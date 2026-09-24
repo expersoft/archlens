@@ -11,7 +11,8 @@ Skill para Claude Code: **arquitetura como modelo, diagramas como consultas.**
 - **ArchiMate:** camadas de negócio, aplicação e tecnologia; visões entre camadas por travessia de
   suporte (o que sustenta uma oferta ou processo), matriz de impacto de um componente, derivação de
   relações através do que foi ocultado, granularidade C4.
-- **HTML animado** num arquivo único: 100% da largura, modo apresentação (`P`), setas entre visões,
+- **Relações explicadas:** cada seta vira uma frase em português ("A serve B: B usa A; se A falhar, há impacto em B"), com cartão de hover, legenda com as setas reais e glossário das confusões comuns do ArchiMate.
+- **HTML animado** num arquivo único: prévia animada no hover, 100% da largura, modo apresentação (`P`), setas entre visões,
   zoom e pan pelo `viewBox`, trace, story, pulso de impacto, tema claro/escuro, exportação SVG/PNG.
 - **Checagem visual** (`deliver`): screenshots em 1920×1080 e 1280×720, largura ocupada ≥ 90% e fonte ≥ 14px.
 

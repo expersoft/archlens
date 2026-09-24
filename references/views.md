@@ -135,6 +135,11 @@ Camada de aplicação sem ruído de componentes:
   embaixo). Os nós são ordenados por baricentro e distribuídos na largura. As colunas são escolhidas
   para chegar a 16:9, e as arestas são curvas entre portas distribuídas nas faces.
 
+## Ajuda sobre relações
+
+Cada aresta do view IR renderizado ganha `help` (`scripts/lib/explain.mjs`), com os campos sentence, meaning, reading, impact, c4 e derived.
+O texto é gerado a partir dos tipos das pontas (atribuição ator→papel vira "desempenha o papel", nó→artefato vira "roda em", realização de requisito vira "atende a"…). O glossário da página vem de `GLOSSARY`, no mesmo arquivo.
+
 ## Tamanho e legibilidade
 
 Fontes em unidades do SVG (15–20). A página avisa quando o texto fica abaixo de 14px na tela, e o

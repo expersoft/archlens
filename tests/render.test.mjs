@@ -74,3 +74,21 @@ test('rendered svg is fluid: viewBox, meet, no fixed size; presentation + naviga
     assert.ok(html.includes(needle), `missing ${needle}`);
   }
 });
+
+test('edges carry plain-language help; page has hover card, marker legend and glossary', async () => {
+  const m = normalizeModel(raw());
+  const views = [];
+  for (const spec of m.views) views.push(await layoutView(resolveView(m, spec)));
+  const html = renderHtml({ title: 'Loja Mini', views });
+  const data = JSON.parse(html.match(/<script id="archlens-data" type="application\/json">([\s\S]*?)<\/script>/)[1]);
+  const serving = data.views.flatMap(v => v.edges).find(e => e.type === 'serving');
+  assert.match(serving.help.sentence, / serve /);
+  assert.ok(serving.help.impact && serving.help.reading);
+  assert.ok(data.views[0].edges.every(e => e.help && e.help.sentence));
+  assert.match(html, /class="hovercard"/);
+  assert.match(html, /id="glossary"/);
+  for (const t of ['serving', 'realization', 'aggregation', 'uses']) assert.match(html, new RegExp(`id="gl-${t}"`), `glossary entry ${t}`);
+  assert.match(html, /class="legend"[\s\S]*?marker-end="url\(#lg-/, 'legend draws real markers');
+  assert.ok(!/<g class="node[^>]*><title>/.test(html), 'no native tooltips competing with the hover card');
+  for (const needle of ['pointerover', 'focusin', 'previewing', 'pinCard']) assert.ok(html.includes(needle), `missing ${needle}`);
+});

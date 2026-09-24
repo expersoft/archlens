@@ -85,18 +85,41 @@ só `viewBox`, e a altura se ajusta à proporção.
 | `←` `→` | visão anterior/próxima (como slides) |
 | `P` | modo apresentação (tela cheia). A barra e o painel somem e voltam ao passar o mouse no topo ou na borda direita |
 | `Espaço` | anima: C4 dinâmico toca os passos; ArchiMate com âncora pulsa por distância; visões de camada revelam faixa por faixa |
-| clique num nó | destaca o que ele alcança (laranja) e o que chega até ele (azul); abre o painel de detalhes |
+| passar o mouse num nó | prévia: acende o nó e os vizinhos diretos, com partículas nas relações dele; o cartão lista as relações em português |
+| passar o mouse numa relação | cartão explicando a relação: frase, significado, como ler a seta e impacto |
+| clique numa relação | fixa o cartão, com link para o glossário daquele tipo |
+| clique num nó | trace completo: o que ele alcança/o sustenta (laranja) e o que chega até ele/depende dele (azul); abre o painel de detalhes |
 | `F` | enquadra o nó selecionado e seus vizinhos |
 | `0` | ajusta à largura |
 | roda / arrastar | zoom e pan (animando o `viewBox`, então o texto continua nítido) |
 | `A` | partículas de fluxo nas relações |
 | `R` | rótulos das relações ArchiMate |
 | `M` | matriz de dependência (visões de impacto). Clicar numa linha destaca o elemento |
-| `L` · `T` · `E` | legenda · tema claro/escuro · exportar SVG/PNG |
+| `L` · `G` · `T` · `E` | legenda (com as setas reais) · glossário de relações · tema claro/escuro · exportar SVG/PNG |
 | duplo clique | abre a visão cujo scope/âncora é aquele nó (drill-down) |
 | `?` | ajuda |
 
 Se, no tamanho de tela atual, o texto cair abaixo de 14px, um aviso sugere zoom ou divisão da visão.
+
+### Entendendo as relações
+
+Algumas relações ArchiMate confundem quem vem do C4. A mais comum é o **serving**, cuja seta aponta
+para quem **consome**, no sentido oposto do "usa" do C4. Por isso cada relação traz uma explicação
+gerada a partir do modelo, por exemplo:
+
+> **Hospedagem de contêineres serve API de Pedidos.** API de Pedidos usa a funcionalidade oferecida
+> por Hospedagem de contêineres. Equivale a dizer "API de Pedidos usa Hospedagem de contêineres".
+> *Se Hospedagem de contêineres falhar, há impacto em API de Pedidos.*
+
+A explicação aparece:
+
+- no cartão de hover;
+- no painel lateral, onde as relações do elemento são listadas como frases;
+- no glossário (`G`), que traz cada tipo com a seta desenhada, a forma de ler, um exemplo e as
+  confusões comuns: serving × usa, realization × serving, direção do access, agregação × composição.
+
+![Relação explicada no hover](img/hover-relacao.png)
+![Glossário](img/glossario.png)
 
 ## Os cenários, com exemplos
 

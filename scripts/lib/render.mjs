@@ -2,6 +2,7 @@
 import { ELEMENT_TYPES, LAYER_LABELS, RELATIONSHIP_TYPES } from './registry.mjs';
 import { MIN_SCREEN_PX } from './layout.mjs';
 import { ICONS } from './icons.mjs';
+import { explainEdge, GLOSSARY } from './explain.mjs';
 
 const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const f = n => Math.round(n * 10) / 10;
@@ -91,7 +92,7 @@ function c4Node(n, i) {
   t += textLines(L.meta, cx, top + L.title.length * 25 + 6, 15, 19, 'meta');
   if (L.desc.length) t += textLines(L.desc, cx, top + L.title.length * 25 + 6 + L.meta.length * 19 + 10, 15, 19, 'desc');
   const tip = `${n.name} [${n.c4Label}${n.technology ? `: ${n.technology}` : ''}]${n.description ? `\n${n.description}` : ''}`;
-  return `<g class="${cls}" data-node="${esc(n.id)}" style="--i:${i}" tabindex="0"><title>${esc(tip)}</title>${shape}${t}</g>`;
+  return `<g class="${cls}" data-node="${esc(n.id)}" style="--i:${i}" tabindex="0" role="button" aria-label="${esc(tip)}">${shape}${t}</g>`;
 }
 
 function c4Boundary(b) {
@@ -111,11 +112,11 @@ function amNode(n, i) {
   const icon = ICONS[spec.icon] ?? '';
   const nameTop = y + (h - n.lines.title.length * 22) / 2;
   const tip = `${n.name} — ${spec.label}${n.technology ? ` [${n.technology}]` : ''}${n.description ? `\n${n.description}` : ''}`;
-  return `<g class="${cls}" data-node="${esc(n.id)}" data-distance="${n.distance ?? ''}" style="--i:${i}" tabindex="0"><title>${esc(tip)}</title>`
+  return `<g class="${cls}" data-node="${esc(n.id)}" data-distance="${n.distance ?? ''}" style="--i:${i}" tabindex="0" role="button" aria-label="${esc(tip)}">`
     + `<rect class="shape" x="${f(x)}" y="${f(y)}" width="${f(w)}" height="${f(h)}" rx="${f(rx)}"/>`
     + (icon ? `<g class="icon" transform="translate(${f(x + w - 36)},${f(y + 8)})">${icon}</g>` : '')
     + textLines(n.lines.title, x + w / 2 - 6, nameTop, 17, 22, 'title', 650)
-    + (n.distance !== null && n.distance !== undefined && !n.isAnchor ? `<text class="dist" x="${f(x + 10)}" y="${f(y + h - 8)}" font-size="15"><title>${n.role === 'dependent' ? 'depende da âncora' : n.role === 'supporter' ? 'sustenta a âncora' : 'sustenta e depende'} · distância ${n.distance}</title>${n.role === 'dependent' ? '↑' : n.role === 'supporter' ? '↓' : '↕'}${n.distance}</text>` : '')
+    + (n.distance !== null && n.distance !== undefined && !n.isAnchor ? `<text class="dist" x="${f(x + 10)}" y="${f(y + h - 8)}" font-size="15">${n.role === 'dependent' ? '↑' : n.role === 'supporter' ? '↓' : '↕'}${n.distance}</text>` : '')
     + '</g>';
 }
 
@@ -151,7 +152,7 @@ function edge(e, prefix, showLabel) {
     label = `<g class="elabel${showLabel ? '' : ' on-demand'}"><rect x="${f(cx - w / 2)}" y="${f(cy)}" width="${f(w)}" height="${f(h)}" rx="6"/>`
       + textLines(e.labelLines, cx, cy + 5, 15, lh, 'etext') + '</g>';
   }
-  return `<g class="edge t-${e.type}${e.derived ? ' derived' : ''}${e.implicit ? ' implicit' : ''}" data-edge="${esc(e.id)}" data-from="${esc(e.from)}" data-to="${esc(e.to)}"${e.step ? ` data-step="${e.step}"` : ''}><title>${esc(title)}</title>`
+  return `<g class="edge t-${e.type}${e.derived ? ' derived' : ''}${e.implicit ? ' implicit' : ''}" data-edge="${esc(e.id)}" data-from="${esc(e.from)}" data-to="${esc(e.to)}"${e.step ? ` data-step="${e.step}"` : ''} aria-label="${esc(title)}">`
     + `<path class="hit" d="${d}"/>`
     + `<path class="line" d="${d}"${dash ? ` stroke-dasharray="${dash}"` : ''}${m('start', start)}${m('end', end)}/>`
     + `<path class="flow" d="${d}"/>${label}</g>`;
@@ -159,19 +160,47 @@ function edge(e, prefix, showLabel) {
 
 // ------------------------------------------------------------------ legend
 
+// A tiny inline SVG line drawn with the same markers/dashes as the diagram (markers from the global "lg" defs).
+function relSample(type, { derived = false, accessType } = {}) {
+  const st = EDGE_STYLE[type] ?? {};
+  let start = st.start, end = st.end;
+  if (type === 'access' && accessType === 'readwrite') start = 'open-s';
+  const dash = derived ? '12 7' : st.dash;
+  return `<svg class="sample" viewBox="0 0 64 20" width="64" height="20" aria-hidden="true"><line x1="${start ? 20 : 4}" y1="10" x2="${end ? 44 : 60}" y2="10" stroke="var(--edge)" stroke-width="2.4"${dash ? ` stroke-dasharray="${dash}"` : ''}${derived ? ' opacity=".75"' : ''}${start ? ` marker-start="url(#lg-${start}-base)"` : ''}${end ? ` marker-end="url(#lg-${end}-base)"` : ''}/></svg>`;
+}
+
 function legend(v) {
   const items = [];
   if (v.notation === 'c4') {
     const kinds = new Map();
     for (const n of v.nodes) kinds.set(n.external ? 'external' : n.c4Kind, n.external ? 'Externo' : n.c4Label);
     for (const [k, l] of kinds) items.push(`<li><i class="sw c4-${k === 'softwareSystem' ? 'system' : k}"></i>${esc(l)}</li>`);
-    items.push('<li><i class="ln dash"></i>usa (consumidor → provedor)</li>');
+    items.push(`<li>${relSample('uses')}<span><b>usa</b> — consumidor → provedor</span></li>`);
   } else {
     for (const l of v.layers) items.push(`<li><i class="sw am-${LAYER_VAR[l]}"></i>${esc(LAYER_LABELS[l])}</li>`);
-    for (const t of [...new Set(v.edges.map(e => e.type))]) items.push(`<li><i class="ln r-${t}"></i>${esc(RELATIONSHIP_TYPES[t]?.label ?? t)}</li>`);
-    if (v.edges.some(e => e.derived)) items.push('<li><i class="ln derived"></i>derivado (via elementos ocultos)</li>');
+    for (const t of [...new Set(v.edges.map(e => e.type))]) {
+      const g = GLOSSARY.types[t];
+      items.push(`<li>${relSample(t)}<span><b>${esc(g?.label ?? t)}</b> — ${esc(g?.reading.split(':')[1]?.split('.')[0]?.trim() ?? '')}</span></li>`);
+    }
+    if (v.edges.some(e => e.derived)) items.push(`<li>${relSample('serving', { derived: true })}<span><b>derivada</b> — via elementos ocultos</span></li>`);
   }
-  return `<ul>${items.join('')}</ul>`;
+  return `<ul>${items.join('')}</ul><button class="linkish" data-act="glossary">Como ler as relações?</button>`;
+}
+
+function glossaryHtml(types) {
+  const order = ['uses', 'serving', 'realization', 'assignment', 'access', 'composition', 'aggregation', 'triggering', 'flow', 'influence', 'specialization', 'association'];
+  const shown = order.filter(t => types.has(t));
+  const rest = order.filter(t => !types.has(t));
+  const entry = t => {
+    const g = GLOSSARY.types[t];
+    return `<article id="gl-${t}" class="gl-entry"><header>${relSample(t, { accessType: t === 'access' ? 'readwrite' : undefined })}<h4>${esc(g.label)}</h4></header>`
+      + `<p>${esc(g.meaning)}</p><p class="gl-read">${esc(g.reading)}</p><p class="gl-ex">Ex.: ${esc(g.example)}</p><p class="gl-not">${esc(g.notation)}</p></article>`;
+  };
+  return `<section id="glossary"><h3>Como ler as relações</h3>`
+    + `<div class="gl-grid">${shown.map(entry).join('')}</div>`
+    + (rest.length ? `<details><summary>Outras relações ArchiMate</summary><div class="gl-grid">${rest.map(entry).join('')}</div></details>` : '')
+    + `<article class="gl-entry gl-derived"><header>${relSample('serving', { derived: true })}<h4>relação derivada</h4></header><p>${esc(GLOSSARY.derived)}</p></article>`
+    + `<h3>Confusões comuns</h3><dl class="gl-faq">${GLOSSARY.confusions.map(c => `<dt>${esc(c.q)}</dt><dd>${esc(c.a)}</dd>`).join('')}</dl></section>`;
 }
 
 // ------------------------------------------------------------------ page
@@ -202,7 +231,10 @@ function viewData(v) {
       distance: n.distance ?? null, role: n.role ?? null, isAnchor: !!n.isAnchor, inferred: !!n.inferred,
       x: n.x, y: n.y, w: n.w, h: n.h,
     }])),
-    edges: v.edges.map(e => ({ id: e.id, from: e.from, to: e.to, type: e.type, label: e.label ?? '', technology: e.technology ?? '', derived: !!e.derived, via: e.via ?? [], step: e.step ?? null })),
+    edges: v.edges.map(e => ({
+      id: e.id, from: e.from, to: e.to, type: e.type, label: e.label ?? '', technology: e.technology ?? '', derived: !!e.derived, via: e.via ?? [], step: e.step ?? null,
+      help: explainEdge(e, Object.fromEntries(v.nodes.map(n => [n.id, { name: n.name, type: n.type }])), v.notation),
+    })),
     matrix: v.matrix ?? null,
   };
 }
@@ -240,15 +272,19 @@ export function renderHtml({ title, subtitle = '', views }) {
     <button data-act="present" class="primary" title="Modo apresentação (P)">Apresentar</button>
   </div>
 </header>
+<svg class="defs" width="0" height="0" aria-hidden="true" focusable="false">${markerDefs('lg')}</svg>
 <main class="stage">${sections}</main>
+<div class="hovercard" role="tooltip" hidden></div>
 <div class="caption" hidden></div>
 <div class="legibility" hidden></div>
 <aside class="drawer" aria-hidden="true"><button class="close" data-act="close" aria-label="Fechar">×</button><div class="drawer-body"></div></aside>
 <div class="sheet" hidden><div class="sheet-head"><strong>Matriz de dependência</strong><button data-act="matrix">Fechar</button></div><div class="sheet-body"></div></div>
 <div class="export-menu" hidden><button data-act="svg">Baixar SVG</button><button data-act="png">Baixar PNG (2×)</button></div>
 <div class="help" hidden>
-  <strong>Atalhos</strong>
-  <ul><li><kbd>←</kbd>/<kbd>→</kbd> visão anterior/próxima</li><li><kbd>P</kbd> apresentação (tela cheia)</li><li><kbd>0</kbd> ajustar à largura</li><li><kbd>F</kbd> focar o nó selecionado</li><li>roda do mouse / arrastar: zoom e pan</li><li><kbd>Espaço</kbd> animar · <kbd>A</kbd> fluxo · <kbd>R</kbd> rótulos</li><li><kbd>M</kbd> matriz · <kbd>L</kbd> legenda · <kbd>T</kbd> tema · <kbd>E</kbd> exportar</li><li><kbd>Esc</kbd> limpar seleção</li></ul>
+  <button class="close" data-act="help" aria-label="Fechar">×</button>
+  <section><h3>Atalhos</h3>
+  <ul><li><kbd>←</kbd>/<kbd>→</kbd> visão anterior/próxima</li><li><kbd>P</kbd> apresentação (tela cheia)</li><li><kbd>0</kbd> ajustar à largura</li><li><kbd>F</kbd> focar o nó selecionado</li><li>roda do mouse / arrastar: zoom e pan</li><li>passar o mouse: prévia das ligações e explicação da relação</li><li>clique numa relação: fixa a explicação</li><li><kbd>Espaço</kbd> animar · <kbd>A</kbd> fluxo · <kbd>R</kbd> rótulos</li><li><kbd>M</kbd> matriz · <kbd>L</kbd> legenda · <kbd>G</kbd> glossário · <kbd>T</kbd> tema · <kbd>E</kbd> exportar</li><li><kbd>Esc</kbd> limpar seleção</li></ul></section>
+  ${glossaryHtml(new Set(views.flatMap(v => v.edges.map(e => e.type))))}
 </div>
 <script id="archlens-data" type="application/json">${json}</script>
 <script>${JS}</script>
@@ -377,6 +413,7 @@ body.presenting.reveal-right .drawer.open{transform:none}
 .legend{position:absolute;left:12px;top:12px;background:color-mix(in srgb,var(--panel) 92%,transparent);border:1px solid var(--line);border-radius:12px;padding:10px 14px;font-size:14px;z-index:5}
 .legend ul{list-style:none;margin:0;padding:0;display:grid;gap:4px}
 .legend li{display:flex;align-items:center;gap:8px}
+.legend{max-height:calc(100% - 24px);overflow:auto}
 .sw{display:inline-block;width:18px;height:14px;border-radius:3px;border:1px solid rgba(0,0,0,.25)}
 .c4-person{background:var(--c4-person)}.c4-system{background:var(--c4-system)}.c4-container{background:var(--c4-container)}.c4-component{background:var(--c4-component)}.c4-external{background:var(--c4-external)}
 .am-biz{background:var(--biz)}.am-app{background:var(--app)}.am-tech{background:var(--tech)}.am-mot{background:var(--mot)}.am-str{background:var(--str)}.am-impl{background:var(--impl)}.am-oth{background:var(--oth)}
@@ -394,12 +431,50 @@ body.presenting.reveal-right .drawer.open{transform:none}
 .export-menu{position:fixed;top:calc(var(--bar-h) + 6px);right:12px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:6px;display:grid;gap:4px;z-index:40}
 .export-menu button{border:0;background:none;padding:6px 12px;text-align:left;cursor:pointer;border-radius:6px}
 .export-menu button:hover{background:var(--bg)}
-.help{position:fixed;inset:auto auto 50% 50%;transform:translate(-50%,50%);background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 22px;z-index:50;box-shadow:0 20px 60px rgba(0,0,0,.25)}
+.help{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:min(980px,calc(100vw - 32px));max-height:calc(100vh - 48px);overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 24px;z-index:50;box-shadow:0 20px 60px rgba(0,0,0,.25)}
+.help .close{position:sticky;top:0;float:right;border:0;background:none;font-size:26px;cursor:pointer;color:var(--muted)}
+.help h3{margin:18px 0 8px}
+.gl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px}
+.gl-entry{border:1px solid var(--line);border-radius:10px;padding:10px 14px;background:var(--bg)}
+.gl-entry header{display:flex;align-items:center;gap:10px}
+.gl-entry h4{margin:0;font-size:16px}
+.gl-entry p{margin:6px 0;font-size:14px}
+.gl-read{font-weight:600}
+.gl-ex,.gl-not{color:var(--muted)}
+.gl-derived{margin-top:10px}
+.gl-faq dt{font-weight:700;margin-top:10px}
+.gl-faq dd{margin:4px 0 0}
+.help details{margin-top:10px}
+.help summary{cursor:pointer;color:var(--muted)}
+.flash{animation:flash 1.4s ease}
+@keyframes flash{0%,40%{box-shadow:0 0 0 3px var(--focus)}100%{box-shadow:0 0 0 0 transparent}}
+.linkish{border:0;background:none;padding:4px 0;color:var(--up);cursor:pointer;text-decoration:underline;font-size:14px}
+.legend .sample,.gl-entry .sample{flex:0 0 auto;overflow:visible}
+.legend li span{font-size:14px}
+svg.defs{position:absolute;width:0;height:0;overflow:hidden}
+/* hover preview + relation card */
+.hovercard{position:fixed;z-index:45;width:max-content;max-width:min(440px,calc(100vw - 24px));background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 36px rgba(0,0,0,.22);padding:12px 16px;font-size:15px;line-height:1.45;pointer-events:none}
+.hovercard.pinned{pointer-events:auto;border-color:var(--focus)}
+.hovercard p{margin:4px 0}
+.hc-kind{font-size:14px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.hc-sent{font-weight:700;font-size:17px}
+.hc-read{color:var(--muted)}
+.hc-imp{color:var(--down);font-weight:600}
+.hc-der{font-style:italic}
+.hovercard ul{margin:6px 0 0;padding-left:18px}
+.edge .hit{cursor:help}
+.previewing .node .shape,.previewing .node text,.previewing .node .icon,.previewing .edge{transition:opacity .15s}
+.previewing .node:not(.pv) .shape,.previewing .node:not(.pv) text,.previewing .node:not(.pv) .icon{opacity:.4}
+.previewing .edge:not(.pv){opacity:.22}
+.edge.pv .line{stroke-width:3.6}
+.edge.pv .flow{opacity:.9;animation:march 1.1s linear infinite}
+.edge.pv .elabel.on-demand{display:inline}
+.node.pv-main .shape{filter:drop-shadow(0 0 9px var(--focus))}
 .help ul{padding-left:18px;margin:8px 0 0}
 kbd{border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;padding:0 5px;font-size:13px}
 @media (max-width:1400px){.brand{flex:0 1 22vw}.tools [data-act=flow],.tools [data-act=labels],.tools [data-act=legend],.tools [data-act=theme]{display:none}}
 @media (max-width:900px){.brand span{display:none}.tools button:not(.primary):not([data-act=play]){display:none}}
-@media (prefers-reduced-motion:reduce){.intro .node,.intro .edge,.intro .band,.intro .boundary{animation:none}body.flowing .edge .flow{animation:none}}
+@media (prefers-reduced-motion:reduce){.intro .node,.intro .edge,.intro .band,.intro .boundary{animation:none}body.flowing .edge .flow,.edge.pv .flow,.edge.up .flow,.edge.down .flow{animation:none}.edge.pv .flow{opacity:0}.flash{animation:none}}
 `;
 
 const JS = String.raw`
@@ -424,7 +499,7 @@ const JS = String.raw`
   const svg = () => $('svg', sec());
   function show(i, fromHash) {
     if (i < 0 || i >= sections.length) return;
-    stop(); clearTrace();
+    stop(); clearTrace(); clearPreview(); unpin();
     sections.forEach((s, k) => { s.hidden = k !== i; });
     current = i;
     $('#viewSelect').value = view().key;
@@ -485,20 +560,21 @@ const JS = String.raw`
     }, { passive: false });
     let drag = null;
     s.addEventListener('pointerdown', e => {
-      if (e.button !== 0 || e.target.closest('.node')) return;
+      if (e.button !== 0 || e.target.closest('.node, .edge')) return;
       drag = { x: e.clientX, y: e.clientY, r: { ...vb[i] }, moved: false, scale: s.getScreenCTM().a };
       s.setPointerCapture(e.pointerId); s.classList.add('panning');
     });
     s.addEventListener('pointermove', e => {
       if (!drag) return;
       const dx = (e.clientX - drag.x) / drag.scale, dy = (e.clientY - drag.y) / drag.scale;
-      if (Math.abs(dx) + Math.abs(dy) > 2) drag.moved = true;
+      if (Math.abs(dx) + Math.abs(dy) > 2) { if (!drag.moved) { clearTimeout(hoverTimer); clearPreview(); hideCard(); } drag.moved = true; dragging = true; }
       setVB(i, { ...drag.r, x: drag.r.x - dx, y: drag.r.y - dy });
     });
-    const end = e => { if (!drag) return; const moved = drag.moved; drag = null; s.classList.remove('panning'); if (!moved && !e.target.closest('.node, .edge')) clearTrace(); };
+    const end = e => { if (!drag) return; const moved = drag.moved; drag = null; dragging = false; s.classList.remove('panning'); if (!moved && !e.target.closest('.node, .edge')) { clearTrace(); unpin(); } };
     s.addEventListener('pointerup', end); s.addEventListener('pointercancel', end);
     s.addEventListener('click', e => {
-      const g = e.target.closest('.node'); if (g) { stop(); trace(g.dataset.node); }
+      const g = e.target.closest('.node'); if (g) { stop(); unpin(); trace(g.dataset.node); return; }
+      const ed = e.target.closest('.edge'); if (ed) pinCard(ed.dataset.edge, e.clientX, e.clientY);
     });
     s.addEventListener('dblclick', e => {
       const g = e.target.closest('.node'); if (!g) return;
@@ -507,6 +583,86 @@ const JS = String.raw`
       if (target >= 0) show(target);
     });
     s.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.closest('.node')) trace(e.target.closest('.node').dataset.node); });
+  });
+
+  // ---------- hover preview (1 hop) + plain-language relation card
+  const card = $('.hovercard');
+  let hoverTimer = null, previewing = null, pinned = null, dragging = false;
+  const canPreview = () => !selected && !timer && !dragging;
+  const edgeById = id => view().edges.find(e => e.id === id);
+  function cardHtml(kind, id) {
+    const v = view();
+    if (kind === 'edge') {
+      const h = edgeById(id).help;
+      return '<div class="hc-kind">' + escH(h.title) + '</div><p class="hc-sent">' + escH(h.sentence) + '</p><p>' + escH(h.meaning) + '</p>'
+        + (h.derived ? '<p class="hc-der">' + escH(h.derived) + '</p>' : '')
+        + (h.c4 ? '<p>' + escH(h.c4) + '</p>' : '') + '<p class="hc-read">' + escH(h.reading) + '</p>'
+        + (h.impact ? '<p class="hc-imp">' + escH(h.impact) + '</p>' : '');
+    }
+    const n = v.nodes[id], rels = v.edges.filter(e => e.from === id || e.to === id);
+    return '<div class="hc-kind">' + escH(n.c4Label || n.typeLabel) + (n.technology ? ' · ' + escH(n.technology) : '') + '</div><p class="hc-sent">' + escH(n.name) + '</p>'
+      + (n.description ? '<p>' + escH(n.description) + '</p>' : '')
+      + (rels.length ? '<ul>' + rels.slice(0, 6).map(e => '<li>' + escH(e.help.sentence) + '</li>').join('') + (rels.length > 6 ? '<li>+' + (rels.length - 6) + ' relações</li>' : '') + '</ul>' : '')
+      + '<p class="hc-read">Clique para rastrear a cadeia completa.</p>';
+  }
+  function placeCard(x, y) {
+    card.hidden = false;
+    const r = card.getBoundingClientRect();
+    let left = x + 18, top = y + 18;
+    if (left + r.width > innerWidth - 12) left = Math.max(12, x - r.width - 18);
+    if (top + r.height > innerHeight - 12) top = Math.max(12, innerHeight - r.height - 12);
+    card.style.left = left + 'px'; card.style.top = top + 'px';
+  }
+  function clearPreview() {
+    const s = svg(); previewing = null; if (!s) return;
+    s.classList.remove('previewing');
+    $$('.pv', s).forEach(x => x.classList.remove('pv', 'pv-main'));
+  }
+  function preview(kind, id) {
+    clearPreview();
+    previewing = { kind, id };
+    if (!canPreview()) return;
+    const s = svg(), mark = nid => { const n = $('.node[data-node="' + CSS.escape(nid) + '"]', s); if (n) n.classList.add('pv'); };
+    s.classList.add('previewing');
+    if (kind === 'node') {
+      mark(id); $('.node[data-node="' + CSS.escape(id) + '"]', s).classList.add('pv-main');
+      $$('.edge', s).forEach(e => { if (e.dataset.from === id || e.dataset.to === id) { e.classList.add('pv'); mark(e.dataset.from); mark(e.dataset.to); } });
+    } else {
+      const e = $('.edge[data-edge="' + CSS.escape(id) + '"]', s); e.classList.add('pv'); mark(e.dataset.from); mark(e.dataset.to);
+    }
+  }
+  function showCard(kind, id, x, y) { if (pinned) return; card.classList.remove('pinned'); card.innerHTML = cardHtml(kind, id); placeCard(x, y); }
+  function hideCard() { if (!pinned) card.hidden = true; }
+  function pinCard(id, x, y) {
+    pinned = id;
+    card.classList.add('pinned');
+    card.innerHTML = cardHtml('edge', id) + '<button class="linkish" data-act="glossary" data-type="' + escH(edgeById(id).type) + '">Como ler este tipo de relação?</button>';
+    placeCard(x, y);
+  }
+  function unpin() { pinned = null; card.hidden = true; card.classList.remove('pinned'); }
+  sections.forEach(section => {
+    const s = $('svg', section);
+    const target = e => { const t = e.target.closest('.node, .edge'); return t ? { t, kind: t.classList.contains('node') ? 'node' : 'edge', id: t.dataset.node || t.dataset.edge } : null; };
+    s.addEventListener('pointerover', e => {
+      if (e.pointerType === 'touch' || dragging) return;
+      const h = target(e); if (!h) return;
+      clearTimeout(hoverTimer);
+      if (previewing && previewing.kind === h.kind && previewing.id === h.id) return;
+      const x = e.clientX, y = e.clientY;
+      hoverTimer = setTimeout(() => { preview(h.kind, h.id); showCard(h.kind, h.id, x, y); }, 100);
+    });
+    s.addEventListener('pointerout', e => {
+      const h = target(e); if (!h || (e.relatedTarget && h.t.contains(e.relatedTarget))) return;
+      clearTimeout(hoverTimer);
+      hoverTimer = setTimeout(() => { clearPreview(); hideCard(); }, 90);
+    });
+    s.addEventListener('pointermove', e => { if (previewing && !pinned && !card.hidden) placeCard(e.clientX, e.clientY); });
+    s.addEventListener('focusin', e => {
+      const t = e.target.closest('.node'); if (!t) return;
+      const r = t.getBoundingClientRect();
+      preview('node', t.dataset.node); showCard('node', t.dataset.node, r.right, r.top);
+    });
+    s.addEventListener('focusout', () => { clearPreview(); hideCard(); });
   });
 
   // ---------- legibility
@@ -556,7 +712,7 @@ const JS = String.raw`
     if (line.dataset.me) line.setAttribute('marker-end', 'url(#' + pre + '-' + line.dataset.me + '-' + tone + ')');
   }
   function trace(id) {
-    clearTrace(); selected = id;
+    clearTrace(); clearPreview(); hideCard(); selected = id;
     const s = svg();
     const down = walk(id, 'down'), up = walk(id, 'up');
     s.classList.add('dimming');
@@ -574,8 +730,8 @@ const JS = String.raw`
   function openDrawer(id) {
     const v = view(), n = v.nodes[id]; if (!n) return;
     const name = x => escH(v.nodes[x] ? v.nodes[x].name : x);
-    const outE = v.edges.filter(e => e.from === id), inE = v.edges.filter(e => e.to === id);
-    const rel = e => (e.derived ? '⇢ ' : '') + escH(e.type === 'uses' ? 'usa' : e.type) + (e.label ? ': ' + escH(e.label) : '') + (e.technology ? ' <span class="chip">' + escH(e.technology) + '</span>' : '');
+    const rels = v.edges.filter(e => e.from === id || e.to === id);
+    const rel = e => escH(e.help.sentence) + (e.derived ? ' <span class="chip">derivada</span>' : '') + (e.technology ? ' <span class="chip">' + escH(e.technology) + '</span>' : '');
     let h = '<h2>' + escH(n.name) + '</h2><div class="kind">' + escH(n.c4Label || n.typeLabel) + (n.c4Label && n.typeLabel ? ' · ArchiMate ' + escH(n.typeLabel) : '') + '</div>';
     if (n.inferred) h += '<p class="warn">⚠︎ Inferido a partir de texto livre: confirme.</p>';
     if (n.description) h += '<p>' + escH(n.description) + '</p>';
@@ -586,8 +742,7 @@ const JS = String.raw`
     for (const [k, val] of Object.entries(n.properties || {})) h += '<dt>' + escH(k) + '</dt><dd>' + escH(val) + '</dd>';
     h += '</dl>';
     if (n.tags && n.tags.length) h += n.tags.map(t => '<span class="chip">' + escH(t) + '</span>').join('');
-    if (outE.length) h += '<h3>Saídas</h3><ul>' + outE.map(e => '<li data-go="' + escH(e.to) + '">' + rel(e) + ' → <b>' + name(e.to) + '</b></li>').join('') + '</ul>';
-    if (inE.length) h += '<h3>Entradas</h3><ul>' + inE.map(e => '<li data-go="' + escH(e.from) + '"><b>' + name(e.from) + '</b> → ' + rel(e) + '</li>').join('') + '</ul>';
+    if (rels.length) h += '<h3>Relações</h3><ul>' + rels.map(e => '<li data-go="' + escH(e.from === id ? e.to : e.from) + '">' + rel(e) + '</li>').join('') + '</ul><button class="linkish" data-act="glossary">Como ler as relações?</button>';
     h += '<p style="color:var(--muted);font-size:13px;margin-top:18px">' + (v.notation === 'c4' ? 'Laranja: o que ele usa (downstream) · Azul: quem o usa (upstream).' : 'Laranja: o que o sustenta · Azul: o que depende dele.') + ' <kbd>F</kbd> foca, <kbd>Esc</kbd> limpa.</p>';
     $('.drawer-body').innerHTML = h;
     $('.drawer').classList.add('open');
@@ -709,8 +864,16 @@ const JS = String.raw`
     svg: () => { download(new Blob([exportSvg()], { type: 'image/svg+xml' }), view().key + '.svg'); $('.export-menu').hidden = true; },
     png: () => { exportPng(); $('.export-menu').hidden = true; },
     close: clearTrace,
+    help: () => { $('.help').hidden = !$('.help').hidden; },
+    glossary: b => {
+      $('.help').hidden = false;
+      const t = (b && b.dataset && b.dataset.type && document.getElementById('gl-' + b.dataset.type)) || document.getElementById('glossary');
+      const d = t.closest('details'); if (d) d.open = true;
+      t.scrollIntoView({ block: 'start', behavior: reduced ? 'auto' : 'smooth' });
+      t.classList.remove('flash'); void t.offsetWidth; t.classList.add('flash');
+    },
   };
-  document.addEventListener('click', e => { const b = e.target.closest('[data-act]'); if (b && actions[b.dataset.act]) actions[b.dataset.act](); });
+  document.addEventListener('click', e => { const b = e.target.closest('[data-act]'); if (b && actions[b.dataset.act]) actions[b.dataset.act](b); });
   $('#viewSelect').addEventListener('change', e => show(DATA.views.findIndex(v => v.key === e.target.value)));
   document.addEventListener('keydown', e => {
     if (e.target.matches('select, input, textarea') || e.metaKey || e.ctrlKey || e.altKey) return;
@@ -727,8 +890,9 @@ const JS = String.raw`
       case 'l': case 'L': actions.legend(); break;
       case 't': case 'T': toggleTheme(); break;
       case 'e': case 'E': actions.export(); break;
-      case '?': $('.help').hidden = !$('.help').hidden; break;
-      case 'Escape': stop(); clearTrace(); $('.help').hidden = true; $('.export-menu').hidden = true; $('.sheet').hidden = true; if (vb[current].w !== view().width) fit(); break;
+      case '?': actions.help(); break;
+      case 'g': case 'G': actions.glossary(); break;
+      case 'Escape': stop(); clearTrace(); unpin(); $('.help').hidden = true; $('.export-menu').hidden = true; $('.sheet').hidden = true; if (vb[current].w !== view().width) fit(); break;
       default: return;
     }
   });
@@ -736,6 +900,6 @@ const JS = String.raw`
 
   const start = DATA.views.findIndex(v => '#' + encodeURIComponent(v.key) === location.hash);
   show(start >= 0 ? start : 0, true);
-  window.archlens = { show, fit, focusNode, trace, play, stop, present, data: DATA, get current() { return current; } };
+  window.archlens = { show, fit, focusNode, trace, play, stop, present, preview, pinCard, data: DATA, get current() { return current; } };
 })();
 `;
