@@ -2,7 +2,7 @@
   "name": "archlens",
   "version": "0.1.0",
   "description": "Skill: arquitetura como modelo (ArchiMate + perfil C4), diagramas como consultas, HTML animado para apresentação",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "private": true,
   "bin": { "archlens": "scripts/archlens.mjs" },
   "engines": { "node": ">=18" },

@@ -29,4 +29,6 @@ node scripts/archlens.mjs build examples/loja-online/model.json --out-dir /tmp/l
 | Exemplos | [examples/loja-online](examples/loja-online), [examples/telemedicina](examples/telemedicina) |
 | Plano de implementação | [docs/plans/](docs/plans/) |
 
-Layout por [ELK](https://eclipse.dev/elk/) (EPL-2.0, vendorizado em `scripts/vendor/`).
+## Licença
+
+[MIT](LICENSE) © 2026 Expersoft. O [ELK](https://eclipse.dev/elk/), usado no layout e incluído em `scripts/vendor/`, mantém a própria licença (EPL-2.0, ver `scripts/vendor/ELK-LICENSE.md`).
