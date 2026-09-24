@@ -1,0 +1,18 @@
+{
+  "name": "archlens",
+  "version": "0.1.0",
+  "description": "Skill: arquitetura como modelo (ArchiMate + perfil C4), diagramas como consultas, HTML animado para apresentação",
+  "license": "UNLICENSED",
+  "private": true,
+  "bin": { "archlens": "scripts/archlens.mjs" },
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "schemas": "node scripts/gen-schemas.mjs",
+    "examples": "node scripts/archlens.mjs build examples/loja-online/model.json --out-dir examples/loja-online; node scripts/archlens.mjs build examples/telemedicina/model.json --out-dir examples/telemedicina",
+    "setup-browser": "npx playwright install chromium",
+    "vendor-elk": "cp node_modules/elkjs/lib/elk.bundled.js scripts/vendor/ && cp node_modules/elkjs/LICENSE.md scripts/vendor/ELK-LICENSE.md"
+  },
+  "optionalDependencies": { "playwright-core": "1.63.0" },
+  "devDependencies": { "elkjs": "0.12.0" }
+}

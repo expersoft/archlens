@@ -1,0 +1,457 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://archlens.local/model.schema.json",
+  "title": "archlens model",
+  "type": "object",
+  "required": [
+    "model"
+  ],
+  "properties": {
+    "archlens": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "meta": {
+      "type": "object"
+    },
+    "assumptions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "model": {
+      "type": "object",
+      "required": [
+        "elements"
+      ],
+      "properties": {
+        "elements": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/element"
+          }
+        },
+        "relationships": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/relationship"
+          }
+        }
+      }
+    },
+    "views": {
+      "type": "array",
+      "items": {
+        "$ref": "view.schema.json"
+      }
+    }
+  },
+  "$defs": {
+    "element": {
+      "type": "object",
+      "required": [
+        "id",
+        "type"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "enum": [
+            "c4:person",
+            "c4:softwareSystem",
+            "c4:container",
+            "c4:component",
+            "c4:deploymentNode",
+            "c4:infrastructureNode",
+            "archimate:resource",
+            "resource",
+            "archimate:capability",
+            "capability",
+            "archimate:value-stream",
+            "value-stream",
+            "archimate:course-of-action",
+            "course-of-action",
+            "archimate:business-actor",
+            "business-actor",
+            "archimate:business-role",
+            "business-role",
+            "archimate:business-collaboration",
+            "business-collaboration",
+            "archimate:business-interface",
+            "business-interface",
+            "archimate:business-process",
+            "business-process",
+            "archimate:business-function",
+            "business-function",
+            "archimate:business-interaction",
+            "business-interaction",
+            "archimate:business-event",
+            "business-event",
+            "archimate:business-service",
+            "business-service",
+            "archimate:business-object",
+            "business-object",
+            "archimate:contract",
+            "contract",
+            "archimate:representation",
+            "representation",
+            "archimate:product",
+            "product",
+            "archimate:application-component",
+            "application-component",
+            "archimate:application-collaboration",
+            "application-collaboration",
+            "archimate:application-interface",
+            "application-interface",
+            "archimate:application-function",
+            "application-function",
+            "archimate:application-interaction",
+            "application-interaction",
+            "archimate:application-process",
+            "application-process",
+            "archimate:application-event",
+            "application-event",
+            "archimate:application-service",
+            "application-service",
+            "archimate:data-object",
+            "data-object",
+            "archimate:node",
+            "node",
+            "archimate:device",
+            "device",
+            "archimate:system-software",
+            "system-software",
+            "archimate:technology-collaboration",
+            "technology-collaboration",
+            "archimate:technology-interface",
+            "technology-interface",
+            "archimate:path",
+            "path",
+            "archimate:communication-network",
+            "communication-network",
+            "archimate:technology-function",
+            "technology-function",
+            "archimate:technology-process",
+            "technology-process",
+            "archimate:technology-interaction",
+            "technology-interaction",
+            "archimate:technology-event",
+            "technology-event",
+            "archimate:technology-service",
+            "technology-service",
+            "archimate:artifact",
+            "artifact",
+            "archimate:equipment",
+            "equipment",
+            "archimate:facility",
+            "facility",
+            "archimate:distribution-network",
+            "distribution-network",
+            "archimate:material",
+            "material",
+            "archimate:stakeholder",
+            "stakeholder",
+            "archimate:driver",
+            "driver",
+            "archimate:assessment",
+            "assessment",
+            "archimate:goal",
+            "goal",
+            "archimate:outcome",
+            "outcome",
+            "archimate:principle",
+            "principle",
+            "archimate:requirement",
+            "requirement",
+            "archimate:constraint",
+            "constraint",
+            "archimate:meaning",
+            "meaning",
+            "archimate:value",
+            "value",
+            "archimate:work-package",
+            "work-package",
+            "archimate:deliverable",
+            "deliverable",
+            "archimate:implementation-event",
+            "implementation-event",
+            "archimate:plateau",
+            "plateau",
+            "archimate:gap",
+            "gap",
+            "archimate:grouping",
+            "grouping",
+            "archimate:location",
+            "location"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "technology": {
+          "type": "string"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "external": {
+          "type": "boolean"
+        },
+        "archimate": {
+          "enum": [
+            "resource",
+            "archimate:resource",
+            "capability",
+            "archimate:capability",
+            "value-stream",
+            "archimate:value-stream",
+            "course-of-action",
+            "archimate:course-of-action",
+            "business-actor",
+            "archimate:business-actor",
+            "business-role",
+            "archimate:business-role",
+            "business-collaboration",
+            "archimate:business-collaboration",
+            "business-interface",
+            "archimate:business-interface",
+            "business-process",
+            "archimate:business-process",
+            "business-function",
+            "archimate:business-function",
+            "business-interaction",
+            "archimate:business-interaction",
+            "business-event",
+            "archimate:business-event",
+            "business-service",
+            "archimate:business-service",
+            "business-object",
+            "archimate:business-object",
+            "contract",
+            "archimate:contract",
+            "representation",
+            "archimate:representation",
+            "product",
+            "archimate:product",
+            "application-component",
+            "archimate:application-component",
+            "application-collaboration",
+            "archimate:application-collaboration",
+            "application-interface",
+            "archimate:application-interface",
+            "application-function",
+            "archimate:application-function",
+            "application-interaction",
+            "archimate:application-interaction",
+            "application-process",
+            "archimate:application-process",
+            "application-event",
+            "archimate:application-event",
+            "application-service",
+            "archimate:application-service",
+            "data-object",
+            "archimate:data-object",
+            "node",
+            "archimate:node",
+            "device",
+            "archimate:device",
+            "system-software",
+            "archimate:system-software",
+            "technology-collaboration",
+            "archimate:technology-collaboration",
+            "technology-interface",
+            "archimate:technology-interface",
+            "path",
+            "archimate:path",
+            "communication-network",
+            "archimate:communication-network",
+            "technology-function",
+            "archimate:technology-function",
+            "technology-process",
+            "archimate:technology-process",
+            "technology-interaction",
+            "archimate:technology-interaction",
+            "technology-event",
+            "archimate:technology-event",
+            "technology-service",
+            "archimate:technology-service",
+            "artifact",
+            "archimate:artifact",
+            "equipment",
+            "archimate:equipment",
+            "facility",
+            "archimate:facility",
+            "distribution-network",
+            "archimate:distribution-network",
+            "material",
+            "archimate:material",
+            "stakeholder",
+            "archimate:stakeholder",
+            "driver",
+            "archimate:driver",
+            "assessment",
+            "archimate:assessment",
+            "goal",
+            "archimate:goal",
+            "outcome",
+            "archimate:outcome",
+            "principle",
+            "archimate:principle",
+            "requirement",
+            "archimate:requirement",
+            "constraint",
+            "archimate:constraint",
+            "meaning",
+            "archimate:meaning",
+            "value",
+            "archimate:value",
+            "work-package",
+            "archimate:work-package",
+            "deliverable",
+            "archimate:deliverable",
+            "implementation-event",
+            "archimate:implementation-event",
+            "plateau",
+            "archimate:plateau",
+            "gap",
+            "archimate:gap",
+            "grouping",
+            "archimate:grouping",
+            "location",
+            "archimate:location"
+          ]
+        },
+        "parent": {
+          "type": "string"
+        },
+        "children": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/element"
+          }
+        },
+        "properties": {
+          "type": "object",
+          "additionalProperties": {
+            "type": [
+              "string",
+              "number",
+              "boolean"
+            ]
+          }
+        },
+        "owner": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        },
+        "inferred": {
+          "type": "boolean"
+        },
+        "confidence": {
+          "enum": [
+            "alta",
+            "média",
+            "baixa",
+            "high",
+            "medium",
+            "low"
+          ]
+        },
+        "source": {
+          "type": "string"
+        }
+      }
+    },
+    "relationship": {
+      "type": "object",
+      "required": [
+        "from",
+        "to"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "from": {
+          "type": "string"
+        },
+        "to": {
+          "type": "string"
+        },
+        "type": {
+          "enum": [
+            "uses",
+            "c4:uses",
+            "archimate:composition",
+            "composition",
+            "archimate:aggregation",
+            "aggregation",
+            "archimate:assignment",
+            "assignment",
+            "archimate:realization",
+            "realization",
+            "archimate:serving",
+            "serving",
+            "archimate:access",
+            "access",
+            "archimate:influence",
+            "influence",
+            "archimate:triggering",
+            "triggering",
+            "archimate:flow",
+            "flow",
+            "archimate:specialization",
+            "specialization",
+            "archimate:association",
+            "association"
+          ]
+        },
+        "description": {
+          "type": "string"
+        },
+        "technology": {
+          "type": "string"
+        },
+        "accessType": {
+          "enum": [
+            "read",
+            "write",
+            "readwrite",
+            "access"
+          ]
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "properties": {
+          "type": "object"
+        },
+        "inferred": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

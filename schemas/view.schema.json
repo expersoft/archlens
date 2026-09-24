@@ -1,0 +1,218 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://archlens.local/view.schema.json",
+  "title": "archlens view spec",
+  "type": "object",
+  "required": [
+    "key",
+    "notation"
+  ],
+  "properties": {
+    "key": {
+      "type": "string",
+      "minLength": 1
+    },
+    "notation": {
+      "enum": [
+        "c4",
+        "archimate"
+      ]
+    },
+    "title": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "exclude": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "layout": {
+      "type": "object",
+      "properties": {
+        "direction": {
+          "enum": [
+            "RIGHT",
+            "DOWN",
+            "LEFT",
+            "UP",
+            "auto"
+          ]
+        },
+        "aspectRatio": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "animation": {
+      "enum": [
+        "trace",
+        "story",
+        "impact",
+        "layers"
+      ]
+    },
+    "edgeLabels": {
+      "type": "boolean"
+    },
+    "level": {
+      "enum": [
+        "landscape",
+        "context",
+        "container",
+        "component",
+        "dynamic"
+      ]
+    },
+    "scope": {
+      "type": "string"
+    },
+    "focus": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "depth": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "steps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          },
+          "rel": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "technology": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "viewpoint": {
+      "enum": [
+        "business",
+        "application",
+        "technology",
+        "strategy",
+        "motivation",
+        "implementation-migration",
+        "application-cooperation",
+        "implementation-deployment",
+        "layered",
+        "impact",
+        "product-support",
+        "custom"
+      ]
+    },
+    "layers": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "motivation",
+          "strategy",
+          "business",
+          "application",
+          "technology",
+          "physical",
+          "implementation",
+          "other"
+        ]
+      }
+    },
+    "types": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "anchor": {
+      "type": "string"
+    },
+    "traverse": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "enum": [
+            "supporters",
+            "dependents",
+            "both"
+          ]
+        },
+        "via": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "composition",
+              "aggregation",
+              "assignment",
+              "realization",
+              "serving",
+              "access",
+              "influence",
+              "triggering",
+              "flow",
+              "specialization",
+              "association"
+            ]
+          }
+        },
+        "maxDepth": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "hierarchy": {
+          "type": "boolean"
+        }
+      }
+    },
+    "granularity": {
+      "enum": [
+        "component",
+        "container",
+        "system"
+      ]
+    },
+    "collapse": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "derive": {
+      "type": "boolean"
+    },
+    "output": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "diagram",
+          "matrix"
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "archlens": "1.0",
+  "name": "Loja Mini",
+  "model": {
+    "elements": [
+      { "id": "cliente", "type": "c4:person", "name": "Cliente" },
+      { "id": "loja", "type": "c4:softwareSystem", "name": "Loja", "children": [
+        { "id": "loja.web", "type": "c4:container", "name": "Web", "technology": "Next.js" },
+        { "id": "loja.api", "type": "c4:container", "name": "API", "technology": "Spring", "children": [
+          { "id": "loja.api.checkout", "type": "c4:component", "name": "Checkout" },
+          { "id": "loja.api.catalogo", "type": "c4:component", "name": "Catalogo" }
+        ]},
+        { "id": "loja.db", "type": "c4:container", "name": "DB", "technology": "PostgreSQL", "tags": ["database"] }
+      ]},
+      { "id": "pagamentos", "type": "c4:softwareSystem", "name": "Gateway de Pagamentos", "external": true },
+      { "id": "venda", "type": "archimate:product", "name": "Venda Online" },
+      { "id": "svc-pedido", "type": "archimate:business-service", "name": "Pedido online" },
+      { "id": "proc-checkout", "type": "archimate:business-process", "name": "Fechar pedido" },
+      { "id": "app-svc-checkout", "type": "archimate:application-service", "name": "Servico de checkout" },
+      { "id": "k8s", "type": "archimate:node", "name": "Cluster K8s" },
+      { "id": "pg", "type": "archimate:system-software", "name": "PostgreSQL 16" }
+    ],
+    "relationships": [
+      { "from": "cliente", "to": "loja.web", "type": "uses", "description": "Compra", "technology": "HTTPS" },
+      { "from": "loja.web", "to": "loja.api.checkout", "type": "uses", "description": "Fecha pedido", "technology": "REST" },
+      { "from": "loja.web", "to": "loja.api.catalogo", "type": "uses", "description": "Lista produtos", "technology": "REST" },
+      { "from": "loja.api.checkout", "to": "loja.db", "type": "uses", "description": "Grava pedido", "technology": "JDBC" },
+      { "from": "loja.api.checkout", "to": "pagamentos", "type": "uses", "description": "Autoriza pagamento", "technology": "HTTPS" },
+      { "from": "venda", "to": "svc-pedido", "type": "archimate:aggregation" },
+      { "from": "proc-checkout", "to": "svc-pedido", "type": "archimate:realization" },
+      { "from": "app-svc-checkout", "to": "proc-checkout", "type": "archimate:serving" },
+      { "from": "loja.api.checkout", "to": "app-svc-checkout", "type": "archimate:realization" },
+      { "from": "k8s", "to": "loja.api", "type": "archimate:serving" },
+      { "from": "pg", "to": "loja.api", "type": "archimate:serving" }
+    ]
+  },
+  "views": [
+    { "key": "ctx", "notation": "c4", "level": "context", "scope": "loja" },
+    { "key": "suporte-venda", "notation": "archimate", "viewpoint": "layered", "anchor": "venda", "traverse": { "mode": "supporters" } }
+  ]
+}

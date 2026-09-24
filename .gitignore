@@ -1,0 +1,5 @@
+node_modules/
+*.shots/
+*.candidate-*.html
+*.rejected.html
+*.tmp-*
