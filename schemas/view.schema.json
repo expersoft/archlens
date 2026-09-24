@@ -78,6 +78,13 @@
     "scope": {
       "type": "string"
     },
+    "expand": {
+      "description": "C4 container/dynamic: other software systems whose containers are also shown, each inside its own boundary",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
     "focus": {
       "type": "array",
       "items": {

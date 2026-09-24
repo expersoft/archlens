@@ -3,6 +3,9 @@ import { c4KindOf, c4Orientation, childrenOf, ancestors } from './model.mjs';
 import { C4_LABELS } from './registry.mjs';
 import { viewError, matchesPattern } from './query-util.mjs';
 
+// Tags that draw a C4 element as a message queue/topic (horizontal cylinder, like C4-PlantUML ContainerQueue).
+const QUEUE_TAGS = ['queue', 'topic', 'messaging'];
+
 const LEVEL_TITLES = { landscape: 'System Landscape', context: 'System Context', container: 'Container', component: 'Component', dynamic: 'Dynamic' };
 
 export function resolveC4(model, spec) {
@@ -40,6 +43,22 @@ export function resolveC4(model, spec) {
     if (system) childrenOf(model, system).filter(c => c.id !== scope.id && kind(c) === 'container').forEach(c => visible.add(c.id));
     topLevel.filter(e => e.id !== system).forEach(e => visible.add(e.id));
     boundary = scope;
+  }
+
+  // expand: also open other software systems (container level), each in its own boundary.
+  const boundaryOf = new Map();
+  const expanded = [];
+  if (spec.expand?.length) {
+    if (effective !== 'container') throw viewError('E_VIEW_SCOPE', '"expand" só vale em visões container e dynamic com scope num software system', 'remova "expand" ou mude o scope');
+    for (const sid of spec.expand) {
+      const sys = model.elements.get(sid);
+      if (!sys) throw viewError('E_UNKNOWN_REF', `expand "${sid}" não existe`, 'use o id de um software system');
+      if (kind(sys) !== 'softwareSystem') throw viewError('E_VIEW_SCOPE', `expand "${sid}" não é um software system`, 'expand abre software systems');
+      if (sid === scope.id) continue;
+      visible.delete(sid);
+      childrenOf(model, sid).filter(c => kind(c) === 'container').forEach(c => { visible.add(c.id); boundaryOf.set(c.id, sys); });
+      expanded.push(sys);
+    }
   }
 
   const rep = id => [id, ...ancestors(model, id)].find(x => visible.has(x));
@@ -149,17 +168,18 @@ export function resolveC4(model, spec) {
       c4Label: C4_LABELS[k] ?? k,
       technology: el.technology, description: el.description, tags: el.tags, properties: el.properties,
       external: !!el.c4?.external,
-      database: el.type === 'data-object' || el.tags.some(t => ['database', 'datastore'].includes(t.toLowerCase())),
-      boundary: internal.has(id) ? boundary.id : null,
-      parentName: !internal.has(id) && parent && k !== 'person' && k !== 'softwareSystem' ? parent.name : null,
+      queue: el.tags.some(t => QUEUE_TAGS.includes(t.toLowerCase())),
+      database: !el.tags.some(t => QUEUE_TAGS.includes(t.toLowerCase())) && (el.type === 'data-object' || el.tags.some(t => ['database', 'datastore'].includes(t.toLowerCase()))),
+      boundary: internal.has(id) ? boundary.id : boundaryOf.get(id)?.id ?? null,
+      parentName: !internal.has(id) && !boundaryOf.has(id) && parent && k !== 'person' && k !== 'softwareSystem' ? parent.name : null,
       isScope: scope?.id === id,
       isFocus: focus.has(id),
       inferred: !!el.inferred,
     };
   });
 
-  const boundaries = boundary && outNodes.some(n => n.boundary === boundary.id)
-    ? [{ id: boundary.id, name: boundary.name, c4Kind: kind(boundary), c4Label: C4_LABELS[kind(boundary)] }] : [];
+  const boundaries = [boundary, ...expanded].filter(b => b && outNodes.some(n => n.boundary === b.id))
+    .map(b => ({ id: b.id, name: b.name, c4Kind: kind(b), c4Label: C4_LABELS[kind(b)] }));
 
   return {
     key: spec.key, notation: 'c4', level,

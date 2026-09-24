@@ -52,7 +52,7 @@ export function legibility(laid, vw, vh) {
 const C4_W = 280;
 
 function c4NodeBox(n) {
-  const inner = C4_W - 32;
+  const inner = C4_W - 32 - (n.queue ? 24 : 0);
   const title = wrap(n.name, FONT.title, inner, 3);
   const metaText = `[${n.c4Label}${n.technology ? `: ${n.technology}` : ''}]`;
   const meta = wrap(metaText, FONT.meta, inner, 2);
