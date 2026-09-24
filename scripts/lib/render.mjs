@@ -77,6 +77,11 @@ function c4Node(n, i) {
   let shape;
   if (n.c4Kind === 'person') {
     shape = `<circle class="shape" cx="${f(x + w / 2)}" cy="${f(y + 30)}" r="28"/><rect class="shape" x="${f(x)}" y="${f(y + 50)}" width="${f(w)}" height="${f(h - 50)}" rx="34"/>`;
+  } else if (n.queue) {
+    // Message queue/topic: horizontal cylinder (C4-PlantUML ContainerQueue).
+    const rx = 16, ry = h / 2;
+    shape = `<path class="shape" d="M${f(x + rx)},${f(y)} h${f(w - 2 * rx)} a${rx},${f(ry)} 0 0,1 0,${f(h)} h${f(-(w - 2 * rx))} a${rx},${f(ry)} 0 0,1 0,${f(-h)} z"/>`
+      + `<path class="rim" d="M${f(x + w - rx)},${f(y)} a${rx},${f(ry)} 0 0,0 0,${f(h)}"/>`;
   } else if (n.database) {
     const ry = 13;
     shape = `<path class="shape" d="M${f(x)},${f(y + ry)} a${f(w / 2)},${ry} 0 0,0 ${f(w)},0 a${f(w / 2)},${ry} 0 0,0 ${f(-w)},0 v${f(h - 2 * ry)} a${f(w / 2)},${ry} 0 0,0 ${f(w)},0 v${f(-(h - 2 * ry))}"/>`
@@ -175,6 +180,7 @@ function legend(v) {
     const kinds = new Map();
     for (const n of v.nodes) kinds.set(n.external ? 'external' : n.c4Kind, n.external ? 'Externo' : n.c4Label);
     for (const [k, l] of kinds) items.push(`<li><i class="sw c4-${k === 'softwareSystem' ? 'system' : k}"></i>${esc(l)}</li>`);
+    if (v.nodes.some(n => n.queue)) items.push(`<li><svg class="sample" viewBox="0 0 64 20" width="64" height="20" aria-hidden="true"><path d="M8,2 h48 a6,8 0 0,1 0,16 h-48 a6,8 0 0,1 0,-16 z M56,2 a6,8 0 0,0 0,16" fill="var(--c4-container)" stroke="var(--edge)" stroke-width="1.4"/></svg><span><b>fila / tópico</b> — mensageria (publica → tópico ← consome)</span></li>`);
     items.push(`<li>${relSample('uses')}<span><b>usa</b> — consumidor → provedor</span></li>`);
   } else {
     for (const l of v.layers) items.push(`<li><i class="sw am-${LAYER_VAR[l]}"></i>${esc(LAYER_LABELS[l])}</li>`);

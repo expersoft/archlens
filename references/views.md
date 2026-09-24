@@ -22,6 +22,7 @@ de visões novas sem remodelar. Campos comuns:
 | `scope` | softwareSystem (context/container/dynamic) ou container (component/dynamic) |
 | `focus` | ids em destaque; a visão é cortada à vizinhança deles |
 | `depth` | saltos a partir do foco (padrão 1) |
+| `expand` | `container`/`dynamic` com scope num sistema: outros software systems a abrir também, cada um no seu boundary (ex.: mostrar o tópico do produtor num fluxo do consumidor) |
 | `steps` | só `dynamic`: `[{ "from", "to", "description"?, "technology"? }]` ou `[{ "rel": "<id>" }]` |
 
 Semântica:

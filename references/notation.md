@@ -48,6 +48,7 @@ Schemas: `schemas/model.schema.json` (arquivo inteiro) e `schemas/view.schema.js
 | `c4:softwareSystem` | application-component | topo da hierarquia |
 | `c4:container` | application-component | filho de softwareSystem |
 | `c4:container` + tag `database` | data-object | desenhado como cilindro no C4 |
+| `c4:container` + tag `topic`/`queue`/`messaging` | application-component (ou o tipo de `archimate`) | desenhado como fila/tópico (cilindro horizontal, notação de mensageria) no C4 |
 | `c4:component` | application-component | filho de container |
 | `c4:deploymentNode`, `c4:infrastructureNode` | node | |
 

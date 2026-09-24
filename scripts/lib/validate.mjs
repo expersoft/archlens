@@ -25,7 +25,7 @@ export function validateModel(raw) {
     if (!v.key) errors.push({ code: 'E_VIEW_KEY', message: 'visão sem "key"', path: `views[${i}]`, hint: 'dê um identificador único à visão' });
     else if (seenViews.has(v.key)) errors.push({ code: 'E_VIEW_KEY', message: `visão duplicada "${v.key}"`, path: `views[${i}]`, hint: 'keys de visões são únicas' });
     seenViews.add(v.key);
-    for (const f of ['scope', 'anchor', ...(v.focus || [])].map(k => (k === 'scope' || k === 'anchor') ? v[k] : k)) {
+    for (const f of ['scope', 'anchor', ...(v.focus || []), ...(v.expand || [])].map(k => (k === 'scope' || k === 'anchor') ? v[k] : k)) {
       if (f && !model.elements.has(f)) errors.push({ code: 'E_UNKNOWN_REF', message: `visão "${v.key}" referencia "${f}", que não existe`, path: `views[${i}]`, hint: 'use o id de um elemento do modelo' });
     }
   });
