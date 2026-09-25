@@ -26,7 +26,7 @@ Schemas: `schemas/model.schema.json` (arquivo inteiro) e `schemas/view.schema.js
 |---|---|---|
 | `id` | sim | único **no modelo inteiro**. Convenção: `sistema.container.componente` |
 | `type` | sim | `c4:<tipo>` ou `archimate:<tipo>` (prefixo opcional para ArchiMate) |
-| `name` | não | rótulo (padrão: `id`) |
+| `name` | não | rótulo (padrão: `id`). `\n` força quebra de linha, ex.: `"Autorizador\n(Odin)"` põe o nome código embaixo |
 | `description` | não | frase curta, aparece no nó (C4) e no painel |
 | `technology` | não | ex.: `"Java / Spring Boot"` |
 | `tags` | não | lista de strings. `database`/`datastore`/`storage`/`bucket` num container C4 o torna data store |
