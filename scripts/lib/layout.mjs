@@ -15,6 +15,12 @@ const CHAR = 0.56;                     // average glyph width / font size for sy
 
 export function wrap(text, fontSize, maxWidth, maxLines = 99) {
   if (!text) return [];
+  // "\n" forces a line break (e.g. business name + code name underneath)
+  if (String(text).includes('\n')) {
+    const lines = String(text).split('\n').flatMap(p => wrap(p, fontSize, maxWidth));
+    if (lines.length > maxLines) { lines.length = maxLines; lines[maxLines - 1] = lines[maxLines - 1].replace(/.{0,1}$/, '…'); }
+    return lines;
+  }
   const maxChars = Math.max(6, Math.floor(maxWidth / (fontSize * CHAR)));
   const words = String(text).split(/\s+/).filter(Boolean);
   const lines = [];
