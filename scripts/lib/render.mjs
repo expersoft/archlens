@@ -48,7 +48,7 @@ function markerDefs(prefix) {
 
 /** Hand-drawn look for drafts and preview changes: two displacement filters, applied to a doubled outline. */
 function sketchDefs(prefix) {
-  const flt = (id, freq, seed) => `<filter id="${prefix}-${id}" x="-5%" y="-5%" width="110%" height="110%">`
+  const flt = (id, freq, seed) => `<filter id="${prefix}-${id}" filterUnits="userSpaceOnUse" x="-10%" y="-10%" width="120%" height="120%">`
     + `<feTurbulence type="fractalNoise" baseFrequency="${freq}" numOctaves="2" seed="${seed}" result="n"/>`
     + `<feDisplacementMap in="SourceGraphic" in2="n" scale="5"/></filter>`;
   return `<defs>${flt('sk1', 0.035, 7)}${flt('sk2', 0.04, 21)}</defs>`;
@@ -82,8 +82,10 @@ const statusClass = n => (n.status && n.status !== 'active' ? ` st-${n.status}` 
 const sketchy = n => n.status === 'draft' || n.change === 'added';
 /** The shape drawn twice through the sketch filters (the second copy is the thinner, offset stroke). */
 function sketchShape(shape, prefix) {
-  const via = (cls, id) => shape.replace(/<(path|rect|circle) class="shape"/g, `<$1 class="${cls}" filter="url(#${prefix}-${id})"`);
-  return via('shape', 'sk1') + via('shape2', 'sk2');
+  const rims = shape.match(/<path class="rim"[^>]*\/>/g) ?? [];
+  const body = rims.reduce((acc, r) => acc.replace(r, ''), shape);
+  const via = (cls, id) => body.replace(/<(path|rect|circle) class="shape"/g, `<$1 class="${cls}" filter="url(#${prefix}-${id})"`);
+  return via('shape', 'sk1') + via('shape2', 'sk2') + rims.map(r => r.replace('class="rim"', `class="rim" filter="url(#${prefix}-sk1)"`)).join('');
 }
 
 function c4Node(n, i, prefix) {
@@ -385,6 +387,7 @@ body.presenting .stage{inset:0}
 .node.sketchy .rim{stroke:var(--sketch-ink)}
 .node.c4.sketchy text,.node.am.sketchy text{fill:var(--sketch-ink)}
 .edge.sketchy .line{stroke:var(--sketch-ink)}
+.node.sketchy.focus .shape,.node.sketchy.anchor .shape{stroke:var(--focus);stroke-width:5}
 .boundary rect{fill:none;stroke:var(--boundary);stroke-width:2.2;stroke-dasharray:12 7}
 .boundary text{fill:var(--muted)}
 .boundary .b-title{fill:var(--ink)}

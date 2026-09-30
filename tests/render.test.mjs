@@ -162,7 +162,7 @@ test('draft nodes and relationships are drawn as a sketch with the filters defin
     await layoutView(resolveView(m, { key: 's', notation: 'archimate', viewpoint: 'layered', anchor: 'venda', traverse: { mode: 'supporters' } })),
   ];
   const html = renderHtml({ title: 't', views });
-  assert.match(html, /<filter id="v0-sk1"[^>]*>[\s\S]*?feDisplacementMap/);
+  assert.match(html, /<filter id="v0-sk1"[^>]*filterUnits="userSpaceOnUse"[^>]*>[\s\S]*?feDisplacementMap/);
   assert.match(html, /<filter id="v1-sk2"/);
   assert.match(html, /<filter id="lg-sk1"/);
   assert.match(html, /class="node c4 [^"]*st-draft sketchy"/);
@@ -170,4 +170,15 @@ test('draft nodes and relationships are drawn as a sketch with the filters defin
   assert.match(html, /class="edge t-serving[^"]* sketchy"/);
   assert.match(html, /<b>rascunho<\/b>/);
   assert.match(html, /--sketch-ink:/);
+});
+
+test('draft database node keeps its rim displaced with the shape and focus highlight survives', async () => {
+  const r = raw();
+  const db = r.model.elements.find(e => e.id === 'loja').children.find(c => c.id === 'loja.db');
+  assert.ok(db, 'fixture has loja.db');
+  db.status = 'draft';
+  const m = normalizeModel(r);
+  const html = renderHtml({ title: 't', views: [await layoutView(resolveView(m, { key: 'c', notation: 'c4', level: 'container', scope: 'loja' }))] });
+  assert.match(html, /<path class="rim" filter="url\(#v0-sk1\)"/);
+  assert.match(html, /\.node\.sketchy\.focus \.shape,\.node\.sketchy\.anchor \.shape\{stroke:var\(--focus\)/);
 });
