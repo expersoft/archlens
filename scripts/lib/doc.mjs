@@ -37,19 +37,32 @@ export function generateDoc(raw, { existing, date } = {}) {
   const kind = el => c4KindOf(model, el);
   const hasC4 = els.some(e => e.c4);
   const hasArchimate = els.some(e => !e.c4);
+  const hasStatus = els.some(e => e.status !== 'active') || model.relationships.some(r => r.status !== 'active');
+  const hasSources = els.some(e => e.sources.length);
+  const KIND_ABBR = { prompt: 'P', repo: 'R', doc: 'D', manual: 'M' };
+  const extraHead = [...(hasStatus ? ['Status'] : []), ...(hasSources ? ['Fontes'] : [])];
+  const extra = e => [
+    ...(hasStatus ? [e.status] : []),
+    ...(hasSources ? [[...new Set(e.sources.map(s => KIND_ABBR[s.kind] ?? s.kind))].join(' ')] : []),
+  ];
   const out = [];
 
   out.push('---');
   out.push(`archlens: "${raw.archlens ?? '1.0'}"`);
   out.push(`name: ${JSON.stringify(model.name)}`);
-  out.push(`generated: ${date ?? new Date().toISOString().slice(0, 10)}`);
+  const changelog = raw.changelog || [];
+  const today = date ?? new Date().toISOString().slice(0, 10);
+  out.push(`generated: ${today}`);
+  out.push(`revision: ${changelog.length}`);
+  out.push(`updated: ${changelog.at(-1)?.date ?? today}`);
   out.push(`notations: [${[hasC4 && 'c4', hasArchimate && 'archimate'].filter(Boolean).join(', ')}]`);
   out.push(`elements: ${els.length}`);
   out.push(`relationships: ${model.relationships.length}`);
   out.push('---', '');
   out.push(`# ${model.name}`, '');
   out.push('> Base de conhecimento gerada pela skill **archlens**. As tabelas são derivadas do bloco',
-    '> `archlens-json` no fim do documento, que é a fonte de verdade: edite o JSON e regenere.',
+    '> `archlens-json` no fim do documento, que é a fonte de verdade. Evolua a base com `archlens merge`',
+    '> (delta → plano → apply); editar o bloco à mão e regenerar com `archlens doc` continua possível.',
     '> Texto entre marcadores `<!-- keep:... -->` é preservado ao regenerar.', '');
 
   out.push('## Visão geral', '');
@@ -78,12 +91,12 @@ export function generateDoc(raw, { existing, date } = {}) {
       if (s.description) out.push(s.description, '');
       const containers = childrenOf(model, s.id).filter(c => kind(c) === 'container');
       if (containers.length) {
-        out.push(table(['Container', 'Tecnologia', 'Descrição', 'id'], containers.map(c => [c.name + (c.type === 'data-object' ? ' 🛢' : ''), c.technology, c.description, `\`${c.id}\``])), '');
+        out.push(table(['Container', 'Tecnologia', 'Descrição', ...extraHead, 'id'], containers.map(c => [c.name + (c.type === 'data-object' ? ' 🛢' : ''), c.technology, c.description, ...extra(c), `\`${c.id}\``])), '');
         for (const c of containers) {
           const comps = childrenOf(model, c.id).filter(x => kind(x) === 'component');
           if (!comps.length) continue;
           out.push(`#### Componentes de ${c.name}`, '');
-          out.push(table(['Componente', 'Tecnologia', 'Descrição', 'id'], comps.map(x => [x.name, x.technology, x.description, `\`${x.id}\``])), '');
+          out.push(table(['Componente', 'Tecnologia', 'Descrição', ...extraHead, 'id'], comps.map(x => [x.name, x.technology, x.description, ...extra(x), `\`${x.id}\``])), '');
         }
       }
     }
@@ -94,8 +107,8 @@ export function generateDoc(raw, { existing, date } = {}) {
     const list = els.filter(e => e.layer === layer);
     if (!list.length) continue;
     out.push(`## Camada de ${LAYER_LABELS[layer]}`, '');
-    out.push(table(['Elemento', 'Tipo ArchiMate', 'Descrição', 'id'], list.map(e => [
-      e.name + (e.inferred ? ' ⚠︎' : ''), ELEMENT_TYPES[e.type].label + (e.c4 ? ` (C4 ${C4_LABELS[e.c4.kind]})` : ''), e.description, `\`${e.id}\``,
+    out.push(table(['Elemento', 'Tipo ArchiMate', 'Descrição', ...extraHead, 'id'], list.map(e => [
+      e.name + (e.inferred ? ' ⚠︎' : ''), ELEMENT_TYPES[e.type].label + (e.c4 ? ` (C4 ${C4_LABELS[e.c4.kind]})` : ''), e.description, ...extra(e), `\`${e.id}\``,
     ])), '');
   }
 
@@ -130,6 +143,17 @@ export function generateDoc(raw, { existing, date } = {}) {
     })), '');
   }
 
+  // Lifecycle
+  out.push('## Ciclo de vida', '');
+  const lifecycle = [
+    ...els.filter(e => e.status !== 'active').map(e => [e.name, ELEMENT_TYPES[e.type].label, e.status, e.statusReason, `\`${e.id}\``]),
+    ...model.relationships.filter(r => r.status !== 'active').map(r => {
+      const o = c4Orientation(r) ?? r;
+      return [`${name(o.from)} → ${name(o.to)}`, r.c4 ? 'usa' : r.type, r.status, r.statusReason, `\`${r.id}\``];
+    }),
+  ];
+  out.push(lifecycle.length ? table(['Item', 'Tipo', 'Status', 'Motivo', 'id'], lifecycle) : '_Todos os elementos e relações estão ativos._', '');
+
   // Assumptions
   out.push('## Premissas e inferências', '');
   const inferred = els.filter(e => e.inferred);
@@ -143,12 +167,41 @@ export function generateDoc(raw, { existing, date } = {}) {
     ]), '');
   }
 
+  // Sources
+  out.push('## Fontes', '');
+  const bySource = new Map();
+  for (const item of [...els, ...model.relationships]) {
+    for (const s of item.sources) {
+      const k = `${s.kind}|${s.ref ?? ''}|${s.path ?? ''}`;
+      const row = bySource.get(k) ?? { kind: s.kind, ref: s.ref ?? (s.path ? '' : '(trechos de texto livre)'), path: s.path, date: s.date, items: new Set() };
+      row.items.add(item.id);
+      if (s.date && (!row.date || s.date > row.date)) row.date = s.date;
+      bySource.set(k, row);
+    }
+  }
+  out.push(bySource.size
+    ? table(['Tipo', 'Referência', 'Data', 'Itens'], [...bySource.values()].map(r => [r.kind, r.path ? `${r.ref} · ${r.path}` : r.ref, r.date, r.items.size]))
+    : '_Nenhuma fonte registrada._', '');
+
   // Views catalogue
   out.push('## Visões', '');
   out.push(table(['key', 'Notação', 'Tipo', 'Escopo / âncora', 'Descrição'], model.views.map(v => [
     `\`${v.key}\``, v.notation, v.notation === 'c4' ? v.level : `${v.viewpoint ?? 'layered'}${v.traverse?.mode ? ` (${v.traverse.mode})` : ''}`,
     [v.scope, v.anchor, ...(v.focus || [])].filter(Boolean).map(name).join(', '), v.title ?? v.description,
   ])), '');
+
+  // History
+  out.push('## Histórico', '');
+  if (!changelog.length) out.push('_Nenhuma rodada de merge registrada._', '');
+  else {
+    out.push(table(['Data', 'Fonte', 'Resumo', 'Mudanças', 'Decisões'], changelog.slice(-10).reverse().map(e => [
+      e.date, e.source ? `${e.source.kind}${e.source.ref ? ` ${e.source.ref}` : ''}` : '—', e.summary,
+      [`+${e.added?.length ?? 0}`, `~${e.changed?.length ?? 0}`, `−${e.removed?.length ?? 0}`,
+        Object.keys(e.status ?? {}).length ? `status ${Object.keys(e.status).length}` : ''].filter(Boolean).join(' '),
+      (e.decisions ?? []).join('; '),
+    ])), '');
+    if (changelog.length > 10) out.push(`_Mostrando as 10 rodadas mais recentes de ${changelog.length}; o histórico completo está em \`changelog\` no bloco \`archlens-json\`._`, '');
+  }
 
   out.push('## Notas', '');
   out.push(keepBlock('notes', '_Decisões, riscos e pendências._'), '');
