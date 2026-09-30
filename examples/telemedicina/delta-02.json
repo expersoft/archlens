@@ -1,0 +1,22 @@
+{
+  "archlens-delta": "1.0",
+  "source": { "kind": "prompt", "ref": "rodada 2026-10-05: lembretes por SMS (em avaliação)", "date": "2026-10-05" },
+  "summary": "Proposta: lembretes por SMS via fila, chatbot de triagem em discussão",
+  "model": {
+    "elements": [
+      { "id": "tele.fila", "type": "c4:container", "name": "Fila de Lembretes", "parent": "tele", "technology": "Amazon SQS", "tags": ["queue"], "description": "Lembretes a enviar" },
+      { "id": "sms", "type": "c4:softwareSystem", "name": "Gateway SMS", "external": true, "description": "Envio de SMS" },
+      { "id": "tele.notificador", "type": "c4:container", "technology": "Node.js 22" },
+      { "id": "agendamento-api", "type": "c4:container", "name": "Agendamento API", "parent": "tele", "technology": "Node.js" },
+      { "id": "tele.chatbot", "type": "c4:container", "name": "Chatbot de Triagem", "parent": "tele", "technology": "Python", "status": "draft", "statusReason": "em discussão com a equipe médica" }
+    ],
+    "relationships": [
+      { "from": "tele.api", "to": "tele.fila", "type": "uses", "description": "Agenda lembrete", "technology": "SQS" },
+      { "from": "tele.notificador", "to": "tele.fila", "type": "uses", "description": "Consome lembretes", "technology": "SQS" },
+      { "from": "tele.notificador", "to": "sms", "type": "uses", "description": "Envia lembrete", "technology": "HTTPS" }
+    ]
+  },
+  "ops": [
+    { "op": "remove", "id": "whatsapp" }
+  ]
+}
