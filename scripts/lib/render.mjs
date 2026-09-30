@@ -70,10 +70,12 @@ function textLines(lines, cx, y, size, lh, cls, weight) {
 
 // ------------------------------------------------------------------ C4 shapes
 
+const statusClass = n => (n.status && n.status !== 'active' ? ` st-${n.status}` : '');
+
 function c4Node(n, i) {
   const { x, y, w, h } = n;
   const kind = n.external ? 'external' : n.c4Kind === 'softwareSystem' ? 'system' : n.c4Kind;
-  const cls = `node c4 k-${kind}${n.isFocus ? ' focus' : ''}${n.isScope ? ' scope' : ''}${n.inferred ? ' inferred' : ''}`;
+  const cls = `node c4 k-${kind}${n.isFocus ? ' focus' : ''}${n.isScope ? ' scope' : ''}${n.inferred ? ' inferred' : ''}${statusClass(n)}`;
   let shape;
   if (n.c4Kind === 'person') {
     shape = `<circle class="shape" cx="${f(x + w / 2)}" cy="${f(y + 30)}" r="28"/><rect class="shape" x="${f(x)}" y="${f(y + 50)}" width="${f(w)}" height="${f(h - 50)}" rx="34"/>`;
@@ -113,7 +115,7 @@ function amNode(n, i) {
   const spec = ELEMENT_TYPES[n.type];
   const lv = LAYER_VAR[n.layer];
   const rx = spec.icon === 'service' ? h / 2 : spec.aspect === 'behavior' ? 14 : spec.icon === 'value-stream' ? 4 : 3;
-  const cls = `node am l-${lv}${n.isAnchor ? ' anchor' : ''}${n.role ? ` r-${n.role}` : ''}${n.inferred ? ' inferred' : ''}`;
+  const cls = `node am l-${lv}${n.isAnchor ? ' anchor' : ''}${n.role ? ` r-${n.role}` : ''}${n.inferred ? ' inferred' : ''}${statusClass(n)}`;
   const icon = ICONS[spec.icon] ?? '';
   const nameTop = y + (h - n.lines.title.length * 22) / 2;
   const tip = `${n.name} — ${spec.label}${n.technology ? ` [${n.technology}]` : ''}${n.description ? `\n${n.description}` : ''}`;
@@ -234,7 +236,7 @@ function viewData(v) {
     nodes: Object.fromEntries(v.nodes.map(n => [n.id, {
       name: n.name, typeLabel: ELEMENT_TYPES[n.type]?.label, c4Label: n.c4Label ?? null, layer: n.layer,
       technology: n.technology ?? '', description: n.description ?? '', tags: n.tags ?? [], properties: n.properties ?? {},
-      distance: n.distance ?? null, role: n.role ?? null, isAnchor: !!n.isAnchor, inferred: !!n.inferred,
+      distance: n.distance ?? null, role: n.role ?? null, isAnchor: !!n.isAnchor, inferred: !!n.inferred, status: n.status ?? 'active',
       x: n.x, y: n.y, w: n.w, h: n.h,
     }])),
     edges: v.edges.map(e => ({
@@ -353,6 +355,9 @@ body.presenting .stage{inset:0}
 .node.c4 .meta,.node.c4 .desc{opacity:.9}
 .node.focus .shape,.node.anchor .shape{stroke:var(--focus);stroke-width:5}
 .node.inferred .shape{stroke-dasharray:8 5}
+.node.st-deprecated{opacity:.55}
+.node.st-deprecated .shape{stroke-dasharray:3 4}
+.node.st-planned .shape{stroke-dasharray:14 5;stroke-width:3}
 .boundary rect{fill:none;stroke:var(--boundary);stroke-width:2.2;stroke-dasharray:12 7}
 .boundary text{fill:var(--muted)}
 .boundary .b-title{fill:var(--ink)}
@@ -758,6 +763,7 @@ const JS = String.raw`
     const rel = e => escH(e.help.sentence) + (e.derived ? ' <span class="chip">derivada</span>' : '') + (e.technology ? ' <span class="chip">' + escH(e.technology) + '</span>' : '');
     let h = '<h2>' + escH(n.name) + '</h2><div class="kind">' + escH(n.c4Label || n.typeLabel) + (n.c4Label && n.typeLabel ? ' · ArchiMate ' + escH(n.typeLabel) : '') + '</div>';
     if (n.inferred) h += '<p class="warn">⚠︎ Inferido a partir de texto livre: confirme.</p>';
+    if (n.status && n.status !== 'active') h += '<p class="warn">' + escH({ planned: 'Planejado: ainda não existe.', deprecated: 'Em desativação.', retired: 'Desativado.' }[n.status] || n.status) + '</p>';
     if (n.description) h += '<p>' + escH(n.description) + '</p>';
     h += '<dl>';
     if (n.technology) h += '<dt>Tecnologia</dt><dd>' + escH(n.technology) + '</dd>';

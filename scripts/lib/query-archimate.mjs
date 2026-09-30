@@ -137,7 +137,7 @@ export function resolveArchimate(model, spec) {
     return {
       id, name: el.name, type: el.type, typeLabel: ELEMENT_TYPES[el.type].label, layer: el.layer, aspect: el.aspect,
       c4Kind: kind(el), technology: el.technology, description: el.description, tags: el.tags, properties: el.properties,
-      isAnchor: id === anchor?.id, distance: i?.distance ?? null, role: i?.role ?? null, inferred: !!el.inferred,
+      isAnchor: id === anchor?.id, distance: i?.distance ?? null, role: i?.role ?? null, inferred: !!el.inferred, status: el.status ?? 'active',
     };
   });
   const presentLayers = LAYER_ORDER.filter(l => nodes.some(n => n.layer === l));

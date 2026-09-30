@@ -174,7 +174,7 @@ export function resolveC4(model, spec) {
       parentName: !internal.has(id) && !boundaryOf.has(id) && parent && k !== 'person' && k !== 'softwareSystem' ? parent.name : null,
       isScope: scope?.id === id,
       isFocus: focus.has(id),
-      inferred: !!el.inferred,
+      inferred: !!el.inferred, status: el.status ?? 'active',
     };
   });
 

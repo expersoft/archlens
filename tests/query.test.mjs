@@ -151,3 +151,38 @@ test('archimate granularity "container" lifts C4 components and hides the enclos
   const full = resolveView(model(), { key: 'g2', notation: 'archimate', viewpoint: 'impact', anchor: 'loja.api', traverse: { mode: 'both' }, granularity: 'component' });
   assert.ok(ids(full).includes('loja.api.checkout'));
 });
+
+const findRaw = (r, id) => {
+  let hit;
+  const walk = list => list.forEach(e => { if (e.id === id) hit = e; walk(e.children || []); });
+  walk(r.model.elements);
+  return hit;
+};
+const modelWith = mut => {
+  const r = JSON.parse(readFileSync(new URL('./fixtures/shop.json', import.meta.url)));
+  mut(r);
+  return normalizeModel(r);
+};
+
+test('views hide retired elements by default and show them on request', () => {
+  const m = modelWith(r => { findRaw(r, 'loja.db').status = 'retired'; findRaw(r, 'pagamentos').status = 'deprecated'; });
+  const v = resolveView(m, { key: 'c', notation: 'c4', level: 'container', scope: 'loja' });
+  assert.ok(!ids(v).includes('loja.db'));
+  assert.equal(v.nodes.find(n => n.id === 'pagamentos').status, 'deprecated');
+  assert.equal(v.nodes.find(n => n.id === 'loja.web').status, 'active');
+  const all = resolveView(m, { key: 'c2', notation: 'c4', level: 'container', scope: 'loja', status: ['planned', 'active', 'deprecated', 'retired'] });
+  assert.ok(ids(all).includes('loja.db'));
+});
+
+test('children of a hidden element are hidden too (C4 and ArchiMate)', () => {
+  const m = modelWith(r => { findRaw(r, 'loja').status = 'retired'; });
+  assert.deepEqual(ids(resolveView(m, { key: 'l', notation: 'c4', level: 'landscape' })), ['cliente', 'pagamentos']);
+  const s = resolveView(m, { key: 's', notation: 'archimate', viewpoint: 'layered', anchor: 'venda', traverse: { mode: 'supporters' } });
+  assert.ok(!ids(s).some(id => id.startsWith('loja')));
+});
+
+test('a view scoped on a hidden element explains the status filter', () => {
+  const m = modelWith(r => { findRaw(r, 'loja').status = 'retired'; });
+  assert.throws(() => resolveView(m, { key: 'c', notation: 'c4', level: 'context', scope: 'loja' }), /E_VIEW_STATUS.*oculto/);
+  assert.throws(() => resolveView(m, { key: 'x', notation: 'c4', level: 'landscape', status: ['vivo'] }), /E_VIEW_STATUS/);
+});
