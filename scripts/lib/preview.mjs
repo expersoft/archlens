@@ -59,6 +59,17 @@ export function previewModel(baseRaw, { delta, plan } = {}) {
 
   const gone = ([, c]) => c.kind === 'removed' || c.kind === 'retired';
   const keep = new Set([...[...changes].filter(gone), ...[...relChanges].filter(gone)].map(([id]) => id));
+  // What sits inside an element retired here stays visible too (a retired system's container view is not empty).
+  const retired = new Set([...changes].filter(([, c]) => c.kind === 'retired').map(([id]) => id));
+  const underRetired = id => {
+    const seen = new Set();
+    for (let cur = after.get(id)?.parent; cur != null && !seen.has(cur); cur = after.get(cur)?.parent) {
+      if (retired.has(cur)) return true;
+      seen.add(cur);
+    }
+    return false;
+  };
+  if (retired.size) for (const id of after.keys()) if (underRetired(id)) keep.add(id);
   return { raw, changes, relChanges, pending: pendingByTarget(merged.plan, merged.idMap, relMap), keep, views, droppedViews, plan: merged.plan };
 }
 

@@ -189,3 +189,27 @@ test('the summary counts relationship changes when there are any', () => {
     { ops: [{ op: 'remove', id: 'loja.api.checkout-serving-loja.web' }] });
   assert.equal(previewSummary(previewModel(shop(), { delta: d })), '+0 ~0 −0 · relações +1 ~1 −1, 2 decisão(ões) pendente(s)');
 });
+
+test('a system retired in this delta keeps its insides visible in the preview', () => {
+  const p = previewModel(shop(), { delta: delta({}, { ops: [{ op: 'status', id: 'loja', status: 'retired' }] }) });
+  assert.ok(p.keep.has('loja.web') && p.keep.has('loja.api.checkout'));
+  const v = resolveView(normalizeModel(p.raw), { key: 'c', notation: 'c4', level: 'container', scope: 'loja' }, { keep: p.keep });
+  assert.ok(['loja.web', 'loja.api', 'loja.db'].every(id => v.nodes.some(n => n.id === id)));
+});
+
+test('without ghosts, the preview of a fully answered plan that removes an element is exactly what apply writes', () => {
+  const base = shop();
+  base.views.push({ key: 'foco', notation: 'c4', level: 'container', scope: 'loja', focus: ['loja.api', 'loja.web'] });
+  const d = delta({ elements: [{ id: 'loja.web', technology: 'Remix' }] }, { ops: [{ op: 'remove', id: 'loja.api' }] });
+  const plan = planMerge(base, d, TODAY);
+  for (const it of plan.items) if ('resolution' in it) it.resolution = it.class === 'op' ? 'yes' : 'take';
+  const p = previewModel(base, { plan });
+  const ghost = (map, id) => map.get(id)?.kind === 'removed';
+  const strip = list => list.filter(e => !ghost(p.changes, e.id)).map(e => (e.children ? { ...e, children: strip(e.children) } : e));
+  const raw = structuredClone(p.raw);
+  raw.model.elements = strip(raw.model.elements);
+  raw.model.relationships = raw.model.relationships.filter(r => !(r.id && ghost(p.relChanges, r.id)));
+  const { changelog, ...applied } = applyPlan(base, plan, TODAY).raw;
+  assert.ok([...p.changes.values()].some(c => c.kind === 'removed'));
+  assert.equal(canonicalJson(raw), canonicalJson(applied));
+});
