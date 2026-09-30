@@ -210,3 +210,19 @@ test('preview marks, banner and drawer data are rendered; a normal render has no
   const plain = renderHtml({ title: 't', views: [await layoutView(resolveView(normalizeModel(raw()), { key: 'c', notation: 'c4', level: 'container', scope: 'loja' }))] });
   assert.doesNotMatch(plain, /<div class="preview-banner"|<body class="preview"|<g class="mark /);
 });
+
+test('a relationship-only change and its open question are visible on the edge, in the legend and in the drawer', async () => {
+  const d = { 'archlens-delta': '1.0', source: { kind: 'prompt', ref: 'r' },
+    model: { relationships: [{ from: 'cliente', to: 'loja.web', type: 'uses', description: 'Compra online' }] } };
+  const p = previewModel(raw(), { delta: d });
+  const v = annotateView(resolveView(normalizeModel(p.raw), { key: 'c', notation: 'c4', level: 'container', scope: 'loja' }, { keep: p.keep }), p);
+  assert.ok(v.nodes.every(n => !n.change && !n.pending), 'no node changes');
+  const html = renderHtml({ title: 't', views: [await layoutView(v)], preview: { label: 'x' } });
+  const g = html.match(/<g class="edge [^"]*ch-changed"[\s\S]*?<path class="flow"[^>]*\/>(?:<g class="elabel[\s\S]*?<\/g>)?(?:<g class="mark[\s\S]*?<\/g>)?/)?.[0];
+  assert.ok(g, 'edge marked ch-changed');
+  assert.match(g, /<path class="line" [^>]*filter="url\(#v0-sk1\)"/);
+  assert.match(g, /<g class="mark m-pending"><circle [^>]*r="10"\/>/);
+  assert.match(html, /\.edge\.ch-changed \.line\{stroke:var\(--sketch-ink\);stroke-width:3\}/);
+  assert.match(html.slice(html.indexOf('<section class="view"')), /mudanças da prévia/);
+  assert.match(html, /e\.pending && e\.pending\.length/, 'the drawer lists the edge questions');
+});

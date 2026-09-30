@@ -68,6 +68,24 @@ function roundedPolyline(pts, r = 12) {
   const last = pts[pts.length - 1];
   return d + ` L${f(last.x)},${f(last.y)}`;
 }
+/** The point half-way along an edge (by length for polylines, t=.5 for curves). */
+function pathMiddle(e) {
+  const p = e.points;
+  if (e.curve) {
+    const b = (a, c1, c2, z) => (a + 3 * c1 + 3 * c2 + z) / 8;
+    return { x: b(p[0].x, p[1].x, p[2].x, p[3].x), y: b(p[0].y, p[1].y, p[2].y, p[3].y) };
+  }
+  const seg = p.slice(1).map((q, i) => Math.hypot(q.x - p[i].x, q.y - p[i].y));
+  let left = seg.reduce((a, b) => a + b, 0) / 2;
+  for (let i = 0; i < seg.length; i++) {
+    if (left <= seg[i] && seg[i] > 0) {
+      const k = left / seg[i];
+      return { x: p[i].x + (p[i + 1].x - p[i].x) * k, y: p[i].y + (p[i + 1].y - p[i].y) * k };
+    }
+    left -= seg[i];
+  }
+  return p[0];
+}
 const edgePath = e => e.curve
   ? `M${f(e.points[0].x)},${f(e.points[0].y)} C${f(e.points[1].x)},${f(e.points[1].y)} ${f(e.points[2].x)},${f(e.points[2].y)} ${f(e.points[3].x)},${f(e.points[3].y)}`
   : roundedPolyline(e.points);
@@ -191,19 +209,26 @@ function edge(e, prefix, showLabel) {
   const m = (which, name) => name ? ` marker-${which}="url(#${prefix}-${name}-base)" data-m${which[0]}="${name}"` : '';
   const title = `${e.derived ? 'derivado: ' : ''}${e.type}${e.label ? ` — ${e.label}` : ''}${e.technology ? ` [${e.technology}]` : ''}${e.via?.length ? `\nvia ${e.via.join(' → ')}` : ''}`;
   let label = '';
+  let badgeAt = null;
   if (e.labelBox && e.labelLines?.length) {
     const lh = 19;
     const w = Math.max(...e.labelLines.map(l => l.length)) * 15 * 0.56 + 14;
     const h = e.labelLines.length * lh + 8;
     const cx = e.curve ? e.labelBox.x : e.labelBox.x + e.labelBox.w / 2;
     const cy = e.curve ? e.labelBox.y - h / 2 : e.labelBox.y;
+    badgeAt = { x: cx, y: cy + h / 2 };
     label = `<g class="elabel${showLabel ? '' : ' on-demand'}"><rect x="${f(cx - w / 2)}" y="${f(cy)}" width="${f(w)}" height="${f(h)}" rx="6"/>`
       + textLines(e.labelLines, cx, cy + 5, 15, lh, 'etext') + '</g>';
   }
+  // An open question on the relationship: a "?" badge on the label, or mid-way along the line.
+  const at = e.pending?.length ? badgeAt ?? pathMiddle(e) : null;
+  const badge = at ? `<g class="mark m-pending"><circle cx="${f(at.x)}" cy="${f(at.y)}" r="10"/>`
+    + `<text x="${f(at.x)}" y="${f(at.y + 1)}" font-size="14" font-weight="700" text-anchor="middle" dominant-baseline="middle">?</text></g>` : '';
+  const sketchLine = e.status === 'draft' || e.change === 'added' || e.change === 'changed';
   return `<g class="edge t-${e.type}${e.derived ? ' derived' : ''}${e.implicit ? ' implicit' : ''}${e.status === 'draft' || e.change === 'added' ? ' sketchy' : ''}${e.change ? ` ch-${e.change}` : ''}" data-edge="${esc(e.id)}" data-from="${esc(e.from)}" data-to="${esc(e.to)}"${e.step ? ` data-step="${e.step}"` : ''} aria-label="${esc(title)}">`
     + `<path class="hit" d="${d}"/>`
-    + `<path class="line" d="${d}"${e.status === 'draft' || e.change === 'added' ? ` filter="url(#${prefix}-sk1)"` : ''}${dash ? ` stroke-dasharray="${dash}"` : ''}${m('start', start)}${m('end', end)}/>`
-    + `<path class="flow" d="${d}"/>${label}</g>`;
+    + `<path class="line" d="${d}"${sketchLine ? ` filter="url(#${prefix}-sk1)"` : ''}${dash ? ` stroke-dasharray="${dash}"` : ''}${m('start', start)}${m('end', end)}/>`
+    + `<path class="flow" d="${d}"/>${label}${badge}</g>`;
 }
 
 // ------------------------------------------------------------------ legend
@@ -236,7 +261,7 @@ function legend(v) {
   if (v.nodes.some(n => n.status === 'draft') || v.edges.some(e => e.status === 'draft')) {
     items.push(`<li><svg class="sample" viewBox="0 0 64 20" width="64" height="20" aria-hidden="true"><rect x="4" y="3" width="56" height="14" rx="3" fill="var(--c4-container)" fill-opacity=".22" stroke="var(--sketch-ink)" stroke-width="1.8" filter="url(#lg-sk1)"/></svg><span><b>rascunho</b> — em discussão (draft)</span></li>`);
   }
-  if (v.nodes.some(n => n.change || n.pending?.length)) {
+  if ([...v.nodes, ...v.edges].some(x => x.change || x.pending?.length)) {
     const markSample = (cls, glyph) => `<svg class="sample" viewBox="0 0 64 20" width="64" height="20" aria-hidden="true"><g class="mark ${cls}"><circle cx="32" cy="10" r="9"/><text x="32" y="11" font-size="13" font-weight="700" text-anchor="middle" dominant-baseline="middle">${glyph}</text></g></svg>`;
     items.push('<li><b>mudanças da prévia</b></li>',
       `<li>${markSample('m-added', '+')}<span>novo neste delta (em esboço)</span></li>`,
@@ -420,6 +445,7 @@ body.presenting .stage{inset:0}
 .edge.sketchy .line{stroke:var(--sketch-ink)}
 .node.sketchy.focus .shape,.node.sketchy.anchor .shape{stroke:var(--focus);stroke-width:5}
 .node.ch-removed,.node.ch-retired,.edge.ch-removed{opacity:.5}
+.edge.ch-changed .line{stroke:var(--sketch-ink);stroke-width:3}
 .node .strike line{stroke:var(--removed);stroke-width:3}
 .node .ch-outline{fill:none;stroke:var(--sketch-ink);stroke-width:2.2}
 .mark circle{fill:var(--panel);stroke:var(--sketch-ink);stroke-width:1.8}
@@ -835,20 +861,22 @@ const JS = String.raw`
 
   // ---------- drawer
   const escH = t => String(t ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const questions = list => '<ul>' + list.map(q => '<li>[' + q.n + '] ' + escH(q.question) + (q.assumed ? ' <span class="chip">a prévia assume: ' + escH(q.assumed) + '</span>' : '') + (q.options && q.options.length ? ' · opções: ' + escH(q.options.join(' | ')) : '') + '</li>').join('') + '</ul>';
   function openDrawer(id) {
     const v = view(), n = v.nodes[id]; if (!n) return;
     const name = x => escH(v.nodes[x] ? v.nodes[x].name : x);
     const fmt = x => (x === undefined || x === null ? '—' : typeof x === 'string' ? x : JSON.stringify(x));
     const rels = v.edges.filter(e => e.from === id || e.to === id);
     const rel = e => escH(e.help.sentence) + (e.derived ? ' <span class="chip">derivada</span>' : '') + (e.technology ? ' <span class="chip">' + escH(e.technology) + '</span>' : '')
-      + (e.change ? ' <span class="chip">' + { removed: 'sai', retired: 'sai', added: 'nova', changed: 'alterada' }[e.change] + '</span>' : '');
+      + (e.change ? ' <span class="chip">' + { removed: 'sai', retired: 'sai', added: 'nova', changed: 'alterada' }[e.change] + '</span>' : '')
+      + (e.pending && e.pending.length ? questions(e.pending) : '');
     let h = '<h2>' + escH(n.name) + '</h2><div class="kind">' + escH(n.c4Label || n.typeLabel) + (n.c4Label && n.typeLabel ? ' · ArchiMate ' + escH(n.typeLabel) : '') + '</div>';
     if (n.inferred) h += '<p class="warn">⚠︎ Inferido a partir de texto livre: confirme.</p>';
     if (n.status && n.status !== 'active') h += '<p class="warn">' + escH({ draft: 'Rascunho: em discussão.', planned: 'Planejado: ainda não existe.', deprecated: 'Em desativação.', retired: 'Desativado.' }[n.status] || n.status) + '</p>';
     if (n.statusReason) h += '<p style="color:var(--muted)">Motivo: ' + escH(n.statusReason) + '</p>';
     if (n.change) h += '<p class="warn">' + escH({ added: 'Novo neste delta.', changed: 'Alterado por este delta.', removed: 'Removido por este delta: sai da base junto com o que o plano lista.', retired: 'Desativado por este delta.' }[n.change]) + '</p>';
     if (n.changeFields && n.changeFields.length) h += '<h3>Mudanças</h3><ul>' + n.changeFields.map(c => '<li><b>' + escH(c.field) + '</b>: ' + escH(fmt(c.before)) + ' → ' + escH(fmt(c.after)) + '</li>').join('') + '</ul>';
-    if (n.pending && n.pending.length) h += '<h3>Decisões pendentes</h3><ul>' + n.pending.map(q => '<li>[' + q.n + '] ' + escH(q.question) + (q.assumed ? ' <span class="chip">a prévia assume: ' + escH(q.assumed) + '</span>' : '') + (q.options && q.options.length ? ' · opções: ' + escH(q.options.join(' | ')) : '') + '</li>').join('') + '</ul>';
+    if (n.pending && n.pending.length) h += '<h3>Decisões pendentes</h3>' + questions(n.pending);
     if (n.description) h += '<p>' + escH(n.description) + '</p>';
     h += '<dl>';
     if (n.technology) h += '<dt>Tecnologia</dt><dd>' + escH(n.technology) + '</dd>';

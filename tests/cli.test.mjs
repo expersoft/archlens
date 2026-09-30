@@ -123,7 +123,7 @@ test('render --delta draws the preview and leaves ARCHITECTURE.md untouched', ()
   writeFileSync(join(dir, 'd.json'), JSON.stringify(previewDelta));
   const r = run(['render', 'ARCHITECTURE.md', '--delta', 'd.json', '--out', 'p.html'], dir);
   assert.equal(r.status, 0, r.stderr);
-  assert.match(r.stdout, /prévia de d\.json · \+1 ~0 −1, 1 decisão\(ões\) pendente\(s\)/);
+  assert.match(r.stdout, /prévia de d\.json · \+1 ~0 −1 · relações \+0 ~0 −1, 1 decisão\(ões\) pendente\(s\)/);
   assert.match(readFileSync(join(dir, 'p.html'), 'utf8'), /PRÉVIA · não é a base oficial — d\.json/);
   assert.equal(readFileSync(join(dir, 'ARCHITECTURE.md'), 'utf8'), before);
 });

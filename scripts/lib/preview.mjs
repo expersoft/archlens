@@ -173,9 +173,13 @@ function pendingByTarget(plan, idMap, relMap = new Map()) {
 }
 
 export function previewSummary(p) {
-  const count = kinds => [...p.changes.values()].filter(c => kinds.includes(c.kind)).length;
+  const tally = map => {
+    const count = kinds => [...map.values()].filter(c => kinds.includes(c.kind)).length;
+    return `+${count(['added'])} ~${count(['changed'])} −${count(['removed', 'retired'])}`;
+  };
+  const rels = p.relChanges?.size ? ` · relações ${tally(p.relChanges)}` : '';
   const questions = new Set([...p.pending.values()].flat().map(e => e.key)).size;
-  return `+${count(['added'])} ~${count(['changed'])} −${count(['removed', 'retired'])}${questions ? `, ${questions} decisão(ões) pendente(s)` : ''}`;
+  return `${tally(p.changes)}${rels}${questions ? `, ${questions} decisão(ões) pendente(s)` : ''}`;
 }
 
 /** Marks a resolved view (IR) with the preview: node.change / changeFields / pending, edge.change / pending. */

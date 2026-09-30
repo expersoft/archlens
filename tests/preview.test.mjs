@@ -30,7 +30,7 @@ test('added, changed, removed and retired elements are told apart', () => {
   assert.equal(p.changes.get('loja.db').kind, 'removed');
   assert.equal(p.changes.get('k8s').kind, 'retired');
   assert.equal(p.changes.has('cliente'), false);
-  assert.equal(previewSummary(p), '+1 ~1 −2, 3 decisão(ões) pendente(s)');
+  assert.equal(previewSummary(p), '+1 ~1 −2 · relações +0 ~0 −1, 3 decisão(ões) pendente(s)');
 });
 
 test('removed elements come back as ghosts under their parent, with the relationships that fall with them', () => {
@@ -182,4 +182,10 @@ test('views: base views stay resolvable in their base form; the delta views come
   const m = normalizeModel(p.raw);
   const v = annotateView(resolveView(m, view('pag'), { keep: p.keep }), p);
   assert.equal(v.nodes.find(n => n.id === 'pagamentos').change, 'removed');
+});
+
+test('the summary counts relationship changes when there are any', () => {
+  const d = delta({ relationships: [{ from: 'cliente', to: 'loja.web', type: 'uses', description: 'Compra online' }, { from: 'loja.web', to: 'loja.db' }] },
+    { ops: [{ op: 'remove', id: 'loja.api.checkout-serving-loja.web' }] });
+  assert.equal(previewSummary(previewModel(shop(), { delta: d })), '+0 ~0 −0 · relações +1 ~1 −1, 2 decisão(ões) pendente(s)');
 });
