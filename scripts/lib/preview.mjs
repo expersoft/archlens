@@ -110,3 +110,25 @@ export function previewSummary(p) {
   const questions = new Set([...p.pending.values()].flat().map(e => e.key)).size;
   return `+${count(['added'])} ~${count(['changed'])} −${count(['removed', 'retired'])}${questions ? `, ${questions} decisão(ões) pendente(s)` : ''}`;
 }
+
+/** Marks a resolved view (IR) with the preview: node.change / changeFields / pending, edge.change / pending. */
+export function annotateView(view, p) {
+  for (const n of view.nodes) {
+    const c = p.changes.get(n.id);
+    if (c) {
+      n.change = c.kind;
+      if (c.fields) n.changeFields = c.fields;
+    }
+    const q = p.pending.get(n.id);
+    if (q) n.pending = q;
+  }
+  for (const e of view.edges) {
+    const kinds = (e.relIds || []).map(id => p.relChanges.get(id)?.kind ?? 'same');
+    if (kinds.length && kinds.every(k => k === 'removed' || k === 'retired')) e.change = 'removed';
+    else if (kinds.length && kinds.every(k => k === 'added')) e.change = 'added';
+    else if (kinds.some(k => k !== 'same')) e.change = 'changed';
+    const q = (e.relIds || []).flatMap(id => p.pending.get(id) ?? []);
+    if (q.length) e.pending = q;
+  }
+  return view;
+}

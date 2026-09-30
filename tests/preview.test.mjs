@@ -1,8 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { previewModel, previewSummary } from '../scripts/lib/preview.mjs';
+import { previewModel, previewSummary, annotateView } from '../scripts/lib/preview.mjs';
 import { planMerge, applyPlan, canonicalJson } from '../scripts/lib/merge.mjs';
+import { normalizeModel } from '../scripts/lib/model.mjs';
+import { resolveView } from '../scripts/lib/query.mjs';
 import { validateModel } from '../scripts/lib/validate.mjs';
 
 const shop = () => JSON.parse(readFileSync(new URL('./fixtures/shop.json', import.meta.url)));
@@ -123,4 +125,21 @@ test('ghosts keep a top-level parent when the child is listed before it', () => 
   const c = find(p.raw, 'c');
   assert.ok(c.parent === 'a' || (a.children || []).some(x => x.id === 'c'));
   assert.deepEqual(validateModel(p.raw).errors, []);
+});
+
+test('views keep ghosts and retired-in-this-delta items visible, and are annotated', () => {
+  const d = delta(
+    { elements: [{ id: 'loja.worker', type: 'c4:container', name: 'Worker', parent: 'loja' }] },
+    { ops: [{ op: 'remove', id: 'loja.db' }, { op: 'status', id: 'pagamentos', status: 'retired' }] },
+  );
+  const p = previewModel(shop(), { delta: d });
+  const v = annotateView(resolveView(normalizeModel(p.raw), { key: 'c', notation: 'c4', level: 'container', scope: 'loja' }, { keep: p.keep }), p);
+  const node = id => v.nodes.find(n => n.id === id);
+  assert.equal(node('loja.worker').change, 'added');
+  assert.equal(node('loja.db').change, 'removed');
+  assert.equal(node('pagamentos').change, 'retired');
+  assert.equal(node('loja.db').pending[0].key, 'op:0');
+  assert.equal(node('loja.web').change, undefined);
+  const toDb = v.edges.find(e => e.to === 'loja.db');
+  assert.equal(toDb.change, 'removed');
 });

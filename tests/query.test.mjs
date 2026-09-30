@@ -205,3 +205,9 @@ test('draft items are visible by default and carry their status and reason', () 
   const asIs = resolveView(m, { key: 'a', notation: 'c4', level: 'container', scope: 'loja', status: ['active', 'deprecated'] });
   assert.ok(!ids(asIs).includes('loja.web'));
 });
+
+test('resolveView can keep ids visible that the status filter would hide (preview ghosts)', () => {
+  const m = modelWith(r => { findRaw(r, 'loja.db').status = 'retired'; });
+  assert.ok(!ids(resolveView(m, { key: 'c', notation: 'c4', level: 'container', scope: 'loja' })).includes('loja.db'));
+  assert.ok(ids(resolveView(m, { key: 'c', notation: 'c4', level: 'container', scope: 'loja' }, { keep: new Set(['loja.db']) })).includes('loja.db'));
+});
