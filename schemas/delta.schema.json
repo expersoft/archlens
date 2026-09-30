@@ -1,13 +1,19 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://archlens.local/model.schema.json",
-  "title": "archlens model",
+  "$id": "https://archlens.local/delta.schema.json",
+  "title": "archlens delta (one enrichment round)",
   "type": "object",
   "required": [
-    "model"
+    "archlens-delta"
   ],
   "properties": {
-    "archlens": {
+    "archlens-delta": {
+      "const": "1.0"
+    },
+    "source": {
+      "$ref": "#/$defs/source"
+    },
+    "summary": {
       "type": "string"
     },
     "name": {
@@ -15,9 +21,6 @@
     },
     "description": {
       "type": "string"
-    },
-    "meta": {
-      "type": "object"
     },
     "assumptions": {
       "type": "array",
@@ -27,9 +30,6 @@
     },
     "model": {
       "type": "object",
-      "required": [
-        "elements"
-      ],
       "properties": {
         "elements": {
           "type": "array",
@@ -51,10 +51,98 @@
         "$ref": "view.schema.json"
       }
     },
-    "changelog": {
+    "ops": {
       "type": "array",
       "items": {
-        "$ref": "#/$defs/changelogEntry"
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "op",
+              "id",
+              "name"
+            ],
+            "properties": {
+              "op": {
+                "const": "rename"
+              },
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "op",
+              "id",
+              "add"
+            ],
+            "properties": {
+              "op": {
+                "const": "alias"
+              },
+              "id": {
+                "type": "string"
+              },
+              "add": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "op",
+              "id",
+              "status"
+            ],
+            "properties": {
+              "op": {
+                "const": "status"
+              },
+              "id": {
+                "type": "string"
+              },
+              "status": {
+                "enum": [
+                  "planned",
+                  "active",
+                  "deprecated",
+                  "retired"
+                ]
+              },
+              "reason": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "op",
+              "id"
+            ],
+            "properties": {
+              "op": {
+                "const": "remove"
+              },
+              "id": {
+                "type": "string"
+              }
+            }
+          }
+        ]
       }
     }
   },
@@ -62,8 +150,7 @@
     "element": {
       "type": "object",
       "required": [
-        "id",
-        "type"
+        "id"
       ],
       "additionalProperties": false,
       "properties": {
@@ -525,62 +612,6 @@
         },
         "date": {
           "type": "string"
-        }
-      }
-    },
-    "changelogEntry": {
-      "type": "object",
-      "required": [
-        "id",
-        "date"
-      ],
-      "properties": {
-        "id": {
-          "type": "string"
-        },
-        "date": {
-          "type": "string"
-        },
-        "source": {
-          "$ref": "#/$defs/source"
-        },
-        "summary": {
-          "type": "string"
-        },
-        "added": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "changed": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "status": {
-          "type": "object",
-          "additionalProperties": {
-            "enum": [
-              "planned",
-              "active",
-              "deprecated",
-              "retired"
-            ]
-          }
-        },
-        "removed": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "decisions": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
         }
       }
     }

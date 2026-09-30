@@ -30,7 +30,7 @@ test('extractModel fails clearly when the block is missing', () => {
 test('published JSON schemas match the registry', async () => {
   const { buildSchemas } = await import('../scripts/gen-schemas.mjs');
   const fresh = buildSchemas();
-  for (const name of ['model', 'view']) {
+  for (const name of ['model', 'view', 'delta', 'plan']) {
     const onDisk = JSON.parse(readFileSync(new URL(`../schemas/${name}.schema.json`, import.meta.url)));
     assert.deepEqual(onDisk, fresh[name], `schemas/${name}.schema.json is stale: run node scripts/gen-schemas.mjs`);
   }
@@ -62,4 +62,15 @@ test('generateDoc without lifecycle data keeps the old tables', () => {
   assert.match(md, /^updated: 2026-10-03$/m);
   assert.match(md, /_Todos os elementos e relações estão ativos\._/);
   assert.match(md, /_Nenhuma rodada de merge registrada\._/);
+});
+
+test('schemas describe the new fields', async () => {
+  const { buildSchemas } = await import('../scripts/gen-schemas.mjs');
+  const s = buildSchemas();
+  assert.deepEqual(s.model.$defs.element.properties.status.enum, ['planned', 'active', 'deprecated', 'retired']);
+  assert.ok(s.model.$defs.source.properties.kind.enum.includes('repo'));
+  assert.ok(s.model.properties.changelog);
+  assert.ok(s.view.properties.status);
+  assert.deepEqual(s.delta.$defs.element.required, ['id']);
+  assert.equal(s.plan.properties['archlens-plan'].const, '1.0');
 });

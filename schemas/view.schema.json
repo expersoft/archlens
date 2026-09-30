@@ -217,6 +217,18 @@
         "type": "string"
       }
     },
+    "status": {
+      "description": "lifecycle statuses shown (default: all but retired)",
+      "type": "array",
+      "items": {
+        "enum": [
+          "planned",
+          "active",
+          "deprecated",
+          "retired"
+        ]
+      }
+    },
     "derive": {
       "type": "boolean"
     },
