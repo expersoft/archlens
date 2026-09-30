@@ -42,12 +42,12 @@ A skill é acionada por pedidos como:
 
 O Claude:
 
-1. monta um delta (marcando o que inferiu e anotando premissas) e roda o merge, perguntando o que for conflito;
-2. valida;
-3. escreve as visões pedidas;
-4. roda `build`, que gera o `ARCHITECTURE.md`, o HTML e os screenshots;
-5. lê o relatório de qualidade e divide visões grandes demais;
-6. escreve a interpretação no documento.
+1. monta um delta (marcando o que inferiu e anotando premissas) e roda o merge, perguntando o que for conflito
+   (a validação acontece dentro do merge: um plano com erros sai bloqueado e o apply não grava nada inválido);
+2. escreve as visões pedidas;
+3. roda `build`, que gera o `ARCHITECTURE.md`, o HTML e os screenshots;
+4. lê o relatório de qualidade e divide visões grandes demais;
+5. escreve a interpretação no documento.
 
 Nas próximas conversas, basta apontar o `ARCHITECTURE.md` e pedir novas visões. O modelo não é refeito.
 
@@ -71,9 +71,13 @@ Pela linha de comando:
 
 ```bash
 $A merge ARCHITECTURE.md delta.json --plan plano.json   # relatório + plano com as perguntas
+# responda primeiro as possíveis duplicatas (same | different); se alguma for "same", replaneje com as respostas:
+$A merge ARCHITECTURE.md delta.json --plan plano2.json --answers plano.json
 # edite "resolution" nos itens pendentes: keep | take | value:<x> | same | different | yes | no
-$A merge ARCHITECTURE.md --apply plano.json            # grava, regenera e registra
+$A merge ARCHITECTURE.md --apply plano2.json           # grava, regenera e registra
 ```
+
+Aplicar de novo um delta que já entrou não muda nada: o apply imprime `= nada mudou; a base não foi regravada`.
 
 Veja `examples/telemedicina/delta-01.json` e `plano-01.json`, e o formato completo em `references/merge.md`.
 
@@ -99,8 +103,10 @@ $A resolve  ARCHITECTURE.md --view containers --json        # IR da visão (nós
 | `render` | HTML, sem checagem |
 | `deliver` | HTML + screenshots 1920×1080 e 1280×720 + checagem de largura (≥ 90%) e fonte (≥ 14px). `--strict` não substitui a saída se falhar |
 | `build` | `doc` + `deliver` de todas as visões |
+| `merge … --plan p.json [--answers antigo.json]` | compara um delta com a base e grava o plano com as perguntas; `--answers` reaproveita as respostas de um plano anterior |
+| `merge … --apply p.json` | aplica o plano respondido: valida, regenera o `ARCHITECTURE.md` e registra o histórico |
 
-Todos aceitam `model.json` ou `ARCHITECTURE.md`.
+Todos aceitam `model.json` ou `ARCHITECTURE.md`, menos o `merge`, que trabalha sempre sobre o `ARCHITECTURE.md`.
 
 ## Apresentando
 

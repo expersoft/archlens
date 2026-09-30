@@ -102,7 +102,7 @@ perguntas novas. As respostas do plano anterior entram pré-preenchidas (o relat
 - `status`: `planned`, `active` (padrão), `deprecated`, `retired`. Visões escondem `retired` por padrão; use
   `status` na view spec para as-is/to-be. O `validate` avisa `W_RETIRED_DEPENDENCY`.
 - Cada apply que muda algo acrescenta uma entrada em `changelog` (seção **Histórico** do `.md`). Aplicar o mesmo
-  delta de novo não muda nada e não cria entrada.
+  delta de novo não muda nada e não cria entrada: o apply imprime `= nada mudou; a base não foi regravada`.
 
 ## Boas práticas
 

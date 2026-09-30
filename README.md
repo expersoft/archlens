@@ -29,6 +29,7 @@ node scripts/archlens.mjs build examples/loja-online/ARCHITECTURE.md --out-dir /
 | Guia do usuário | [docs/GUIA.md](docs/GUIA.md) |
 | DSL | [references/notation.md](references/notation.md) |
 | Visões | [references/views.md](references/views.md) |
+| Evolução da base (merge) | [references/merge.md](references/merge.md) |
 | Exemplos | [examples/loja-online](examples/loja-online), [examples/telemedicina](examples/telemedicina) |
 | Plano de implementação | [docs/plans/](docs/plans/) |
 
