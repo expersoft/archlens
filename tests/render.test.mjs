@@ -136,3 +136,18 @@ test('layoutQuality counts crossings, edges through boxes and bends', () => {
   assert.equal(q.through, 1);
   assert.equal(q.bends, 1);
 });
+
+test('render marks deprecated and planned nodes', async () => {
+  const r = raw();
+  r.model.elements.find(e => e.id === 'pagamentos').status = 'deprecated';
+  r.model.elements.find(e => e.id === 'k8s').status = 'planned';
+  const m = normalizeModel(r);
+  const views = [
+    await layoutView(resolveView(m, { key: 'c', notation: 'c4', level: 'context', scope: 'loja' })),
+    await layoutView(resolveView(m, { key: 's', notation: 'archimate', viewpoint: 'layered', anchor: 'venda', traverse: { mode: 'supporters' } })),
+  ];
+  const html = renderHtml({ title: 't', views });
+  assert.match(html, /class="node c4 k-external[^"]* st-deprecated"/);
+  assert.match(html, /class="node am l-[^"]* st-planned"/);
+  assert.match(html, /\.node\.st-deprecated\{/);
+});

@@ -73,3 +73,86 @@ test('validation reports stable codes', () => {
   assert.ok(warnings.some(w => w.code === 'W_REL_DIRECTION'));
   assert.ok(errors.every(e => e.message && e.hint), 'errors carry message + hint');
 });
+
+import { canonicalRel } from '../scripts/lib/model.mjs';
+import { addSources } from '../scripts/lib/sources.mjs';
+
+const findRaw = (r, id) => {
+  let hit;
+  const walk = list => list.forEach(e => { if (e.id === id) hit = e; walk(e.children || []); });
+  walk(r.model.elements);
+  return hit;
+};
+const shopWith = mut => { const r = raw(); mut(r); return r; };
+
+test('normalizeModel reads status, aliases and sources, accepting the legacy source string', () => {
+  const m = normalizeModel(shopWith(r => {
+    Object.assign(findRaw(r, 'loja.api'), { status: 'deprecated', statusReason: 'migração', aliases: ['orders-service'],
+      sources: [{ kind: 'repo', ref: 'github.com/x/orders@a1b2c3d', path: 'compose.yml' }] });
+    findRaw(r, 'loja.web').source = 'a vitrine é em Next.js';
+  }));
+  const api = m.elements.get('loja.api');
+  assert.equal(api.status, 'deprecated');
+  assert.equal(api.statusReason, 'migração');
+  assert.deepEqual(api.aliases, ['orders-service']);
+  assert.equal(api.sources[0].kind, 'repo');
+  assert.deepEqual(m.elements.get('loja.web').sources, [{ kind: 'prompt', excerpt: 'a vitrine é em Next.js' }]);
+  assert.equal(m.elements.get('cliente').status, 'active');
+  assert.deepEqual(m.elements.get('cliente').sources, []);
+  assert.equal(m.relationships[0].status, 'active');
+});
+
+test('validate flags invalid status, sources and alias conflicts', () => {
+  const codes = validateModel(shopWith(r => {
+    findRaw(r, 'loja.api').status = 'morto';
+    findRaw(r, 'loja.web').sources = [{ kind: 'git', ref: 'x' }, { kind: 'repo' }];
+    findRaw(r, 'loja.db').aliases = ['Loja API']; // aliasKey("Loja API") === aliasKey("loja.api")
+    r.model.relationships[0].status = 'zumbi';
+  })).errors.map(e => e.code);
+  assert.equal(codes.filter(c => c === 'E_STATUS').length, 2);
+  assert.equal(codes.filter(c => c === 'E_SOURCE').length, 2);
+  assert.ok(codes.includes('E_ALIAS_CONFLICT'));
+});
+
+test('validate warns when something active depends on a retired element', () => {
+  const w = validateModel(shopWith(r => { findRaw(r, 'k8s').status = 'retired'; })).warnings.filter(x => x.code === 'W_RETIRED_DEPENDENCY');
+  assert.equal(w.length, 1);
+  assert.match(w[0].message, /loja\.api/);
+});
+
+test('canonicalRel reads uses as inverted serving, or access to passive targets', () => {
+  const types = { web: 'application-component', api: 'application-component', db: 'data-object' };
+  const typeOf = id => types[id];
+  assert.deepEqual(canonicalRel({ from: 'web', to: 'api', type: 'uses' }, typeOf), { type: 'serving', from: 'api', to: 'web' });
+  assert.deepEqual(canonicalRel({ from: 'api', to: 'db' }, typeOf), { type: 'access', from: 'api', to: 'db', accessType: 'readwrite' });
+  assert.deepEqual(canonicalRel({ from: 'api', to: 'web', type: 'archimate:serving' }, typeOf), { type: 'serving', from: 'api', to: 'web' });
+  assert.equal(canonicalRel({ from: 'a', to: 'b', type: 'banana' }, () => undefined).error, 'E_REL_TYPE');
+});
+
+test('addSources deduplicates by kind+ref+path and migrates a legacy source string', () => {
+  const el = { id: 'x', source: 'trecho antigo' };
+  assert.equal(addSources(el, [{ kind: 'repo', ref: 'r@1', path: 'a.yml' }, { kind: 'repo', ref: 'r@1', path: 'a.yml', date: '2026-10-01' }]), 1);
+  assert.equal(el.source, undefined);
+  assert.deepEqual(el.sources, [{ kind: 'prompt', excerpt: 'trecho antigo' }, { kind: 'repo', ref: 'r@1', path: 'a.yml' }]);
+  assert.equal(addSources(el, []), 0);
+});
+
+test('validate reports a saved view whose status is not a list of known statuses', () => {
+  const r = raw();
+  r.views.push({ key: 's1', notation: 'c4', level: 'landscape', status: 'planned' });
+  r.views.push({ key: 's2', notation: 'c4', level: 'landscape', status: ['vivo'] });
+  r.views.push({ key: 's3', notation: 'c4', level: 'landscape', status: ['planned', 'active'] });
+  const { errors } = validateModel(r);
+  assert.deepEqual(errors.filter(e => e.code === 'E_VIEW_STATUS').map(e => e.path), ['views[2].status', 'views[3].status']);
+});
+
+test('aliases that are not a list are a schema error, not a crash', () => {
+  const r = raw();
+  r.model.elements[0].aliases = 'cliente final';
+  let res;
+  assert.doesNotThrow(() => { res = validateModel(r); });
+  const e = res.errors.find(x => x.code === 'E_SCHEMA');
+  assert.equal(e?.path, 'model.elements[0].aliases');
+  assert.match(e.hint, /lista/);
+  assert.deepEqual(res.model.elements.get('cliente').aliases, []);
+});

@@ -6,6 +6,7 @@ feitos para apresentação em tela cheia.
 
 - [Instalação](#instalação)
 - [Usando com o Claude](#usando-com-o-claude)
+- [Evoluindo a base](#evoluindo-a-base)
 - [Usando pela linha de comando](#usando-pela-linha-de-comando)
 - [Apresentando](#apresentando)
 - [Os cenários, com exemplos](#os-cenários-com-exemplos)
@@ -41,26 +42,56 @@ A skill é acionada por pedidos como:
 
 O Claude:
 
-1. monta o `model.json` (marcando o que inferiu e anotando premissas);
-2. valida;
-3. escreve as visões pedidas;
-4. roda `build`, que gera o `ARCHITECTURE.md`, o HTML e os screenshots;
-5. lê o relatório de qualidade e divide visões grandes demais;
-6. escreve a interpretação no documento.
+1. monta um delta (marcando o que inferiu e anotando premissas) e roda o merge, perguntando o que for conflito
+   (a validação acontece dentro do merge: um plano com erros sai bloqueado e o apply não grava nada inválido);
+2. escreve as visões pedidas;
+3. roda `build`, que gera o `ARCHITECTURE.md`, o HTML e os screenshots;
+4. lê o relatório de qualidade e divide visões grandes demais;
+5. escreve a interpretação no documento.
 
 Nas próximas conversas, basta apontar o `ARCHITECTURE.md` e pedir novas visões. O modelo não é refeito.
+
+## Evoluindo a base
+
+A base cresce por rodadas. A cada informação nova, diga ao Claude o que mudou:
+
+> O PEP Tasy vai ser substituído por um PEP em nuvem até março. Atualize a base.
+
+> A API de Pedidos agora é Kotlin, e existe um worker novo que consome o tópico de pedidos.
+
+O Claude escreve um **delta**, roda `archlens merge … --plan`, mostra o que é novo e pergunta, **um item por vez**,
+só o que exige decisão: conflitos ("a base diz Java, você disse Kotlin"), possíveis duplicatas ("'API Agendamento' é
+a mesma 'API de Agendamento'?"), remoções e desativações. Depois aplica, e o `ARCHITECTURE.md` ganha:
+
+- a coluna **Fontes** e a seção **Fontes** (de onde veio cada fato);
+- a seção **Ciclo de vida** (`planned`, `deprecated`, `retired`) e visões as-is/to-be;
+- a seção **Histórico** com a rodada, e um commit sugerido.
+
+Pela linha de comando:
+
+```bash
+$A merge ARCHITECTURE.md delta.json --plan plano.json   # relatório + plano com as perguntas
+# responda primeiro as possíveis duplicatas (same | different); se alguma for "same", replaneje com as respostas:
+$A merge ARCHITECTURE.md delta.json --plan plano2.json --answers plano.json
+# edite "resolution" nos itens pendentes: keep | take | value:<x> | same | different | yes | no
+$A merge ARCHITECTURE.md --apply plano2.json           # grava, regenera e registra
+```
+
+Aplicar de novo um delta que já entrou não muda nada: o apply imprime `= nada mudou; a base não foi regravada`.
+
+Veja `examples/telemedicina/delta-01.json` e `plano-01.json`, e o formato completo em `references/merge.md`.
 
 ## Usando pela linha de comando
 
 ```bash
 A="node scripts/archlens.mjs"
-$A validate examples/loja-online/model.json
-$A views    examples/loja-online/model.json            # visões definidas + sugestões
-$A doc      examples/loja-online/model.json            # gera/atualiza ARCHITECTURE.md
-$A build    examples/loja-online/model.json --out-dir out/
+$A validate examples/loja-online/ARCHITECTURE.md
+$A views    examples/loja-online/ARCHITECTURE.md            # visões definidas + sugestões
+$A doc      examples/loja-online/ARCHITECTURE.md            # gera/atualiza ARCHITECTURE.md
+$A build    examples/loja-online/ARCHITECTURE.md --out-dir out/
 $A deliver  out/ARCHITECTURE.md --view impacto-api-pedidos --out out/impacto.html --open
 $A deliver  out/ARCHITECTURE.md --spec '{"key":"erp","notation":"archimate","viewpoint":"impact","anchor":"erp"}' --out out/erp.html
-$A resolve  model.json --view containers --json        # IR da visão (nós e arestas), para depuração
+$A resolve  ARCHITECTURE.md --view containers --json        # IR da visão (nós e arestas), para depuração
 ```
 
 | Comando | O que faz |
@@ -72,8 +103,10 @@ $A resolve  model.json --view containers --json        # IR da visão (nós e ar
 | `render` | HTML, sem checagem |
 | `deliver` | HTML + screenshots 1920×1080 e 1280×720 + checagem de largura (≥ 90%) e fonte (≥ 14px). `--strict` não substitui a saída se falhar |
 | `build` | `doc` + `deliver` de todas as visões |
+| `merge … --plan p.json [--answers antigo.json]` | compara um delta com a base e grava o plano com as perguntas; `--answers` reaproveita as respostas de um plano anterior |
+| `merge … --apply p.json` | aplica o plano respondido: valida, regenera o `ARCHITECTURE.md` e registra o histórico |
 
-Todos aceitam `model.json` ou `ARCHITECTURE.md`.
+Todos aceitam `model.json` ou `ARCHITECTURE.md`, menos o `merge`, que trabalha sempre sobre o `ARCHITECTURE.md`.
 
 ## Apresentando
 

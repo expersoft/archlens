@@ -1,16 +1,19 @@
 ---
 archlens: "1.0"
 name: "Teleconsulta — Clínica Vida"
-generated: 2026-09-24
+generated: 2026-09-30
+revision: 1
+updated: 2026-09-30
 notations: [c4, archimate]
-elements: 32
-relationships: 44
+elements: 33
+relationships: 46
 ---
 
 # Teleconsulta — Clínica Vida
 
 > Base de conhecimento gerada pela skill **archlens**. As tabelas são derivadas do bloco
-> `archlens-json` no fim do documento, que é a fonte de verdade: edite o JSON e regenere.
+> `archlens-json` no fim do documento, que é a fonte de verdade. Evolua a base com `archlens merge`
+> (delta → plano → apply); editar o bloco à mão e regenerar com `archlens doc` continua possível.
 > Texto entre marcadores `<!-- keep:... -->` é preservado ao regenerar.
 
 ## Visão geral
@@ -24,13 +27,13 @@ Modelo extraído de texto livre (ver entrada.md). Itens marcados como inferidos 
 | Camada | Elementos |
 | --- | --- |
 | Negócio | 11 |
-| Aplicação | 16 |
+| Aplicação | 17 |
 | Tecnologia | 5 |
 
 | Tipo C4 | Quantidade |
 | --- | --- |
 | Person | 2 |
-| Software System | 6 |
+| Software System | 7 |
 | Container | 6 |
 
 ## Contexto e atores
@@ -46,14 +49,14 @@ Modelo extraído de texto livre (ver entrada.md). Itens marcados como inferidos 
 
 Agendamento, pagamento e sala de vídeo
 
-| Container | Tecnologia | Descrição | id |
-| --- | --- | --- | --- |
-| App do Paciente | React Native | — | `tele.app` |
-| Site do Paciente | SPA | — | `tele.site` |
-| Portal Médico | Web | — | `tele.portal-medico` |
-| API de Agendamento | Node.js | Agenda, cobrança e criação de salas | `tele.api` |
-| Banco de Agendamentos 🛢 | PostgreSQL | — | `tele.db` |
-| Worker de Notificações | Node.js | — | `tele.notificador` |
+| Container | Tecnologia | Descrição | Status | Fontes | id |
+| --- | --- | --- | --- | --- | --- |
+| App do Paciente | React Native | — | active | P | `tele.app` |
+| Site do Paciente | SPA | — | active | P | `tele.site` |
+| Portal Médico | Web | — | active | P | `tele.portal-medico` |
+| API de Agendamento | Node.js | Agenda, cobrança e confirmação de consultas | active | P | `tele.api` |
+| Banco de Agendamentos 🛢 | PostgreSQL | — | active | P | `tele.db` |
+| Worker de Notificações | Node.js | — | active | P | `tele.notificador` |
 
 ### PEP (Tasy) — Software System
 
@@ -67,52 +70,57 @@ Prontuário eletrônico legado
 
 ### Assinatura ICP-Brasil — Software System (externo)
 
+### PEP em nuvem — Software System (externo)
+
+Prontuário eletrônico SaaS que substitui o Tasy
+
 ## Camada de Negócio
 
-| Elemento | Tipo ArchiMate | Descrição | id |
-| --- | --- | --- | --- |
-| Paciente | Business Actor (C4 Person) | Agenda, paga e participa da teleconsulta | `paciente` |
-| Médico | Business Actor (C4 Person) | Atende, registra prontuário e emite receita | `medico` |
-| Teleconsulta | Product | — | `prod-tele` |
-| Agendamento de consulta | Business Service | — | `bs-agendamento` |
-| Consulta por vídeo | Business Service | — | `bs-consulta` |
-| Receita digital | Business Service | — | `bs-receita` |
-| Agendar teleconsulta | Business Process | — | `bp-agendar` |
-| Realizar teleconsulta | Business Process | — | `bp-realizar` |
-| Emitir receita | Business Process | — | `bp-emitir` |
-| Prontuário | Business Object | — | `bo-prontuario` |
-| Receita | Business Object | — | `bo-receita` |
+| Elemento | Tipo ArchiMate | Descrição | Status | Fontes | id |
+| --- | --- | --- | --- | --- | --- |
+| Paciente | Business Actor (C4 Person) | Agenda, paga e participa da teleconsulta | active | P | `paciente` |
+| Médico | Business Actor (C4 Person) | Atende, registra prontuário e emite receita | active | P | `medico` |
+| Teleconsulta | Product | — | active | P | `prod-tele` |
+| Agendamento de consulta | Business Service | — | active | — | `bs-agendamento` |
+| Consulta por vídeo | Business Service | — | active | — | `bs-consulta` |
+| Receita digital | Business Service | — | active | — | `bs-receita` |
+| Agendar teleconsulta | Business Process | — | active | — | `bp-agendar` |
+| Realizar teleconsulta | Business Process | — | active | — | `bp-realizar` |
+| Emitir receita | Business Process | — | active | — | `bp-emitir` |
+| Prontuário | Business Object | — | active | — | `bo-prontuario` |
+| Receita | Business Object | — | active | — | `bo-receita` |
 
 ## Camada de Aplicação
 
-| Elemento | Tipo ArchiMate | Descrição | id |
-| --- | --- | --- | --- |
-| Plataforma de Teleconsulta | Application Component (C4 Software System) | Agendamento, pagamento e sala de vídeo | `tele` |
-| App do Paciente ⚠︎ | Application Component (C4 Container) | — | `tele.app` |
-| Site do Paciente | Application Component (C4 Container) | — | `tele.site` |
-| Portal Médico | Application Component (C4 Container) | — | `tele.portal-medico` |
-| API de Agendamento | Application Component (C4 Container) | Agenda, cobrança e criação de salas | `tele.api` |
-| Banco de Agendamentos | Data Object (C4 Container) | — | `tele.db` |
-| Worker de Notificações ⚠︎ | Application Component (C4 Container) | — | `tele.notificador` |
-| PEP (Tasy) | Application Component (C4 Software System) | Prontuário eletrônico legado | `pep` |
-| Twilio Video | Application Component (C4 Software System) | — | `twilio` |
-| Gateway de Pagamento ⚠︎ | Application Component (C4 Software System) | — | `gateway` |
-| WhatsApp Business API | Application Component (C4 Software System) | — | `whatsapp` |
-| Assinatura ICP-Brasil ⚠︎ | Application Component (C4 Software System) | — | `icp` |
-| Agenda e cobrança | Application Service | — | `as-agenda` |
-| Sala de vídeo | Application Service | — | `as-video` |
-| Registro clínico | Application Service | — | `as-registro` |
-| Assinatura digital | Application Service | — | `as-assinatura` |
+| Elemento | Tipo ArchiMate | Descrição | Status | Fontes | id |
+| --- | --- | --- | --- | --- | --- |
+| Plataforma de Teleconsulta | Application Component (C4 Software System) | Agendamento, pagamento e sala de vídeo | active | — | `tele` |
+| App do Paciente | Application Component (C4 Container) | — | active | P | `tele.app` |
+| Site do Paciente | Application Component (C4 Container) | — | active | P | `tele.site` |
+| Portal Médico | Application Component (C4 Container) | — | active | P | `tele.portal-medico` |
+| API de Agendamento | Application Component (C4 Container) | Agenda, cobrança e confirmação de consultas | active | P | `tele.api` |
+| Banco de Agendamentos | Data Object (C4 Container) | — | active | P | `tele.db` |
+| Worker de Notificações ⚠︎ | Application Component (C4 Container) | — | active | P | `tele.notificador` |
+| PEP (Tasy) | Application Component (C4 Software System) | Prontuário eletrônico legado | deprecated | P | `pep` |
+| Twilio Video | Application Component (C4 Software System) | — | active | P | `twilio` |
+| Gateway de Pagamento ⚠︎ | Application Component (C4 Software System) | — | active | P | `gateway` |
+| WhatsApp Business API | Application Component (C4 Software System) | — | active | P | `whatsapp` |
+| Assinatura ICP-Brasil ⚠︎ | Application Component (C4 Software System) | — | active | P | `icp` |
+| Agenda e cobrança | Application Service | — | active | — | `as-agenda` |
+| Sala de vídeo | Application Service | — | active | — | `as-video` |
+| Registro clínico | Application Service | — | active | — | `as-registro` |
+| Assinatura digital | Application Service | — | active | — | `as-assinatura` |
+| PEP em nuvem | Application Component (C4 Software System) | Prontuário eletrônico SaaS que substitui o Tasy | planned | P | `pep-nuvem` |
 
 ## Camada de Tecnologia
 
-| Elemento | Tipo ArchiMate | Descrição | id |
-| --- | --- | --- | --- |
-| AWS ECS | Node | — | `tn-ecs` |
-| Execução de contêineres | Technology Service | — | `ts-containers` |
-| PostgreSQL (RDS) ⚠︎ | System Software | — | `ss-rds` |
-| Datacenter da clínica | Node | — | `tn-dc` |
-| VPN AWS ↔ datacenter ⚠︎ | Communication Network | — | `cn-vpn` |
+| Elemento | Tipo ArchiMate | Descrição | Status | Fontes | id |
+| --- | --- | --- | --- | --- | --- |
+| AWS ECS | Node | — | active | P | `tn-ecs` |
+| Execução de contêineres | Technology Service | — | active | — | `ts-containers` |
+| PostgreSQL (RDS) ⚠︎ | System Software | — | active | — | `ss-rds` |
+| Datacenter da clínica | Node | — | active | P | `tn-dc` |
+| VPN AWS ↔ datacenter ⚠︎ | Communication Network | — | active | — | `cn-vpn` |
 
 ## Relacionamentos
 
@@ -162,6 +170,8 @@ Prontuário eletrônico legado
 | PostgreSQL (RDS) | serving | API de Agendamento | — | — |
 | Datacenter da clínica | serving | PEP (Tasy) | — | — |
 | VPN AWS ↔ datacenter | serving | PEP (Tasy) | — | — |
+| Portal Médico | usa | PEP em nuvem | Registra prontuário | HTTPS/FHIR |
+| PEP em nuvem | realization | Registro clínico | — | — |
 
 ## Rastreabilidade
 
@@ -170,7 +180,7 @@ Cadeias de suporte calculadas a partir do modelo (o que sustenta cada oferta, e 
 ### Teleconsulta (Product) — o que sustenta
 
 - **Negócio:** Paciente, Médico, Agendamento de consulta, Consulta por vídeo, Receita digital, Agendar teleconsulta, Realizar teleconsulta, Emitir receita, Prontuário, Receita
-- **Aplicação:** Plataforma de Teleconsulta, App do Paciente, Site do Paciente, Portal Médico, API de Agendamento, Banco de Agendamentos, PEP (Tasy), Twilio Video, Gateway de Pagamento, Assinatura ICP-Brasil, Agenda e cobrança, Sala de vídeo, Registro clínico, Assinatura digital
+- **Aplicação:** Plataforma de Teleconsulta, App do Paciente, Site do Paciente, Portal Médico, API de Agendamento, Banco de Agendamentos, PEP (Tasy), Twilio Video, Gateway de Pagamento, Assinatura ICP-Brasil, Agenda e cobrança, Sala de vídeo, Registro clínico, Assinatura digital, PEP em nuvem
 - **Tecnologia:** AWS ECS, Execução de contêineres, PostgreSQL (RDS), Datacenter da clínica, VPN AWS ↔ datacenter
 
 ### Dependências por aplicação
@@ -185,6 +195,15 @@ Cadeias de suporte calculadas a partir do modelo (o que sustenta cada oferta, e 
 | Worker de Notificações | — | AWS ECS, Execução de contêineres |
 | PEP (Tasy) | Médico, Teleconsulta, Consulta por vídeo, Receita digital, Realizar teleconsulta, Emitir receita | Datacenter da clínica, VPN AWS ↔ datacenter |
 
+## Ciclo de vida
+
+| Item | Tipo | Status | Motivo | id |
+| --- | --- | --- | --- | --- |
+| PEP (Tasy) | Application Component | deprecated | substituição pelo PEP em nuvem | `pep` |
+| PEP em nuvem | Application Component | planned | — | `pep-nuvem` |
+| Portal Médico → PEP em nuvem | usa | planned | — | `pep-nuvem-serving-tele.portal-medico` |
+| PEP em nuvem → Registro clínico | realization | planned | — | `pep-nuvem-realization-as-registro` |
+
 ## Premissas e inferências
 
 <!-- keep:assumptions -->
@@ -197,7 +216,6 @@ Cadeias de suporte calculadas a partir do modelo (o que sustenta cada oferta, e 
 
 | Item | Tipo | Confiança | Origem no texto |
 | --- | --- | --- | --- |
-| App do Paciente | Application Component | alta | agenda pelo app |
 | Worker de Notificações | Application Component | média | Lembretes são enviados por WhatsApp |
 | Gateway de Pagamento | Application Component | média | paga com cartão |
 | Assinatura ICP-Brasil | Application Component | média | receita digital assinada com certificado ICP-Brasil |
@@ -210,6 +228,13 @@ Cadeias de suporte calculadas a partir do modelo (o que sustenta cada oferta, e 
 | API de Agendamento → PostgreSQL (RDS) | serving | — | — |
 | PEP (Tasy) → VPN AWS ↔ datacenter | serving | — | — |
 
+## Fontes
+
+| Tipo | Referência | Data | Itens |
+| --- | --- | --- | --- |
+| prompt | (trechos de texto livre) | — | 16 |
+| prompt | rodada 2026-10-01: substituição do PEP | 2026-10-01 | 6 |
+
 ## Visões
 
 | key | Notação | Tipo | Escopo / âncora | Descrição |
@@ -218,6 +243,13 @@ Cadeias de suporte calculadas a partir do modelo (o que sustenta cada oferta, e 
 | `containers` | c4 | container | Plataforma de Teleconsulta | Containers — Plataforma de Teleconsulta |
 | `suporte-teleconsulta` | archimate | product-support | Teleconsulta | Oferta Teleconsulta — do negócio à infraestrutura |
 | `impacto-api-agenda` | archimate | impact | API de Agendamento | API de Agendamento — matriz de impacto |
+| `containers-to-be` | c4 | container | Plataforma de Teleconsulta | Containers — to-be (sem o que está em desativação) |
+
+## Histórico
+
+| Data | Fonte | Resumo | Mudanças | Decisões |
+| --- | --- | --- | --- | --- |
+| 2026-09-30 | prompt rodada 2026-10-01: substituição do PEP | PEP Tasy será substituído por um PEP em nuvem; API de agendamento confirmada | +4 ~2 −0 status 1 | duplicata: api-agendamento = tele.api; conflito tele.api.description: take "Agenda, cobrança e confirmação de consultas" |
 
 ## Notas
 
@@ -237,7 +269,8 @@ _Decisões, riscos e pendências._
     "O worker de notificações foi inferido a partir de \"lembretes por WhatsApp\"; pode ser parte da própria API.",
     "A integração com o PEP (Tasy) foi assumida via HL7 FHIR a partir do portal médico.",
     "Como o PEP está no datacenter e o restante na AWS, assumiu-se uma VPN site-to-site entre eles.",
-    "A assinatura ICP-Brasil foi modelada como serviço externo de assinatura em nuvem."
+    "A assinatura ICP-Brasil foi modelada como serviço externo de assinatura em nuvem.",
+    "O PEP em nuvem entra em produção antes do desligamento do Tasy."
   ],
   "model": {
     "elements": [
@@ -266,9 +299,17 @@ _Decisões, riscos e pendências._
             "type": "c4:container",
             "name": "App do Paciente",
             "technology": "React Native",
-            "source": "agenda pelo app",
-            "inferred": true,
-            "confidence": "alta"
+            "sources": [
+              {
+                "kind": "prompt",
+                "excerpt": "agenda pelo app"
+              },
+              {
+                "kind": "prompt",
+                "ref": "rodada 2026-10-01: substituição do PEP",
+                "date": "2026-10-01"
+              }
+            ]
           },
           {
             "id": "tele.site",
@@ -289,8 +330,21 @@ _Decisões, riscos e pendências._
             "type": "c4:container",
             "name": "API de Agendamento",
             "technology": "Node.js",
-            "description": "Agenda, cobrança e criação de salas",
-            "source": "O sistema de agendamento é interno, feito em Node.js"
+            "description": "Agenda, cobrança e confirmação de consultas",
+            "aliases": [
+              "api-agendamento"
+            ],
+            "sources": [
+              {
+                "kind": "prompt",
+                "excerpt": "O sistema de agendamento é interno, feito em Node.js"
+              },
+              {
+                "kind": "prompt",
+                "ref": "rodada 2026-10-01: substituição do PEP",
+                "date": "2026-10-01"
+              }
+            ]
           },
           {
             "id": "tele.db",
@@ -318,7 +372,19 @@ _Decisões, riscos e pendências._
         "type": "c4:softwareSystem",
         "name": "PEP (Tasy)",
         "description": "Prontuário eletrônico legado",
-        "source": "O prontuário fica no PEP legado (Tasy)"
+        "status": "deprecated",
+        "statusReason": "substituição pelo PEP em nuvem",
+        "sources": [
+          {
+            "kind": "prompt",
+            "excerpt": "O prontuário fica no PEP legado (Tasy)"
+          },
+          {
+            "kind": "prompt",
+            "ref": "rodada 2026-10-01: substituição do PEP",
+            "date": "2026-10-01"
+          }
+        ]
       },
       {
         "id": "twilio",
@@ -448,6 +514,22 @@ _Decisões, riscos e pendências._
         "name": "VPN AWS ↔ datacenter",
         "inferred": true,
         "confidence": "baixa"
+      },
+      {
+        "id": "pep-nuvem",
+        "type": "c4:softwareSystem",
+        "name": "PEP em nuvem",
+        "description": "Prontuário eletrônico SaaS que substitui o Tasy",
+        "external": true,
+        "status": "planned",
+        "sources": [
+          {
+            "kind": "prompt",
+            "ref": "rodada 2026-10-01: substituição do PEP",
+            "date": "2026-10-01",
+            "excerpt": "o PEP Tasy será substituído por um PEP em nuvem"
+          }
+        ]
       }
     ],
     "relationships": [
@@ -708,6 +790,36 @@ _Decisões, riscos e pendências._
         "to": "pep",
         "type": "archimate:serving",
         "inferred": true
+      },
+      {
+        "from": "tele.portal-medico",
+        "to": "pep-nuvem",
+        "type": "uses",
+        "description": "Registra prontuário",
+        "technology": "HTTPS/FHIR",
+        "status": "planned",
+        "id": "pep-nuvem-serving-tele.portal-medico",
+        "sources": [
+          {
+            "kind": "prompt",
+            "ref": "rodada 2026-10-01: substituição do PEP",
+            "date": "2026-10-01"
+          }
+        ]
+      },
+      {
+        "from": "pep-nuvem",
+        "to": "as-registro",
+        "type": "archimate:realization",
+        "status": "planned",
+        "id": "pep-nuvem-realization-as-registro",
+        "sources": [
+          {
+            "kind": "prompt",
+            "ref": "rodada 2026-10-01: substituição do PEP",
+            "date": "2026-10-01"
+          }
+        ]
       }
     ]
   },
@@ -739,6 +851,47 @@ _Decisões, riscos e pendências._
       "viewpoint": "impact",
       "anchor": "tele.api",
       "title": "API de Agendamento — matriz de impacto"
+    },
+    {
+      "key": "containers-to-be",
+      "notation": "c4",
+      "level": "container",
+      "scope": "tele",
+      "status": [
+        "planned",
+        "active"
+      ],
+      "title": "Containers — to-be (sem o que está em desativação)"
+    }
+  ],
+  "changelog": [
+    {
+      "id": "2026-09-30-01",
+      "date": "2026-09-30",
+      "source": {
+        "kind": "prompt",
+        "ref": "rodada 2026-10-01: substituição do PEP",
+        "date": "2026-10-01"
+      },
+      "summary": "PEP Tasy será substituído por um PEP em nuvem; API de agendamento confirmada",
+      "added": [
+        "pep-nuvem",
+        "pep-nuvem-serving-tele.portal-medico",
+        "pep-nuvem-realization-as-registro",
+        "view:containers-to-be"
+      ],
+      "changed": [
+        "tele.api",
+        "tele.app"
+      ],
+      "status": {
+        "pep": "deprecated"
+      },
+      "removed": [],
+      "decisions": [
+        "duplicata: api-agendamento = tele.api",
+        "conflito tele.api.description: take \"Agenda, cobrança e confirmação de consultas\""
+      ]
     }
   ]
 }

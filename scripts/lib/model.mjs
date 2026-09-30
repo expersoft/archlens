@@ -1,9 +1,11 @@
 // Load + normalize the archlens DSL into a flat, ArchiMate-typed in-memory model.
 import {
-  ELEMENT_TYPES, resolveType, resolveRelType, checkRelationship, isPassive,
+  ELEMENT_TYPES, resolveType, resolveRelType, checkRelationship, isPassive, STATUSES,
 } from './registry.mjs';
+import { readSources, sourceProblem } from './sources.mjs';
+import { aliasKey } from './match.mjs';
 
-const ELEMENT_FIELDS = ['description', 'technology', 'owner', 'url', 'inferred', 'confidence', 'source'];
+const ELEMENT_FIELDS = ['description', 'technology', 'owner', 'url', 'inferred', 'confidence', 'statusReason'];
 
 /**
  * @returns {{ name, description, meta, elements: Map<string, object>, relationships: object[],
@@ -12,6 +14,13 @@ const ELEMENT_FIELDS = ['description', 'technology', 'owner', 'url', 'inferred',
 export function normalizeModel(raw) {
   const issues = [];
   const issue = (level, code, message, path, hint) => issues.push({ level, code, message, path, hint });
+  const checkStatus = (status, where, p) => {
+    if (status !== undefined && !STATUSES.includes(status)) issue('error', 'E_STATUS', `status "${status}" inválido em ${where}`, `${p}.status`, `use ${STATUSES.join(' | ')}`);
+  };
+  const checkSources = (list, p) => list.forEach((s, j) => {
+    const why = sourceProblem(s);
+    if (why) issue('error', 'E_SOURCE', 'fonte inválida', `${p}.sources[${j}]`, why);
+  });
   const elements = new Map();
   const relationships = [];
 
@@ -50,9 +59,17 @@ export function normalizeModel(raw) {
         parent: e.parent ?? parent ?? null,
         tags,
         properties: { ...(e.properties || {}) },
+        status: e.status ?? 'active',
+        aliases: Array.isArray(e.aliases) ? e.aliases.map(String) : [],
+        sources: readSources(e),
         path: p,
       };
       for (const f of ELEMENT_FIELDS) if (e[f] !== undefined) node[f] = e[f];
+      checkStatus(e.status, `"${e.id}"`, p);
+      if (e.aliases !== undefined && !Array.isArray(e.aliases)) {
+        issue('error', 'E_SCHEMA', `"aliases" de "${e.id}" não é uma lista`, `${p}.aliases`, 'use uma lista de nomes, ex.: "aliases": ["orders-service"]');
+      }
+      checkSources(node.sources, p);
       elements.set(e.id, node);
       if (e.parent && parent) issue('warning', 'W_PARENT_CONFLICT', `"${e.id}" tem "parent" e também está aninhado`, p, 'use só uma das formas');
       if (e.parent) pending.push(node);
@@ -65,6 +82,19 @@ export function normalizeModel(raw) {
     if (!elements.has(n.parent)) {
       issue('error', 'E_UNKNOWN_REF', `parent "${n.parent}" de "${n.id}" não existe`, `${n.path}.parent`, 'corrija o id do pai');
       n.parent = null;
+    }
+  }
+
+  // Aliases identify one element only (compared like the merge compares them).
+  const aliasOwner = new Map();
+  for (const n of elements.values()) aliasOwner.set(aliasKey(n.id), n.id);
+  for (const n of elements.values()) {
+    for (const a of n.aliases) {
+      const k = aliasKey(a);
+      const owner = aliasOwner.get(k);
+      if (owner && owner !== n.id) {
+        issue('error', 'E_ALIAS_CONFLICT', `alias "${a}" de "${n.id}" já identifica "${owner}"`, `${n.path}.aliases`, 'um alias aponta para um único elemento; remova-o de um dos dois');
+      } else aliasOwner.set(k, n.id);
     }
   }
 
@@ -99,31 +129,24 @@ export function normalizeModel(raw) {
       }
     }
     if (bad) return;
-    const t = resolveRelType(r.type ?? 'uses');
-    if (t.error) {
+    const c = canonicalRel(r, id => elements.get(id)?.type);
+    if (c.error) {
       issue('error', 'E_REL_TYPE', `tipo de relacionamento desconhecido "${r.type}"`, `${p}.type`,
         'use "uses" (C4) ou archimate:composition|aggregation|assignment|realization|serving|access|influence|triggering|flow|specialization|association');
       return;
     }
     const rel = {
-      from: r.from, to: r.to, type: t.type,
+      from: c.from, to: c.to, type: c.type,
       description: r.description, technology: r.technology,
       tags: (r.tags || []).map(String), properties: { ...(r.properties || {}) },
-      c4: null, path: p,
+      c4: resolveRelType(r.type ?? 'uses').type === 'uses' ? { from: r.from, to: r.to } : null, path: p,
+      status: r.status ?? 'active', sources: readSources(r),
     };
     if (r.inferred !== undefined) rel.inferred = r.inferred;
-    if (r.accessType) rel.accessType = r.accessType;
-    if (t.type === 'uses') {
-      rel.c4 = { from: r.from, to: r.to };
-      if (isPassive(elements.get(r.to).type)) {
-        rel.type = 'access';
-        rel.accessType = r.accessType ?? 'readwrite';
-      } else {
-        rel.type = 'serving';
-        rel.from = r.to;
-        rel.to = r.from;
-      }
-    }
+    if (c.accessType) rel.accessType = c.accessType;
+    if (r.statusReason) rel.statusReason = r.statusReason;
+    checkStatus(r.status, p, p);
+    checkSources(rel.sources, p);
     const check = checkRelationship(rel.type, elements.get(rel.from).type, elements.get(rel.to).type);
     if (check) issue(check.level, check.code, `${rel.type} "${rel.from}" → "${rel.to}"`, p, check.hint);
     let id = r.id ?? `${rel.from}-${rel.type}-${rel.to}`;
@@ -141,6 +164,16 @@ export function normalizeModel(raw) {
     views: raw.views || [],
     issues,
   };
+}
+
+/** ArchiMate reading of a raw relationship: `uses` becomes access (passive target) or inverted serving. */
+export function canonicalRel(r, typeOf) {
+  const t = resolveRelType(r.type ?? 'uses');
+  if (t.error) return { error: t.error };
+  if (t.type !== 'uses') return { type: t.type, from: r.from, to: r.to, ...(r.accessType ? { accessType: r.accessType } : {}) };
+  const target = typeOf(r.to);
+  if (target && isPassive(target)) return { type: 'access', from: r.from, to: r.to, accessType: r.accessType ?? 'readwrite' };
+  return { type: 'serving', from: r.to, to: r.from };
 }
 
 export function childrenOf(model, id) {

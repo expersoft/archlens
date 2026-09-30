@@ -7,6 +7,8 @@ Skill para Claude Code: **arquitetura como modelo, diagramas como consultas.**
   C4 e application component no ArchiMate.
 - Gera um **`ARCHITECTURE.md`** (base de conhecimento com o modelo canônico embutido) de onde se
   extraem visões novas a qualquer momento.
+- **Base que evolui:** cada informação nova vira um delta; `archlens merge` casa entidades (id, alias, nome parecido),
+  pergunta conflitos e duplicatas, e registra proveniência, ciclo de vida (as-is/to-be) e histórico.
 - **C4:** landscape, context, container, component, dynamic, com `focus`/`depth` e elevação de relações.
 - **ArchiMate:** camadas de negócio, aplicação e tecnologia; visões entre camadas por travessia de
   suporte (o que sustenta uma oferta ou processo), matriz de impacto de um componente, derivação de
@@ -18,7 +20,7 @@ Skill para Claude Code: **arquitetura como modelo, diagramas como consultas.**
 
 ```bash
 npm install && npx playwright install chromium
-node scripts/archlens.mjs build examples/loja-online/model.json --out-dir /tmp/loja
+node scripts/archlens.mjs build examples/loja-online/ARCHITECTURE.md --out-dir /tmp/loja
 ```
 
 | | |
@@ -27,6 +29,7 @@ node scripts/archlens.mjs build examples/loja-online/model.json --out-dir /tmp/l
 | Guia do usuário | [docs/GUIA.md](docs/GUIA.md) |
 | DSL | [references/notation.md](references/notation.md) |
 | Visões | [references/views.md](references/views.md) |
+| Evolução da base (merge) | [references/merge.md](references/merge.md) |
 | Exemplos | [examples/loja-online](examples/loja-online), [examples/telemedicina](examples/telemedicina) |
 | Plano de implementação | [docs/plans/](docs/plans/) |
 

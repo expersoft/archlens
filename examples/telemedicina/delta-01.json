@@ -1,0 +1,23 @@
+{
+  "archlens-delta": "1.0",
+  "source": { "kind": "prompt", "ref": "rodada 2026-10-01: substituição do PEP", "date": "2026-10-01" },
+  "summary": "PEP Tasy será substituído por um PEP em nuvem; API de agendamento confirmada",
+  "assumptions": ["O PEP em nuvem entra em produção antes do desligamento do Tasy."],
+  "model": {
+    "elements": [
+      { "id": "pep-nuvem", "type": "c4:softwareSystem", "name": "PEP em nuvem", "description": "Prontuário eletrônico SaaS que substitui o Tasy", "external": true, "status": "planned", "source": "o PEP Tasy será substituído por um PEP em nuvem" },
+      { "id": "api-agendamento", "type": "c4:container", "name": "API Agendamento", "parent": "tele", "technology": "Node.js", "description": "Agenda, cobrança e confirmação de consultas" },
+      { "id": "tele.app", "inferred": false }
+    ],
+    "relationships": [
+      { "from": "tele.portal-medico", "to": "pep-nuvem", "type": "uses", "description": "Registra prontuário", "technology": "HTTPS/FHIR", "status": "planned" },
+      { "from": "pep-nuvem", "to": "as-registro", "type": "archimate:realization", "status": "planned" }
+    ]
+  },
+  "views": [
+    { "key": "containers-to-be", "notation": "c4", "level": "container", "scope": "tele", "status": ["planned", "active"], "title": "Containers — to-be (sem o que está em desativação)" }
+  ],
+  "ops": [
+    { "op": "status", "id": "pep", "status": "deprecated", "reason": "substituição pelo PEP em nuvem" }
+  ]
+}

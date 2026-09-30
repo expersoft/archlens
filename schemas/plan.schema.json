@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://archlens.local/plan.schema.json",
+  "title": "archlens merge plan",
+  "type": "object",
+  "required": [
+    "archlens-plan",
+    "baseHash",
+    "delta",
+    "items"
+  ],
+  "properties": {
+    "archlens-plan": {
+      "const": "1.0"
+    },
+    "base": {
+      "type": "string"
+    },
+    "baseHash": {
+      "type": "string"
+    },
+    "created": {
+      "type": "string"
+    },
+    "delta": {
+      "$ref": "delta.schema.json"
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "n",
+          "key",
+          "class"
+        ],
+        "properties": {
+          "n": {
+            "type": "integer"
+          },
+          "key": {
+            "type": "string"
+          },
+          "class": {
+            "enum": [
+              "new",
+              "unchanged",
+              "enrich",
+              "conflict",
+              "possible-duplicate",
+              "op"
+            ]
+          },
+          "kind": {
+            "enum": [
+              "element",
+              "relationship",
+              "view",
+              "assumption"
+            ]
+          },
+          "field": {
+            "type": "string"
+          },
+          "when": {
+            "type": "string"
+          },
+          "resolution": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "integer"
+      }
+    },
+    "blocked": {
+      "type": "boolean"
+    },
+    "errors": {
+      "type": "array"
+    }
+  }
+}

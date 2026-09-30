@@ -90,6 +90,9 @@ export const RELATIONSHIP_TYPES = {
 // Presentation order of layers (top → bottom in layered diagrams).
 export const LAYER_ORDER = ['motivation', 'strategy', 'business', 'application', 'technology', 'physical', 'implementation', 'other'];
 export const CORE_LAYERS = ['business', 'application', 'technology'];
+
+/** Lifecycle of elements and relationships; views hide `retired` unless asked. */
+export const STATUSES = ['planned', 'active', 'deprecated', 'retired'];
 export const LAYER_LABELS = {
   motivation: 'Motivação', strategy: 'Estratégia', business: 'Negócio', application: 'Aplicação',
   technology: 'Tecnologia', physical: 'Física', implementation: 'Implementação e Migração', other: 'Outros',
