@@ -1,14 +1,16 @@
 ---
 name: archlens
-description: Use when the user wants architecture diagrams in C4 (landscape, context, container, component, dynamic) or ArchiMate (business, application, technology layers, cross-layer support or impact views), described in free text or JSON, or asks to extract new diagrams from an existing ARCHITECTURE.md knowledge base — e.g. "what supports this product/process", "dependency/impact matrix of this component", "focus on X", animated HTML for presentations.
+description: Use when the user wants architecture diagrams in C4 (landscape, context, container, component, dynamic) or ArchiMate (business, application, technology layers, cross-layer support or impact views), described in free text or JSON; when they want to create or enrich an ARCHITECTURE.md knowledge base incrementally (new prompts, "X was replaced", "add Y", with provenance, lifecycle status and history); or asks to extract new diagrams from an existing ARCHITECTURE.md — e.g. "what supports this product/process", "dependency/impact matrix of this component", "focus on X", as-is/to-be, animated HTML for presentations.
 ---
 
 # archlens
 
-Arquitetura como **modelo**, diagramas como **consultas**. Texto livre ou DSL JSON viram um modelo
-persistente (metamodelo ArchiMate, com perfil C4 por cima). O modelo mora num `ARCHITECTURE.md`
-(base de conhecimento). Cada diagrama é uma *view spec* resolvida sobre esse modelo e renderizada
-em HTML animado, autocontido e pronto para apresentação.
+Arquitetura como **modelo**, diagramas como **consultas**. O modelo (metamodelo ArchiMate, com perfil C4
+por cima) mora no `ARCHITECTURE.md`, a base de conhecimento: o bloco `archlens-json` é a fonte de verdade.
+A base **evolui por rodadas**: cada informação nova (prompt, texto, documento, repositório) vira um
+**delta**, que passa por `merge --plan` → perguntas ao usuário → `merge --apply`, com proveniência,
+ciclo de vida e histórico. Cada diagrama é uma *view spec* resolvida sobre a base e renderizada em HTML
+animado, autocontido e pronto para apresentação.
 
 **Princípio:** nunca desenhe um diagrama "à mão". Modele uma vez e peça visões. Se falta algo na
 visão, falta no modelo: corrija o modelo.
@@ -19,25 +21,32 @@ Requer Node ≥ 18. A checagem visual (`deliver`/`build`) usa `playwright-core` 
 
 ## Fluxo
 
-1. **Identifique a entrada**
-   - **JSON DSL**: use como está → passo 2.
-   - **Texto livre**: modele seguindo `references/free-text.md`. Registre `source` (trecho do texto),
-     marque `inferred: true` + `confidence` no que não foi dito, e preencha `assumptions`.
-     Pergunte ao usuário **só** o que bloqueia (ex.: "o ERP é interno ou SaaS externo?").
-   - **`ARCHITECTURE.md` existente**: não remodele. Use-o direto (a CLI lê o bloco `archlens-json`)
-     e vá para o passo 4. Para mudar o modelo, edite o JSON e regenere.
-2. **Escreva/atualize `model.json`** conforme `references/notation.md`.
-3. **Valide**: `archlens validate model.json`. Corrija todo `E_*`. Leia os `W_*`: `W_REL_DIRECTION`
-   quase sempre indica serving/realization invertido.
-4. **Traduza cada pedido em view spec** (tabela abaixo; detalhes em `references/views.md`) e
-   acrescente em `views`. `archlens views model.json` lista as visões definidas e sugere outras.
-5. **Gere tudo**: `archlens build model.json --out-dir <pasta>`. Isso escreve o `ARCHITECTURE.md`,
-   um HTML com todas as visões (setas ←/→ navegam) e screenshots 1920×1080 / 1280×720.
-6. **Leia o relatório de qualidade** e aja (seção *Alertas*). Olhe ao menos um screenshot por
-   visão nova antes de entregar.
-7. **Escreva a interpretação** no `ARCHITECTURE.md`, dentro dos blocos `<!-- keep:overview -->`
-   (propósito, decisões, riscos) e `<!-- keep:notes -->`. O resto do documento é regenerado.
-8. **Entregue**: caminhos do `.md` e do `.html`, lista de visões, premissas abertas e alertas.
+1. **Localize a base.** Procure o `ARCHITECTURE.md` do projeto (ou pergunte onde fica). Se não existe, o
+   primeiro delta a cria.
+2. **Só pedido de visão, nada novo a modelar?** Vá ao passo 7.
+3. **Traduza a informação nova em delta** (`references/merge.md`):
+   - **texto livre**: siga `references/free-text.md` (`source` com o trecho, `inferred` + `confidence`,
+     `assumptions`). Pergunte ao usuário **só** o que bloqueia;
+   - **JSON DSL**: embrulhe em `{"archlens-delta":"1.0","source":…,"model":…}`;
+   - **"X foi desligado / será substituído / renomeie Y"**: `ops` (`status`, `rename`, `alias`, `remove`).
+
+   Sempre preencha `source` (`kind` + `ref`) e `summary`. Reutilize os ids da base.
+4. **Planeje**: `archlens merge ARCHITECTURE.md delta.json --plan plano.json`. Mostre o resumo ao usuário.
+   Se o plano vier **bloqueado**, corrija o delta e planeje de novo.
+5. **Pergunte, uma decisão por vez**: cada item com `resolution: null` (conflito, possível duplicata, remoção,
+   `retired`), com a sua recomendação. Itens com `when` só valem se a duplicata for `same`. **Nunca decida
+   sozinho.**
+6. **Aplique**: grave as respostas no plano e rode `archlens merge ARCHITECTURE.md --apply plano.json`. Ele
+   valida, regenera o documento e registra a rodada. Sugira o commit que ele imprime.
+7. **Traduza cada pedido de visão em view spec** (tabela abaixo; detalhes em `references/views.md`). Visões que
+   o usuário quer manter entram na base por delta (`views`); consultas avulsas usam `--spec`.
+   `archlens views ARCHITECTURE.md` lista as definidas e sugere outras.
+8. **Gere**: `archlens build ARCHITECTURE.md --out-dir <pasta>` (documento + HTML com todas as visões +
+   screenshots 1920×1080 / 1280×720) ou `archlens deliver ARCHITECTURE.md --spec '<json>' --out x.html`.
+9. **Leia o relatório de qualidade** e aja (seção *Alertas*). Olhe ao menos um screenshot por visão nova.
+10. **Escreva a interpretação** nos blocos `<!-- keep:overview -->` (propósito, decisões, riscos) e
+    `<!-- keep:notes -->`. O resto do documento é regenerado.
+11. **Entregue**: caminhos do `.md` e do `.html`, visões, premissas abertas, alertas e o commit sugerido.
 
 ## Pedido → view spec
 
@@ -54,6 +63,8 @@ Requer Node ≥ 18. A checagem visual (`deliver`/`build`) usa `playwright-core` 
 | aplicações e infra por trás do processo Q | `{notation:"archimate", viewpoint:"layered", anchor:"Q", traverse:{mode:"supporters"}, granularity:"container"}` |
 | matriz de dependência / impacto do componente A | `{notation:"archimate", viewpoint:"impact", anchor:"A"}` (traz a matriz, tecla M) |
 | negócio × tecnologia sem a camada do meio | `{viewpoint:"custom", layers:["business","technology"], anchor:"P", derive:true}` |
+| como está hoje (as-is) | acrescente `status:["active","deprecated"]` |
+| como fica depois das mudanças (to-be) | acrescente `status:["planned","active"]` |
 
 **Estilo do layout ArchiMate** (`layout.style`, detalhes em `references/views.md`): sem pedido explícito,
 omita-o (`auto` escolhe o mais legível). Se o prompt pedir, grave na visão:
@@ -92,11 +103,16 @@ recorta com scope, focus, depth, anchor, traverse, layers, granularity, collapse
 - **Hierarquia C4**: component dentro de container, que fica dentro de softwareSystem (`E_C4_HIERARCHY`).
 - **Ids instáveis**: ids são a chave da base de conhecimento. Não os renomeie sem necessidade; use
   `sistema.container.componente`.
+- **Editar o bloco à mão**: funciona (rode `archlens doc ARCHITECTURE.md` depois), mas perde proveniência e
+  histórico. Prefira um delta, mesmo pequeno.
+- **Duplicata aceita sem perguntar**: `possible-duplicate` é sempre pergunta ao usuário. Um `same` errado funde
+  dois elementos diferentes.
 - **Visão gigante**: um diagrama com 60 nós não comunica nada. Prefira várias visões, que as setas
   ←/→ encadeiam como slides.
 
 ## Referências
 
+- `references/merge.md`: delta, plano, classes, respostas, erros do merge, proveniência, ciclo de vida e histórico
 - `references/notation.md`: DSL JSON completa (elementos, relações, campos, exemplos)
 - `references/views.md`: view specs, travessia, derivação, granularidade, layout, animação
 - `references/archimate.md`: catálogo ArchiMate 3.2, regras de relacionamento, direção de suporte
@@ -104,4 +120,5 @@ recorta com scope, focus, depth, anchor, traverse, layers, granularity, collapse
 - `references/free-text.md`: como extrair o modelo de texto livre
 - `references/knowledge-doc.md`: estrutura do ARCHITECTURE.md e atualização incremental
 - `docs/GUIA.md`: guia do usuário (apresentação, atalhos, exemplos)
-- `examples/`: `loja-online` (DSL completa, 13 visões) e `telemedicina` (a partir de texto livre)
+- `examples/`: `loja-online` (DSL completa, 13 visões) e `telemedicina` (texto livre + `delta-01.json`/`plano-01.json`,
+  uma rodada de merge com duplicata, `deprecated`/`planned` e a visão to-be)
