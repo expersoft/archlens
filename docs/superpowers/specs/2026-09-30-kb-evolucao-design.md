@@ -49,7 +49,7 @@ Todos os campos são opcionais; ausentes, o comportamento atual se mantém.
   "id": "loja.pedidos",
   "aliases": ["orders-service", "API Pedidos"],
   "status": "active",
-  "statusReason": "—",
+  "statusReason": "em produção desde 2025",
   "sources": [
     { "kind": "prompt", "ref": "rodada 2026-09-30", "excerpt": "a API de pedidos publica no Kafka", "date": "2026-09-30" },
     { "kind": "repo", "ref": "github.com/x/orders@a1b2c3d", "path": "deploy/compose.yml", "date": "2026-10-02" }
@@ -144,7 +144,7 @@ filtrada somem junto.
    1. id do delta = id da base;
    2. id ou `name` do delta = alias da base (ou vice-versa);
    3. candidato fuzzy (`match.mjs`): mesmo tipo ArchiMate **e** (similaridade de nome normalizado
-      ≥ limiar **ou** mesmo pai e mesma `technology`). Fuzzy **nunca** casa automaticamente.
+      ≥ 0,75 (constante `FUZZY_THRESHOLD` em `match.mjs`) **ou** mesmo pai e mesma `technology`). Fuzzy **nunca** casa automaticamente.
 3. **Casar relações:** por `id`; senão pela tripla normalizada `(from, tipo ArchiMate, to)` depois
    de resolver ids/aliases e converter `uses` (logo `A uses B` casa com `B serving A` existente).
 4. **Classificar** cada item:
