@@ -418,3 +418,15 @@ test('removing an element lists and removes each parallel relationship once', ()
   assert.ok(!raw.model.relationships.some(r => r.from === 'pagamentos' || r.to === 'pagamentos'));
   assert.equal(raw.model.relationships.length, parallelBase().model.relationships.length - rels.length);
 });
+
+test('a delta view with a non-list status blocks the plan', () => {
+  const plan = planMerge(shop(), delta({}, { views: [{ key: 'tobe', notation: 'c4', level: 'landscape', status: 'planned' }] }), TODAY);
+  assert.equal(plan.blocked, true);
+  assert.ok(plan.errors.some(e => e.code === 'E_VIEW_STATUS'));
+});
+
+test('a delta element with non-list aliases blocks the plan instead of matching letters', () => {
+  const plan = planMerge(shop(), delta({ elements: [{ id: 'novo', type: 'c4:softwareSystem', name: 'Novo', aliases: 'loja' }] }), TODAY);
+  assert.equal(plan.blocked, true);
+  assert.ok(plan.errors.some(e => e.code === 'E_SCHEMA'));
+});

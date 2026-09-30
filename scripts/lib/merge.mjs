@@ -112,7 +112,7 @@ function runMerge(baseRaw, delta, { mode, resolutions = new Map() }) {
   };
   // Fuzzy pool frozen before any merge, so simulated answers in plan mode cannot change what apply sees.
   ctx.pool = [...ctx.tree].map(([, { el, parent }]) => describe(el, parent));
-  for (const [id, { el }] of ctx.tree) for (const a of el.aliases || []) if (!ctx.aliases.has(aliasKey(a))) ctx.aliases.set(aliasKey(a), id);
+  for (const [id, { el }] of ctx.tree) for (const a of aliasesOf(el)) if (!ctx.aliases.has(aliasKey(a))) ctx.aliases.set(aliasKey(a), id);
   ctx.typeOf = id => {
     const el = ctx.tree.get(id)?.el;
     return el ? resolveType(el.type, { tags: el.tags || [], archimate: el.archimate }).type ?? null : null;
@@ -158,17 +158,17 @@ function resolveRef(ctx, ref) {
 }
 
 const describe = (el, parent) => ({
-  id: el.id, names: [el.name ?? el.id, ...(el.aliases || [])], parent: parent ?? null, technology: el.technology,
+  id: el.id, names: [el.name ?? el.id, ...aliasesOf(el)], parent: parent ?? null, technology: el.technology,
   type: resolveType(el.type, { tags: el.tags || [], archimate: el.archimate }).type ?? null,
 });
 
 function findMatch(ctx, el, parentId) {
   if (ctx.tree.has(el.id)) return { id: el.id };
-  for (const k of [el.id, el.name, ...(el.aliases || [])]) {
+  for (const k of [el.id, el.name, ...aliasesOf(el)]) {
     const id = k == null ? null : ctx.aliases.get(aliasKey(k));
     if (id) return { id };
   }
-  for (const a of el.aliases || []) if (ctx.tree.has(a)) return { id: a };
+  for (const a of aliasesOf(el)) if (ctx.tree.has(a)) return { id: a };
   const pool = ctx.pool.filter(p => !ctx.fresh.has(p.id));
   const [best] = findCandidates(describe(el, parentId), pool);
   return best ? { candidate: best } : {};
@@ -257,9 +257,13 @@ function addList(target, key, list = []) {
   return true;
 }
 
+/** A malformed (non-list) "aliases" is ignored here and reported by validation, which blocks the plan. */
+const aliasesOf = el => (Array.isArray(el.aliases) ? el.aliases : []);
+
 function addAliases(ctx, id, list) {
   const target = ctx.tree.get(id).el;
-  const known = new Set([aliasKey(id), ...(target.aliases || []).map(aliasKey)]);
+  if (target.aliases !== undefined && !Array.isArray(target.aliases)) return false;
+  const known = new Set([aliasKey(id), ...aliasesOf(target).map(aliasKey)]);
   const extra = [];
   for (const a of list) {
     if (a == null || known.has(aliasKey(a))) continue;
@@ -267,7 +271,7 @@ function addAliases(ctx, id, list) {
     extra.push(a);
   }
   if (!extra.length) return false;
-  target.aliases = [...(target.aliases || []), ...extra];
+  target.aliases = [...aliasesOf(target), ...extra];
   for (const a of extra) if (!ctx.aliases.has(aliasKey(a))) ctx.aliases.set(aliasKey(a), id);
   return true;
 }
@@ -295,7 +299,7 @@ function mergeElementInto(ctx, baseId, el, parentId, { dry = false, when } = {})
   const { filled, changed } = reconcile(ctx, { fields, keyPrefix: `el:${el.id}`, kind: 'element', target: baseId, dry, when });
   if (dry) return;
   let more = addList(target, 'tags', el.tags);
-  more = addAliases(ctx, baseId, el.aliases || []) || more;
+  more = addAliases(ctx, baseId, aliasesOf(el)) || more;
   if (el.inferred === false && target.inferred) {
     delete target.inferred;
     delete target.confidence;
@@ -314,7 +318,7 @@ function insertElement(ctx, el, parentId) {
   attach(ctx.raw, ctx.tree, node, parentId);
   ctx.fresh.add(node.id);
   ctx.idMap.set(el.id, node.id);
-  for (const a of node.aliases || []) if (!ctx.aliases.has(aliasKey(a))) ctx.aliases.set(aliasKey(a), node.id);
+  for (const a of aliasesOf(node)) if (!ctx.aliases.has(aliasKey(a))) ctx.aliases.set(aliasKey(a), node.id);
   ctx.log.added.push(node.id);
   note(ctx, { key: `el:${el.id}`, class: 'new', kind: 'element', target: node.id, type: el.type, name: el.name ?? el.id, parent: parentId });
 }

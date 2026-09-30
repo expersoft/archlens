@@ -1,6 +1,6 @@
 // Model validation: errors block rendering, warnings are advisory. Codes are stable.
 import { normalizeModel } from './model.mjs';
-import { supportDirection } from './registry.mjs';
+import { supportDirection, STATUSES } from './registry.mjs';
 
 export function validateModel(raw) {
   const model = normalizeModel(raw);
@@ -36,6 +36,10 @@ export function validateModel(raw) {
     if (!v.key) errors.push({ code: 'E_VIEW_KEY', message: 'visão sem "key"', path: `views[${i}]`, hint: 'dê um identificador único à visão' });
     else if (seenViews.has(v.key)) errors.push({ code: 'E_VIEW_KEY', message: `visão duplicada "${v.key}"`, path: `views[${i}]`, hint: 'keys de visões são únicas' });
     seenViews.add(v.key);
+    if (v.status !== undefined && (!Array.isArray(v.status) || v.status.some(s => !STATUSES.includes(s)))) {
+      errors.push({ code: 'E_VIEW_STATUS', message: `visão "${v.key}" tem "status" inválido: ${JSON.stringify(v.status)}`, path: `views[${i}].status`,
+        hint: `use uma lista com ${STATUSES.join(' | ')}, ex.: ["planned","active"]` });
+    }
     for (const f of ['scope', 'anchor', ...(v.focus || []), ...(v.expand || [])].map(k => (k === 'scope' || k === 'anchor') ? v[k] : k)) {
       if (f && !model.elements.has(f)) errors.push({ code: 'E_UNKNOWN_REF', message: `visão "${v.key}" referencia "${f}", que não existe`, path: `views[${i}]`, hint: 'use o id de um elemento do modelo' });
     }

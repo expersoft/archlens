@@ -28,6 +28,9 @@ export function resolveView(model, spec) {
   if (!spec || typeof spec !== 'object') throw viewError('E_VIEW_SPEC', 'visão inválida', 'passe um objeto com "key" e "notation"');
   const withKey = { key: spec.key ?? 'view', ...spec };
   const status = withKey.status ?? DEFAULT_STATUS;
+  if (!Array.isArray(status)) {
+    throw viewError('E_VIEW_STATUS', `"status" da visão "${withKey.key}" precisa ser uma lista`, `use uma lista, ex.: ["planned","active"] (opções: ${STATUSES.join(' | ')})`);
+  }
   const unknown = status.find(s => !STATUSES.includes(s));
   if (unknown) throw viewError('E_VIEW_STATUS', `status desconhecido "${unknown}" na visão "${withKey.key}"`, `use ${STATUSES.join(' | ')}`);
   const visible = filterByStatus(model, status);

@@ -186,3 +186,7 @@ test('a view scoped on a hidden element explains the status filter', () => {
   assert.throws(() => resolveView(m, { key: 'c', notation: 'c4', level: 'context', scope: 'loja' }), /E_VIEW_STATUS.*oculto/);
   assert.throws(() => resolveView(m, { key: 'x', notation: 'c4', level: 'landscape', status: ['vivo'] }), /E_VIEW_STATUS/);
 });
+
+test('a view whose status is not an array is refused with E_VIEW_STATUS, not a crash', () => {
+  assert.throws(() => resolveView(model(), { key: 'x', notation: 'c4', level: 'landscape', status: 'planned' }), /E_VIEW_STATUS/);
+});

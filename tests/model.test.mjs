@@ -136,3 +136,23 @@ test('addSources deduplicates by kind+ref+path and migrates a legacy source stri
   assert.deepEqual(el.sources, [{ kind: 'prompt', excerpt: 'trecho antigo' }, { kind: 'repo', ref: 'r@1', path: 'a.yml' }]);
   assert.equal(addSources(el, []), 0);
 });
+
+test('validate reports a saved view whose status is not a list of known statuses', () => {
+  const r = raw();
+  r.views.push({ key: 's1', notation: 'c4', level: 'landscape', status: 'planned' });
+  r.views.push({ key: 's2', notation: 'c4', level: 'landscape', status: ['vivo'] });
+  r.views.push({ key: 's3', notation: 'c4', level: 'landscape', status: ['planned', 'active'] });
+  const { errors } = validateModel(r);
+  assert.deepEqual(errors.filter(e => e.code === 'E_VIEW_STATUS').map(e => e.path), ['views[2].status', 'views[3].status']);
+});
+
+test('aliases that are not a list are a schema error, not a crash', () => {
+  const r = raw();
+  r.model.elements[0].aliases = 'cliente final';
+  let res;
+  assert.doesNotThrow(() => { res = validateModel(r); });
+  const e = res.errors.find(x => x.code === 'E_SCHEMA');
+  assert.equal(e?.path, 'model.elements[0].aliases');
+  assert.match(e.hint, /lista/);
+  assert.deepEqual(res.model.elements.get('cliente').aliases, []);
+});

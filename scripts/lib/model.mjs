@@ -60,12 +60,15 @@ export function normalizeModel(raw) {
         tags,
         properties: { ...(e.properties || {}) },
         status: e.status ?? 'active',
-        aliases: (e.aliases || []).map(String),
+        aliases: Array.isArray(e.aliases) ? e.aliases.map(String) : [],
         sources: readSources(e),
         path: p,
       };
       for (const f of ELEMENT_FIELDS) if (e[f] !== undefined) node[f] = e[f];
       checkStatus(e.status, `"${e.id}"`, p);
+      if (e.aliases !== undefined && !Array.isArray(e.aliases)) {
+        issue('error', 'E_SCHEMA', `"aliases" de "${e.id}" não é uma lista`, `${p}.aliases`, 'use uma lista de nomes, ex.: "aliases": ["orders-service"]');
+      }
       checkSources(node.sources, p);
       elements.set(e.id, node);
       if (e.parent && parent) issue('warning', 'W_PARENT_CONFLICT', `"${e.id}" tem "parent" e também está aninhado`, p, 'use só uma das formas');
