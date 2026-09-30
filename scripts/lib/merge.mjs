@@ -45,17 +45,31 @@ const isoToday = () => new Date().toISOString().slice(0, 10);
  * `answers` (Map or object, key → resolution) pre-fills questions answered in an earlier plan, so that
  * a possible duplicate answered "same" is planned (and its follow-up questions asked) as apply will see it.
  */
-export function planMerge(baseRaw, delta, { base = 'ARCHITECTURE.md', today, answers } = {}) {
+export function planMerge(baseRaw, delta, opts = {}) {
+  return planContext(baseRaw, delta, opts).plan;
+}
+
+/**
+ * What a plan simulates, for previews: the merged model (open questions at their plan default, answered
+ * ones as answered), the plan itself and delta id → final id. Pure; never throws on a blocked plan.
+ */
+export function previewMerge(baseRaw, delta, opts = {}) {
+  const { ctx, plan } = planContext(baseRaw, delta, opts);
+  return { plan, raw: ctx.raw, idMap: ctx.idMap };
+}
+
+function planContext(baseRaw, delta, { base = 'ARCHITECTURE.md', today, answers } = {}) {
   checkDelta(delta);
   const earlier = answers instanceof Map ? answers : new Map(Object.entries(answers ?? {}));
   const ctx = runMerge(baseRaw, delta, { mode: 'plan', resolutions: earlier });
   const errors = [...ctx.errors, ...validateModel(ctx.raw).errors];
   const summary = {};
   for (const it of ctx.items) if (!it.when) summary[it.class] = (summary[it.class] ?? 0) + 1;
-  return {
+  const plan = {
     'archlens-plan': PLAN_VERSION, base, baseHash: hashRaw(baseRaw), created: today ?? isoToday(), delta,
     items: ctx.items.map((it, i) => ({ n: i + 1, ...it })), summary, blocked: errors.length > 0, errors,
   };
+  return { ctx, plan };
 }
 
 export function applyPlan(baseRaw, plan, { today } = {}) {
@@ -358,6 +372,17 @@ export function relIds(ctx) {
     ids.set(r, id);
   }
   return ids;
+}
+
+/** raw relationship → id as normalizeModel names it, for any raw model (the preview diffs relationships by it). */
+export function relationshipIds(raw) {
+  const model = { elements: raw?.model?.elements ?? [], relationships: raw?.model?.relationships ?? [] };
+  const tree = indexTree({ model });
+  const typeOf = id => {
+    const el = tree.get(id)?.el;
+    return el ? resolveType(el.type, { tags: el.tags || [], archimate: el.archimate }).type ?? null : null;
+  };
+  return relIds({ raw: { model }, tree, typeOf });
 }
 
 function mergeRelationships(ctx) {

@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { planMerge, applyPlan } from '../scripts/lib/merge.mjs';
+import { planMerge, applyPlan, previewMerge, relationshipIds, canonicalJson } from '../scripts/lib/merge.mjs';
+import { normalizeModel } from '../scripts/lib/model.mjs';
 import { formatPlanReport } from '../scripts/lib/merge-report.mjs';
 
 const shop = () => JSON.parse(readFileSync(new URL('./fixtures/shop.json', import.meta.url)));
@@ -497,4 +498,29 @@ test('status draft needs no confirmation', () => {
   const plan = planMerge(shop(), delta({}, { ops: [{ op: 'status', id: 'loja.web', status: 'draft', reason: 'em discussão' }] }), TODAY);
   assert.equal(plan.items[0].resolution, undefined);
   assert.equal(find(applyPlan(shop(), plan, TODAY).raw, 'loja.web').status, 'draft');
+});
+
+test('previewMerge returns the simulated result; with every answer it equals what apply writes', () => {
+  const d = delta({ elements: [{ id: 'loja.api', technology: 'Kotlin' }, { id: 'loja.worker', type: 'c4:container', name: 'Worker', parent: 'loja' }] });
+  const base = shop();
+  const { plan, raw, idMap } = previewMerge(base, d, TODAY);
+  assert.deepEqual(base, shop(), 'the base is not mutated');
+  assert.equal(find(raw, 'loja.api').technology, 'Kotlin', 'an open conflict is simulated as take');
+  assert.equal(idMap.get('loja.worker'), 'loja.worker');
+  const answered = answer(structuredClone(plan), { 'el:loja.api:technology': 'keep' });
+  const answers = new Map(answered.items.filter(i => i.resolution != null).map(i => [i.key, i.resolution]));
+  const preview = previewMerge(base, d, { ...TODAY, answers }).raw;
+  const { changelog, ...applied } = applyPlan(base, answered, TODAY).raw;
+  assert.equal(canonicalJson(preview), canonicalJson(applied));
+});
+
+test('previewMerge does not throw on a blocked plan (the caller decides)', () => {
+  const { plan } = previewMerge(shop(), delta({ relationships: [{ from: 'loja.api', to: 'pagamentoz' }] }), TODAY);
+  assert.equal(plan.blocked, true);
+});
+
+test('relationshipIds names relationships exactly like normalizeModel, parallels included', () => {
+  const base = shop();
+  base.model.relationships.push({ from: 'cliente', to: 'loja.web', description: 'Volta a comprar' });
+  assert.deepEqual([...relationshipIds(base).values()], normalizeModel(base).relationships.map(r => r.id));
 });
