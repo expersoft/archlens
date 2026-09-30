@@ -12,7 +12,10 @@ function describeItem(it) {
     const views = c.views.length ? `; visões: ${c.views.map(v => `${v.key} (${v.action})`).join(', ')}` : '';
     return `remover ${it.target}: ${c.elements.length} elemento(s), ${c.relationships.length} relação(ões)${views}  → yes | no`;
   }
-  if (it.op === 'status') return `status ${it.target}: ${it.from} → ${it.status}${it.reason ? ` (${it.reason})` : ''}  → yes | no`;
+  if (it.op === 'status') {
+    const views = it.views?.length ? `; visões que deixam de abrir: ${it.views.join(', ')}` : '';
+    return `status ${it.target}: ${it.from} → ${it.status}${it.reason ? ` (${it.reason})` : ''}${views}  → yes | no`;
+  }
   return `${it.class} ${it.target}`;
 }
 

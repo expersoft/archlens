@@ -60,7 +60,7 @@ Se o `ARCHITECTURE.md` não existe, o primeiro delta o cria (`name` e `descripti
 | `enrich` | preenche campos vazios, tags, aliases, fontes | — |
 | `conflict` | um campo preenchido difere | `keep` \| `take` \| `value:<valor>` (visões: `keep` \| `take`) |
 | `possible-duplicate` | parece um elemento da base | `same` (vira alias e o item é mesclado) \| `different` (entra como novo) |
-| `op` | operação explícita | `remove` e `status: retired`: `yes` \| `no` |
+| `op` | operação explícita | `remove` e `status: retired`: `yes` \| `no` (o item lista em `cascade.views` / `views` as visões salvas afetadas) |
 
 Itens com `"when": "dup:<id>=same"` só valem se a duplicata correspondente for respondida `same`. Eles mostram
 só as diferenças de **campo** do próprio elemento; relações e filhos do item do delta foram planejados como se ele

@@ -479,7 +479,9 @@ function runOps(ctx) {
         if (!STATUSES.includes(op.status)) return opError('E_STATUS', `status "${op.status}" inválido`, `use ${STATUSES.join(' | ')}`);
         const from = target.status ?? 'active';
         if (from === op.status) return note(ctx, { key, class: 'op', op: 'status', target: id, status: op.status, noop: true });
-        const item = { key, class: 'op', op: 'status', target: id, from, status: op.status, ...(op.reason ? { reason: op.reason } : {}) };
+        const broken = el && op.status === 'retired' ? viewsHiding(ctx, id) : [];
+        const item = { key, class: 'op', op: 'status', target: id, from, status: op.status, ...(op.reason ? { reason: op.reason } : {}),
+          ...(broken.length ? { views: broken } : {}) };
         if (op.status === 'retired') {
           if (decide(ctx, item, 'yes') !== 'yes') { ctx.log.decisions.push(`status ${id} → retired: recusado`); return undefined; }
         } else note(ctx, item);
@@ -503,6 +505,15 @@ function runOps(ctx) {
         return opError('E_OP', `operação desconhecida "${op.op}"`, 'use rename | alias | status | remove');
     }
   });
+}
+
+/** Saved views that stop resolving when `id` (and what is nested in it) is retired: it is their scope, anchor or focus. */
+function viewsHiding(ctx, id) {
+  const hidden = new Set([id, ...descendantsOf(ctx.tree, id)]);
+  return (ctx.raw.views || [])
+    .filter(v => !(Array.isArray(v.status) && v.status.includes('retired')))
+    .filter(v => [v.scope, v.anchor, ...(Array.isArray(v.focus) ? v.focus : [])].some(x => hidden.has(x)))
+    .map(v => v.key);
 }
 
 /** What removing element `id` takes with it: the plan's cascade (ids) and the raw relationships to drop. */

@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { planMerge, applyPlan } from '../scripts/lib/merge.mjs';
+import { formatPlanReport } from '../scripts/lib/merge-report.mjs';
 
 const shop = () => JSON.parse(readFileSync(new URL('./fixtures/shop.json', import.meta.url)));
 const SRC = { kind: 'prompt', ref: 'rodada 1', date: '2026-10-01' };
@@ -476,4 +477,18 @@ test('an item whose only change is a taken conflict is enrich; kept is unchanged
   assert.equal(cls({ 'el:loja.api:technology': 'keep' }, 'el:loja.api'), 'unchanged');
   assert.equal(cls({ 'rel:0:description': 'value:Navega e compra' }, 'rel:0'), 'enrich');
   assert.equal(cls({ 'rel:0:description': 'keep' }, 'rel:0'), 'unchanged');
+});
+
+test('retiring an element lists the saved views it would break (scope, anchor or focus, also via children)', () => {
+  const base = shop();
+  base.views.push(
+    { key: 'comp', notation: 'c4', level: 'component', scope: 'loja.api' },
+    { key: 'foco', notation: 'c4', level: 'container', scope: 'loja', focus: ['loja.api.checkout'] },
+    { key: 'asis', notation: 'c4', level: 'component', scope: 'loja.api', status: ['active', 'retired'] },
+  );
+  const plan = planMerge(base, delta({}, { ops: [{ op: 'status', id: 'loja.api', status: 'retired' }] }), TODAY);
+  assert.deepEqual(plan.items[0].views, ['comp', 'foco']);
+  assert.match(formatPlanReport(plan), /status loja\.api: active → retired; visões que deixam de abrir: comp, foco/);
+  const quiet = planMerge(base, delta({}, { ops: [{ op: 'status', id: 'pg', status: 'retired' }] }), TODAY);
+  assert.equal(quiet.items[0].views, undefined);
 });
