@@ -237,3 +237,25 @@ test('new relationships do not share nested objects with the delta', () => {
   assert.deepEqual(d.model.relationships[0].tags, ['x']);
   assert.deepEqual(d.model.relationships[0].properties, { a: '1' });
 });
+
+test('views: new keys are added with references rewritten; a changed spec is a keep/take conflict', () => {
+  const base = shop();
+  find(base, 'loja.api').aliases = ['orders-service'];
+  const d = delta({}, {
+    views: [
+      { key: 'comp', notation: 'c4', level: 'component', scope: 'orders-service' },
+      { key: 'ctx', notation: 'c4', level: 'context', scope: 'loja', title: 'Contexto' },
+    ],
+    assumptions: ['O ERP é SaaS'],
+  });
+  const plan = planMerge(base, d, TODAY);
+  const c = plan.items.find(i => i.kind === 'view' && i.class === 'conflict');
+  assert.equal(c.key, 'view:ctx');
+  assert.throws(() => applyPlan(base, answer(structuredClone(plan), { 'view:ctx': 'value:x' }), TODAY), /E_PLAN_RESOLUTION/);
+  const { raw } = applyPlan(base, answer(plan, { 'view:ctx': 'take' }), TODAY);
+  assert.equal(raw.views.find(v => v.key === 'comp').scope, 'loja.api');
+  assert.equal(raw.views.find(v => v.key === 'ctx').title, 'Contexto');
+  assert.deepEqual(raw.assumptions, ['O ERP é SaaS']);
+  const again = planMerge(raw, d, TODAY);
+  assert.deepEqual(again.summary, { unchanged: 2 });
+});

@@ -11,6 +11,8 @@ import { indexTree, orderDelta, attach, detach, descendantsOf } from './raw-tree
 export const PLAN_VERSION = '1.0';
 const ELEMENT_FIELDS = ['type', 'name', 'description', 'technology', 'external', 'archimate', 'owner', 'url', 'status', 'statusReason'];
 const REL_FIELDS = ['description', 'technology', 'accessType', 'status', 'statusReason'];
+export const VIEW_REFS = ['scope', 'anchor'];
+export const VIEW_LISTS = ['focus', 'expand', 'include'];
 const RESOLUTION = {
   conflict: /^(keep|take|value:[\s\S]*)$/,
   'view-conflict': /^(keep|take)$/,
@@ -112,6 +114,8 @@ function runMerge(baseRaw, delta, { mode, resolutions = new Map() }) {
   };
   mergeElements(ctx);
   mergeRelationships(ctx);
+  mergeViews(ctx);
+  mergeAssumptions(ctx);
   return ctx;
 }
 
@@ -341,6 +345,49 @@ function mergeRelInto(ctx, base, r, i) {
   addSources(base, deltaSources(r, ctx.delta.source));
   if (filled || changed || more) ctx.log.changed.add(id);
   note(ctx, { key: `rel:${i}`, class: filled || more ? 'enrich' : 'unchanged', kind: 'relationship', target: id });
+}
+
+function rewriteView(ctx, view) {
+  const v = structuredClone(view);
+  for (const f of VIEW_REFS) if (v[f]) v[f] = resolveRef(ctx, v[f]);
+  for (const f of VIEW_LISTS) if (Array.isArray(v[f])) v[f] = v[f].map(x => resolveRef(ctx, x));
+  if (Array.isArray(v.steps)) {
+    v.steps = v.steps.map(s => ({ ...s, ...(s.from ? { from: resolveRef(ctx, s.from) } : {}), ...(s.to ? { to: resolveRef(ctx, s.to) } : {}) }));
+  }
+  return v;
+}
+
+function mergeViews(ctx) {
+  if (!ctx.delta.views?.length) return;
+  ctx.raw.views ??= [];
+  for (const dv of ctx.delta.views) {
+    const v = rewriteView(ctx, dv);
+    const key = `view:${v.key}`;
+    const i = ctx.raw.views.findIndex(x => x.key === v.key);
+    if (i < 0) {
+      ctx.raw.views.push(v);
+      ctx.log.added.push(key);
+      note(ctx, { key, class: 'new', kind: 'view', target: v.key });
+      continue;
+    }
+    if (canonicalJson(ctx.raw.views[i]) === canonicalJson(v)) {
+      note(ctx, { key, class: 'unchanged', kind: 'view', target: v.key });
+      continue;
+    }
+    const res = decide(ctx, { key, class: 'conflict', kind: 'view', target: v.key, base: ctx.raw.views[i], delta: v }, 'take');
+    if (res !== 'take') continue;
+    ctx.raw.views[i] = v;
+    ctx.log.changed.add(key);
+    ctx.log.decisions.push(`visão ${v.key}: take`);
+  }
+}
+
+function mergeAssumptions(ctx) {
+  const current = ctx.raw.assumptions || [];
+  const extra = (ctx.delta.assumptions || []).filter(a => !current.includes(a));
+  if (!extra.length) return;
+  ctx.raw.assumptions = [...current, ...extra];
+  note(ctx, { key: 'assumptions', class: 'new', kind: 'assumption', target: `${extra.length} premissa(s)`, added: extra });
 }
 
 function changelogEntry(ctx, date) {
