@@ -264,3 +264,63 @@ test('assumptions: duplicates inside the delta are appended once', () => {
   const { raw } = applyPlan(shop(), planMerge(shop(), delta({}, { assumptions: ['A', 'A'] }), TODAY), TODAY);
   assert.deepEqual(raw.assumptions, ['A']);
 });
+
+test('rename keeps the old name as an alias; alias op adds names', () => {
+  const d = delta({}, { ops: [{ op: 'rename', id: 'loja.api', name: 'Orders API' }, { op: 'alias', id: 'loja.api', add: ['orders-service'] }] });
+  const { raw } = applyPlan(shop(), planMerge(shop(), d, TODAY), TODAY);
+  const api = find(raw, 'loja.api');
+  assert.equal(api.name, 'Orders API');
+  assert.deepEqual(api.aliases, ['API', 'orders-service']);
+});
+
+test('status changes are applied; retiring needs confirmation', () => {
+  const plan = planMerge(shop(), delta({}, { ops: [
+    { op: 'status', id: 'pagamentos', status: 'deprecated', reason: 'troca de adquirente' },
+    { op: 'status', id: 'k8s', status: 'retired', reason: 'migrado para ECS' },
+  ] }), TODAY);
+  assert.equal(plan.items.find(i => i.key === 'op:0').resolution, undefined);
+  assert.equal(plan.items.find(i => i.key === 'op:1').resolution, null);
+  const { raw, entry } = applyPlan(shop(), answer(plan, { 'op:1': 'no' }), TODAY);
+  assert.equal(find(raw, 'pagamentos').status, 'deprecated');
+  assert.equal(find(raw, 'pagamentos').statusReason, 'troca de adquirente');
+  assert.equal(find(raw, 'k8s').status, undefined);
+  assert.deepEqual(entry.status, { pagamentos: 'deprecated' });
+});
+
+test('remove cascades to children and relationships, and needs confirmation', () => {
+  const plan = planMerge(shop(), delta({}, { ops: [{ op: 'remove', id: 'loja.api' }] }), TODAY);
+  const it = plan.items.find(i => i.key === 'op:0');
+  assert.deepEqual([...it.cascade.elements].sort(), ['loja.api', 'loja.api.catalogo', 'loja.api.checkout']);
+  assert.equal(it.cascade.relationships.length, 7);
+  const { raw, entry } = applyPlan(shop(), answer(plan, { 'op:0': 'yes' }), TODAY);
+  assert.equal(find(raw, 'loja.api'), undefined);
+  assert.ok(!raw.model.relationships.some(r => [r.from, r.to].some(x => x.startsWith('loja.api'))));
+  assert.deepEqual([...entry.removed].sort(), ['loja.api', 'loja.api.catalogo', 'loja.api.checkout']);
+});
+
+test('remove trims view lists and drops views scoped on what is removed', () => {
+  const base = shop();
+  base.views.push({ key: 'f', notation: 'c4', level: 'container', scope: 'loja', focus: ['loja.db', 'loja.web'] });
+  const plan = planMerge(base, delta({}, { ops: [{ op: 'remove', id: 'loja.db' }] }), TODAY);
+  assert.deepEqual(plan.items[0].cascade.views, [{ key: 'f', action: 'trim' }]);
+  const { raw } = applyPlan(base, answer(plan, { 'op:0': 'yes' }), TODAY);
+  assert.deepEqual(raw.views.find(v => v.key === 'f').focus, ['loja.web']);
+  const gone = planMerge(shop(), delta({}, { ops: [{ op: 'remove', id: 'loja' }] }), TODAY);
+  assert.deepEqual(gone.items[0].cascade.views, [{ key: 'ctx', action: 'remove' }]);
+});
+
+test('remove also works on a relationship id', () => {
+  const plan = planMerge(shop(), delta({}, { ops: [{ op: 'remove', id: 'k8s-serving-loja.api' }] }), TODAY);
+  const { raw } = applyPlan(shop(), answer(plan, { 'op:0': 'yes' }), TODAY);
+  assert.ok(!raw.model.relationships.some(r => r.from === 'k8s'));
+});
+
+test('an op on an unknown id or with an invalid status blocks the plan', () => {
+  const plan = planMerge(shop(), delta({}, { ops: [
+    { op: 'status', id: 'nada', status: 'deprecated' },
+    { op: 'status', id: 'k8s', status: 'morto' },
+    { op: 'explode', id: 'k8s' },
+  ] }), TODAY);
+  assert.equal(plan.blocked, true);
+  assert.deepEqual(plan.errors.map(e => e.code), ['E_UNKNOWN_REF', 'E_STATUS', 'E_OP']);
+});

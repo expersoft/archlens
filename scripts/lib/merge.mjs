@@ -1,7 +1,7 @@
 // Incremental merge of a delta into the knowledge base. planMerge classifies and never decides;
 // applyPlan replays the same merge with the user's answers. Pure: no file I/O.
 import { createHash } from 'node:crypto';
-import { resolveType } from './registry.mjs';
+import { resolveType, STATUSES } from './registry.mjs';
 import { validateModel } from './validate.mjs';
 import { aliasKey, findCandidates } from './match.mjs';
 import { addSources, deltaSources } from './sources.mjs';
@@ -116,6 +116,7 @@ function runMerge(baseRaw, delta, { mode, resolutions = new Map() }) {
   mergeRelationships(ctx);
   mergeViews(ctx);
   mergeAssumptions(ctx);
+  runOps(ctx);
   return ctx;
 }
 
@@ -388,6 +389,101 @@ function mergeAssumptions(ctx) {
   if (!extra.length) return;
   ctx.raw.assumptions = [...current, ...extra];
   note(ctx, { key: 'assumptions', class: 'new', kind: 'assumption', target: `${extra.length} premissa(s)`, added: extra });
+}
+
+function findRelationship(ctx, id) {
+  return ctx.raw.model.relationships.find(r => relId(ctx, r) === id) ?? null;
+}
+
+function runOps(ctx) {
+  (ctx.delta.ops || []).forEach((op, i) => {
+    const key = `op:${i}`;
+    const opError = (code, message, hint) => {
+      ctx.errors.push({ code, message: `ops[${i}] (${op.op}): ${message}`, path: `ops[${i}]`, hint });
+      note(ctx, { key, class: 'op', op: op.op, target: op.id, error: code });
+    };
+    const elId = resolveRef(ctx, op.id);
+    const el = ctx.tree.get(elId)?.el ?? null;
+    const rel = el ? null : findRelationship(ctx, op.id);
+    if (!el && !rel) return opError('E_UNKNOWN_REF', `"${op.id}" não existe`, 'use o id (ou alias) de um elemento, ou o id de uma relação');
+    const id = el ? elId : relId(ctx, rel);
+    const target = el ?? rel;
+    switch (op.op) {
+      case 'rename': {
+        if (!el) return opError('E_OP', 'rename só vale para elementos', 'para relações, mude "description" pelo delta');
+        if (!op.name || op.name === target.name) return note(ctx, { key, class: 'op', op: 'rename', target: id, noop: true });
+        const old = target.name;
+        target.name = op.name;
+        if (old) addAliases(ctx, id, [old]);
+        ctx.log.changed.add(id);
+        return note(ctx, { key, class: 'op', op: 'rename', target: id, from: old ?? id, to: op.name });
+      }
+      case 'alias': {
+        if (!el) return opError('E_OP', 'alias só vale para elementos', 'relações são casadas por origem, tipo e destino');
+        if (addAliases(ctx, id, op.add || [])) ctx.log.changed.add(id);
+        return note(ctx, { key, class: 'op', op: 'alias', target: id, add: op.add || [] });
+      }
+      case 'status': {
+        if (!STATUSES.includes(op.status)) return opError('E_STATUS', `status "${op.status}" inválido`, `use ${STATUSES.join(' | ')}`);
+        const from = target.status ?? 'active';
+        if (from === op.status) return note(ctx, { key, class: 'op', op: 'status', target: id, status: op.status, noop: true });
+        const item = { key, class: 'op', op: 'status', target: id, from, status: op.status, ...(op.reason ? { reason: op.reason } : {}) };
+        if (op.status === 'retired') {
+          if (decide(ctx, item, 'yes') !== 'yes') { ctx.log.decisions.push(`status ${id} → retired: recusado`); return undefined; }
+        } else note(ctx, item);
+        target.status = op.status;
+        if (op.reason) target.statusReason = op.reason;
+        addSources(target, ctx.delta.source ? [ctx.delta.source] : []);
+        ctx.log.status[id] = op.status;
+        return undefined;
+      }
+      case 'remove': {
+        const cascade = el ? removalCascade(ctx, id) : { elements: [], relationships: [id], views: [] };
+        if (decide(ctx, { key, class: 'op', op: 'remove', target: id, cascade }, 'yes') !== 'yes') {
+          ctx.log.decisions.push(`remover ${id}: recusado`);
+          return undefined;
+        }
+        applyRemoval(ctx, cascade);
+        ctx.log.removed.push(...(el ? cascade.elements : [id]));
+        return undefined;
+      }
+      default:
+        return opError('E_OP', `operação desconhecida "${op.op}"`, 'use rename | alias | status | remove');
+    }
+  });
+}
+
+function removalCascade(ctx, id) {
+  const gone = new Set([id, ...descendantsOf(ctx.tree, id)]);
+  const relationships = ctx.raw.model.relationships.filter(r => gone.has(r.from) || gone.has(r.to)).map(r => relId(ctx, r));
+  const views = [];
+  for (const v of ctx.raw.views || []) {
+    if (VIEW_REFS.some(f => gone.has(v[f]))) views.push({ key: v.key, action: 'remove' });
+    else if (VIEW_LISTS.some(f => (v[f] || []).some(x => gone.has(x))) || (v.steps || []).some(s => gone.has(s.from) || gone.has(s.to))) {
+      views.push({ key: v.key, action: 'trim' });
+    }
+  }
+  return { elements: [...gone], relationships, views };
+}
+
+function applyRemoval(ctx, cascade) {
+  const gone = new Set(cascade.elements);
+  // Relationship ids depend on element types, so drop relationships before the elements leave the tree.
+  const rels = new Set(cascade.relationships);
+  ctx.raw.model.relationships = ctx.raw.model.relationships.filter(r => !rels.has(relId(ctx, r)));
+  for (const id of cascade.elements) if (ctx.tree.has(id)) detach(ctx.tree, id);
+  for (const id of cascade.elements) ctx.tree.delete(id);
+  for (const [k, id] of ctx.aliases) if (gone.has(id)) ctx.aliases.delete(k);
+  ctx.pool = ctx.pool.filter(p => !gone.has(p.id));
+  const action = new Map(cascade.views.map(v => [v.key, v.action]));
+  if (!action.size) return;
+  ctx.raw.views = ctx.raw.views.filter(v => action.get(v.key) !== 'remove').map(v => {
+    if (action.get(v.key) !== 'trim') return v;
+    const t = { ...v };
+    for (const f of VIEW_LISTS) if (Array.isArray(t[f])) t[f] = t[f].filter(x => !gone.has(x));
+    if (Array.isArray(t.steps)) t.steps = t.steps.filter(s => !gone.has(s.from) && !gone.has(s.to));
+    return t;
+  });
 }
 
 function changelogEntry(ctx, date) {
