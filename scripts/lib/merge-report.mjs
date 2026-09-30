@@ -2,7 +2,7 @@
 const LABELS = { new: 'novos', unchanged: 'sem mudança', enrich: 'enriquecidos', conflict: 'conflitos', 'possible-duplicate': 'possíveis duplicatas', op: 'operações' };
 const show = v => (typeof v === 'string' ? `"${v}"` : JSON.stringify(v));
 
-function describeItem(it) {
+export function describeItem(it) {
   const cond = it.when ? ` (só se [${it.when.slice(0, it.when.lastIndexOf('='))}] = same)` : '';
   if (it.class === 'conflict' && it.kind === 'view') return `conflito na visão "${it.target}": a definição mudou  → keep | take`;
   if (it.class === 'conflict') return `conflito ${it.target}.${it.field}: base ${show(it.base)} ≠ delta ${show(it.delta)}${cond}  → keep | take | value:<x>`;
