@@ -382,3 +382,39 @@ test('earlier answers that are invalid for their question are ignored when re-pl
   const plan = planMerge(agendaBase(), d, { ...TODAY, answers: { 'dup:api-agenda': 'talvez' } });
   assert.equal(plan.items.find(i => i.key === 'dup:api-agenda').resolution, null);
 });
+
+// --- parallel id-less relationships get the same ids normalizeModel gives them ---
+const parallelBase = () => {
+  const base = shop();
+  base.model.relationships.push(
+    { from: 'cliente', to: 'pagamentos', type: 'uses', description: 'lê' },
+    { from: 'cliente', to: 'pagamentos', type: 'uses', description: 'grava' },
+  );
+  return base;
+};
+
+test('remove on the second of two parallel relationships uses the #2 id and removes only it', () => {
+  const plan = planMerge(parallelBase(), delta({}, { ops: [{ op: 'remove', id: 'pagamentos-serving-cliente#2' }] }), TODAY);
+  assert.equal(plan.blocked, false, JSON.stringify(plan.errors));
+  assert.deepEqual(plan.items[0].cascade.relationships, ['pagamentos-serving-cliente#2']);
+  const { raw } = applyPlan(parallelBase(), answer(plan, { 'op:0': 'yes' }), TODAY);
+  const left = raw.model.relationships.filter(r => r.from === 'cliente' && r.to === 'pagamentos');
+  assert.deepEqual(left.map(r => r.description), ['lê']);
+});
+
+test('remove on the first of two parallel relationships keeps the other one', () => {
+  const plan = planMerge(parallelBase(), delta({}, { ops: [{ op: 'remove', id: 'pagamentos-serving-cliente' }] }), TODAY);
+  assert.deepEqual(plan.items[0].cascade.relationships, ['pagamentos-serving-cliente']);
+  const { raw } = applyPlan(parallelBase(), answer(plan, { 'op:0': 'yes' }), TODAY);
+  const left = raw.model.relationships.filter(r => r.from === 'cliente' && r.to === 'pagamentos');
+  assert.deepEqual(left.map(r => r.description), ['grava']);
+});
+
+test('removing an element lists and removes each parallel relationship once', () => {
+  const plan = planMerge(parallelBase(), delta({}, { ops: [{ op: 'remove', id: 'pagamentos' }] }), TODAY);
+  const rels = plan.items[0].cascade.relationships;
+  assert.ok(rels.includes('pagamentos-serving-cliente') && rels.includes('pagamentos-serving-cliente#2'), rels.join());
+  const { raw } = applyPlan(parallelBase(), answer(plan, { 'op:0': 'yes' }), TODAY);
+  assert.ok(!raw.model.relationships.some(r => r.from === 'pagamentos' || r.to === 'pagamentos'));
+  assert.equal(raw.model.relationships.length, parallelBase().model.relationships.length - rels.length);
+});

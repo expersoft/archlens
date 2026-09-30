@@ -324,26 +324,46 @@ function relKey(ctx, r) {
   return c.error ? null : `${c.from}|${c.type}|${c.to}`;
 }
 
-/** Id of a raw relationship as normalizeModel names it: explicit id, or from-type-to after reading `uses`. */
+/** Generated id of a raw relationship (before de-duplication): explicit id, or from-type-to after reading `uses`. */
 export function relId(ctx, r) {
   if (r.id) return r.id;
   const c = canonicalRel(r, ctx.typeOf);
   return c.error ? `${r.from}-${r.type}-${r.to}` : `${c.from}-${c.type}-${c.to}`;
 }
 
+/**
+ * raw relationship → id, exactly as normalizeModel names it: walking the list in order, repeated ids get
+ * "#2", "#3"…; relationships normalizeModel would skip (bad ends or type) keep their generated id.
+ */
+export function relIds(ctx) {
+  const ids = new Map();
+  const seen = new Map();
+  for (const r of ctx.raw.model.relationships) {
+    if (!r || typeof r !== 'object') continue;
+    const valid = r.from && r.to && ctx.tree.has(r.from) && ctx.tree.has(r.to) && !canonicalRel(r, ctx.typeOf).error;
+    let id = relId(ctx, r);
+    if (valid) {
+      if (seen.has(id)) { seen.set(id, seen.get(id) + 1); id = `${id}#${seen.get(id)}`; } else seen.set(id, 1);
+    }
+    ids.set(r, id);
+  }
+  return ids;
+}
+
 function mergeRelationships(ctx) {
   const byKey = new Map();
   const byId = new Map();
-  for (const r of ctx.raw.model.relationships) {
+  const ids = relIds(ctx);
+  for (const [r, id] of ids) {
     const k = relKey(ctx, r);
     if (k && !byKey.has(k)) byKey.set(k, r);
-    byId.set(relId(ctx, r), r);
+    byId.set(id, r);
   }
   (ctx.delta.model?.relationships || []).forEach((dr, i) => {
     const r = { ...dr, from: resolveRef(ctx, dr.from), to: resolveRef(ctx, dr.to) };
     const k = relKey(ctx, r);
     const base = (r.id && byId.get(r.id)) || (k && byKey.get(k));
-    if (base) { mergeRelInto(ctx, base, r, i); return; }
+    if (base) { mergeRelInto(ctx, base, ids.get(base), r, i); return; }
     const { source, sources, ...rest } = r;
     const generated = relId(ctx, { ...r, id: undefined });
     let id = r.id ?? generated;
@@ -353,14 +373,14 @@ function mergeRelationships(ctx) {
     if (srcs.length) node.sources = srcs;
     ctx.raw.model.relationships.push(node);
     byId.set(id, node);
+    ids.set(node, id);
     if (k) byKey.set(k, node);
     ctx.log.added.push(id);
     note(ctx, { key: `rel:${i}`, class: 'new', kind: 'relationship', target: id, from: r.from, to: r.to, type: r.type ?? 'uses' });
   });
 }
 
-function mergeRelInto(ctx, base, r, i) {
-  const id = relId(ctx, base);
+function mergeRelInto(ctx, base, id, r, i) {
   const { filled, changed } = reconcile(ctx, { fields: fieldsOf(base, r, REL_FIELDS), keyPrefix: `rel:${i}`, kind: 'relationship', target: id });
   let more = addList(base, 'tags', r.tags);
   if (r.inferred === false && base.inferred) { delete base.inferred; more = true; }
@@ -413,7 +433,8 @@ function mergeAssumptions(ctx) {
 }
 
 function findRelationship(ctx, id) {
-  return ctx.raw.model.relationships.find(r => relId(ctx, r) === id) ?? null;
+  for (const [r, rid] of relIds(ctx)) if (rid === id) return r;
+  return null;
 }
 
 function runOps(ctx) {
@@ -427,7 +448,7 @@ function runOps(ctx) {
     const el = ctx.tree.get(elId)?.el ?? null;
     const rel = el ? null : findRelationship(ctx, op.id);
     if (!el && !rel) return opError('E_UNKNOWN_REF', `"${op.id}" não existe`, 'use o id (ou alias) de um elemento, ou o id de uma relação');
-    const id = el ? elId : relId(ctx, rel);
+    const id = el ? elId : relIds(ctx).get(rel);
     const target = el ?? rel;
     switch (op.op) {
       case 'rename': {
@@ -459,12 +480,12 @@ function runOps(ctx) {
         return undefined;
       }
       case 'remove': {
-        const cascade = el ? removalCascade(ctx, id) : { elements: [], relationships: [id], views: [] };
+        const { cascade, rels } = el ? removalCascade(ctx, id) : { cascade: { elements: [], relationships: [id], views: [] }, rels: [rel] };
         if (decide(ctx, { key, class: 'op', op: 'remove', target: id, cascade }, 'yes') !== 'yes') {
           ctx.log.decisions.push(`remover ${id}: recusado`);
           return undefined;
         }
-        applyRemoval(ctx, cascade);
+        applyRemoval(ctx, cascade, rels);
         ctx.log.removed.push(...(el ? cascade.elements : [id]));
         return undefined;
       }
@@ -474,9 +495,11 @@ function runOps(ctx) {
   });
 }
 
+/** What removing element `id` takes with it: the plan's cascade (ids) and the raw relationships to drop. */
 function removalCascade(ctx, id) {
   const gone = new Set([id, ...descendantsOf(ctx.tree, id)]);
-  const relationships = ctx.raw.model.relationships.filter(r => gone.has(r.from) || gone.has(r.to)).map(r => relId(ctx, r));
+  const ids = relIds(ctx);
+  const rels = ctx.raw.model.relationships.filter(r => gone.has(r?.from) || gone.has(r?.to));
   const views = [];
   for (const v of ctx.raw.views || []) {
     if (VIEW_REFS.some(f => gone.has(v[f]))) views.push({ key: v.key, action: 'remove' });
@@ -484,14 +507,14 @@ function removalCascade(ctx, id) {
       views.push({ key: v.key, action: 'trim' });
     }
   }
-  return { elements: [...gone], relationships, views };
+  return { cascade: { elements: [...gone], relationships: rels.map(r => ids.get(r)), views }, rels };
 }
 
-function applyRemoval(ctx, cascade) {
+function applyRemoval(ctx, cascade, rels) {
   const gone = new Set(cascade.elements);
-  // Relationship ids depend on element types, so drop relationships before the elements leave the tree.
-  const rels = new Set(cascade.relationships);
-  ctx.raw.model.relationships = ctx.raw.model.relationships.filter(r => !rels.has(relId(ctx, r)));
+  // By object: parallel relationships may share from/type/to, so ids alone would not tell them apart.
+  const drop = new Set(rels);
+  ctx.raw.model.relationships = ctx.raw.model.relationships.filter(r => !drop.has(r));
   for (const id of cascade.elements) if (ctx.tree.has(id)) detach(ctx.tree, id);
   for (const id of cascade.elements) ctx.tree.delete(id);
   for (const [k, id] of ctx.aliases) if (gone.has(id)) ctx.aliases.delete(k);
