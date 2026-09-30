@@ -191,9 +191,9 @@ function mergeElements(ctx) {
       if (ctx.mode === 'plan' && !ctx.items.at(-1).resolution) mergeElementInto(ctx, c.id, el, parentId, { dry: true, when: `${key}=same` });
       if (res === 'same') {
         ctx.idMap.set(el.id, c.id);
-        addAliases(ctx, c.id, [el.id]);
         ctx.log.decisions.push(`duplicata: ${el.id} = ${c.id}`);
-        mergeElementInto(ctx, c.id, el, parentId);
+        // The delta's id and name become aliases, so the same delta matches directly next time.
+        mergeElementInto(ctx, c.id, el, parentId, { aliases: [el.id, el.name] });
         continue;
       }
       if (ctx.mode === 'apply') ctx.log.decisions.push(`duplicata descartada: ${el.id} ≠ ${c.id}`);
@@ -241,7 +241,11 @@ function reconcile(ctx, { fields, keyPrefix, kind, target, dry = false, when }) 
       continue;
     }
     const res = decide(ctx, item, 'take');
-    if (res === 'keep') continue;
+    if (res === 'keep') {
+      // A kept name is still a name people use for the element: keep it as an alias (asked once).
+      if (kind === 'element' && field === 'name' && addAliases(ctx, target, [dv])) changed = true;
+      continue;
+    }
     apply(res === 'take' ? dv : parseValue(res.slice('value:'.length), dv));
     changed = true;
     ctx.log.decisions.push(`conflito ${target}.${field}: ${res === 'take' ? `take ${JSON.stringify(dv)}` : res}`);
@@ -263,7 +267,7 @@ const aliasesOf = el => (Array.isArray(el.aliases) ? el.aliases : []);
 function addAliases(ctx, id, list) {
   const target = ctx.tree.get(id).el;
   if (target.aliases !== undefined && !Array.isArray(target.aliases)) return false;
-  const known = new Set([aliasKey(id), ...aliasesOf(target).map(aliasKey)]);
+  const known = new Set([aliasKey(id), ...(target.name != null ? [aliasKey(target.name)] : []), ...aliasesOf(target).map(aliasKey)]);
   const extra = [];
   for (const a of list) {
     if (a == null || known.has(aliasKey(a))) continue;
@@ -289,17 +293,19 @@ function moveElement(ctx, baseId, newParent) {
   attach(ctx.raw, ctx.tree, ctx.tree.get(baseId).el, newParent);
 }
 
-function mergeElementInto(ctx, baseId, el, parentId, { dry = false, when } = {}) {
+function mergeElementInto(ctx, baseId, el, parentId, { dry = false, when, aliases = [] } = {}) {
   const entry = ctx.tree.get(baseId);
   const target = entry.el;
-  const fields = fieldsOf(target, el, ELEMENT_FIELDS);
+  // A delta name that is already an alias of the element is not a conflict (the user answered it before).
+  const knownName = el.name != null && aliasesOf(target).some(a => aliasKey(a) === aliasKey(el.name));
+  const fields = fieldsOf(target, el, ELEMENT_FIELDS).filter(([f]) => !(f === 'name' && knownName));
   if (parentId != null && parentId !== entry.parent) {
     fields.push(['parent', entry.parent ?? undefined, parentId, v => moveElement(ctx, baseId, resolveRef(ctx, v))]);
   }
   const { filled, changed } = reconcile(ctx, { fields, keyPrefix: `el:${el.id}`, kind: 'element', target: baseId, dry, when });
   if (dry) return;
   let more = addList(target, 'tags', el.tags);
-  more = addAliases(ctx, baseId, aliasesOf(el)) || more;
+  more = addAliases(ctx, baseId, [...aliasesOf(el), ...aliases]) || more;
   if (el.inferred === false && target.inferred) {
     delete target.inferred;
     delete target.confidence;
@@ -307,7 +313,7 @@ function mergeElementInto(ctx, baseId, el, parentId, { dry = false, when } = {})
   }
   addSources(target, deltaSources(el, ctx.delta.source));
   if (filled || changed || more) ctx.log.changed.add(baseId);
-  note(ctx, { key: `el:${el.id}`, class: filled || more ? 'enrich' : 'unchanged', kind: 'element', target: baseId, ...(el.id !== baseId ? { from: el.id } : {}) });
+  note(ctx, { key: `el:${el.id}`, class: filled || changed || more ? 'enrich' : 'unchanged', kind: 'element', target: baseId, ...(el.id !== baseId ? { from: el.id } : {}) });
 }
 
 function insertElement(ctx, el, parentId) {
@@ -390,7 +396,7 @@ function mergeRelInto(ctx, base, id, r, i) {
   if (r.inferred === false && base.inferred) { delete base.inferred; more = true; }
   addSources(base, deltaSources(r, ctx.delta.source));
   if (filled || changed || more) ctx.log.changed.add(id);
-  note(ctx, { key: `rel:${i}`, class: filled || more ? 'enrich' : 'unchanged', kind: 'relationship', target: id });
+  note(ctx, { key: `rel:${i}`, class: filled || changed || more ? 'enrich' : 'unchanged', kind: 'relationship', target: id });
 }
 
 function rewriteView(ctx, view) {

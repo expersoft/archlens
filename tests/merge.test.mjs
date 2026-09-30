@@ -82,7 +82,7 @@ test('a similar name of the same type is only a possible duplicate', () => {
   assert.equal(plan.summary.new, 1, 'simulated as different');
   const same = applyPlan(shop(), answer(structuredClone(plan), { 'dup:gateway-pag': 'same', 'el:gateway-pag:name': 'keep' }), TODAY);
   const pag = find(same.raw, 'pagamentos');
-  assert.deepEqual(pag.aliases, ['gateway-pag']);
+  assert.deepEqual(pag.aliases, ['Gateway Pagamentos', 'gateway-pag'], 'kept delta name and delta id become aliases');
   assert.equal(pag.description, 'Adquirente');
   assert.equal(find(same.raw, 'gateway-pag'), undefined);
   const diff = applyPlan(shop(), answer(structuredClone(plan), { 'dup:gateway-pag': 'different' }), TODAY);
@@ -429,4 +429,51 @@ test('a delta element with non-list aliases blocks the plan instead of matching 
   const plan = planMerge(shop(), delta({ elements: [{ id: 'novo', type: 'c4:softwareSystem', name: 'Novo', aliases: 'loja' }] }), TODAY);
   assert.equal(plan.blocked, true);
   assert.ok(plan.errors.some(e => e.code === 'E_SCHEMA'));
+});
+
+// --- names the user kept become aliases, so the same delta does not ask again ---
+test('duplicate answered same adds the delta id and name as aliases; re-planning asks nothing', () => {
+  const d = delta({ elements: [{ id: 'api-agenda', type: 'c4:container', name: 'API Agendamento', parent: 'sys' }] });
+  const plan = planMerge(agendaBase(), d, TODAY);
+  answer(plan, { 'dup:api-agenda': 'same', 'el:api-agenda:name': 'keep' });
+  const plan2 = planMerge(agendaBase(), d, { ...TODAY, answers: answersOf(plan) });
+  const { raw } = applyPlan(agendaBase(), plan2, TODAY);
+  const el = find(raw, 'sys.agenda');
+  assert.equal(el.name, 'API de Agendamento');
+  assert.deepEqual(el.aliases, ['API Agendamento', 'api-agenda']);
+  const again = planMerge(raw, d, TODAY);
+  assert.deepEqual(again.items.filter(i => 'resolution' in i), [], JSON.stringify(again.items));
+  assert.equal(applyPlan(raw, again, TODAY).entry, null);
+});
+
+test('duplicate answered same with the name taken does not keep the new name as an alias', () => {
+  const d = delta({ elements: [{ id: 'api-agenda', type: 'c4:container', name: 'API Agendamento', parent: 'sys' }] });
+  const plan = planMerge(agendaBase(), d, { ...TODAY, answers: { 'dup:api-agenda': 'same', 'el:api-agenda:name': 'take' } });
+  const { raw } = applyPlan(agendaBase(), plan, TODAY);
+  assert.equal(find(raw, 'sys.agenda').name, 'API Agendamento');
+  assert.deepEqual(find(raw, 'sys.agenda').aliases, ['api-agenda']);
+});
+
+test('a name conflict answered keep adds the delta name as an alias', () => {
+  const d = delta({ elements: [{ id: 'loja.api', name: 'Orders API' }] });
+  const plan = planMerge(shop(), d, { ...TODAY, answers: { 'el:loja.api:name': 'keep' } });
+  const { raw, entry } = applyPlan(shop(), plan, TODAY);
+  assert.equal(find(raw, 'loja.api').name, 'API');
+  assert.deepEqual(find(raw, 'loja.api').aliases, ['Orders API']);
+  assert.deepEqual(entry.changed, ['loja.api']);
+  const again = planMerge(raw, d, TODAY);
+  assert.ok(!again.items.some(i => i.class === 'conflict'), JSON.stringify(again.items));
+});
+
+// --- the note class reflects taken conflicts ---
+test('an item whose only change is a taken conflict is enrich; kept is unchanged', () => {
+  const d = delta({
+    elements: [{ id: 'loja.api', technology: 'Kotlin' }],
+    relationships: [{ from: 'cliente', to: 'loja.web', description: 'Navega' }],
+  });
+  const cls = (answers, key) => planMerge(shop(), d, { ...TODAY, answers }).items.find(i => i.key === key).class;
+  assert.equal(cls({ 'el:loja.api:technology': 'take' }, 'el:loja.api'), 'enrich');
+  assert.equal(cls({ 'el:loja.api:technology': 'keep' }, 'el:loja.api'), 'unchanged');
+  assert.equal(cls({ 'rel:0:description': 'value:Navega e compra' }, 'rel:0'), 'enrich');
+  assert.equal(cls({ 'rel:0:description': 'keep' }, 'rel:0'), 'unchanged');
 });
