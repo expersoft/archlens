@@ -1,7 +1,9 @@
 ---
 archlens: "1.0"
 name: "Loja Online"
-generated: 2026-09-24
+generated: 2026-09-30
+revision: 0
+updated: 2026-09-30
 notations: [c4, archimate]
 elements: 60
 relationships: 78
@@ -10,7 +12,8 @@ relationships: 78
 # Loja Online
 
 > Base de conhecimento gerada pela skill **archlens**. As tabelas são derivadas do bloco
-> `archlens-json` no fim do documento, que é a fonte de verdade: edite o JSON e regenere.
+> `archlens-json` no fim do documento, que é a fonte de verdade. Evolua a base com `archlens merge`
+> (delta → plano → apply); editar o bloco à mão e regenerar com `archlens doc` continua possível.
 > Texto entre marcadores `<!-- keep:... -->` é preservado ao regenerar.
 
 ## Visão geral
@@ -285,11 +288,19 @@ Cadeias de suporte calculadas a partir do modelo (o que sustenta cada oferta, e 
 | Barramento de Eventos | Cliente, Atendente SAC, Operador de Logística, Venda Online, Entrega Expressa, Compra online, Pagamento seguro, Entrega do pedido, Atendimento pós-venda, Comprador, Checkout, Faturamento, Expedição, Tratar solicitação | — |
 | ERP | Operador de Logística, Venda Online, Entrega Expressa, Entrega do pedido, Faturamento, Expedição | Mensageria, Apache Kafka (MSK), Servidor SAP (on-premises), VPN site-to-site |
 
+## Ciclo de vida
+
+_Todos os elementos e relações estão ativos._
+
 ## Premissas e inferências
 
 <!-- keep:assumptions -->
 _Nenhuma premissa registrada._
 <!-- /keep:assumptions -->
+
+## Fontes
+
+_Nenhuma fonte registrada._
 
 ## Visões
 
@@ -308,6 +319,10 @@ _Nenhuma premissa registrada._
 | `suporte-checkout` | archimate | layered (supporters) | Checkout | Processo de Checkout — dependências por camada |
 | `impacto-api-pedidos` | archimate | impact (both) | API de Pedidos | API de Pedidos — matriz de dependência e impacto |
 | `negocio-x-tecnologia` | archimate | custom (supporters) | Venda Online | Venda Online — negócio × tecnologia (relações derivadas) |
+
+## Histórico
+
+_Nenhuma rodada de merge registrada._
 
 ## Notas
 
