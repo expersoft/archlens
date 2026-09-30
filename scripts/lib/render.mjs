@@ -220,7 +220,7 @@ function viewSvg(v, idx) {
   else parts.push(...v.bands.map(b => band(b, v.layers)));
   const edges = v.edges.map(e => edge(e, prefix, showLabels)).join('');
   const nodes = v.nodes.map((n, i) => v.notation === 'c4' ? c4Node(n, i) : amNode(n, i)).join('');
-  return `<svg class="diagram n-${v.notation}" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" data-w="${W}" data-h="${H}" style="--ratio:${(H / W).toFixed(5)}" role="img" aria-label="${esc(v.title)}" xmlns="http://www.w3.org/2000/svg">`
+  return `<svg class="diagram n-${v.notation}" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" data-w="${W}" data-h="${H}" role="img" aria-label="${esc(v.title)}" xmlns="http://www.w3.org/2000/svg">`
     + markerDefs(prefix)
     + `<rect class="bgrect" x="0" y="0" width="${W}" height="${H}"/>`
     + `<g class="content">${parts.join('')}<g class="edges">${edges}</g><g class="nodes">${nodes}</g></g></svg>`;
@@ -334,13 +334,12 @@ button,select{font:inherit;color:inherit}
 .bar button.primary{background:var(--c4-system);border-color:var(--c4-system);color:#fff}
 .stage{position:fixed;inset:var(--bar-h) 0 0 0;display:flex;align-items:center;justify-content:center}
 .view{width:100%;height:100%;display:flex;align-items:center;justify-content:center;position:relative}
-svg.diagram{display:block;width:100%;height:min(calc(100vh - var(--bar-h)),calc(100vw * var(--ratio)));cursor:grab;touch-action:none;user-select:none}
+svg.diagram{display:block;width:100%;height:100%;cursor:grab;touch-action:none;user-select:none}
 svg.diagram.panning{cursor:grabbing}
 .bgrect{fill:transparent}
 body.presenting .bar{transform:translateY(-100%)}
 body.presenting.reveal-top .bar{transform:none}
 body.presenting .stage{inset:0}
-body.presenting svg.diagram{height:100vh}
 /* C4 */
 .node .shape{stroke-width:2;transition:filter .2s,opacity .25s}
 .k-person .shape{fill:var(--c4-person);stroke:color-mix(in srgb,var(--c4-person) 70%,#000)}
@@ -493,6 +492,7 @@ const JS = String.raw`
   const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
   let current = 0, selected = null, timer = null;
   const vb = sections.map(s => { const svg = $('svg', s); return { x: 0, y: 0, w: +svg.dataset.w, h: +svg.dataset.h }; });
+  const fitted = sections.map(() => true); // view still at "fit"? (re-fit on resize instead of keeping the zoom)
 
   // ---------- theme
   const root = document.documentElement;
@@ -513,6 +513,7 @@ const JS = String.raw`
     $('[data-act=matrix]').hidden = !view().matrix;
     if (!view().matrix) $('.sheet').hidden = true; else if (!$('.sheet').hidden) renderMatrix();
     $('[data-act=legend]').classList.toggle('on', !$('.legend', sec()).hidden);
+    reshape(i);
     intro();
     requestAnimationFrame(checkLegibility);
   }
@@ -538,8 +539,22 @@ const JS = String.raw`
     };
     anim = requestAnimationFrame(step);
   }
-  const full = () => ({ x: 0, y: 0, w: view().width, h: view().height });
-  const fit = () => animateVB(full());
+  // The svg fills the whole stage; the viewBox always takes the element's aspect ratio so zoom/pan
+  // use the full screen instead of a strip with the diagram's proportions.
+  function aspectOf(i) { const b = $('svg', sections[i]).getBoundingClientRect(); return b.width && b.height ? b.width / b.height : 0; }
+  function fitRect(i) {
+    const v = DATA.views[i], a = aspectOf(i);
+    if (!a) return { x: 0, y: 0, w: v.width, h: v.height };
+    const w = Math.max(v.width, v.height * a), h = w / a;
+    return { x: (v.width - w) / 2, y: (v.height - h) / 2, w, h };
+  }
+  function reshape(i) { // after a size change: re-fit, or keep center + horizontal scale of the current zoom
+    const a = aspectOf(i); if (!a) return;
+    if (fitted[i]) { setVB(i, fitRect(i)); return; }
+    const r = vb[i], h = r.w / a;
+    setVB(i, { x: r.x, y: r.y + (r.h - h) / 2, w: r.w, h });
+  }
+  const fit = () => { fitted[current] = true; animateVB(fitRect(current)); };
   function focusNode(id) {
     const v = view(), n = v.nodes[id]; if (!n) return;
     const near = [id, ...v.edges.filter(e => e.from === id || e.to === id).map(e => e.from === id ? e.to : e.from)].map(k => v.nodes[k]).filter(Boolean);
@@ -549,6 +564,7 @@ const JS = String.raw`
     let w = Math.max(x1 - x0 + 2 * pad, 1000), h = Math.max(y1 - y0 + 2 * pad, w / aspect);
     w = Math.max(w, h * aspect); h = w / aspect;
     const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+    fitted[current] = false;
     animateVB({ x: cx - w / 2, y: cy - h / 2, w, h });
   }
   function toSvg(e) {
@@ -561,6 +577,7 @@ const JS = String.raw`
       e.preventDefault();
       const p = toSvg(e), k = Math.exp(e.deltaY * 0.0015), r = vb[i];
       const w = Math.min(Math.max(r.w * k, 120), DATA.views[i].width * 4), h = w * r.h / r.w;
+      fitted[i] = false;
       setVB(i, { x: p.x - (p.x - r.x) * (w / r.w), y: p.y - (p.y - r.y) * (h / r.h), w, h });
       checkLegibility();
     }, { passive: false });
@@ -573,7 +590,7 @@ const JS = String.raw`
     s.addEventListener('pointermove', e => {
       if (!drag) return;
       const dx = (e.clientX - drag.x) / drag.scale, dy = (e.clientY - drag.y) / drag.scale;
-      if (Math.abs(dx) + Math.abs(dy) > 2) { if (!drag.moved) { clearTimeout(hoverTimer); clearPreview(); hideCard(); } drag.moved = true; dragging = true; }
+      if (Math.abs(dx) + Math.abs(dy) > 2) { if (!drag.moved) { clearTimeout(hoverTimer); clearPreview(); hideCard(); } drag.moved = true; dragging = true; fitted[i] = false; }
       setVB(i, { ...drag.r, x: drag.r.x - dx, y: drag.r.y - dy });
     });
     const end = e => { if (!drag) return; const moved = drag.moved; drag = null; dragging = false; s.classList.remove('panning'); if (!moved && !e.target.closest('.node, .edge')) { clearTrace(); unpin(); } };
@@ -683,7 +700,8 @@ const JS = String.raw`
       el.textContent = 'Texto a ~' + px.toFixed(1) + 'px nesta tela (mínimo ' + DATA.minScreenPx + 'px). Use a roda do mouse / F para focar, ou divida a visão (focus + depth, collapse, layers).';
     } else el.hidden = true;
   }
-  addEventListener('resize', () => requestAnimationFrame(checkLegibility));
+  // Window resize, fullscreen and presentation mode all change the stage size.
+  new ResizeObserver(() => { reshape(current); checkLegibility(); }).observe($('.stage'));
 
   // ---------- trace
   // C4: follow calls (consumer → provider). ArchiMate: follow support (supported → supporter).
@@ -898,7 +916,7 @@ const JS = String.raw`
       case 'e': case 'E': actions.export(); break;
       case '?': actions.help(); break;
       case 'g': case 'G': actions.glossary(); break;
-      case 'Escape': stop(); clearTrace(); unpin(); $('.help').hidden = true; $('.export-menu').hidden = true; $('.sheet').hidden = true; if (vb[current].w !== view().width) fit(); break;
+      case 'Escape': stop(); clearTrace(); unpin(); $('.help').hidden = true; $('.export-menu').hidden = true; $('.sheet').hidden = true; if (!fitted[current]) fit(); break;
       default: return;
     }
   });

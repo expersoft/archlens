@@ -70,6 +70,9 @@ test('rendered svg is fluid: viewBox, meet, no fixed size; presentation + naviga
     assert.ok(!/\swidth="/.test(t) && !/\sheight="/.test(t), 'no fixed width/height attributes');
   }
   assert.ok(!/[{;]max-width\s*:\s*\d/.test(html), 'no fixed max-width on layout containers (media queries are fine)');
+  assert.match(html, /svg\.diagram\{[^}]*width:100%;height:100%/, 'svg fills the stage so zoom/pan use the whole screen');
+  assert.ok(!html.includes('--ratio'), 'svg height is not tied to the diagram aspect ratio');
+  assert.ok(html.includes('fitRect') && html.includes('ResizeObserver'), 'viewBox follows the element aspect ratio');
   for (const needle of ['requestFullscreen', 'ArrowRight', 'ArrowLeft', "case 'p'", "case '0'", "case 'f'", 'wheel']) {
     assert.ok(html.includes(needle), `missing ${needle}`);
   }
