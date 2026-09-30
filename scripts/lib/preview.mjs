@@ -55,9 +55,28 @@ export function previewModel(baseRaw, { delta, plan } = {}) {
 
   const { relChanges, relMap } = diffRelationships(baseRaw, raw);
 
+  const { views, droppedViews } = previewViews(baseRaw?.views ?? [], raw.views ?? [], (plan ? plan.delta : delta).views ?? []);
+
   const gone = ([, c]) => c.kind === 'removed' || c.kind === 'retired';
   const keep = new Set([...[...changes].filter(gone), ...[...relChanges].filter(gone)].map(([id]) => id));
-  return { raw, changes, relChanges, pending: pendingByTarget(merged.plan, merged.idMap, relMap), keep, plan: merged.plan };
+  return { raw, changes, relChanges, pending: pendingByTarget(merged.plan, merged.idMap, relMap), keep, views, droppedViews, plan: merged.plan };
+}
+
+/**
+ * The views a preview offers: every base view in its base form (ghosts keep it resolvable even when the apply would
+ * drop or trim it), except those the delta brings, which show as the merge leaves them; plus the delta's new views.
+ * `droppedViews`: base views the apply removes or trims (not counting the delta's own changes).
+ */
+function previewViews(baseViews, resultViews, deltaViews) {
+  const fromDelta = new Set(deltaViews.map(v => v?.key));
+  const result = new Map(resultViews.map(v => [v.key, v]));
+  const views = baseViews.map(v => (fromDelta.has(v.key) && result.has(v.key) ? result.get(v.key) : v));
+  const baseKeys = new Set(baseViews.map(v => v.key));
+  views.push(...resultViews.filter(v => fromDelta.has(v.key) && !baseKeys.has(v.key)));
+  const droppedViews = baseViews
+    .filter(v => !result.has(v.key) || (!fromDelta.has(v.key) && canonicalJson(result.get(v.key)) !== canonicalJson(v)))
+    .map(v => v.key);
+  return { views: structuredClone(views), droppedViews };
 }
 
 /**

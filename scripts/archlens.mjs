@@ -98,18 +98,19 @@ function loadSpecs(arg) {
   return Array.isArray(v) ? v : [v];
 }
 
-function selectSpecs(model, args) {
+/** In a preview, `defined` is the preview's view list (base views stay selectable even if the delta drops them). */
+function selectSpecs(model, args, defined = model.views) {
   let specs = [];
   if (args.view && args.view !== true) {
     for (const k of String(args.view).split(',')) {
-      const v = model.views.find(x => x.key === k) ?? suggestViews(model).find(x => x.key === k);
+      const v = defined.find(x => x.key === k) ?? suggestViews(model).find(x => x.key === k);
       if (!v) fail(`visão "${k}" não existe (veja "archlens views")`);
       specs.push(v);
     }
   }
   specs.push(...loadSpecs(args.spec));
-  if (args.suggested) specs.push(...suggestViews(model).filter(s => !model.views.some(v => v.key === s.key)));
-  if (!specs.length) specs = model.views.length ? model.views : suggestViews(model);
+  if (args.suggested) specs.push(...suggestViews(model).filter(s => !defined.some(v => v.key === s.key)));
+  if (!specs.length) specs = defined.length ? defined : suggestViews(model);
   if (!specs.length) fail('nenhuma visão definida nem sugerida');
   return specs;
 }
@@ -214,6 +215,11 @@ async function main() {
   if (previewing && !file) fail('informe o arquivo da base (ARCHITECTURE.md), mesmo que ainda não exista');
   const preview = previewing ? loadPreview(file, args) : null;
   if (preview && cmd !== 'resolve' && !args.json) console.log(`prévia de ${preview.label}`);
+  if (preview?.droppedViews.length) {
+    const say = cmd === 'resolve' || args.json ? console.warn : console.log;
+    say(`  visões afetadas pelo delta (somem ou mudam no apply): ${preview.droppedViews.join(', ')}`);
+  }
+  const specsOf = model => selectSpecs(model, args, preview ? preview.views : model.views);
   const load = () => (preview ? preview.raw : loadRaw(file));
 
   switch (cmd) {
@@ -247,18 +253,19 @@ async function main() {
     }
     case 'views': {
       const model = normalizeModel(load());
-      const suggested = suggestViews(model).filter(s => !model.views.some(v => v.key === s.key));
-      if (args.json) { console.log(JSON.stringify({ defined: model.views, suggested }, null, 2)); break; }
+      const defined = preview ? preview.views : model.views;
+      const suggested = suggestViews(model).filter(s => !defined.some(v => v.key === s.key));
+      if (args.json) { console.log(JSON.stringify({ defined, suggested }, null, 2)); break; }
       console.log('Visões definidas:');
-      for (const v of model.views) console.log(`  ${v.key.padEnd(34)} ${v.notation.padEnd(9)} ${v.level ?? v.viewpoint ?? ''} ${v.scope ?? v.anchor ?? ''}`);
-      if (!model.views.length) console.log('  (nenhuma)');
+      for (const v of defined) console.log(`  ${v.key.padEnd(34)} ${v.notation.padEnd(9)} ${v.level ?? v.viewpoint ?? ''} ${v.scope ?? v.anchor ?? ''}`);
+      if (!defined.length) console.log('  (nenhuma)');
       console.log('\nSugestões (use --view <key> em render/deliver, ou copie para "views"):');
       for (const s of suggested) console.log(`  ${s.key.padEnd(34)} ${s.notation.padEnd(9)} ${s.why}`);
       break;
     }
     case 'resolve': {
       const model = normalizeModel(load());
-      const specs = selectSpecs(model, args);
+      const specs = specsOf(model);
       const out = specs.map(s => { const v = resolveView(model, s, preview ? { keep: preview.keep } : {}); return preview ? annotateView(v, preview) : v; });
       console.log(JSON.stringify(out.length === 1 ? out[0] : out, null, 2));
       break;
@@ -267,7 +274,7 @@ async function main() {
       const raw = load();
       const model = normalizeModel(raw);
       if (!args.out || args.out === true) fail('informe --out arquivo.html');
-      const { html } = await buildHtml(raw, selectSpecs(model, args), args.title, preview);
+      const { html } = await buildHtml(raw, specsOf(model), args.title, preview);
       atomicWrite(args.out, html);
       console.log(`✓ ${args.out}`);
       if (args.open) openFile(args.out);
@@ -277,7 +284,7 @@ async function main() {
       const raw = load();
       const model = normalizeModel(raw);
       if (!args.out || args.out === true) fail('informe --out arquivo.html');
-      const problems = await deliver(raw, selectSpecs(model, args), args.out, args, preview);
+      const problems = await deliver(raw, specsOf(model), args.out, args, preview);
       process.exitCode = problems ? 3 : 0;
       break;
     }
@@ -297,7 +304,7 @@ async function main() {
       const base = args.name && args.name !== true ? args.name
         : preview ? preview.name
           : basename(file).replace(/\.(json|md)$/i, '').replace(/^ARCHITECTURE$/i, 'architecture').replace(/\.model$/, '');
-      const problems = await deliver(raw, selectSpecs(model, args), join(dir, `${base}.html`), args, preview);
+      const problems = await deliver(raw, specsOf(model), join(dir, `${base}.html`), args, preview);
       process.exitCode = problems ? 3 : 0;
       break;
     }

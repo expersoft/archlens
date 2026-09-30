@@ -183,3 +183,19 @@ test('a preview command without the base file argument fails cleanly', () => {
   assert.equal(r.status, 1);
   assert.match(r.stderr, /informe o arquivo da base/);
 });
+
+test('a view the delta drops still renders in the preview, with the ghost, and is reported', () => {
+  const dir = setup();
+  writeFileSync(join(dir, 'd.json'), JSON.stringify({ 'archlens-delta': '1.0', ops: [{ op: 'remove', id: 'loja' }] }));
+  const r = run(['render', 'ARCHITECTURE.md', '--delta', 'd.json', '--view', 'ctx', '--out', 'p.html'], dir);
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /visões afetadas pelo delta \(somem ou mudam no apply\): ctx/);
+  assert.match(readFileSync(join(dir, 'p.html'), 'utf8'), /class="node c4 [^"]*ch-removed[^"]*" data-node="loja"/);
+  const j = run(['resolve', 'ARCHITECTURE.md', '--delta', 'd.json', '--view', 'ctx'], dir);
+  assert.equal(j.status, 0, j.stderr);
+  assert.equal(JSON.parse(j.stdout).nodes.find(n => n.id === 'loja').change, 'removed');
+  assert.match(j.stderr, /visões afetadas pelo delta \(somem ou mudam no apply\): ctx/);
+  const v = run(['views', 'ARCHITECTURE.md', '--delta', 'd.json', '--json'], dir);
+  assert.ok(JSON.parse(v.stdout).defined.some(x => x.key === 'ctx'));
+  assert.match(v.stderr, /visões afetadas/);
+});

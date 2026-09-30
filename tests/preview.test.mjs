@@ -163,3 +163,23 @@ test('removing one of two parallel relationships ghosts that one and leaves the 
   const edges = v.edges.filter(e => e.relIds?.includes(ghostId));
   assert.ok(edges.length && edges.every(e => e.change === 'removed' || (e.relIds.length > 1 && e.change === 'changed')));
 });
+
+test('views: base views stay resolvable in their base form; the delta views come in; dropped or trimmed ones are listed', () => {
+  const base = shop();
+  base.views.push({ key: 'foco', notation: 'c4', level: 'container', scope: 'loja', focus: ['loja.db', 'loja.web'] });
+  const d = delta({}, { ops: [{ op: 'remove', id: 'loja.db' }, { op: 'remove', id: 'pagamentos' }],
+    views: [{ key: 'nova', notation: 'c4', level: 'landscape' }, { key: 'suporte-venda', notation: 'archimate', viewpoint: 'layered', anchor: 'venda' }] });
+  base.views.push({ key: 'pag', notation: 'c4', level: 'context', scope: 'pagamentos' });
+  const p = previewModel(base, { delta: d });
+  const view = k => p.views.find(v => v.key === k);
+  assert.deepEqual(p.views.map(v => v.key), ['ctx', 'suporte-venda', 'foco', 'pag', 'nova']);
+  assert.deepEqual(view('foco').focus, ['loja.db', 'loja.web'], 'base form: the ghost keeps it whole');
+  assert.equal(view('pag').scope, 'pagamentos');
+  assert.equal(view('suporte-venda').traverse, undefined, 'a view the delta changes shows as the delta leaves it');
+  assert.deepEqual(p.droppedViews, ['foco', 'pag']);
+  assert.deepEqual(p.raw.views.map(v => v.key), ['ctx', 'suporte-venda', 'foco', 'nova'], 'raw is still what apply writes');
+  assert.deepEqual(p.raw.views.find(v => v.key === 'foco').focus, ['loja.web']);
+  const m = normalizeModel(p.raw);
+  const v = annotateView(resolveView(m, view('pag'), { keep: p.keep }), p);
+  assert.equal(v.nodes.find(n => n.id === 'pagamentos').change, 'removed');
+});
