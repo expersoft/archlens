@@ -10,7 +10,7 @@ Cada item tem o próprio spec e o próprio plano (`docs/superpowers/specs/`, `do
 | # | Item | Status | Spec / plano | Entrega |
 |---|---|---|---|---|
 | a | Evolução incremental da base: delta → plano → apply, casamento de entidades, conflitos, proveniência, ciclo de vida, histórico | feito | [spec](specs/2026-09-30-kb-evolucao-design.md) · [plano](plans/2026-09-30-kb-evolucao.md) | PR #5 → `develop-v2` |
-| a.1 | Rascunho e prévia: status `draft`, notação de esboço, diagramas a partir de deltas não mergeados | em andamento | [spec](specs/2026-09-30-kb-preview-design.md) | branch `feat/kb-preview` |
+| a.1 | Rascunho e prévia: status `draft`, notação de esboço, diagramas a partir de deltas não mergeados | em andamento | [spec](specs/2026-09-30-kb-preview-design.md) · [plano](plans/2026-09-30-kb-preview.md) | branch `feat/kb-preview` |
 | b | Leitura de repositórios: extrair deltas de docker-compose, k8s/Helm, Terraform, OpenAPI/AsyncAPI, filas/tópicos e dependências entre serviços | próximo | — | — |
 | c | Lacunas de visões: nível deployment do C4, mapa de capacidades, foco de negócio projetado no C4, fluxos de eventos entre sistemas | depois | — | — |
 | d | Exportações: Structurizr DSL, PlantUML/Mermaid, ArchiMate Open Exchange | depois | — | — |
