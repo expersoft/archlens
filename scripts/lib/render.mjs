@@ -124,7 +124,7 @@ function band(b, layers) {
   const lv = LAYER_VAR[b.layer];
   const cy = b.y + b.height / 2;
   return `<g class="band b-${lv}" data-layer="${b.layer}" style="--b:${layers.indexOf(b.layer)}"><rect x="${f(b.x)}" y="${f(b.y)}" width="${f(b.width)}" height="${f(b.height)}"/>`
-    + `<text x="28" y="${f(cy)}" font-size="16" font-weight="700" text-anchor="middle" dominant-baseline="middle" transform="rotate(-90 28 ${f(cy)})">${esc(b.label.toUpperCase())}</text></g>`;
+    + (b.vertical ? `<text x="${f(b.x + b.width / 2)}" y="28" font-size="16" font-weight="700" text-anchor="middle" dominant-baseline="middle">${esc(b.label.toUpperCase())}</text></g>` : `<text x="28" y="${f(cy)}" font-size="16" font-weight="700" text-anchor="middle" dominant-baseline="middle" transform="rotate(-90 28 ${f(cy)})">${esc(b.label.toUpperCase())}</text></g>`);
 }
 
 // ------------------------------------------------------------------ edges

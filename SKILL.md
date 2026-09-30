@@ -55,6 +55,15 @@ Requer Node ≥ 18. A checagem visual (`deliver`/`build`) usa `playwright-core` 
 | matriz de dependência / impacto do componente A | `{notation:"archimate", viewpoint:"impact", anchor:"A"}` (traz a matriz, tecla M) |
 | negócio × tecnologia sem a camada do meio | `{viewpoint:"custom", layers:["business","technology"], anchor:"P", derive:true}` |
 
+**Estilo do layout ArchiMate** (`layout.style`, detalhes em `references/views.md`): sem pedido explícito,
+omita-o (`auto` escolhe o mais legível). Se o prompt pedir, grave na visão:
+
+| O usuário diz | `layout.style` |
+|---|---|
+| "camadas horizontais", "clássico", "linhas por tipo" | `bands` |
+| "fluxo", "cadeia de dependências", "como o C4", "da esquerda para a direita" | `flow` (+ `direction:"DOWN"` se pedir faixas, `"RIGHT"` se pedir colunas) |
+| "camadas com o fluxo dentro", "faixas com a cadeia" | `bands-flow` |
+
 Toda visão precisa de `key` único e de um `title` legível. O modelo pode ter muitas conexões: a visão
 recorta com scope, focus, depth, anchor, traverse, layers, granularity, collapse, include e exclude.
 
@@ -64,6 +73,7 @@ recorta com scope, focus, depth, anchor, traverse, layers, granularity, collapse
 |---|---|
 | `texto ~Npx (< 14px)` | divida a visão: `focus`+`depth`, `exclude`, `granularity:"container"`, `collapse:["application-service"]`, ou `layers` menores. Em visões C4 grandes, crie uma visão por container |
 | `ocupa N% da largura (< 90%)` | C4: `layout:{direction:"auto"}` ou `"DOWN"`. Se persistir, a visão é estreita demais: divida-a |
+| ArchiMate com setas difíceis de seguir | veja o estilo escolhido no build; force outro com `layout:{style:"flow"|"bands"|"bands-flow"}` |
 | `visão tem N nós` (> 40) | quase sempre ilegível no telão: recorte |
 | visão vazia | scope/anchor errado ou faltam ligações entre camadas (veja *Erros comuns*) |
 | erro de JS | bug do renderer: reporte com o HTML |

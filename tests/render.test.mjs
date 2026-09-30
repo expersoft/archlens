@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { normalizeModel } from '../scripts/lib/model.mjs';
 import { resolveView } from '../scripts/lib/query.mjs';
-import { layoutView, legibility } from '../scripts/lib/layout.mjs';
+import { layoutView, legibility, layoutQuality, AM_STYLES } from '../scripts/lib/layout.mjs';
 import { renderHtml } from '../scripts/lib/render.mjs';
 
 const raw = () => JSON.parse(readFileSync(new URL('./fixtures/shop.json', import.meta.url)));
@@ -91,4 +91,45 @@ test('edges carry plain-language help; page has hover card, marker legend and gl
   assert.match(html, /class="legend"[\s\S]*?marker-end="url\(#lg-/, 'legend draws real markers');
   assert.ok(!/<g class="node[^>]*><title>/.test(html), 'no native tooltips competing with the hover card');
   for (const needle of ['pointerover', 'focusin', 'previewing', 'pinCard']) assert.ok(html.includes(needle), `missing ${needle}`);
+});
+
+const amSpec = { key: 's', notation: 'archimate', viewpoint: 'layered', anchor: 'venda', traverse: { mode: 'supporters' } };
+const isOrthogonal = pts => pts.every((p, i) => !i || Math.abs(p.x - pts[i - 1].x) < 0.5 || Math.abs(p.y - pts[i - 1].y) < 0.5);
+
+test('archimate: every layout.style is honoured, keeps layer order and routes edges orthogonally', async () => {
+  const m = normalizeModel(raw());
+  for (const style of AM_STYLES) {
+    const laid = await layoutView(resolveView(m, { ...amSpec, layout: { style } }));
+    assert.equal(laid.layoutStyle, style);
+    assert.equal(laid.layoutAuto, false);
+    assert.deepEqual(laid.bands.map(b => b.layer), ['business', 'application', 'technology'], style);
+    for (const e of laid.edges) assert.ok(e.points.length >= 2 && isOrthogonal(e.points), `${style}: ${e.id} not orthogonal`);
+    for (const n of laid.nodes) {
+      const b = laid.bands.find(x => x.layer === n.layer);
+      assert.ok(n.x >= b.x && n.y >= b.y && n.x + n.w <= b.x + b.width + 0.5 && n.y + n.h <= b.y + b.height + 0.5, `${style}: ${n.id} outside its band`);
+    }
+    if (style !== 'flow') for (const b of laid.bands) assert.ok(!b.vertical && b.x === 0 && b.width === laid.width, `${style}: horizontal full-width bands`);
+    assert.equal(layoutQuality(laid).through, 0, `${style}: no edge crosses a box`);
+  }
+});
+
+test('archimate: layout.style auto keeps the best-scoring style', async () => {
+  const m = normalizeModel(raw());
+  const laid = await layoutView(resolveView(m, amSpec));
+  assert.equal(laid.layoutAuto, true);
+  assert.deepEqual(Object.keys(laid.layoutScores).sort(), [...AM_STYLES].sort());
+  const best = Math.min(...Object.values(laid.layoutScores).map(q => q.score));
+  assert.equal(laid.layoutScores[laid.layoutStyle].score, best);
+});
+
+test('layoutQuality counts crossings, edges through boxes and bends', () => {
+  const nodes = [{ id: 'a', x: 0, y: 0, w: 10, h: 10 }, { id: 'b', x: 200, y: 0, w: 10, h: 10 }, { id: 'c', x: 90, y: 40, w: 20, h: 20 }];
+  const edges = [
+    { id: 'h', from: 'a', to: 'b', points: [{ x: 10, y: 50 }, { x: 200, y: 50 }] },               // passes through c
+    { id: 'v', from: 'a', to: 'b', points: [{ x: 60, y: 0 }, { x: 60, y: 100 }, { x: 80, y: 100 }] }, // crosses h, 1 bend
+  ];
+  const q = layoutQuality({ width: 1920, height: 1024, nodes, edges, bands: [] });
+  assert.equal(q.crossings, 1);
+  assert.equal(q.through, 1);
+  assert.equal(q.bends, 1);
 });
