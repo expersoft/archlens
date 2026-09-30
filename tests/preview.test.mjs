@@ -60,6 +60,7 @@ test('open questions are attached to what they are about; a possible duplicate s
   assert.equal(q.assumed, 'different');
   assert.match(q.question, /possível duplicata/);
   assert.equal(p.pending.get('gateway-pag')[0].key, 'dup:gateway-pag');
+  assert.deepEqual(p.pending.get('gateway-pag')[0].options, ['same', 'different']);
 });
 
 test('a plan uses its answers; open ones take the plan default', () => {
@@ -70,6 +71,7 @@ test('a plan uses its answers; open ones take the plan default', () => {
   assert.equal(find(p.raw, 'loja.web').technology, 'Remix');
   assert.equal(p.pending.has('loja.api'), false);
   assert.equal(p.pending.get('loja.web')[0].assumed, 'take');
+  assert.deepEqual(p.pending.get('loja.web')[0].options, ['keep', 'take', 'value:<x>']);
 });
 
 test('without ghosts, the preview of a fully answered plan is exactly what apply writes', () => {

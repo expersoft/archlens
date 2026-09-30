@@ -431,6 +431,8 @@ body.presenting .stage{inset:0}
 body.preview .stage{inset:calc(var(--bar-h) + 32px) 0 0 0}
 body.presenting .preview-banner{top:0}
 body.presenting.preview .stage{inset:32px 0 0 0}
+body.preview .drawer{top:calc(var(--bar-h) + 44px)}
+body.presenting.preview .drawer{top:44px}
 .boundary rect{fill:none;stroke:var(--boundary);stroke-width:2.2;stroke-dasharray:12 7}
 .boundary text{fill:var(--muted)}
 .boundary .b-title{fill:var(--ink)}
@@ -834,14 +836,15 @@ const JS = String.raw`
     const name = x => escH(v.nodes[x] ? v.nodes[x].name : x);
     const fmt = x => (x === undefined || x === null ? '—' : typeof x === 'string' ? x : JSON.stringify(x));
     const rels = v.edges.filter(e => e.from === id || e.to === id);
-    const rel = e => escH(e.help.sentence) + (e.derived ? ' <span class="chip">derivada</span>' : '') + (e.technology ? ' <span class="chip">' + escH(e.technology) + '</span>' : '');
+    const rel = e => escH(e.help.sentence) + (e.derived ? ' <span class="chip">derivada</span>' : '') + (e.technology ? ' <span class="chip">' + escH(e.technology) + '</span>' : '')
+      + (e.change ? ' <span class="chip">' + { removed: 'sai', retired: 'sai', added: 'nova', changed: 'alterada' }[e.change] + '</span>' : '');
     let h = '<h2>' + escH(n.name) + '</h2><div class="kind">' + escH(n.c4Label || n.typeLabel) + (n.c4Label && n.typeLabel ? ' · ArchiMate ' + escH(n.typeLabel) : '') + '</div>';
     if (n.inferred) h += '<p class="warn">⚠︎ Inferido a partir de texto livre: confirme.</p>';
     if (n.status && n.status !== 'active') h += '<p class="warn">' + escH({ draft: 'Rascunho: em discussão.', planned: 'Planejado: ainda não existe.', deprecated: 'Em desativação.', retired: 'Desativado.' }[n.status] || n.status) + '</p>';
     if (n.statusReason) h += '<p style="color:var(--muted)">Motivo: ' + escH(n.statusReason) + '</p>';
     if (n.change) h += '<p class="warn">' + escH({ added: 'Novo neste delta.', changed: 'Alterado por este delta.', removed: 'Removido por este delta: sai da base junto com o que o plano lista.', retired: 'Desativado por este delta.' }[n.change]) + '</p>';
     if (n.changeFields && n.changeFields.length) h += '<h3>Mudanças</h3><ul>' + n.changeFields.map(c => '<li><b>' + escH(c.field) + '</b>: ' + escH(fmt(c.before)) + ' → ' + escH(fmt(c.after)) + '</li>').join('') + '</ul>';
-    if (n.pending && n.pending.length) h += '<h3>Decisões pendentes</h3><ul>' + n.pending.map(q => '<li>[' + q.n + '] ' + escH(q.question) + (q.assumed ? ' <span class="chip">a prévia assume: ' + escH(q.assumed) + '</span>' : '') + '</li>').join('') + '</ul>';
+    if (n.pending && n.pending.length) h += '<h3>Decisões pendentes</h3><ul>' + n.pending.map(q => '<li>[' + q.n + '] ' + escH(q.question) + (q.assumed ? ' <span class="chip">a prévia assume: ' + escH(q.assumed) + '</span>' : '') + (q.options && q.options.length ? ' · opções: ' + escH(q.options.join(' | ')) : '') + '</li>').join('') + '</ul>';
     if (n.description) h += '<p>' + escH(n.description) + '</p>';
     h += '<dl>';
     if (n.technology) h += '<dt>Tecnologia</dt><dd>' + escH(n.technology) + '</dd>';

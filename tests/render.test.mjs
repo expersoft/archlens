@@ -203,6 +203,9 @@ test('preview marks, banner and drawer data are rendered; a normal render has no
   const data = JSON.parse(html.match(/<script id="archlens-data" type="application\/json">([\s\S]*?)<\/script>/)[1]);
   assert.deepEqual(data.views[0].nodes['loja.web'].changeFields, [{ field: 'technology', before: 'Next.js', after: 'Remix' }]);
   assert.equal(data.views[0].nodes['loja.db'].pending[0].assumed, 'yes');
+  assert.deepEqual(data.views[0].nodes['loja.db'].pending[0].options, ['yes', 'no']);
+  assert.match(html, /sai: 'sai'|removed: 'sai'/);
+  assert.match(html, /opções: /);
   const plain = renderHtml({ title: 't', views: [await layoutView(resolveView(normalizeModel(raw()), { key: 'c', notation: 'c4', level: 'container', scope: 'loja' }))] });
   assert.doesNotMatch(plain, /<div class="preview-banner"|<body class="preview"|<g class="mark /);
 });

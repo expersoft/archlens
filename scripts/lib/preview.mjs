@@ -7,6 +7,7 @@ import { describeItem } from './merge-report.mjs';
 
 const ELEMENT_COMPARED = ['name', 'type', 'description', 'technology', 'external', 'archimate', 'parent', 'status', 'statusReason', 'tags', 'aliases', 'properties', 'owner', 'url'];
 const REL_COMPARED = ['description', 'technology', 'accessType', 'status', 'statusReason', 'tags', 'properties'];
+const OPTIONS = { conflict: ['keep', 'take', 'value:<x>'], 'view-conflict': ['keep', 'take'], 'possible-duplicate': ['same', 'different'], op: ['yes', 'no'] };
 const ASSUMED = { conflict: 'take', 'possible-duplicate': 'different', op: 'yes' };
 
 const elementValue = (entry, f) => (f === 'parent' ? entry.parent ?? undefined : f === 'status' ? entry.el.status ?? 'active' : entry.el[f]);
@@ -95,7 +96,8 @@ function pendingByTarget(plan, idMap) {
   };
   for (const it of plan.items) {
     if (!('resolution' in it) || it.resolution != null || !applies(it)) continue;
-    const entry = { n: it.n, key: it.key, question: describeItem(it), assumed: ASSUMED[it.class] ?? null };
+    const entry = { n: it.n, key: it.key, question: describeItem(it), assumed: ASSUMED[it.class] ?? null,
+      options: OPTIONS[it.class === 'conflict' && it.kind === 'view' ? 'view-conflict' : it.class] ?? [] };
     if (it.class === 'possible-duplicate') {
       add(idMap.get(it.target) ?? it.target, entry);
       add(it.candidate, entry);
