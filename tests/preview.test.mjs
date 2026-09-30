@@ -145,3 +145,21 @@ test('views keep ghosts and retired-in-this-delta items visible, and are annotat
   const toDb = v.edges.find(e => e.to === 'loja.db');
   assert.equal(toDb.change, 'removed');
 });
+
+test('removing one of two parallel relationships ghosts that one and leaves the survivor unchanged', () => {
+  const base = shop();
+  base.model.relationships.splice(1, 0, { from: 'cliente', to: 'loja.web', type: 'uses', description: 'Volta a comprar', technology: 'HTTPS' });
+  const p = previewModel(base, { delta: delta({}, { ops: [{ op: 'remove', id: 'loja.web-serving-cliente' }] }) });
+  const kinds = [...p.relChanges].map(([id, c]) => [id, c.kind]);
+  assert.equal(kinds.length, 1, JSON.stringify(kinds));
+  const [[ghostId, kind]] = kinds;
+  assert.equal(kind, 'removed');
+  const parallel = p.raw.model.relationships.filter(r => r.from === 'cliente' && r.to === 'loja.web');
+  assert.deepEqual(parallel.map(r => r.description).sort(), ['Compra', 'Volta a comprar']);
+  assert.equal(parallel.find(r => r.id === ghostId)?.description, 'Compra', 'the ghost is the removed relationship');
+  assert.equal(p.pending.get(ghostId)?.[0].key, 'op:0', 'the open removal question sits on the ghost');
+  assert.equal(p.pending.has('loja.web-serving-cliente') && ghostId !== 'loja.web-serving-cliente', false);
+  const v = annotateView(resolveView(normalizeModel(p.raw), { key: 'c', notation: 'c4', level: 'container', scope: 'loja' }, { keep: p.keep }), p);
+  const edges = v.edges.filter(e => e.relIds?.includes(ghostId));
+  assert.ok(edges.length && edges.every(e => e.change === 'removed' || (e.relIds.length > 1 && e.change === 'changed')));
+});

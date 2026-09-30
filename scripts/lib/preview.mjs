@@ -1,7 +1,7 @@
 // Preview of an unmerged delta (or a partly answered plan): the model the merge would produce, what changed
 // against the base, the questions still open, and removed items kept as "ghosts" so views can show what goes
 // away. Pure: never writes, never mutates its inputs.
-import { previewMerge, relationshipIds, canonicalJson, mergeError } from './merge.mjs';
+import { previewMerge, relationshipIds, relationshipKeys, canonicalJson, mergeError } from './merge.mjs';
 import { indexTree, attach } from './raw-tree.mjs';
 import { describeItem } from './merge-report.mjs';
 
@@ -16,7 +16,15 @@ const diff = (names, a, b, get) => names
   .filter(f => canonicalJson(get(a, f)) !== canonicalJson(get(b, f)))
   .map(f => ({ field: f, before: get(a, f), after: get(b, f) }));
 const turnedRetired = (before, after) => after.status === 'retired' && (before.status ?? 'active') !== 'retired';
-const byId = ids => new Map([...ids].map(([r, id]) => [id, r]));
+const groupBy = (list, keyOf) => {
+  const out = new Map();
+  for (const x of list) {
+    const k = keyOf(x);
+    if (!out.has(k)) out.set(k, []);
+    out.get(k).push(x);
+  }
+  return out;
+};
 
 export function previewModel(baseRaw, { delta, plan } = {}) {
   if (!delta === !plan) throw mergeError('E_PREVIEW_INPUT', 'informe um delta ou um plano (e não os dois)');
@@ -45,43 +53,81 @@ export function previewModel(baseRaw, { delta, plan } = {}) {
     changes.set(id, { kind: 'removed' });
   }
 
-  const beforeRels = byId(baseRaw ? relationshipIds(baseRaw) : new Map());
-  const afterRels = byId(relationshipIds(raw));
-  const relChanges = new Map();
-  // A relationship whose canonical id flipped (an endpoint changed type) is one relationship, not removed + added:
-  // pair each vanished base relationship with an unmatched result one with the same from/to/type.
-  const freed = new Set([...afterRels.keys()].filter(id => !beforeRels.has(id)));
-  const pairedTo = new Map(); // old id → new id
-  for (const [oldId, r] of beforeRels) {
-    if (afterRels.has(oldId)) continue;
-    const cands = [...freed].filter(id => { const c = afterRels.get(id); return c.from === r.from && c.to === r.to && c.type === r.type; });
-    const newId = cands.find(id => afterRels.get(id).description === r.description) ?? cands[0];
-    if (newId === undefined) continue;
-    freed.delete(newId);
-    pairedTo.set(oldId, newId);
-  }
-  const pairedFrom = new Map([...pairedTo].map(([o, n]) => [n, o]));
-  for (const [id, r] of afterRels) {
-    const oldId = pairedFrom.get(id);
-    const b = beforeRels.get(oldId ?? id);
-    if (!b) { relChanges.set(id, { kind: 'added' }); continue; }
-    const fields = diff(REL_COMPARED, b, r, relValue);
-    if (oldId !== undefined) fields.unshift({ field: 'id', before: oldId, after: id });
-    if (fields.length) relChanges.set(id, { kind: turnedRetired(b, r) ? 'retired' : 'changed', fields });
-  }
-  for (const [id, r] of beforeRels) {
-    if (afterRels.has(id) || pairedTo.has(id)) continue;
-    raw.model.relationships.push({ ...structuredClone(r), id });
-    relChanges.set(id, { kind: 'removed' });
-  }
+  const { relChanges, relMap } = diffRelationships(baseRaw, raw);
 
   const gone = ([, c]) => c.kind === 'removed' || c.kind === 'retired';
   const keep = new Set([...[...changes].filter(gone), ...[...relChanges].filter(gone)].map(([id]) => id));
-  return { raw, changes, relChanges, pending: pendingByTarget(merged.plan, merged.idMap), keep, plan: merged.plan };
+  return { raw, changes, relChanges, pending: pendingByTarget(merged.plan, merged.idMap, relMap), keep, plan: merged.plan };
+}
+
+/**
+ * Relationship changes between base and result, keyed by the result id (ghosts: a free id). Parallel relationships
+ * share a "from|type|to" group, so ids ("#2", "#3"…) are only labels: within a group, base and result are matched by
+ * description, then technology, then order. Also returns base id → id in the preview (to re-key open questions).
+ * Removed relationships are appended to `raw` as ghosts.
+ */
+function diffRelationships(baseRaw, raw) {
+  const beforeIds = baseRaw ? relationshipIds(baseRaw) : new Map();
+  const beforeKeys = baseRaw ? relationshipKeys(baseRaw) : new Map();
+  const afterIds = relationshipIds(raw);
+  const afterKeys = relationshipKeys(raw);
+  const groupOf = (keys, ids) => r => keys.get(r) ?? `id:${ids.get(r)}`;
+  const before = groupBy([...beforeIds.keys()], groupOf(beforeKeys, beforeIds));
+  const after = groupBy([...afterIds.keys()], groupOf(afterKeys, afterIds));
+  const pairs = []; // [base, result, flipped]
+  const leftBase = [];
+  const leftResult = new Set();
+  const sameText = f => (a, b) => (a[f] ?? '') === (b[f] ?? '');
+  for (const k of new Set([...before.keys(), ...after.keys()])) {
+    const pool = [...(after.get(k) ?? [])];
+    let rest = before.get(k) ?? [];
+    for (const same of [sameText('description'), sameText('technology'), () => true]) {
+      const next = [];
+      for (const b of rest) {
+        const i = pool.findIndex(a => same(a, b));
+        if (i < 0) next.push(b); else pairs.push([b, pool.splice(i, 1)[0], false]);
+      }
+      rest = next;
+    }
+    leftBase.push(...rest);
+    pool.forEach(a => leftResult.add(a));
+  }
+  // A relationship whose canonical key flipped (an endpoint changed type) is one relationship, not removed + added:
+  // pair each unmatched base relationship with an unmatched result one with the same raw from/to/type.
+  const removed = [];
+  for (const b of leftBase) {
+    const cands = [...leftResult].filter(a => a.from === b.from && a.to === b.to && a.type === b.type);
+    const a = cands.find(c => c.description === b.description) ?? cands[0];
+    if (!a) { removed.push(b); continue; }
+    leftResult.delete(a);
+    pairs.push([b, a, true]);
+  }
+
+  const relChanges = new Map();
+  const relMap = new Map();
+  for (const [b, a, flipped] of pairs) {
+    const oldId = beforeIds.get(b), id = afterIds.get(a);
+    relMap.set(oldId, id);
+    const fields = diff(REL_COMPARED, b, a, relValue);
+    if (flipped) fields.unshift({ field: 'id', before: oldId, after: id });
+    if (fields.length) relChanges.set(id, { kind: turnedRetired(b, a) ? 'retired' : 'changed', fields });
+  }
+  for (const a of leftResult) relChanges.set(afterIds.get(a), { kind: 'added' });
+  const taken = new Set(afterIds.values());
+  for (const b of removed) {
+    const oldId = beforeIds.get(b);
+    let id = oldId;
+    for (let n = 1; taken.has(id); n++) id = `${oldId.replace(/#\d+$/, '')}#removed${n > 1 ? n : ''}`;
+    taken.add(id);
+    raw.model.relationships.push({ ...structuredClone(b), id });
+    relChanges.set(id, { kind: 'removed' });
+    relMap.set(oldId, id);
+  }
+  return { relChanges, relMap };
 }
 
 /** Open questions of the plan (applicable `when` only), keyed by the element / relationship / view they are about. */
-function pendingByTarget(plan, idMap) {
+function pendingByTarget(plan, idMap, relMap = new Map()) {
   const answered = new Map(plan.items.filter(i => i.resolution != null).map(i => [i.key, i.resolution]));
   const applies = it => {
     if (!it.when) return true;
@@ -102,7 +148,7 @@ function pendingByTarget(plan, idMap) {
       add(idMap.get(it.target) ?? it.target, entry);
       add(it.candidate, entry);
     } else if (it.kind === 'view') add(`view:${it.target}`, entry);
-    else add(it.target, entry);
+    else add(relMap.get(it.target) ?? it.target, entry);
   }
   return out;
 }

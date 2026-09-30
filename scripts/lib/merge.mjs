@@ -374,15 +374,25 @@ export function relIds(ctx) {
   return ids;
 }
 
-/** raw relationship → id as normalizeModel names it, for any raw model (the preview diffs relationships by it). */
-export function relationshipIds(raw) {
+function relContext(raw) {
   const model = { elements: raw?.model?.elements ?? [], relationships: raw?.model?.relationships ?? [] };
   const tree = indexTree({ model });
   const typeOf = id => {
     const el = tree.get(id)?.el;
     return el ? resolveType(el.type, { tags: el.tags || [], archimate: el.archimate }).type ?? null : null;
   };
-  return relIds({ raw: { model }, tree, typeOf });
+  return { raw: { model }, tree, typeOf };
+}
+
+/** raw relationship → id as normalizeModel names it, for any raw model (the preview diffs relationships by it). */
+export function relationshipIds(raw) {
+  return relIds(relContext(raw));
+}
+
+/** raw relationship → canonical "from|type|to" (null when it does not read), for any raw model. */
+export function relationshipKeys(raw) {
+  const ctx = relContext(raw);
+  return new Map(ctx.raw.model.relationships.filter(r => r && typeof r === 'object').map(r => [r, relKey(ctx, r)]));
 }
 
 function mergeRelationships(ctx) {
