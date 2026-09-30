@@ -92,7 +92,7 @@ export const LAYER_ORDER = ['motivation', 'strategy', 'business', 'application',
 export const CORE_LAYERS = ['business', 'application', 'technology'];
 
 /** Lifecycle of elements and relationships; views hide `retired` unless asked. */
-export const STATUSES = ['planned', 'active', 'deprecated', 'retired'];
+export const STATUSES = ['draft', 'planned', 'active', 'deprecated', 'retired'];
 export const LAYER_LABELS = {
   motivation: 'Motivação', strategy: 'Estratégia', business: 'Negócio', application: 'Aplicação',
   technology: 'Tecnologia', physical: 'Física', implementation: 'Implementação e Migração', other: 'Outros',

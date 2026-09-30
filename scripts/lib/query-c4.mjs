@@ -74,6 +74,7 @@ export function resolveC4(model, spec) {
     e.count++;
     if (rel) {
       e.relIds.push(rel.id);
+      (e.statuses ??= []).push(rel.status ?? 'active');
       if (rel.description && !e.descriptions.includes(rel.description)) e.descriptions.push(rel.description);
       if (rel.technology && !e.technologies.includes(rel.technology)) e.technologies.push(rel.technology);
     }
@@ -155,6 +156,7 @@ export function resolveC4(model, spec) {
     id: e.id, from: e.from, to: e.to, type: 'uses',
     label: e.descriptions.length > 2 ? `${e.descriptions.length} interações: ${e.descriptions.join('; ')}` : e.descriptions.join('; '),
     technology: e.technologies.join(', '),
+    status: e.statuses?.length && e.statuses.every(s => s === 'draft') ? 'draft' : 'active',
     count: e.count, relIds: e.relIds, ...(e.step ? { step: e.step } : {}),
   }));
 
@@ -174,7 +176,7 @@ export function resolveC4(model, spec) {
       parentName: !internal.has(id) && !boundaryOf.has(id) && parent && k !== 'person' && k !== 'softwareSystem' ? parent.name : null,
       isScope: scope?.id === id,
       isFocus: focus.has(id),
-      inferred: !!el.inferred, status: el.status ?? 'active',
+      inferred: !!el.inferred, status: el.status ?? 'active', statusReason: el.statusReason,
     };
   });
 

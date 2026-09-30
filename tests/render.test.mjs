@@ -151,3 +151,23 @@ test('render marks deprecated and planned nodes', async () => {
   assert.match(html, /class="node am l-[^"]* st-planned"/);
   assert.match(html, /\.node\.st-deprecated\{/);
 });
+
+test('draft nodes and relationships are drawn as a sketch with the filters defined in each view', async () => {
+  const r = raw();
+  r.model.elements.find(e => e.id === 'loja').children.find(c => c.id === 'loja.web').status = 'draft';
+  r.model.relationships.find(x => x.from === 'k8s').status = 'draft';
+  const m = normalizeModel(r);
+  const views = [
+    await layoutView(resolveView(m, { key: 'c', notation: 'c4', level: 'container', scope: 'loja' })),
+    await layoutView(resolveView(m, { key: 's', notation: 'archimate', viewpoint: 'layered', anchor: 'venda', traverse: { mode: 'supporters' } })),
+  ];
+  const html = renderHtml({ title: 't', views });
+  assert.match(html, /<filter id="v0-sk1"[^>]*>[\s\S]*?feDisplacementMap/);
+  assert.match(html, /<filter id="v1-sk2"/);
+  assert.match(html, /<filter id="lg-sk1"/);
+  assert.match(html, /class="node c4 [^"]*st-draft sketchy"/);
+  assert.match(html, /class="shape2" filter="url\(#v0-sk2\)"/);
+  assert.match(html, /class="edge t-serving[^"]* sketchy"/);
+  assert.match(html, /<b>rascunho<\/b>/);
+  assert.match(html, /--sketch-ink:/);
+});

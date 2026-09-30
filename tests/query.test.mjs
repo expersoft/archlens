@@ -190,3 +190,18 @@ test('a view scoped on a hidden element explains the status filter', () => {
 test('a view whose status is not an array is refused with E_VIEW_STATUS, not a crash', () => {
   assert.throws(() => resolveView(model(), { key: 'x', notation: 'c4', level: 'landscape', status: 'planned' }), /E_VIEW_STATUS/);
 });
+
+test('draft items are visible by default and carry their status and reason', () => {
+  const m = modelWith(r => {
+    Object.assign(findRaw(r, 'loja.web'), { status: 'draft', statusReason: 'em discussão com o time de canais' });
+    r.model.relationships.find(x => x.from === 'k8s').status = 'draft';
+  });
+  const v = resolveView(m, { key: 'c', notation: 'c4', level: 'container', scope: 'loja' });
+  const web = v.nodes.find(n => n.id === 'loja.web');
+  assert.equal(web.status, 'draft');
+  assert.equal(web.statusReason, 'em discussão com o time de canais');
+  const s = resolveView(m, { key: 's', notation: 'archimate', viewpoint: 'layered', anchor: 'venda', traverse: { mode: 'supporters' } });
+  assert.equal(s.edges.find(e => e.from === 'k8s').status, 'draft');
+  const asIs = resolveView(m, { key: 'a', notation: 'c4', level: 'container', scope: 'loja', status: ['active', 'deprecated'] });
+  assert.ok(!ids(asIs).includes('loja.web'));
+});

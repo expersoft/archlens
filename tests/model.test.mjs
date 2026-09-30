@@ -156,3 +156,9 @@ test('aliases that are not a list are a schema error, not a crash', () => {
   assert.match(e.hint, /lista/);
   assert.deepEqual(res.model.elements.get('cliente').aliases, []);
 });
+
+test('draft is a valid status for elements and relationships', () => {
+  const r = shopWith(r => { findRaw(r, 'loja.api').status = 'draft'; r.model.relationships[0].status = 'draft'; });
+  assert.deepEqual(validateModel(r).errors, []);
+  assert.equal(normalizeModel(r).elements.get('loja.api').status, 'draft');
+});

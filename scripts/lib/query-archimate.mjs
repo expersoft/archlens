@@ -87,7 +87,7 @@ export function resolveArchimate(model, spec) {
     edges.push({
       id: r.id, from: r.from, to: r.to, type: r.type,
       label: r.description ?? '', technology: r.technology ?? '', accessType: r.accessType,
-      derived: false, relIds: [r.id],
+      derived: false, relIds: [r.id], status: r.status ?? 'active',
     });
     linked.add(pairKey(r.from, r.to)); linked.add(pairKey(r.to, r.from));
   }
@@ -137,7 +137,7 @@ export function resolveArchimate(model, spec) {
     return {
       id, name: el.name, type: el.type, typeLabel: ELEMENT_TYPES[el.type].label, layer: el.layer, aspect: el.aspect,
       c4Kind: kind(el), technology: el.technology, description: el.description, tags: el.tags, properties: el.properties,
-      isAnchor: id === anchor?.id, distance: i?.distance ?? null, role: i?.role ?? null, inferred: !!el.inferred, status: el.status ?? 'active',
+      isAnchor: id === anchor?.id, distance: i?.distance ?? null, role: i?.role ?? null, inferred: !!el.inferred, status: el.status ?? 'active', statusReason: el.statusReason,
     };
   });
   const presentLayers = LAYER_ORDER.filter(l => nodes.some(n => n.layer === l));

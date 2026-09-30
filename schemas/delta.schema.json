@@ -115,6 +115,7 @@
               },
               "status": {
                 "enum": [
+                  "draft",
                   "planned",
                   "active",
                   "deprecated",
@@ -479,6 +480,7 @@
         },
         "status": {
           "enum": [
+            "draft",
             "planned",
             "active",
             "deprecated",
@@ -569,6 +571,7 @@
         },
         "status": {
           "enum": [
+            "draft",
             "planned",
             "active",
             "deprecated",

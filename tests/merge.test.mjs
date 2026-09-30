@@ -492,3 +492,9 @@ test('retiring an element lists the saved views it would break (scope, anchor or
   const quiet = planMerge(base, delta({}, { ops: [{ op: 'status', id: 'pg', status: 'retired' }] }), TODAY);
   assert.equal(quiet.items[0].views, undefined);
 });
+
+test('status draft needs no confirmation', () => {
+  const plan = planMerge(shop(), delta({}, { ops: [{ op: 'status', id: 'loja.web', status: 'draft', reason: 'em discussão' }] }), TODAY);
+  assert.equal(plan.items[0].resolution, undefined);
+  assert.equal(find(applyPlan(shop(), plan, TODAY).raw, 'loja.web').status, 'draft');
+});

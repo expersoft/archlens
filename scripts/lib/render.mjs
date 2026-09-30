@@ -46,6 +46,14 @@ function markerDefs(prefix) {
   return `<defs>${out}</defs>`;
 }
 
+/** Hand-drawn look for drafts and preview changes: two displacement filters, applied to a doubled outline. */
+function sketchDefs(prefix) {
+  const flt = (id, freq, seed) => `<filter id="${prefix}-${id}" x="-5%" y="-5%" width="110%" height="110%">`
+    + `<feTurbulence type="fractalNoise" baseFrequency="${freq}" numOctaves="2" seed="${seed}" result="n"/>`
+    + `<feDisplacementMap in="SourceGraphic" in2="n" scale="5"/></filter>`;
+  return `<defs>${flt('sk1', 0.035, 7)}${flt('sk2', 0.04, 21)}</defs>`;
+}
+
 function roundedPolyline(pts, r = 12) {
   if (pts.length < 2) return '';
   let d = `M${f(pts[0].x)},${f(pts[0].y)}`;
@@ -71,11 +79,17 @@ function textLines(lines, cx, y, size, lh, cls, weight) {
 // ------------------------------------------------------------------ C4 shapes
 
 const statusClass = n => (n.status && n.status !== 'active' ? ` st-${n.status}` : '');
+const sketchy = n => n.status === 'draft' || n.change === 'added';
+/** The shape drawn twice through the sketch filters (the second copy is the thinner, offset stroke). */
+function sketchShape(shape, prefix) {
+  const via = (cls, id) => shape.replace(/<(path|rect|circle) class="shape"/g, `<$1 class="${cls}" filter="url(#${prefix}-${id})"`);
+  return via('shape', 'sk1') + via('shape2', 'sk2');
+}
 
-function c4Node(n, i) {
+function c4Node(n, i, prefix) {
   const { x, y, w, h } = n;
   const kind = n.external ? 'external' : n.c4Kind === 'softwareSystem' ? 'system' : n.c4Kind;
-  const cls = `node c4 k-${kind}${n.isFocus ? ' focus' : ''}${n.isScope ? ' scope' : ''}${n.inferred ? ' inferred' : ''}${statusClass(n)}`;
+  const cls = `node c4 k-${kind}${n.isFocus ? ' focus' : ''}${n.isScope ? ' scope' : ''}${n.inferred ? ' inferred' : ''}${statusClass(n)}${sketchy(n) ? ' sketchy' : ''}`;
   let shape;
   if (n.c4Kind === 'person') {
     shape = `<circle class="shape" cx="${f(x + w / 2)}" cy="${f(y + 30)}" r="28"/><rect class="shape" x="${f(x)}" y="${f(y + 50)}" width="${f(w)}" height="${f(h - 50)}" rx="34"/>`;
@@ -91,6 +105,7 @@ function c4Node(n, i) {
   } else {
     shape = `<rect class="shape" x="${f(x)}" y="${f(y)}" width="${f(w)}" height="${f(h)}" rx="12"/>`;
   }
+  if (sketchy(n)) shape = sketchShape(shape, prefix);
   const L = n.lines;
   const content = L.title.length * 25 + 6 + L.meta.length * 19 + (L.desc.length ? 10 + L.desc.length * 19 : 0);
   const top = y + n.headH + n.topH + (h - n.headH - n.topH - content) / 2 + (n.c4Kind === 'person' ? 4 : 0);
@@ -110,17 +125,19 @@ function c4Boundary(b) {
 
 // ------------------------------------------------------------------ ArchiMate shapes
 
-function amNode(n, i) {
+function amNode(n, i, prefix) {
   const { x, y, w, h } = n;
   const spec = ELEMENT_TYPES[n.type];
   const lv = LAYER_VAR[n.layer];
   const rx = spec.icon === 'service' ? h / 2 : spec.aspect === 'behavior' ? 14 : spec.icon === 'value-stream' ? 4 : 3;
-  const cls = `node am l-${lv}${n.isAnchor ? ' anchor' : ''}${n.role ? ` r-${n.role}` : ''}${n.inferred ? ' inferred' : ''}${statusClass(n)}`;
+  const cls = `node am l-${lv}${n.isAnchor ? ' anchor' : ''}${n.role ? ` r-${n.role}` : ''}${n.inferred ? ' inferred' : ''}${statusClass(n)}${sketchy(n) ? ' sketchy' : ''}`;
   const icon = ICONS[spec.icon] ?? '';
   const nameTop = y + (h - n.lines.title.length * 22) / 2;
   const tip = `${n.name} — ${spec.label}${n.technology ? ` [${n.technology}]` : ''}${n.description ? `\n${n.description}` : ''}`;
+  let shape = `<rect class="shape" x="${f(x)}" y="${f(y)}" width="${f(w)}" height="${f(h)}" rx="${f(rx)}"/>`;
+  if (sketchy(n)) shape = sketchShape(shape, prefix);
   return `<g class="${cls}" data-node="${esc(n.id)}" data-distance="${n.distance ?? ''}" style="--i:${i}" tabindex="0" role="button" aria-label="${esc(tip)}">`
-    + `<rect class="shape" x="${f(x)}" y="${f(y)}" width="${f(w)}" height="${f(h)}" rx="${f(rx)}"/>`
+    + shape
     + (icon ? `<g class="icon" transform="translate(${f(x + w - 36)},${f(y + 8)})">${icon}</g>` : '')
     + textLines(n.lines.title, x + w / 2 - 6, nameTop, 17, 22, 'title', 650)
     + (n.distance !== null && n.distance !== undefined && !n.isAnchor ? `<text class="dist" x="${f(x + 10)}" y="${f(y + h - 8)}" font-size="15">${n.role === 'dependent' ? '↑' : n.role === 'supporter' ? '↓' : '↕'}${n.distance}</text>` : '')
@@ -159,9 +176,9 @@ function edge(e, prefix, showLabel) {
     label = `<g class="elabel${showLabel ? '' : ' on-demand'}"><rect x="${f(cx - w / 2)}" y="${f(cy)}" width="${f(w)}" height="${f(h)}" rx="6"/>`
       + textLines(e.labelLines, cx, cy + 5, 15, lh, 'etext') + '</g>';
   }
-  return `<g class="edge t-${e.type}${e.derived ? ' derived' : ''}${e.implicit ? ' implicit' : ''}" data-edge="${esc(e.id)}" data-from="${esc(e.from)}" data-to="${esc(e.to)}"${e.step ? ` data-step="${e.step}"` : ''} aria-label="${esc(title)}">`
+  return `<g class="edge t-${e.type}${e.derived ? ' derived' : ''}${e.implicit ? ' implicit' : ''}${e.status === 'draft' || e.change === 'added' ? ' sketchy' : ''}" data-edge="${esc(e.id)}" data-from="${esc(e.from)}" data-to="${esc(e.to)}"${e.step ? ` data-step="${e.step}"` : ''} aria-label="${esc(title)}">`
     + `<path class="hit" d="${d}"/>`
-    + `<path class="line" d="${d}"${dash ? ` stroke-dasharray="${dash}"` : ''}${m('start', start)}${m('end', end)}/>`
+    + `<path class="line" d="${d}"${e.status === 'draft' || e.change === 'added' ? ` filter="url(#${prefix}-sk1)"` : ''}${dash ? ` stroke-dasharray="${dash}"` : ''}${m('start', start)}${m('end', end)}/>`
     + `<path class="flow" d="${d}"/>${label}</g>`;
 }
 
@@ -192,6 +209,9 @@ function legend(v) {
     }
     if (v.edges.some(e => e.derived)) items.push(`<li>${relSample('serving', { derived: true })}<span><b>derivada</b> — via elementos ocultos</span></li>`);
   }
+  if (v.nodes.some(n => n.status === 'draft') || v.edges.some(e => e.status === 'draft')) {
+    items.push(`<li><svg class="sample" viewBox="0 0 64 20" width="64" height="20" aria-hidden="true"><rect x="4" y="3" width="56" height="14" rx="3" fill="var(--c4-container)" fill-opacity=".22" stroke="var(--sketch-ink)" stroke-width="1.8" filter="url(#lg-sk1)"/></svg><span><b>rascunho</b> — em discussão (draft)</span></li>`);
+  }
   return `<ul>${items.join('')}</ul><button class="linkish" data-act="glossary">Como ler as relações?</button>`;
 }
 
@@ -221,9 +241,9 @@ function viewSvg(v, idx) {
   if (v.notation === 'c4') parts.push(...v.boundaries.map(c4Boundary));
   else parts.push(...v.bands.map(b => band(b, v.layers)));
   const edges = v.edges.map(e => edge(e, prefix, showLabels)).join('');
-  const nodes = v.nodes.map((n, i) => v.notation === 'c4' ? c4Node(n, i) : amNode(n, i)).join('');
+  const nodes = v.nodes.map((n, i) => v.notation === 'c4' ? c4Node(n, i, prefix) : amNode(n, i, prefix)).join('');
   return `<svg class="diagram n-${v.notation}" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" data-w="${W}" data-h="${H}" role="img" aria-label="${esc(v.title)}" xmlns="http://www.w3.org/2000/svg">`
-    + markerDefs(prefix)
+    + markerDefs(prefix) + sketchDefs(prefix)
     + `<rect class="bgrect" x="0" y="0" width="${W}" height="${H}"/>`
     + `<g class="content">${parts.join('')}<g class="edges">${edges}</g><g class="nodes">${nodes}</g></g></svg>`;
 }
@@ -236,7 +256,7 @@ function viewData(v) {
     nodes: Object.fromEntries(v.nodes.map(n => [n.id, {
       name: n.name, typeLabel: ELEMENT_TYPES[n.type]?.label, c4Label: n.c4Label ?? null, layer: n.layer,
       technology: n.technology ?? '', description: n.description ?? '', tags: n.tags ?? [], properties: n.properties ?? {},
-      distance: n.distance ?? null, role: n.role ?? null, isAnchor: !!n.isAnchor, inferred: !!n.inferred, status: n.status ?? 'active',
+      distance: n.distance ?? null, role: n.role ?? null, isAnchor: !!n.isAnchor, inferred: !!n.inferred, status: n.status ?? 'active', statusReason: n.statusReason ?? '',
       x: n.x, y: n.y, w: n.w, h: n.h,
     }])),
     edges: v.edges.map(e => ({
@@ -280,7 +300,7 @@ export function renderHtml({ title, subtitle = '', views }) {
     <button data-act="present" class="primary" title="Modo apresentação (P)">Apresentar</button>
   </div>
 </header>
-<svg class="defs" width="0" height="0" aria-hidden="true" focusable="false">${markerDefs('lg')}</svg>
+<svg class="defs" width="0" height="0" aria-hidden="true" focusable="false">${markerDefs('lg')}${sketchDefs('lg')}</svg>
 <main class="stage">${sections}</main>
 <div class="hovercard" role="tooltip" hidden></div>
 <div class="caption" hidden></div>
@@ -309,6 +329,7 @@ const CSS = `
   --biz:#fff5a8;--biz-s:#a89a2c;--app:#b6eef6;--app-s:#338fa0;--tech:#cbe8b9;--tech-s:#558f42;--mot:#dcd6ff;--mot-s:#6f62c9;--str:#f6dcaa;--str-s:#ae8330;--impl:#ffdfe3;--impl-s:#b85f6c;--oth:#ffffff;--oth-s:#8f8f8f;
   --band-biz:#fffbe0;--band-app:#e9fafc;--band-tech:#eef8e8;--band-mot:#f1efff;--band-str:#fdf4e3;--band-impl:#fff1f3;--band-oth:#f7f7f7;
   --am-ink:#18202c;
+  --sketch-ink:#0b3d78;--removed:#b3261e;--pending:#f2a900;
   color-scheme:light;
 }
 :root[data-theme="dark"]{
@@ -317,6 +338,7 @@ const CSS = `
   --biz:#5a5220;--biz-s:#d7c44e;--app:#17454e;--app-s:#56c3d6;--tech:#28481f;--tech-s:#86c96c;--mot:#353061;--mot-s:#a79cf0;--str:#5a4520;--str-s:#e0b25a;--impl:#5a2a31;--impl-s:#ee97a3;--oth:#232b36;--oth-s:#8f98a6;
   --band-biz:#1d1b10;--band-app:#101e22;--band-tech:#121c10;--band-mot:#18162a;--band-str:#1f1910;--band-impl:#221316;--band-oth:#161b22;
   --am-ink:#eef2f7;
+  --sketch-ink:#9cc8f5;--removed:#ff6b5e;--pending:#ffd24a;
   color-scheme:dark;
 }
 *{box-sizing:border-box}
@@ -358,6 +380,11 @@ body.presenting .stage{inset:0}
 .node.st-deprecated{opacity:.55}
 .node.st-deprecated .shape{stroke-dasharray:3 4}
 .node.st-planned .shape{stroke-dasharray:14 5;stroke-width:3}
+.node.sketchy .shape{fill-opacity:.22;stroke:var(--sketch-ink);stroke-width:2.2;stroke-dasharray:none}
+.node.sketchy .shape2{fill:none;stroke:var(--sketch-ink);stroke-width:1.3}
+.node.sketchy .rim{stroke:var(--sketch-ink)}
+.node.c4.sketchy text,.node.am.sketchy text{fill:var(--sketch-ink)}
+.edge.sketchy .line{stroke:var(--sketch-ink)}
 .boundary rect{fill:none;stroke:var(--boundary);stroke-width:2.2;stroke-dasharray:12 7}
 .boundary text{fill:var(--muted)}
 .boundary .b-title{fill:var(--ink)}
@@ -763,7 +790,8 @@ const JS = String.raw`
     const rel = e => escH(e.help.sentence) + (e.derived ? ' <span class="chip">derivada</span>' : '') + (e.technology ? ' <span class="chip">' + escH(e.technology) + '</span>' : '');
     let h = '<h2>' + escH(n.name) + '</h2><div class="kind">' + escH(n.c4Label || n.typeLabel) + (n.c4Label && n.typeLabel ? ' · ArchiMate ' + escH(n.typeLabel) : '') + '</div>';
     if (n.inferred) h += '<p class="warn">⚠︎ Inferido a partir de texto livre: confirme.</p>';
-    if (n.status && n.status !== 'active') h += '<p class="warn">' + escH({ planned: 'Planejado: ainda não existe.', deprecated: 'Em desativação.', retired: 'Desativado.' }[n.status] || n.status) + '</p>';
+    if (n.status && n.status !== 'active') h += '<p class="warn">' + escH({ draft: 'Rascunho: em discussão.', planned: 'Planejado: ainda não existe.', deprecated: 'Em desativação.', retired: 'Desativado.' }[n.status] || n.status) + '</p>';
+    if (n.statusReason) h += '<p style="color:var(--muted)">Motivo: ' + escH(n.statusReason) + '</p>';
     if (n.description) h += '<p>' + escH(n.description) + '</p>';
     h += '<dl>';
     if (n.technology) h += '<dt>Tecnologia</dt><dd>' + escH(n.technology) + '</dd>';
