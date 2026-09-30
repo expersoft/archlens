@@ -39,7 +39,7 @@ Schemas: `schemas/model.schema.json` (arquivo inteiro) e `schemas/view.schema.js
 | `inferred` | não | `true` quando veio de interpretação, não do texto explícito |
 | `confidence` | não | `"alta"`, `"média"` ou `"baixa"` (para itens inferidos) |
 | `aliases` | não | outros nomes/ids do mesmo elemento (o merge casa por eles). Únicos no modelo (`E_ALIAS_CONFLICT`) |
-| `status` | não | `planned`, `active` (padrão), `deprecated`, `retired` |
+| `status` | não | `draft` (em discussão), `planned`, `active` (padrão), `deprecated`, `retired` |
 | `statusReason` | não | motivo do status |
 | `sources` | não | proveniência: `[{ "kind": "prompt"\|"repo"\|"doc"\|"manual", "ref", "path", "excerpt", "date" }]` |
 | `source` | não | forma antiga: trecho do texto livre; lido como `sources: [{kind:"prompt", excerpt}]` |
@@ -123,7 +123,7 @@ A orientação original fica guardada, e as visões C4 desenham a seta como foi 
 | `E_C4_HIERARCHY` | erro | component fora de container, container fora de sistema… |
 | `E_REL_INVALID` | erro | relação proibida (access para não passivo, serving com dado…) |
 | `E_VIEW_KEY` | erro | visão sem key ou key repetida |
-| `E_STATUS` | erro | `status` fora de planned/active/deprecated/retired |
+| `E_STATUS` | erro | `status` fora de draft/planned/active/deprecated/retired |
 | `E_SOURCE` | erro | fonte sem `kind` válido ou sem `ref`/`excerpt` |
 | `E_ALIAS_CONFLICT` | erro | alias repetido em dois elementos ou igual ao id de outro |
 | `W_RETIRED_DEPENDENCY` | aviso | algo não-retired depende de um elemento retired |

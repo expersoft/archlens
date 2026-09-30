@@ -81,6 +81,15 @@ Aplicar de novo um delta que já entrou não muda nada: o apply imprime `= nada 
 
 Veja `examples/telemedicina/delta-01.json` e `plano-01.json`, e o formato completo em `references/merge.md`.
 
+### Vendo antes de aplicar
+
+Peça "mostre como fica" e o Claude gera a **prévia** do delta: a base oficial desenhada normalmente e, por
+cima, o que muda — novo em esboço com `+`, alterado com `~`, removido riscado com `−`, decisão pendente com `?`.
+Nada é gravado; responda as perguntas, veja a prévia de novo com `--plan` e só então aplique. Exemplo:
+`examples/telemedicina/delta-02.json` e `delta-02-preview.html`.
+
+Itens ainda em discussão podem entrar na base com `status: "draft"`: aparecem em esboço, sem marcador.
+
 ## Usando pela linha de comando
 
 ```bash

@@ -10,7 +10,7 @@ de visões novas sem remodelar. Campos comuns:
 | `title`, `description` | textos da visão |
 | `include` | ids forçados na visão |
 | `exclude` | padrões: `"<id>"`, `"tag:<tag>"`, `"type:<tipo ArchiMate ou kind C4>"`, `"layer:<camada>"`, `"external"` |
-| `status` | status mostrados (padrão: todos menos `retired`). Esconder um elemento esconde o que está aninhado nele. As-is: `["active","deprecated"]`; to-be: `["planned","active"]` |
+| `status` | status mostrados (padrão: todos menos `retired`). Esconder um elemento esconde o que está aninhado nele. As-is: `["active","deprecated"]`; to-be: `["draft","planned","active"]`. `draft` aparece em esboço. |
 | `layout` | `{ "direction": "RIGHT" \| "DOWN" \| "auto", "aspectRatio": 1.78, "style": "auto" \| "flow" \| "bands" \| "bands-flow" }` (`style` só vale para ArchiMate) |
 | `animation` | `trace` (padrão C4), `story` (dinâmica), `impact` (ArchiMate com âncora), `layers` |
 | `edgeLabels` | mostra rótulos das relações sempre (padrão: C4 sim, ArchiMate só ao destacar/tecla R) |
