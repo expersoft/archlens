@@ -324,3 +324,61 @@ test('an op on an unknown id or with an invalid status blocks the plan', () => {
   assert.equal(plan.blocked, true);
   assert.deepEqual(plan.errors.map(e => e.code), ['E_UNKNOWN_REF', 'E_STATUS', 'E_OP']);
 });
+
+// --- possible duplicate answered "same": re-plan with earlier answers (plan and apply must agree) ---
+const agendaBase = () => {
+  const base = shop();
+  base.model.elements.push({ id: 'sys', type: 'c4:softwareSystem', name: 'Agenda', children: [
+    { id: 'sys.agenda', type: 'c4:container', name: 'API de Agendamento', technology: 'Node.js' },
+    { id: 'sys.db', type: 'c4:container', name: 'Banco de agendas', technology: 'PostgreSQL', tags: ['database'] },
+  ] });
+  base.model.relationships.push({ from: 'sys.agenda', to: 'sys.db', type: 'uses', description: 'Lê e grava agendas' });
+  return base;
+};
+const answersOf = plan => Object.fromEntries(plan.items.filter(i => i.resolution != null).map(i => [i.key, i.resolution]));
+
+test('duplicate answered same: re-planning with the answers asks the questions apply will meet (relationship)', () => {
+  const d = delta({
+    elements: [{ id: 'api-agenda', type: 'c4:container', name: 'API Agendamento', parent: 'sys' }],
+    relationships: [{ from: 'api-agenda', to: 'sys.db', type: 'uses', description: 'grava' }],
+  });
+  const plan = planMerge(agendaBase(), d, TODAY);
+  assert.equal(plan.items.find(i => i.key === 'dup:api-agenda')?.candidate, 'sys.agenda');
+  answer(plan, { 'dup:api-agenda': 'same', 'el:api-agenda:name': 'keep' });
+  assert.throws(() => applyPlan(agendaBase(), plan, TODAY), e => e.code === 'E_PLAN_REPLAN' && /--answers/.test(e.message));
+  const plan2 = planMerge(agendaBase(), d, { ...TODAY, answers: answersOf(plan) });
+  assert.equal(plan2.items.find(i => i.key === 'dup:api-agenda').resolution, 'same', 'earlier answer pre-filled');
+  const rel = plan2.items.find(i => i.key === 'rel:0:description');
+  assert.ok(rel, 'the relationship conflict against the base element is now asked');
+  assert.equal(rel.resolution, null);
+  assert.ok(!plan2.items.some(i => i.class === 'new' && i.kind === 'relationship'));
+  const { raw } = applyPlan(agendaBase(), answer(plan2, { 'rel:0:description': 'take' }), TODAY);
+  assert.equal(find(raw, 'api-agenda'), undefined);
+  const rels = raw.model.relationships.filter(r => r.from === 'sys.agenda' && r.to === 'sys.db');
+  assert.equal(rels.length, 1);
+  assert.equal(rels[0].description, 'grava');
+  assert.equal(raw.model.relationships.length, agendaBase().model.relationships.length);
+});
+
+test('duplicate answered same: a new child of the duplicate is nested under the base element', () => {
+  const d = delta({ elements: [
+    { id: 'api-agenda', type: 'c4:container', name: 'API Agendamento', parent: 'sys' },
+    { id: 'api-agenda.slots', type: 'c4:component', name: 'Slots', parent: 'api-agenda' },
+  ] });
+  const plan = planMerge(agendaBase(), d, TODAY);
+  assert.equal(plan.items.find(i => i.key === 'el:api-agenda.slots').parent, 'api-agenda', 'simulated as different');
+  answer(plan, { 'dup:api-agenda': 'same', 'el:api-agenda:name': 'keep' });
+  const plan2 = planMerge(agendaBase(), d, { ...TODAY, answers: new Map(Object.entries(answersOf(plan))) });
+  assert.equal(plan2.items.filter(i => i.resolution === null).length, 0, JSON.stringify(plan2.items));
+  assert.equal(plan2.items.find(i => i.key === 'el:api-agenda.slots').parent, 'sys.agenda', 'planned against the base element');
+  assert.ok(!plan2.items.some(i => i.key === 'el:api-agenda' && i.class === 'new'));
+  const { raw } = applyPlan(agendaBase(), plan2, TODAY);
+  assert.ok(find(raw, 'sys.agenda').children.some(c => c.id === 'api-agenda.slots'));
+  assert.equal(find(raw, 'api-agenda'), undefined);
+});
+
+test('earlier answers that are invalid for their question are ignored when re-planning', () => {
+  const d = delta({ elements: [{ id: 'api-agenda', type: 'c4:container', name: 'API Agendamento', parent: 'sys' }] });
+  const plan = planMerge(agendaBase(), d, { ...TODAY, answers: { 'dup:api-agenda': 'talvez' } });
+  assert.equal(plan.items.find(i => i.key === 'dup:api-agenda').resolution, null);
+});

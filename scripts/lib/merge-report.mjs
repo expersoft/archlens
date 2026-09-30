@@ -23,8 +23,10 @@ export function formatPlanReport(plan) {
   out.push(`  ${Object.entries(plan.summary).map(([k, n]) => `${LABELS[k] ?? k}: ${n}`).join(' · ') || 'nada a fazer'}`);
   const questions = plan.items.filter(i => 'resolution' in i);
   if (questions.length) {
-    out.push('', 'Decisões pendentes (preencha "resolution" de cada item no plano):');
-    for (const it of questions) out.push(`  [${it.n}] ${describeItem(it)}`);
+    const pending = questions.filter(i => i.resolution == null).length;
+    const answered = questions.length - pending;
+    out.push('', `Decisões (preencha "resolution" de cada item pendente no plano)${answered ? `: ${pending} pendente(s), ${answered} já respondida(s)` : ''}:`);
+    for (const it of questions) out.push(`  [${it.n}] ${describeItem(it)}${it.resolution != null ? `  ✓ respondido: ${it.resolution}` : ''}`);
   }
   const fresh = plan.items.filter(i => i.class === 'new');
   if (fresh.length) out.push('', `Novos: ${fresh.map(i => i.target).join(', ')}`);

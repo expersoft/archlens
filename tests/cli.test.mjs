@@ -64,6 +64,41 @@ test('merge creates a missing base; the same delta again changes nothing', () =>
   assert.match(r.stdout, /nada mudou/);
 });
 
+test('merge --plan --answers reuses the answers of an earlier plan (duplicate answered same)', () => {
+  const dir = setup();
+  writeFileSync(join(dir, 'delta.json'), JSON.stringify({
+    'archlens-delta': '1.0', source: { kind: 'prompt', ref: 'rodada 2' },
+    model: {
+      elements: [{ id: 'gateway-pag', type: 'c4:softwareSystem', name: 'Gateway Pagamentos', external: true }],
+      relationships: [{ from: 'loja.api.checkout', to: 'gateway-pag', type: 'uses', description: 'Captura' }],
+    },
+  }));
+  assert.equal(run(['merge', 'ARCHITECTURE.md', 'delta.json', '--plan', 'p1.json'], dir).status, 0);
+  const p1 = JSON.parse(readFileSync(join(dir, 'p1.json'), 'utf8'));
+  for (const it of p1.items) {
+    if (it.key === 'dup:gateway-pag') it.resolution = 'same';
+    else if (it.key === 'el:gateway-pag:name') it.resolution = 'keep';
+  }
+  writeFileSync(join(dir, 'p1.json'), JSON.stringify(p1));
+  const stale = run(['merge', 'ARCHITECTURE.md', '--apply', 'p1.json'], dir);
+  assert.equal(stale.status, 2);
+  assert.match(stale.stderr, /E_PLAN_REPLAN[\s\S]*--answers/);
+  const p = run(['merge', 'ARCHITECTURE.md', 'delta.json', '--plan', 'p2.json', '--answers', 'p1.json'], dir);
+  assert.equal(p.status, 0, p.stderr);
+  assert.match(p.stdout, /possível duplicata[^\n]*respondido: same/);
+  assert.match(p.stdout, /conflito pagamentos-serving-loja\.api\.checkout\.description/);
+  const p2 = JSON.parse(readFileSync(join(dir, 'p2.json'), 'utf8'));
+  p2.items.find(i => i.key === 'rel:0:description').resolution = 'take';
+  writeFileSync(join(dir, 'p2.json'), JSON.stringify(p2));
+  const ok = run(['merge', 'ARCHITECTURE.md', '--apply', 'p2.json'], dir);
+  assert.equal(ok.status, 0, ok.stderr);
+  const raw = extractModel(readFileSync(join(dir, 'ARCHITECTURE.md'), 'utf8'));
+  assert.equal(raw.model.relationships.find(r => r.from === 'loja.api.checkout' && r.to === 'pagamentos').description, 'Captura');
+  const bad = run(['merge', 'ARCHITECTURE.md', 'delta.json', '--plan', 'p3.json', '--answers', 'delta.json'], dir);
+  assert.equal(bad.status, 2);
+  assert.match(bad.stderr, /E_PLAN_SCHEMA/);
+});
+
 test('a blocked plan exits with 2 and shows the errors', () => {
   const dir = setup();
   writeFileSync(join(dir, 'delta.json'), JSON.stringify({ 'archlens-delta': '1.0', model: { relationships: [{ from: 'loja.api', to: 'pagamentoz' }] } }));

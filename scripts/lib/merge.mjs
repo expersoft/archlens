@@ -41,9 +41,14 @@ export function canonicalJson(v) {
 
 const isoToday = () => new Date().toISOString().slice(0, 10);
 
-export function planMerge(baseRaw, delta, { base = 'ARCHITECTURE.md', today } = {}) {
+/**
+ * `answers` (Map or object, key → resolution) pre-fills questions answered in an earlier plan, so that
+ * a possible duplicate answered "same" is planned (and its follow-up questions asked) as apply will see it.
+ */
+export function planMerge(baseRaw, delta, { base = 'ARCHITECTURE.md', today, answers } = {}) {
   checkDelta(delta);
-  const ctx = runMerge(baseRaw, delta, { mode: 'plan' });
+  const earlier = answers instanceof Map ? answers : new Map(Object.entries(answers ?? {}));
+  const ctx = runMerge(baseRaw, delta, { mode: 'plan', resolutions: earlier });
   const errors = [...ctx.errors, ...validateModel(ctx.raw).errors];
   const summary = {};
   for (const it of ctx.items) if (!it.when) summary[it.class] = (summary[it.class] ?? 0) + 1;
@@ -120,12 +125,23 @@ function runMerge(baseRaw, delta, { mode, resolutions = new Map() }) {
   return ctx;
 }
 
-/** Records a question. Plan mode answers with the simulated default; apply mode with the user's answer. */
+export const validResolution = (it, r) => r != null && RESOLUTION[resolutionKind(it)].test(String(r));
+
+/**
+ * Records a question. Plan mode answers with an earlier valid answer (pre-filled in the item) or the
+ * simulated default (left pending); apply mode with the user's answer.
+ */
 function decide(ctx, item, simulated) {
-  ctx.items.push({ ...item, resolution: null });
-  if (ctx.mode === 'plan') return simulated;
   const r = ctx.resolutions.get(item.key);
-  if (r == null) throw mergeError('E_PLAN_REPLAN', `a decisão "${item.key}" não está no plano; rode "archlens merge --plan" de novo`);
+  if (ctx.mode === 'plan') {
+    const earlier = validResolution(item, r) ? r : null;
+    ctx.items.push({ ...item, resolution: earlier });
+    return earlier ?? simulated;
+  }
+  ctx.items.push({ ...item, resolution: null });
+  if (r == null) {
+    throw mergeError('E_PLAN_REPLAN', `a decisão "${item.key}" não está no plano (uma resposta, como "same" numa possível duplicata, abriu perguntas novas); gere o plano de novo reaproveitando as respostas: archlens merge <base.md> <delta.json> --plan <novo.json> --answers <plano.json>`);
+  }
   return r;
 }
 
@@ -171,7 +187,8 @@ function mergeElements(ctx) {
       const c = match.candidate;
       const key = `dup:${el.id}`;
       const res = decide(ctx, { key, class: 'possible-duplicate', kind: 'element', target: el.id, candidate: c.id, score: c.score, why: c.why }, 'different');
-      if (ctx.mode === 'plan') mergeElementInto(ctx, c.id, el, parentId, { dry: true, when: `${key}=same` });
+      // Unanswered: show what "same" would ask, as conditional questions. Answered: plan it for real.
+      if (ctx.mode === 'plan' && !ctx.items.at(-1).resolution) mergeElementInto(ctx, c.id, el, parentId, { dry: true, when: `${key}=same` });
       if (res === 'same') {
         ctx.idMap.set(el.id, c.id);
         addAliases(ctx, c.id, [el.id]);
@@ -218,7 +235,11 @@ function reconcile(ctx, { fields, keyPrefix, kind, target, dry = false, when }) 
       continue;
     }
     const item = { key: `${keyPrefix}:${field}`, class: 'conflict', kind, target, field, base: bv, delta: dv, ...(when ? { when } : {}) };
-    if (dry) { ctx.items.push({ ...item, resolution: null }); continue; }
+    if (dry) {
+      const r = ctx.mode === 'plan' ? ctx.resolutions.get(item.key) : null;
+      ctx.items.push({ ...item, resolution: validResolution(item, r) ? r : null });
+      continue;
+    }
     const res = decide(ctx, item, 'take');
     if (res === 'keep') continue;
     apply(res === 'take' ? dv : parseValue(res.slice('value:'.length), dv));

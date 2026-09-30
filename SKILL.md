@@ -34,8 +34,11 @@ Requer Node ≥ 18. A checagem visual (`deliver`/`build`) usa `playwright-core` 
 4. **Planeje**: `archlens merge ARCHITECTURE.md delta.json --plan plano.json`. Mostre o resumo ao usuário.
    Se o plano vier **bloqueado**, corrija o delta e planeje de novo.
 5. **Pergunte, uma decisão por vez**: cada item com `resolution: null` (conflito, possível duplicata, remoção,
-   `retired`), com a sua recomendação. Itens com `when` só valem se a duplicata for `same`. **Nunca decida
-   sozinho.**
+   `retired`), com a sua recomendação. **Comece pelas possíveis duplicatas.** Se alguma for `same`, grave as
+   respostas e gere o plano de novo reaproveitando-as:
+   `archlens merge ARCHITECTURE.md delta.json --plan plano2.json --answers plano.json` (relações e filhos passam a
+   apontar para o elemento da base e podem surgir perguntas novas); depois responda o resto no plano novo. **Nunca
+   decida sozinho.**
 6. **Aplique**: grave as respostas no plano e rode `archlens merge ARCHITECTURE.md --apply plano.json`. Ele
    valida, regenera o documento e registra a rodada. Sugira o commit que ele imprime.
 7. **Traduza cada pedido de visão em view spec** (tabela abaixo; detalhes em `references/views.md`). Visões que

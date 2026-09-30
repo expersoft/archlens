@@ -7,8 +7,10 @@ Nada é decidido em silêncio: conflitos, possíveis duplicatas, remoções e `r
 
 ```bash
 node scripts/archlens.mjs merge ARCHITECTURE.md delta.json --plan plano.json   # relatório + plano
-# … responda cada item com "resolution": null …
-node scripts/archlens.mjs merge ARCHITECTURE.md --apply plano.json            # grava e registra
+# … responda as possíveis duplicatas; se alguma for "same", gere o plano de novo com as respostas:
+node scripts/archlens.mjs merge ARCHITECTURE.md delta.json --plan plano2.json --answers plano.json
+# … responda os itens restantes com "resolution": null …
+node scripts/archlens.mjs merge ARCHITECTURE.md --apply plano2.json           # grava e registra
 ```
 
 Se o `ARCHITECTURE.md` não existe, o primeiro delta o cria (`name` e `description` do delta viram os da base).
@@ -60,12 +62,21 @@ Se o `ARCHITECTURE.md` não existe, o primeiro delta o cria (`name` e `descripti
 | `possible-duplicate` | parece um elemento da base | `same` (vira alias e o item é mesclado) \| `different` (entra como novo) |
 | `op` | operação explícita | `remove` e `status: retired`: `yes` \| `no` |
 
-Itens com `"when": "dup:<id>=same"` só valem se a duplicata correspondente for respondida `same`
-(são as diferenças de campo que apareceriam nesse caso).
+Itens com `"when": "dup:<id>=same"` só valem se a duplicata correspondente for respondida `same`. Eles mostram
+só as diferenças de **campo** do próprio elemento; relações e filhos do item do delta foram planejados como se ele
+fosse novo. Por isso, **se alguma duplicata for `same`, gere o plano de novo com `--answers`**: o plano novo
+já trata o item como o elemento da base (relações casam com as da base, filhos entram dentro dele) e pode trazer
+perguntas novas. As respostas do plano anterior entram pré-preenchidas (o relatório as marca como
+`✓ respondido`); respostas inválidas são ignoradas.
+
+`--answers <plano.json>` lê os `resolution` preenchidos daquele plano, por `key`. Use-o com o **mesmo delta**
+(a CLI avisa se o delta mudou, porque `rel:<n>` e `op:<n>` são posições no delta).
 
 ## Perguntando ao usuário
 
 - Mostre o resumo do relatório (contagens e novos).
+- Pergunte **primeiro as possíveis duplicatas**. Se alguma for `same`, grave as respostas, rode
+  `--plan <novo.json> --answers <plano.json>` e continue no plano novo.
 - Faça **uma pergunta por item** com `resolution: null`, na ordem de `n`, com a sua recomendação e o motivo.
   Ex.: *"A base diz que a API de Pedidos é Java/Spring; o repo mostra Kotlin. Recomendo `take` (o repo é mais recente). Ok?"*
 - Pule os itens com `when` se a duplicata foi respondida `different`.
@@ -80,7 +91,7 @@ Itens com `"when": "dup:<id>=same"` só valem se a duplicata correspondente for 
 | `E_PARENT_CYCLE` | o delta move um elemento para dentro de um descendente seu (plano bloqueado) | corrija o `parent` no delta e planeje de novo |
 | `E_PLAN_PENDING` | há `resolution: null` | responda os itens listados |
 | `E_PLAN_RESOLUTION` | resposta fora das opções | use as opções da tabela |
-| `E_PLAN_REPLAN` | o apply encontrou uma decisão que não está no plano | rode `--plan` de novo |
+| `E_PLAN_REPLAN` | o apply encontrou uma decisão que não está no plano (típico: duplicata respondida `same` sem replanejar) | rode `--plan <novo.json> --answers <plano.json>` e responda as perguntas novas |
 | `E_PLAN_STALE` | a base mudou depois do plano (inclusive por já ter aplicado este plano) | gere o plano de novo |
 | `E_MERGE_INVALID` | o resultado com as respostas reais é inválido | reveja as respostas (ex.: `value:` com id inexistente) |
 

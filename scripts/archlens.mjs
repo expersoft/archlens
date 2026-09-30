@@ -11,7 +11,7 @@ import { layoutView, legibility } from './lib/layout.mjs';
 import { renderHtml } from './lib/render.mjs';
 import { suggestViews } from './lib/suggest.mjs';
 import { inspectHtml } from './lib/deliver.mjs';
-import { planMerge, applyPlan } from './lib/merge.mjs';
+import { planMerge, applyPlan, mergeError, canonicalJson, PLAN_VERSION } from './lib/merge.mjs';
 import { formatPlanReport } from './lib/merge-report.mjs';
 
 const HELP = `archlens — arquitetura como modelo, diagramas como consultas
@@ -23,6 +23,7 @@ Comandos
   doc       <modelo> [--out ARCHITECTURE.md] gera/atualiza a base de conhecimento (preserva blocos keep)
   extract   <ARCHITECTURE.md> [--out m.json] extrai o modelo canônico do markdown
   merge     <base.md> <delta.json> --plan p.json  compara o delta com a base e grava o plano (decisões pendentes)
+            [--answers antigo.json]         reaproveita as respostas de um plano anterior (ex.: duplicata = same)
   merge     <base.md> --apply p.json            aplica o plano respondido, regenera a base e registra o histórico
   views     <modelo>                         lista as visões definidas e sugere novas
   resolve   <modelo> --view k | --spec J     imprime o view IR (nós/arestas) de uma visão
@@ -36,7 +37,8 @@ Seleção de visões (render/deliver)
   --suggested         inclui as visões sugeridas por "views"
 
 Opções
-  --json              saída em JSON (validate, views, resolve)
+  --json              saída em JSON (validate, views, resolve, merge --plan)
+  --answers P         merge --plan: pré-preenche as respostas do plano P (gere de novo após responder "same")
   --title T           título da página
   --shots DIR         pasta dos screenshots (deliver; padrão: <out>.shots/)
   --strict            deliver: não substitui a saída se alguma checagem falhar
@@ -163,6 +165,17 @@ async function deliver(raw, specs, out, args) {
   return problems;
 }
 
+/** key → resolution of the answered items of an earlier plan (for merge --plan --answers). */
+function answersFrom(old, delta) {
+  if (old?.['archlens-plan'] !== PLAN_VERSION || !Array.isArray(old.items)) {
+    throw mergeError('E_PLAN_SCHEMA', '--answers precisa de um plano do archlens (gerado por "archlens merge --plan")');
+  }
+  if (canonicalJson(old.delta) !== canonicalJson(delta)) {
+    console.warn('  aviso: o plano de --answers foi gerado com outro delta; confira as respostas pré-preenchidas');
+  }
+  return new Map(old.items.filter(i => i.resolution != null).map(i => [i.key, i.resolution]));
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const [cmd, file] = args._;
@@ -250,14 +263,18 @@ async function main() {
       break;
     }
     case 'merge': {
-      const usage = 'uso: archlens merge <base.md> <delta.json> --plan <plano.json>  |  archlens merge <base.md> --apply <plano.json>';
+      const usage = 'uso: archlens merge <base.md> <delta.json> --plan <plano.json> [--answers <plano-anterior.json>]  |  archlens merge <base.md> --apply <plano.json>';
       if (!file || extname(file).toLowerCase() !== '.md') fail(`a base do merge é o ARCHITECTURE.md (o bloco archlens-json é a fonte de verdade)\n${usage}`);
       const baseRaw = existsSync(file) ? loadRaw(file) : null;
       if (args.plan && args.plan !== true) {
         const deltaPath = args._[2];
         if (!deltaPath) fail(usage);
         let plan;
-        try { plan = planMerge(baseRaw, readJson(deltaPath), { base: basename(file) }); } catch (e) { fail(e.message, 2); }
+        try {
+          const delta = readJson(deltaPath);
+          const answers = args.answers && args.answers !== true ? answersFrom(readJson(args.answers), delta) : undefined;
+          plan = planMerge(baseRaw, delta, { base: basename(file), answers });
+        } catch (e) { fail(e.message, 2); }
         atomicWrite(args.plan, JSON.stringify(plan, null, 2) + '\n');
         if (args.json) console.log(JSON.stringify(plan, null, 2));
         else console.log(`${formatPlanReport(plan)}\n\n✓ plano em ${args.plan}`);
