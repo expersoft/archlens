@@ -11,6 +11,8 @@ import { layoutView, legibility } from './lib/layout.mjs';
 import { renderHtml } from './lib/render.mjs';
 import { suggestViews } from './lib/suggest.mjs';
 import { inspectHtml } from './lib/deliver.mjs';
+import { planMerge, applyPlan } from './lib/merge.mjs';
+import { formatPlanReport } from './lib/merge-report.mjs';
 
 const HELP = `archlens — arquitetura como modelo, diagramas como consultas
 
@@ -20,6 +22,8 @@ Comandos
   validate  <modelo>                       valida schema, referências, hierarquia C4 e regras ArchiMate
   doc       <modelo> [--out ARCHITECTURE.md] gera/atualiza a base de conhecimento (preserva blocos keep)
   extract   <ARCHITECTURE.md> [--out m.json] extrai o modelo canônico do markdown
+  merge     <base.md> <delta.json> --plan p.json  compara o delta com a base e grava o plano (decisões pendentes)
+  merge     <base.md> --apply p.json            aplica o plano respondido, regenera a base e registra o histórico
   views     <modelo>                         lista as visões definidas e sugere novas
   resolve   <modelo> --view k | --spec J     imprime o view IR (nós/arestas) de uma visão
   render    <modelo> --out f.html [seleção]  gera o HTML animado
@@ -62,6 +66,11 @@ function loadRaw(path) {
 }
 
 function fail(msg, code = 1) { console.error(`archlens: ${msg}`); process.exit(code); }
+
+function readJson(path) {
+  if (!existsSync(path)) fail(`arquivo não encontrado: ${path}`);
+  try { return JSON.parse(readFileSync(path, 'utf8')); } catch (e) { fail(`${path}: JSON inválido: ${e.message}`); }
+}
 
 function atomicWrite(path, content) {
   mkdirSync(dirname(resolve(path)), { recursive: true });
@@ -175,8 +184,9 @@ async function main() {
       const raw = loadRaw(file);
       const { errors } = validateModel(raw);
       if (errors.length) { printIssues(errors, 'ERRO'); fail('corrija os erros antes de gerar o documento', 2); }
-      const out = args.out && args.out !== true ? args.out : join(dirname(file), 'ARCHITECTURE.md');
-      const existing = existsSync(out) ? readFileSync(out, 'utf8') : undefined;
+      const isMd = extname(file).toLowerCase() === '.md';
+      const out = args.out && args.out !== true ? args.out : isMd ? file : join(dirname(file), 'ARCHITECTURE.md');
+      const existing = existsSync(out) ? readFileSync(out, 'utf8') : isMd ? readFileSync(file, 'utf8') : undefined;
       atomicWrite(out, generateDoc(raw, { existing }));
       console.log(`✓ ${out}`);
       break;
@@ -229,15 +239,42 @@ async function main() {
       const dir = args['out-dir'] && args['out-dir'] !== true ? args['out-dir'] : dirname(file);
       mkdirSync(dir, { recursive: true });
       const docPath = join(dir, 'ARCHITECTURE.md');
-      if (extname(file).toLowerCase() !== '.md' || resolve(file) !== resolve(docPath)) {
-        const { errors } = validateModel(raw);
-        if (errors.length) { printIssues(errors, 'ERRO'); fail('corrija os erros do modelo', 2); }
-        atomicWrite(docPath, generateDoc(raw, { existing: existsSync(docPath) ? readFileSync(docPath, 'utf8') : undefined }));
-        console.log(`✓ ${docPath}`);
-      }
+      const { errors } = validateModel(raw);
+      if (errors.length) { printIssues(errors, 'ERRO'); fail('corrija os erros do modelo', 2); }
+      const existing = existsSync(docPath) ? readFileSync(docPath, 'utf8') : extname(file).toLowerCase() === '.md' ? readFileSync(file, 'utf8') : undefined;
+      atomicWrite(docPath, generateDoc(raw, { existing }));
+      console.log(`✓ ${docPath}`);
       const name = (args.name && args.name !== true ? args.name : basename(file).replace(/\.(json|md)$/i, '').replace(/^ARCHITECTURE$/i, 'architecture').replace(/\.model$/, '')) + '.html';
       const problems = await deliver(raw, selectSpecs(model, args), join(dir, name), args);
       process.exitCode = problems ? 3 : 0;
+      break;
+    }
+    case 'merge': {
+      const usage = 'uso: archlens merge <base.md> <delta.json> --plan <plano.json>  |  archlens merge <base.md> --apply <plano.json>';
+      if (!file || extname(file).toLowerCase() !== '.md') fail(`a base do merge é o ARCHITECTURE.md (o bloco archlens-json é a fonte de verdade)\n${usage}`);
+      const baseRaw = existsSync(file) ? loadRaw(file) : null;
+      if (args.plan && args.plan !== true) {
+        const deltaPath = args._[2];
+        if (!deltaPath) fail(usage);
+        let plan;
+        try { plan = planMerge(baseRaw, readJson(deltaPath), { base: basename(file) }); } catch (e) { fail(e.message, 2); }
+        atomicWrite(args.plan, JSON.stringify(plan, null, 2) + '\n');
+        if (args.json) console.log(JSON.stringify(plan, null, 2));
+        else console.log(`${formatPlanReport(plan)}\n\n✓ plano em ${args.plan}`);
+        process.exitCode = plan.blocked ? 2 : 0;
+      } else if (args.apply && args.apply !== true) {
+        let res;
+        try { res = applyPlan(baseRaw, readJson(args.apply)); } catch (e) {
+          if (e.errors) printIssues(e.errors.map(x => ({ path: '$', hint: '', ...x })), 'ERRO');
+          fail(e.message, 2);
+        }
+        if (!res.entry) { console.log('= nada mudou; a base não foi regravada'); break; }
+        atomicWrite(file, generateDoc(res.raw, { existing: existsSync(file) ? readFileSync(file, 'utf8') : undefined }));
+        const e = res.entry;
+        const st = Object.keys(e.status).length;
+        console.log(`✓ ${file} (revisão ${res.raw.changelog.length}): +${e.added.length} ~${e.changed.length} −${e.removed.length}${st ? `, ${st} mudança(s) de status` : ''}`);
+        console.log(`  commit sugerido: git add ${file} && git commit -m ${JSON.stringify(`docs(arquitetura): ${e.summary}`)}`);
+      } else fail(usage);
       break;
     }
     default:
