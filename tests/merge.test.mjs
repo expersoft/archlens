@@ -150,3 +150,46 @@ test('files that are not deltas or plans are refused', () => {
   assert.throws(() => planMerge(shop(), { model: {} }, TODAY), /E_DELTA_SCHEMA/);
   assert.throws(() => applyPlan(shop(), { items: [] }, TODAY), /E_PLAN_SCHEMA/);
 });
+
+test('plan and apply agree: a simulated take cannot create a fuzzy match apply never saw', () => {
+  const d = delta({ elements: [
+    { id: 'pagamentos', name: 'Adquirente XYZ' },
+    { id: 'gateway-pag', type: 'c4:softwareSystem', name: 'Gateway Pagamentos' },
+  ] });
+  const plan = planMerge(shop(), d, TODAY);
+  const dups = plan.items.filter(i => i.class === 'possible-duplicate');
+  for (const res of ['keep', 'take']) {
+    const p = answer(structuredClone(plan), { 'el:pagamentos:name': res });
+    if (dups.length) answer(p, { 'dup:gateway-pag': 'different' });
+    assert.doesNotThrow(() => applyPlan(shop(), p, TODAY), res);
+  }
+  const p2 = answer(structuredClone(plan), { 'el:pagamentos:name': 'keep', 'dup:gateway-pag': 'different' });
+  const gone = structuredClone(p2);
+  gone.items = gone.items.filter(i => i.key !== 'el:pagamentos:name');
+  assert.throws(() => applyPlan(shop(), gone, TODAY), /E_PLAN_REPLAN/);
+});
+
+test('planning and applying never mutate the delta or leak simulated values over a keep', () => {
+  const d = delta({ elements: [
+    { id: 'loja.a', type: 'c4:container', parent: 'loja', properties: { x: 1 } },
+    { id: 'b', aliases: ['loja.a'], properties: { x: 2 } },
+  ] });
+  const before = structuredClone(d);
+  const plan = planMerge(shop(), d, TODAY);
+  assert.deepEqual(d, before);
+  assert.deepEqual(plan.delta.model.elements[0].properties, { x: 1 });
+  const { raw } = applyPlan(shop(), answer(structuredClone(plan), { 'el:b:properties.x': 'keep' }), TODAY);
+  assert.equal(find(raw, 'loja.a').properties.x, 1);
+  assert.deepEqual(plan.delta, before);
+});
+
+test('moving an element under its own descendant is a blocking error, not a silent delete', () => {
+  const base = shop();
+  base.model.elements.push({ id: 'x', type: 'c4:softwareSystem', name: 'X', children: [{ id: 'x.y', type: 'c4:container', name: 'Y' }] });
+  const snapshot = structuredClone(base);
+  const plan = planMerge(base, delta({ elements: [{ id: 'x', parent: 'x.y' }] }), TODAY);
+  assert.equal(plan.blocked, true);
+  assert.ok(plan.errors.some(e => e.code === 'E_PARENT_CYCLE'));
+  assert.throws(() => applyPlan(base, plan, TODAY), /E_MERGE_INVALID/);
+  assert.deepEqual(base, snapshot);
+});

@@ -5,7 +5,7 @@ import { resolveType } from './registry.mjs';
 import { validateModel } from './validate.mjs';
 import { aliasKey, findCandidates } from './match.mjs';
 import { addSources, deltaSources } from './sources.mjs';
-import { indexTree, orderDelta, attach, detach } from './raw-tree.mjs';
+import { indexTree, orderDelta, attach, detach, descendantsOf } from './raw-tree.mjs';
 
 export const PLAN_VERSION = '1.0';
 const ELEMENT_FIELDS = ['type', 'name', 'description', 'technology', 'external', 'archimate', 'owner', 'url', 'status', 'statusReason'];
@@ -95,11 +95,14 @@ function runMerge(baseRaw, delta, { mode, resolutions = new Map() }) {
   const raw = baseRaw ? structuredClone(baseRaw) : emptyBase(delta);
   raw.model.elements ??= [];
   raw.model.relationships ??= [];
+  delta = structuredClone(delta); // never mutate (or share nested objects with) the caller's delta
   const ctx = {
     raw, delta, mode, resolutions, items: [], errors: [],
     tree: indexTree(raw), aliases: new Map(), idMap: new Map(), fresh: new Set(),
     log: { added: [], changed: new Set(), status: {}, removed: [], decisions: [] },
   };
+  // Fuzzy pool frozen before any merge, so simulated answers in plan mode cannot change what apply sees.
+  ctx.pool = [...ctx.tree].map(([, { el, parent }]) => describe(el, parent));
   for (const [id, { el }] of ctx.tree) for (const a of el.aliases || []) if (!ctx.aliases.has(aliasKey(a))) ctx.aliases.set(aliasKey(a), id);
   ctx.typeOf = id => {
     const el = ctx.tree.get(id)?.el;
@@ -114,7 +117,7 @@ function decide(ctx, item, simulated) {
   ctx.items.push({ ...item, resolution: null });
   if (ctx.mode === 'plan') return simulated;
   const r = ctx.resolutions.get(item.key);
-  if (r == null) throw mergeError('E_PLAN_STALE', `a decisão "${item.key}" não está no plano; rode "archlens merge --plan" de novo`);
+  if (r == null) throw mergeError('E_PLAN_REPLAN', `a decisão "${item.key}" não está no plano; rode "archlens merge --plan" de novo`);
   return r;
 }
 
@@ -142,7 +145,7 @@ function findMatch(ctx, el, parentId) {
     if (id) return { id };
   }
   for (const a of el.aliases || []) if (ctx.tree.has(a)) return { id: a };
-  const pool = [...ctx.tree].filter(([id]) => !ctx.fresh.has(id)).map(([, { el: b, parent }]) => describe(b, parent));
+  const pool = ctx.pool.filter(p => !ctx.fresh.has(p.id));
   const [best] = findCandidates(describe(el, parentId), pool);
   return best ? { candidate: best } : {};
 }
@@ -240,12 +243,25 @@ function addAliases(ctx, id, list) {
   return true;
 }
 
+function moveElement(ctx, baseId, newParent) {
+  if (newParent === baseId || descendantsOf(ctx.tree, baseId).includes(newParent)) {
+    ctx.errors.push({
+      code: 'E_PARENT_CYCLE', path: 'model.elements',
+      message: `mover "${baseId}" para dentro de "${newParent}" criaria um ciclo: o pai novo é o próprio elemento ou um descendente dele`,
+      hint: 'corrija o "parent" no delta ou responda "keep" para manter o pai atual',
+    });
+    return;
+  }
+  detach(ctx.tree, baseId);
+  attach(ctx.raw, ctx.tree, ctx.tree.get(baseId).el, newParent);
+}
+
 function mergeElementInto(ctx, baseId, el, parentId, { dry = false, when } = {}) {
   const entry = ctx.tree.get(baseId);
   const target = entry.el;
   const fields = fieldsOf(target, el, ELEMENT_FIELDS);
   if (parentId != null && parentId !== entry.parent) {
-    fields.push(['parent', entry.parent ?? undefined, parentId, v => { detach(ctx.tree, baseId); attach(ctx.raw, ctx.tree, target, v); }]);
+    fields.push(['parent', entry.parent ?? undefined, parentId, v => moveElement(ctx, baseId, resolveRef(ctx, v))]);
   }
   const { filled, changed } = reconcile(ctx, { fields, keyPrefix: `el:${el.id}`, kind: 'element', target: baseId, dry, when });
   if (dry) return;
@@ -263,7 +279,7 @@ function mergeElementInto(ctx, baseId, el, parentId, { dry = false, when } = {})
 
 function insertElement(ctx, el, parentId) {
   const { source, sources, parent, ...rest } = el;
-  const node = { ...rest };
+  const node = structuredClone(rest);
   const srcs = deltaSources(el, ctx.delta.source);
   if (srcs.length) node.sources = srcs;
   attach(ctx.raw, ctx.tree, node, parentId);
