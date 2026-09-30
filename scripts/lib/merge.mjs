@@ -5,10 +5,12 @@ import { resolveType } from './registry.mjs';
 import { validateModel } from './validate.mjs';
 import { aliasKey, findCandidates } from './match.mjs';
 import { addSources, deltaSources } from './sources.mjs';
+import { canonicalRel } from './model.mjs';
 import { indexTree, orderDelta, attach, detach, descendantsOf } from './raw-tree.mjs';
 
 export const PLAN_VERSION = '1.0';
 const ELEMENT_FIELDS = ['type', 'name', 'description', 'technology', 'external', 'archimate', 'owner', 'url', 'status', 'statusReason'];
+const REL_FIELDS = ['description', 'technology', 'accessType', 'status', 'statusReason'];
 const RESOLUTION = {
   conflict: /^(keep|take|value:[\s\S]*)$/,
   'view-conflict': /^(keep|take)$/,
@@ -109,6 +111,7 @@ function runMerge(baseRaw, delta, { mode, resolutions = new Map() }) {
     return el ? resolveType(el.type, { tags: el.tags || [], archimate: el.archimate }).type ?? null : null;
   };
   mergeElements(ctx);
+  mergeRelationships(ctx);
   return ctx;
 }
 
@@ -288,6 +291,56 @@ function insertElement(ctx, el, parentId) {
   for (const a of node.aliases || []) if (!ctx.aliases.has(aliasKey(a))) ctx.aliases.set(aliasKey(a), node.id);
   ctx.log.added.push(node.id);
   note(ctx, { key: `el:${el.id}`, class: 'new', kind: 'element', target: node.id, type: el.type, name: el.name ?? el.id, parent: parentId });
+}
+
+function relKey(ctx, r) {
+  const c = canonicalRel(r, ctx.typeOf);
+  return c.error ? null : `${c.from}|${c.type}|${c.to}`;
+}
+
+/** Id of a raw relationship as normalizeModel names it: explicit id, or from-type-to after reading `uses`. */
+export function relId(ctx, r) {
+  if (r.id) return r.id;
+  const c = canonicalRel(r, ctx.typeOf);
+  return c.error ? `${r.from}-${r.type}-${r.to}` : `${c.from}-${c.type}-${c.to}`;
+}
+
+function mergeRelationships(ctx) {
+  const byKey = new Map();
+  const byId = new Map();
+  for (const r of ctx.raw.model.relationships) {
+    const k = relKey(ctx, r);
+    if (k && !byKey.has(k)) byKey.set(k, r);
+    byId.set(relId(ctx, r), r);
+  }
+  (ctx.delta.model?.relationships || []).forEach((dr, i) => {
+    const r = { ...dr, from: resolveRef(ctx, dr.from), to: resolveRef(ctx, dr.to) };
+    const k = relKey(ctx, r);
+    const base = (r.id && byId.get(r.id)) || (k && byKey.get(k));
+    if (base) { mergeRelInto(ctx, base, r, i); return; }
+    const { source, sources, ...rest } = r;
+    const generated = relId(ctx, { ...r, id: undefined });
+    let id = r.id ?? generated;
+    for (let n = 2; byId.has(id); n++) id = `${generated}#${n}`;
+    const node = structuredClone({ ...rest, id });
+    const srcs = deltaSources(dr, ctx.delta.source);
+    if (srcs.length) node.sources = srcs;
+    ctx.raw.model.relationships.push(node);
+    byId.set(id, node);
+    if (k) byKey.set(k, node);
+    ctx.log.added.push(id);
+    note(ctx, { key: `rel:${i}`, class: 'new', kind: 'relationship', target: id, from: r.from, to: r.to, type: r.type ?? 'uses' });
+  });
+}
+
+function mergeRelInto(ctx, base, r, i) {
+  const id = relId(ctx, base);
+  const { filled, changed } = reconcile(ctx, { fields: fieldsOf(base, r, REL_FIELDS), keyPrefix: `rel:${i}`, kind: 'relationship', target: id });
+  let more = addList(base, 'tags', r.tags);
+  if (r.inferred === false && base.inferred) { delete base.inferred; more = true; }
+  addSources(base, deltaSources(r, ctx.delta.source));
+  if (filled || changed || more) ctx.log.changed.add(id);
+  note(ctx, { key: `rel:${i}`, class: filled || more ? 'enrich' : 'unchanged', kind: 'relationship', target: id });
 }
 
 function changelogEntry(ctx, date) {

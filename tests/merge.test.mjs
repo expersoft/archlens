@@ -193,3 +193,47 @@ test('moving an element under its own descendant is a blocking error, not a sile
   assert.throws(() => applyPlan(base, plan, TODAY), /E_MERGE_INVALID/);
   assert.deepEqual(base, snapshot);
 });
+
+test('uses in the delta matches the equivalent serving already in the base', () => {
+  const plan = planMerge(shop(), delta({ relationships: [{ from: 'loja.api', to: 'k8s', type: 'uses', technology: 'containerd' }] }), TODAY);
+  assert.deepEqual(plan.summary, { enrich: 1 });
+  const { raw } = applyPlan(shop(), plan, TODAY);
+  assert.equal(raw.model.relationships.length, shop().model.relationships.length);
+  assert.equal(raw.model.relationships.find(r => r.from === 'k8s' && r.to === 'loja.api').technology, 'containerd');
+});
+
+test('relationship fields that differ are conflicts; new ones get a stable id and the source', () => {
+  const plan = planMerge(shop(), delta({ relationships: [
+    { from: 'cliente', to: 'loja.web', description: 'Navega e compra' },
+    { from: 'loja.api.checkout', to: 'loja.api.catalogo', description: 'Consulta preço' },
+  ] }), TODAY);
+  const c = plan.items.find(i => i.class === 'conflict');
+  assert.deepEqual([c.key, c.base, c.delta], ['rel:0:description', 'Compra', 'Navega e compra']);
+  const { raw } = applyPlan(shop(), answer(plan, { 'rel:0:description': 'keep' }), TODAY);
+  const added = raw.model.relationships.at(-1);
+  assert.equal(added.id, 'loja.api.catalogo-serving-loja.api.checkout');
+  assert.deepEqual(added.sources, [SRC]);
+});
+
+test('relationships may point at elements by alias', () => {
+  const base = shop();
+  find(base, 'loja.api').aliases = ['orders-service'];
+  const { raw } = applyPlan(base, planMerge(base, delta({ relationships: [{ from: 'orders-service', to: 'pagamentos', description: 'Estorna' }] }), TODAY), TODAY);
+  assert.equal(raw.model.relationships.at(-1).from, 'loja.api');
+});
+
+test('a relationship to an unknown element blocks the plan (typo protection)', () => {
+  const plan = planMerge(shop(), delta({ relationships: [{ from: 'loja.api', to: 'pagamentoz' }] }), TODAY);
+  assert.equal(plan.blocked, true);
+  assert.ok(plan.errors.some(e => e.code === 'E_UNKNOWN_REF'));
+  assert.throws(() => applyPlan(shop(), plan, TODAY), /E_MERGE_INVALID/);
+});
+
+test('new relationships do not share nested objects with the delta', () => {
+  const d = delta({ relationships: [{ from: 'loja.api', to: 'pagamentos', tags: ['x'], properties: { a: '1' } }] });
+  const { raw } = applyPlan(shop(), planMerge(shop(), d, TODAY), TODAY);
+  const added = raw.model.relationships.at(-1);
+  added.tags.push('y'); added.properties.b = '2';
+  assert.deepEqual(d.model.relationships[0].tags, ['x']);
+  assert.deepEqual(d.model.relationships[0].properties, { a: '1' });
+});
