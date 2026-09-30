@@ -34,7 +34,7 @@ export function buildSchemas() {
     properties: {
       key: { type: 'string', minLength: 1 }, notation: { enum: ['c4', 'archimate'] }, title: str, description: str,
       include: { type: 'array', items: str }, exclude: { type: 'array', items: str },
-      layout: { type: 'object', properties: { direction: { enum: ['RIGHT', 'DOWN', 'LEFT', 'UP', 'auto'] }, aspectRatio: { type: 'number', exclusiveMinimum: 0 } }, additionalProperties: false },
+      layout: { type: 'object', properties: { direction: { enum: ['RIGHT', 'DOWN', 'LEFT', 'UP', 'auto'] }, aspectRatio: { type: 'number', exclusiveMinimum: 0 }, style: { enum: ['auto', 'flow', 'bands', 'bands-flow'] } }, additionalProperties: false },
       animation: { enum: ['trace', 'story', 'impact', 'layers'] }, edgeLabels: { type: 'boolean' },
       level: { enum: ['landscape', 'context', 'container', 'component', 'dynamic'] }, scope: str,
       expand: { description: 'C4 container/dynamic: other software systems whose containers are also shown, each inside its own boundary', type: 'array', items: str },

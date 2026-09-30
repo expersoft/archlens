@@ -51,6 +51,14 @@
         "aspectRatio": {
           "type": "number",
           "exclusiveMinimum": 0
+        },
+        "style": {
+          "enum": [
+            "auto",
+            "flow",
+            "bands",
+            "bands-flow"
+          ]
         }
       },
       "additionalProperties": false

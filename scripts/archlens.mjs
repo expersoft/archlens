@@ -109,6 +109,7 @@ async function buildHtml(raw, specs, title) {
     if (!view.nodes.length) { console.warn(`  aviso: visão "${spec.key}" ficou vazia — revise scope/anchor/filtros`); continue; }
     if (view.nodes.length > 40) console.warn(`  aviso: visão "${spec.key}" tem ${view.nodes.length} nós; considere focus/depth, collapse ou layers`);
     const l = await layoutView(view);
+    if (l.layoutStyle) console.log(`  layout "${spec.key}": ${l.layoutStyle}${l.layoutAuto ? ` (auto; ${Object.entries(l.layoutScores).map(([k, q]) => `${k} ${q.score}`).join(', ')})` : ' (pedido na visão)'}`);
     const leg = legibility(l, 1920, 1080 - 56);
     if (!leg.ok) console.warn(`  aviso: "${spec.key}": ${leg.suggestion}`);
     laid.push(l);

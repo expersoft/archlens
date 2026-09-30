@@ -10,7 +10,7 @@ de visões novas sem remodelar. Campos comuns:
 | `title`, `description` | textos da visão |
 | `include` | ids forçados na visão |
 | `exclude` | padrões: `"<id>"`, `"tag:<tag>"`, `"type:<tipo ArchiMate ou kind C4>"`, `"layer:<camada>"`, `"external"` |
-| `layout` | `{ "direction": "RIGHT" \| "DOWN" \| "auto", "aspectRatio": 1.78 }` |
+| `layout` | `{ "direction": "RIGHT" \| "DOWN" \| "auto", "aspectRatio": 1.78, "style": "auto" \| "flow" \| "bands" \| "bands-flow" }` (`style` só vale para ArchiMate) |
 | `animation` | `trace` (padrão C4), `story` (dinâmica), `impact` (ArchiMate com âncora), `layers` |
 | `edgeLabels` | mostra rótulos das relações sempre (padrão: C4 sim, ArchiMate só ao destacar/tecla R) |
 
@@ -131,10 +131,17 @@ Camada de aplicação sem ruído de componentes:
 - **C4:** ELK *layered* com boundaries aninhados. O padrão é `RIGHT` (paisagem, 16:9). Se `RIGHT` sair alto e
   estreito, testa `DOWN`. Se ainda ficar mais estreito que a proporção-alvo, alarga os vãos entre
   camadas (nunca as caixas). `layout.direction` força a direção; `"auto"` escolhe a melhor.
-- **ArchiMate:** faixas horizontais de camada com largura total. Em cada faixa, as linhas seguem a
-  convenção ArchiMate (serviços/produtos em cima, comportamento no meio, estrutura ativa/passiva
-  embaixo). Os nós são ordenados por baricentro e distribuídos na largura. As colunas são escolhidas
-  para chegar a 16:9, e as arestas são curvas entre portas distribuídas nas faces.
+- **ArchiMate:** três estilos, escolhidos por visão em `layout.style`:
+
+  | `style` | Como fica | Bom para |
+  |---|---|---|
+  | `flow` | ELK *layered* com cada camada numa partição. As cadeias de dependência definem a ordem e as arestas são ortogonais, como no C4. As camadas viram faixas (`DOWN`) ou colunas (`RIGHT`, o que render maior; `layout.direction` força) | cadeias longas, visões de impacto, camada única |
+  | `bands` | Faixas horizontais com linhas pela convenção ArchiMate (serviços em cima, comportamento no meio, estrutura embaixo), nós por baricentro, arestas ortogonais com um trilho próprio no vão, e vãos que crescem com o número de arestas | poucas dependências dentro da camada, leitura "clássica" |
+  | `bands-flow` | Faixas horizontais, com o fluxo de dependências da esquerda para a direita *dentro* de cada faixa (ELK por faixa). As faixas são alinhadas entre si, e as arestas entre camadas passam por um roteador ortogonal que desvia das caixas | visões em camadas com dependências dentro e entre camadas |
+  | `auto` (padrão) | Gera os três e fica com o de menor custo em `layoutQuality`: cruzamentos, arestas sobre caixas e dobras por aresta, mais uma penalidade leve para texto < 18px no encaixe inicial e um pedágio pequeno para colunas | quando o pedido não diz nada |
+
+  O build mostra o estilo escolhido e as notas (`layout "k": bands-flow (auto; …)`). Se o usuário pedir
+  um estilo, grave-o na visão e ele deixa de ser automático.
 
 ## Ajuda sobre relações
 
