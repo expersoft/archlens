@@ -107,10 +107,14 @@ A prévia roda o mesmo merge do plano e desenha a base com o delta aplicado:
 
 | Marcador | Significado | No painel |
 |---|---|---|
-| esboço + `+` | novo neste delta | fonte do delta |
+| esboço + `+` | novo neste delta | o que o delta traz: nome, tipo, tecnologia |
 | contorno em esboço + `~` | alterado | antes → depois de cada campo |
 | esmaecido, riscado, `−` | removido ou `retired` (fantasma: continua visível com as relações que caem) | o que sai junto |
-| `?` amarelo | decisão pendente | a pergunta, o que a prévia assumiu e as alternativas |
+| `?` amarelo | decisão pendente (no nó ou no rótulo da relação) | a pergunta, o que a prévia assumiu e as alternativas |
+| relação em esboço, mais grossa | relação alterada | "alterada" na lista de relações |
+
+Visões que o apply apagaria ou apararia (ex.: `scope` removido) continuam na prévia na forma da base, com o
+fantasma; o terminal avisa `visões afetadas pelo delta (somem ou mudam no apply): …`.
 
 Pendências assumem o padrão do plano: `take` em conflitos, `different` em duplicatas, `yes` em remoções. Plano
 bloqueado não tem prévia. Com as mesmas respostas, a prévia mostra exatamente o que o apply gravaria.
