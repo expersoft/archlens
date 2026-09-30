@@ -99,3 +99,28 @@ test('a delta on a missing base previews everything as added', () => {
   assert.deepEqual([...p.changes], [['sis', { kind: 'added' }]]);
   assert.equal(previewSummary(p), '+1 ~0 −0');
 });
+
+test('a relationship whose canonical id flips is one changed relationship, not removed + added', () => {
+  const base = { archlens: '1.0', name: 'X', model: {
+    elements: [{ id: 'sys', type: 'c4:softwareSystem', name: 'Sys', children: [
+      { id: 'app', type: 'c4:container', name: 'App' }, { id: 'store', type: 'c4:container', name: 'Store' }] }],
+    relationships: [{ from: 'app', to: 'store', type: 'uses' }] } };
+  const p = previewModel(base, { delta: delta({ elements: [{ id: 'store', type: 'archimate:data-object' }] }) });
+  const kinds = [...p.relChanges.values()].map(c => c.kind);
+  assert.deepEqual(kinds, ['changed']);
+  const [c] = p.relChanges.values();
+  assert.equal(c.fields[0].field, 'id');
+  assert.notEqual(c.fields[0].before, c.fields[0].after);
+  assert.equal(p.raw.model.relationships.filter(r => [r.from, r.to].sort().join() === 'app,store').length, 1);
+});
+
+test('ghosts keep a top-level parent when the child is listed before it', () => {
+  const base = { archlens: '1.0', name: 'X', model: {
+    elements: [{ id: 'c', type: 'c4:container', name: 'C', parent: 'a' }, { id: 'a', type: 'c4:softwareSystem', name: 'A' }],
+    relationships: [] } };
+  const p = previewModel(base, { delta: delta({}, { ops: [{ op: 'remove', id: 'a' }] }) });
+  const a = find(p.raw, 'a');
+  const c = find(p.raw, 'c');
+  assert.ok(c.parent === 'a' || (a.children || []).some(x => x.id === 'c'));
+  assert.deepEqual(validateModel(p.raw).errors, []);
+});

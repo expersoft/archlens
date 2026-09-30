@@ -40,21 +40,36 @@ export function previewModel(baseRaw, { delta, plan } = {}) {
   for (const [id, b] of before) {
     if (after.has(id)) continue;
     const { children, ...el } = structuredClone(b.el);
-    attach(raw, after, el, b.parent != null && after.has(b.parent) ? b.parent : null);
+    attach(raw, after, el, b.parent ?? null);
     changes.set(id, { kind: 'removed' });
   }
 
   const beforeRels = byId(baseRaw ? relationshipIds(baseRaw) : new Map());
   const afterRels = byId(relationshipIds(raw));
   const relChanges = new Map();
+  // A relationship whose canonical id flipped (an endpoint changed type) is one relationship, not removed + added:
+  // pair each vanished base relationship with an unmatched result one with the same from/to/type.
+  const freed = new Set([...afterRels.keys()].filter(id => !beforeRels.has(id)));
+  const pairedTo = new Map(); // old id → new id
+  for (const [oldId, r] of beforeRels) {
+    if (afterRels.has(oldId)) continue;
+    const cands = [...freed].filter(id => { const c = afterRels.get(id); return c.from === r.from && c.to === r.to && c.type === r.type; });
+    const newId = cands.find(id => afterRels.get(id).description === r.description) ?? cands[0];
+    if (newId === undefined) continue;
+    freed.delete(newId);
+    pairedTo.set(oldId, newId);
+  }
+  const pairedFrom = new Map([...pairedTo].map(([o, n]) => [n, o]));
   for (const [id, r] of afterRels) {
-    const b = beforeRels.get(id);
+    const oldId = pairedFrom.get(id);
+    const b = beforeRels.get(oldId ?? id);
     if (!b) { relChanges.set(id, { kind: 'added' }); continue; }
     const fields = diff(REL_COMPARED, b, r, relValue);
+    if (oldId !== undefined) fields.unshift({ field: 'id', before: oldId, after: id });
     if (fields.length) relChanges.set(id, { kind: turnedRetired(b, r) ? 'retired' : 'changed', fields });
   }
   for (const [id, r] of beforeRels) {
-    if (afterRels.has(id)) continue;
+    if (afterRels.has(id) || pairedTo.has(id)) continue;
     raw.model.relationships.push({ ...structuredClone(r), id });
     relChanges.set(id, { kind: 'removed' });
   }
