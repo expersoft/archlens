@@ -1,5 +1,6 @@
 // Model validation: errors block rendering, warnings are advisory. Codes are stable.
 import { normalizeModel } from './model.mjs';
+import { supportDirection } from './registry.mjs';
 
 export function validateModel(raw) {
   const model = normalizeModel(raw);
@@ -15,6 +16,16 @@ export function validateModel(raw) {
   }
   for (const e of model.elements.values()) {
     if (!connected.has(e.id)) warnings.push({ code: 'W_ORPHAN', message: `"${e.id}" não tem relacionamentos`, path: e.path, hint: 'conecte-o ou remova-o; elementos isolados não aparecem em visões com âncora' });
+  }
+  for (const r of model.relationships) {
+    if (r.status === 'retired') continue;
+    const dir = supportDirection(r);
+    if (!dir) continue;
+    const [sup, dep] = dir.map(id => model.elements.get(id));
+    if (sup?.status === 'retired' && dep && dep.status !== 'retired') {
+      warnings.push({ code: 'W_RETIRED_DEPENDENCY', message: `"${dep.id}" (${dep.status}) depende de "${sup.id}", que está retired`, path: r.path,
+        hint: 'aponte a dependência para o substituto ou mude o status do dependente' });
+    }
   }
   const inferred = [...model.elements.values()].filter(e => e.inferred);
   if (inferred.length) {

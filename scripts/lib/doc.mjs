@@ -138,7 +138,7 @@ export function generateDoc(raw, { existing, date } = {}) {
   out.push(keepBlock('assumptions', assumptionLines || '_Nenhuma premissa registrada._'), '');
   if (inferred.length || inferredRels.length) {
     out.push(table(['Item', 'Tipo', 'Confiança', 'Origem no texto'], [
-      ...inferred.map(e => [e.name, ELEMENT_TYPES[e.type].label, e.confidence, e.source]),
+      ...inferred.map(e => [e.name, ELEMENT_TYPES[e.type].label, e.confidence, e.sources.map(s => s.excerpt).filter(Boolean).join(' · ')]),
       ...inferredRels.map(r => { const o = c4Orientation(r) ?? r; return [`${name(o.from)} → ${name(o.to)}`, r.c4 ? 'usa' : r.type, '—', '—']; }),
     ]), '');
   }
