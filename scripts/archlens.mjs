@@ -11,8 +11,9 @@ import { layoutView, legibility } from './lib/layout.mjs';
 import { renderHtml } from './lib/render.mjs';
 import { suggestViews } from './lib/suggest.mjs';
 import { inspectHtml } from './lib/deliver.mjs';
-import { planMerge, applyPlan, mergeError, canonicalJson, PLAN_VERSION } from './lib/merge.mjs';
+import { planMerge, applyPlan, mergeError, canonicalJson, hashRaw, PLAN_VERSION } from './lib/merge.mjs';
 import { formatPlanReport } from './lib/merge-report.mjs';
+import { previewModel, previewSummary, annotateView } from './lib/preview.mjs';
 
 const HELP = `archlens — arquitetura como modelo, diagramas como consultas
 
@@ -35,6 +36,10 @@ Seleção de visões (render/deliver)
   --view k1,k2        visões do modelo pelo key (padrão: todas as definidas)
   --spec J            JSON inline, arquivo .json, ou lista, com view specs ad hoc
   --suggested         inclui as visões sugeridas por "views"
+
+Prévia de um delta ainda não mergeado (render/deliver/build/resolve/views; nunca grava o ARCHITECTURE.md)
+  --delta D           a base com o delta D aplicado (decisões pendentes no padrão do plano)
+  --plan P            idem, a partir de um plano (usa as respostas já dadas)
 
 Opções
   --json              saída em JSON (validate, views, resolve, merge --plan)
@@ -109,14 +114,18 @@ function selectSpecs(model, args) {
   return specs;
 }
 
-async function buildHtml(raw, specs, title) {
+async function buildHtml(raw, specs, title, preview) {
   const { errors } = validateModel(raw);
   if (errors.length) { printIssues(errors, 'ERRO'); fail(`${errors.length} erro(s) no modelo; corrija antes de renderizar`, 2); }
   const model = normalizeModel(raw);
   const laid = [];
   for (const spec of specs) {
     let view;
-    try { view = resolveView(model, spec); } catch (e) { fail(`visão "${spec.key}": ${e.message}`, 2); }
+    try { view = resolveView(model, spec, preview ? { keep: preview.keep } : {}); } catch (e) {
+      if (preview) { console.warn(`  aviso: visão "${spec.key}" não abre na prévia: ${e.message}`); continue; }
+      fail(`visão "${spec.key}": ${e.message}`, 2);
+    }
+    if (preview) annotateView(view, preview);
     if (!view.nodes.length) { console.warn(`  aviso: visão "${spec.key}" ficou vazia — revise scope/anchor/filtros`); continue; }
     if (view.nodes.length > 40) console.warn(`  aviso: visão "${spec.key}" tem ${view.nodes.length} nós; considere focus/depth, collapse ou layers`);
     const l = await layoutView(view);
@@ -126,7 +135,8 @@ async function buildHtml(raw, specs, title) {
     laid.push(l);
   }
   if (!laid.length) fail('nenhuma visão com conteúdo', 2);
-  return { html: renderHtml({ title: title ?? model.name, subtitle: `${laid.length} visão(ões) · archlens`, views: laid }), laid };
+  const subtitle = `${laid.length} visão(ões) · archlens${preview ? ' · prévia' : ''}`;
+  return { html: renderHtml({ title: title ?? model.name, subtitle, views: laid, ...(preview ? { preview: { label: preview.label } } : {}) }), laid };
 }
 
 function openFile(path) {
@@ -135,8 +145,8 @@ function openFile(path) {
   try { spawn(cmd, a, { detached: true, stdio: 'ignore' }).on('error', () => {}).unref(); } catch { /* ignore */ }
 }
 
-async function deliver(raw, specs, out, args) {
-  const { html } = await buildHtml(raw, specs, args.title);
+async function deliver(raw, specs, out, args, preview) {
+  const { html } = await buildHtml(raw, specs, args.title, preview);
   const tmp = out.replace(/\.html?$/i, '') + `.candidate-${process.pid}.html`;
   mkdirSync(dirname(resolve(out)), { recursive: true });
   writeFileSync(tmp, html);
@@ -165,6 +175,26 @@ async function deliver(raw, specs, out, args) {
   return problems;
 }
 
+/** Preview mode (--delta / --plan): the model with the delta applied, never written; exits on bad input. */
+function loadPreview(file, args) {
+  if (args.delta && args.plan) fail('use --delta ou --plan, não os dois');
+  const input = args.delta ?? args.plan;
+  if (input === true) fail('informe o arquivo: --delta <delta.json> ou --plan <plano.json>');
+  const baseRaw = file && existsSync(file) ? loadRaw(file) : null;
+  const doc = readJson(input);
+  if (args.plan && doc.baseHash && doc.baseHash !== hashRaw(baseRaw)) {
+    console.warn('  aviso: a base mudou depois deste plano; a prévia usa a base atual');
+  }
+  let p;
+  try { p = previewModel(baseRaw, args.delta ? { delta: doc } : { plan: doc }); } catch (e) {
+    if (e.errors) printIssues(e.errors.map(x => ({ path: '$', hint: '', ...x })), 'ERRO');
+    fail(e.message, 2);
+  }
+  p.label = `${basename(input)} · ${previewSummary(p)}`;
+  p.name = `${basename(input).replace(/\.json$/i, '')}-preview`;
+  return p;
+}
+
 /** key → resolution of the answered items of an earlier plan (for merge --plan --answers). */
 function answersFrom(old, delta) {
   if (old?.['archlens-plan'] !== PLAN_VERSION || !Array.isArray(old.items)) {
@@ -180,6 +210,10 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   const [cmd, file] = args._;
   if (!cmd || args.help || cmd === 'help') { console.log(HELP); return; }
+  const previewing = ['render', 'deliver', 'build', 'resolve', 'views'].includes(cmd) && (args.delta || args.plan);
+  const preview = previewing ? loadPreview(file, args) : null;
+  if (preview && cmd !== 'resolve') console.log(`prévia de ${preview.label}`);
+  const load = () => (preview ? preview.raw : loadRaw(file));
 
   switch (cmd) {
     case 'validate': {
@@ -211,7 +245,7 @@ async function main() {
       break;
     }
     case 'views': {
-      const model = normalizeModel(loadRaw(file));
+      const model = normalizeModel(load());
       const suggested = suggestViews(model).filter(s => !model.views.some(v => v.key === s.key));
       if (args.json) { console.log(JSON.stringify({ defined: model.views, suggested }, null, 2)); break; }
       console.log('Visões definidas:');
@@ -222,43 +256,47 @@ async function main() {
       break;
     }
     case 'resolve': {
-      const model = normalizeModel(loadRaw(file));
+      const model = normalizeModel(load());
       const specs = selectSpecs(model, args);
-      const out = specs.map(s => resolveView(model, s));
+      const out = specs.map(s => { const v = resolveView(model, s, preview ? { keep: preview.keep } : {}); return preview ? annotateView(v, preview) : v; });
       console.log(JSON.stringify(out.length === 1 ? out[0] : out, null, 2));
       break;
     }
     case 'render': {
-      const raw = loadRaw(file);
+      const raw = load();
       const model = normalizeModel(raw);
       if (!args.out || args.out === true) fail('informe --out arquivo.html');
-      const { html } = await buildHtml(raw, selectSpecs(model, args), args.title);
+      const { html } = await buildHtml(raw, selectSpecs(model, args), args.title, preview);
       atomicWrite(args.out, html);
       console.log(`✓ ${args.out}`);
       if (args.open) openFile(args.out);
       break;
     }
     case 'deliver': {
-      const raw = loadRaw(file);
+      const raw = load();
       const model = normalizeModel(raw);
       if (!args.out || args.out === true) fail('informe --out arquivo.html');
-      const problems = await deliver(raw, selectSpecs(model, args), args.out, args);
+      const problems = await deliver(raw, selectSpecs(model, args), args.out, args, preview);
       process.exitCode = problems ? 3 : 0;
       break;
     }
     case 'build': {
-      const raw = loadRaw(file);
+      const raw = load();
       const model = normalizeModel(raw);
       const dir = args['out-dir'] && args['out-dir'] !== true ? args['out-dir'] : dirname(file);
       mkdirSync(dir, { recursive: true });
-      const docPath = join(dir, 'ARCHITECTURE.md');
-      const { errors } = validateModel(raw);
-      if (errors.length) { printIssues(errors, 'ERRO'); fail('corrija os erros do modelo', 2); }
-      const existing = existsSync(docPath) ? readFileSync(docPath, 'utf8') : extname(file).toLowerCase() === '.md' ? readFileSync(file, 'utf8') : undefined;
-      atomicWrite(docPath, generateDoc(raw, { existing }));
-      console.log(`✓ ${docPath}`);
-      const name = (args.name && args.name !== true ? args.name : basename(file).replace(/\.(json|md)$/i, '').replace(/^ARCHITECTURE$/i, 'architecture').replace(/\.model$/, '')) + '.html';
-      const problems = await deliver(raw, selectSpecs(model, args), join(dir, name), args);
+      if (!preview) {
+        const docPath = join(dir, 'ARCHITECTURE.md');
+        const { errors } = validateModel(raw);
+        if (errors.length) { printIssues(errors, 'ERRO'); fail('corrija os erros do modelo', 2); }
+        const existing = existsSync(docPath) ? readFileSync(docPath, 'utf8') : extname(file).toLowerCase() === '.md' ? readFileSync(file, 'utf8') : undefined;
+        atomicWrite(docPath, generateDoc(raw, { existing }));
+        console.log(`✓ ${docPath}`);
+      }
+      const base = args.name && args.name !== true ? args.name
+        : preview ? preview.name
+          : basename(file).replace(/\.(json|md)$/i, '').replace(/^ARCHITECTURE$/i, 'architecture').replace(/\.model$/, '');
+      const problems = await deliver(raw, selectSpecs(model, args), join(dir, `${base}.html`), args, preview);
       process.exitCode = problems ? 3 : 0;
       break;
     }

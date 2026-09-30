@@ -113,3 +113,57 @@ test('doc regenerates an ARCHITECTURE.md in place, keeping hand-written blocks',
   assert.equal(r.status, 0, r.stderr);
   assert.match(readFileSync(join(dir, 'ARCHITECTURE.md'), 'utf8'), /Nota à mão\./);
 });
+
+const previewDelta = { 'archlens-delta': '1.0', source: { kind: 'prompt', ref: 'r' },
+  model: { elements: [{ id: 'loja.worker', type: 'c4:container', name: 'Worker', parent: 'loja' }] }, ops: [{ op: 'remove', id: 'loja.db' }] };
+
+test('render --delta draws the preview and leaves ARCHITECTURE.md untouched', () => {
+  const dir = setup();
+  const before = readFileSync(join(dir, 'ARCHITECTURE.md'), 'utf8');
+  writeFileSync(join(dir, 'd.json'), JSON.stringify(previewDelta));
+  const r = run(['render', 'ARCHITECTURE.md', '--delta', 'd.json', '--out', 'p.html'], dir);
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /prévia de d\.json · \+1 ~0 −1, 1 decisão\(ões\) pendente\(s\)/);
+  assert.match(readFileSync(join(dir, 'p.html'), 'utf8'), /PRÉVIA · não é a base oficial — d\.json/);
+  assert.equal(readFileSync(join(dir, 'ARCHITECTURE.md'), 'utf8'), before);
+});
+
+test('build --delta writes <delta>-preview.html and never the knowledge base', () => {
+  const dir = setup();
+  const before = readFileSync(join(dir, 'ARCHITECTURE.md'), 'utf8');
+  writeFileSync(join(dir, 'd.json'), JSON.stringify(previewDelta));
+  const r = run(['build', 'ARCHITECTURE.md', '--delta', 'd.json'], dir);
+  assert.ok([0, 3].includes(r.status), r.stderr);
+  assert.ok(existsSync(join(dir, 'd-preview.html')));
+  assert.equal(readFileSync(join(dir, 'ARCHITECTURE.md'), 'utf8'), before);
+});
+
+test('render --plan uses the plan answers; --delta with --plan is refused', () => {
+  const dir = setup();
+  writeFileSync(join(dir, 'd.json'), JSON.stringify(previewDelta));
+  assert.equal(run(['merge', 'ARCHITECTURE.md', 'd.json', '--plan', 'p.json'], dir).status, 0);
+  const viaPlan = run(['render', 'ARCHITECTURE.md', '--plan', 'p.json', '--out', 'q.html'], dir);
+  assert.equal(viaPlan.status, 0, viaPlan.stderr);
+  const both = run(['render', 'ARCHITECTURE.md', '--delta', 'd.json', '--plan', 'p.json', '--out', 'x.html'], dir);
+  assert.equal(both.status, 1);
+  assert.match(both.stderr, /--delta ou --plan/);
+  assert.ok(!existsSync(join(dir, 'x.html')));
+});
+
+test('in a preview, a view that does not open is skipped with a warning', () => {
+  const dir = setup();
+  writeFileSync(join(dir, 'd.json'), JSON.stringify(previewDelta));
+  const r = run(['render', 'ARCHITECTURE.md', '--delta', 'd.json', '--view', 'ctx', '--spec', '{"key":"x","notation":"c4","level":"context","scope":"nada"}', '--out', 'p.html'], dir);
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stderr, /visão "x" não abre na prévia/);
+});
+
+test('resolve --delta prints the annotated IR; a preview of a missing base shows everything as new', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'archlens-'));
+  writeFileSync(join(dir, 'd.json'), JSON.stringify({ 'archlens-delta': '1.0', model: { elements: [{ id: 'sis', type: 'c4:softwareSystem', name: 'Sistema' }, { id: 'u', type: 'c4:person', name: 'Usuário' }], relationships: [{ from: 'u', to: 'sis' }] } }));
+  const r = run(['resolve', 'ARCHITECTURE.md', '--delta', 'd.json', '--spec', '{"key":"l","notation":"c4","level":"landscape"}'], dir);
+  assert.equal(r.status, 0, r.stderr);
+  const ir = JSON.parse(r.stdout);
+  assert.deepEqual(ir.nodes.map(n => n.change).sort(), ['added', 'added']);
+  assert.ok(!existsSync(join(dir, 'ARCHITECTURE.md')));
+});
