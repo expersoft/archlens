@@ -384,7 +384,7 @@ function mergeViews(ctx) {
 
 function mergeAssumptions(ctx) {
   const current = ctx.raw.assumptions || [];
-  const extra = (ctx.delta.assumptions || []).filter(a => !current.includes(a));
+  const extra = [...new Set(ctx.delta.assumptions || [])].filter(a => !current.includes(a));
   if (!extra.length) return;
   ctx.raw.assumptions = [...current, ...extra];
   note(ctx, { key: 'assumptions', class: 'new', kind: 'assumption', target: `${extra.length} premissa(s)`, added: extra });

@@ -259,3 +259,8 @@ test('views: new keys are added with references rewritten; a changed spec is a k
   const again = planMerge(raw, d, TODAY);
   assert.deepEqual(again.summary, { unchanged: 2 });
 });
+
+test('assumptions: duplicates inside the delta are appended once', () => {
+  const { raw } = applyPlan(shop(), planMerge(shop(), delta({}, { assumptions: ['A', 'A'] }), TODAY), TODAY);
+  assert.deepEqual(raw.assumptions, ['A']);
+});
