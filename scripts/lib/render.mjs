@@ -88,10 +88,31 @@ function sketchShape(shape, prefix) {
   return via('shape', 'sk1') + via('shape2', 'sk2') + rims.map(r => r.replace('class="rim"', `class="rim" filter="url(#${prefix}-sk1)"`)).join('');
 }
 
+const MARK = { added: '+', changed: '~', removed: '−', retired: '−' };
+const changeClass = n => `${n.change ? ` ch-${n.change}` : ''}${n.pending?.length ? ' pending' : ''}`;
+
+/** Preview decorations over a node: sketch outline (changed), sketch strike (removed/retired), corner markers. */
+function decorations(n, prefix) {
+  const { x, y, w, h } = n;
+  let out = '';
+  if (n.change === 'changed') {
+    out += `<rect class="ch-outline" x="${f(x - 7)}" y="${f(y - 7)}" width="${f(w + 14)}" height="${f(h + 14)}" rx="16" filter="url(#${prefix}-sk1)"/>`;
+  }
+  if (n.change === 'removed' || n.change === 'retired') {
+    out += `<g class="strike"><line x1="${f(x + 4)}" y1="${f(y + 4)}" x2="${f(x + w - 4)}" y2="${f(y + h - 4)}" filter="url(#${prefix}-sk1)"/>`
+      + `<line x1="${f(x + 4)}" y1="${f(y + h - 4)}" x2="${f(x + w - 4)}" y2="${f(y + 4)}" filter="url(#${prefix}-sk2)"/></g>`;
+  }
+  const mark = (cls, cx, glyph) => `<g class="mark ${cls}"><circle cx="${f(cx)}" cy="${f(y + 2)}" r="14"/>`
+    + `<text x="${f(cx)}" y="${f(y + 3)}" font-size="19" font-weight="700" text-anchor="middle" dominant-baseline="middle">${glyph}</text></g>`;
+  if (n.change) out += mark(`m-${n.change}`, x + w - 2, MARK[n.change]);
+  if (n.pending?.length) out += mark('m-pending', x + w - (n.change ? 34 : 2), '?');
+  return out;
+}
+
 function c4Node(n, i, prefix) {
   const { x, y, w, h } = n;
   const kind = n.external ? 'external' : n.c4Kind === 'softwareSystem' ? 'system' : n.c4Kind;
-  const cls = `node c4 k-${kind}${n.isFocus ? ' focus' : ''}${n.isScope ? ' scope' : ''}${n.inferred ? ' inferred' : ''}${statusClass(n)}${sketchy(n) ? ' sketchy' : ''}`;
+  const cls = `node c4 k-${kind}${n.isFocus ? ' focus' : ''}${n.isScope ? ' scope' : ''}${n.inferred ? ' inferred' : ''}${statusClass(n)}${sketchy(n) ? ' sketchy' : ''}${changeClass(n)}`;
   let shape;
   if (n.c4Kind === 'person') {
     shape = `<circle class="shape" cx="${f(x + w / 2)}" cy="${f(y + 30)}" r="28"/><rect class="shape" x="${f(x)}" y="${f(y + 50)}" width="${f(w)}" height="${f(h - 50)}" rx="34"/>`;
@@ -116,7 +137,7 @@ function c4Node(n, i, prefix) {
   t += textLines(L.meta, cx, top + L.title.length * 25 + 6, 15, 19, 'meta');
   if (L.desc.length) t += textLines(L.desc, cx, top + L.title.length * 25 + 6 + L.meta.length * 19 + 10, 15, 19, 'desc');
   const tip = `${n.name} [${n.c4Label}${n.technology ? `: ${n.technology}` : ''}]${n.description ? `\n${n.description}` : ''}`;
-  return `<g class="${cls}" data-node="${esc(n.id)}" style="--i:${i}" tabindex="0" role="button" aria-label="${esc(tip)}">${shape}${t}</g>`;
+  return `<g class="${cls}" data-node="${esc(n.id)}" style="--i:${i}" tabindex="0" role="button" aria-label="${esc(tip)}">${shape}${t}${decorations(n, prefix)}</g>`;
 }
 
 function c4Boundary(b) {
@@ -132,7 +153,7 @@ function amNode(n, i, prefix) {
   const spec = ELEMENT_TYPES[n.type];
   const lv = LAYER_VAR[n.layer];
   const rx = spec.icon === 'service' ? h / 2 : spec.aspect === 'behavior' ? 14 : spec.icon === 'value-stream' ? 4 : 3;
-  const cls = `node am l-${lv}${n.isAnchor ? ' anchor' : ''}${n.role ? ` r-${n.role}` : ''}${n.inferred ? ' inferred' : ''}${statusClass(n)}${sketchy(n) ? ' sketchy' : ''}`;
+  const cls = `node am l-${lv}${n.isAnchor ? ' anchor' : ''}${n.role ? ` r-${n.role}` : ''}${n.inferred ? ' inferred' : ''}${statusClass(n)}${sketchy(n) ? ' sketchy' : ''}${changeClass(n)}`;
   const icon = ICONS[spec.icon] ?? '';
   const nameTop = y + (h - n.lines.title.length * 22) / 2;
   const tip = `${n.name} — ${spec.label}${n.technology ? ` [${n.technology}]` : ''}${n.description ? `\n${n.description}` : ''}`;
@@ -143,7 +164,7 @@ function amNode(n, i, prefix) {
     + (icon ? `<g class="icon" transform="translate(${f(x + w - 36)},${f(y + 8)})">${icon}</g>` : '')
     + textLines(n.lines.title, x + w / 2 - 6, nameTop, 17, 22, 'title', 650)
     + (n.distance !== null && n.distance !== undefined && !n.isAnchor ? `<text class="dist" x="${f(x + 10)}" y="${f(y + h - 8)}" font-size="15">${n.role === 'dependent' ? '↑' : n.role === 'supporter' ? '↓' : '↕'}${n.distance}</text>` : '')
-    + '</g>';
+    + decorations(n, prefix) + '</g>';
 }
 
 function band(b, layers) {
@@ -178,7 +199,7 @@ function edge(e, prefix, showLabel) {
     label = `<g class="elabel${showLabel ? '' : ' on-demand'}"><rect x="${f(cx - w / 2)}" y="${f(cy)}" width="${f(w)}" height="${f(h)}" rx="6"/>`
       + textLines(e.labelLines, cx, cy + 5, 15, lh, 'etext') + '</g>';
   }
-  return `<g class="edge t-${e.type}${e.derived ? ' derived' : ''}${e.implicit ? ' implicit' : ''}${e.status === 'draft' || e.change === 'added' ? ' sketchy' : ''}" data-edge="${esc(e.id)}" data-from="${esc(e.from)}" data-to="${esc(e.to)}"${e.step ? ` data-step="${e.step}"` : ''} aria-label="${esc(title)}">`
+  return `<g class="edge t-${e.type}${e.derived ? ' derived' : ''}${e.implicit ? ' implicit' : ''}${e.status === 'draft' || e.change === 'added' ? ' sketchy' : ''}${e.change ? ` ch-${e.change}` : ''}" data-edge="${esc(e.id)}" data-from="${esc(e.from)}" data-to="${esc(e.to)}"${e.step ? ` data-step="${e.step}"` : ''} aria-label="${esc(title)}">`
     + `<path class="hit" d="${d}"/>`
     + `<path class="line" d="${d}"${e.status === 'draft' || e.change === 'added' ? ` filter="url(#${prefix}-sk1)"` : ''}${dash ? ` stroke-dasharray="${dash}"` : ''}${m('start', start)}${m('end', end)}/>`
     + `<path class="flow" d="${d}"/>${label}</g>`;
@@ -213,6 +234,14 @@ function legend(v) {
   }
   if (v.nodes.some(n => n.status === 'draft') || v.edges.some(e => e.status === 'draft')) {
     items.push(`<li><svg class="sample" viewBox="0 0 64 20" width="64" height="20" aria-hidden="true"><rect x="4" y="3" width="56" height="14" rx="3" fill="var(--c4-container)" fill-opacity=".22" stroke="var(--sketch-ink)" stroke-width="1.8" filter="url(#lg-sk1)"/></svg><span><b>rascunho</b> — em discussão (draft)</span></li>`);
+  }
+  if (v.nodes.some(n => n.change || n.pending?.length)) {
+    const markSample = (cls, glyph) => `<svg class="sample" viewBox="0 0 64 20" width="64" height="20" aria-hidden="true"><g class="mark ${cls}"><circle cx="32" cy="10" r="9"/><text x="32" y="11" font-size="13" font-weight="700" text-anchor="middle" dominant-baseline="middle">${glyph}</text></g></svg>`;
+    items.push('<li><b>mudanças da prévia</b></li>',
+      `<li>${markSample('m-added', '+')}<span>novo neste delta (em esboço)</span></li>`,
+      `<li>${markSample('m-changed', '~')}<span>alterado (contorno em esboço)</span></li>`,
+      `<li>${markSample('m-removed', '−')}<span>removido ou desativado (riscado)</span></li>`,
+      `<li>${markSample('m-pending', '?')}<span>decisão pendente no plano</span></li>`);
   }
   return `<ul>${items.join('')}</ul><button class="linkish" data-act="glossary">Como ler as relações?</button>`;
 }
@@ -258,18 +287,18 @@ function viewData(v) {
     nodes: Object.fromEntries(v.nodes.map(n => [n.id, {
       name: n.name, typeLabel: ELEMENT_TYPES[n.type]?.label, c4Label: n.c4Label ?? null, layer: n.layer,
       technology: n.technology ?? '', description: n.description ?? '', tags: n.tags ?? [], properties: n.properties ?? {},
-      distance: n.distance ?? null, role: n.role ?? null, isAnchor: !!n.isAnchor, inferred: !!n.inferred, status: n.status ?? 'active', statusReason: n.statusReason ?? '',
+      distance: n.distance ?? null, role: n.role ?? null, isAnchor: !!n.isAnchor, inferred: !!n.inferred, status: n.status ?? 'active', statusReason: n.statusReason ?? '', change: n.change ?? null, changeFields: n.changeFields ?? [], pending: n.pending ?? [],
       x: n.x, y: n.y, w: n.w, h: n.h,
     }])),
     edges: v.edges.map(e => ({
-      id: e.id, from: e.from, to: e.to, type: e.type, label: e.label ?? '', technology: e.technology ?? '', derived: !!e.derived, via: e.via ?? [], step: e.step ?? null,
+      id: e.id, from: e.from, to: e.to, type: e.type, label: e.label ?? '', technology: e.technology ?? '', derived: !!e.derived, via: e.via ?? [], step: e.step ?? null, change: e.change ?? null, pending: e.pending ?? [],
       help: explainEdge(e, Object.fromEntries(v.nodes.map(n => [n.id, { name: n.name, type: n.type }])), v.notation),
     })),
     matrix: v.matrix ?? null,
   };
 }
 
-export function renderHtml({ title, subtitle = '', views }) {
+export function renderHtml({ title, subtitle = '', views, preview }) {
   const data = views.map(viewData);
   const json = JSON.stringify({ title, minScreenPx: MIN_SCREEN_PX, views: data }).replace(/</g, '\\u003c');
   const sections = views.map((v, i) => `<section class="view" data-view="${esc(v.key)}" data-index="${i}"${i ? ' hidden' : ''}>${viewSvg(v, i)}<div class="legend" hidden>${legend(v)}</div></section>`).join('');
@@ -282,7 +311,7 @@ export function renderHtml({ title, subtitle = '', views }) {
 <title>${esc(title)}</title>
 <style>${CSS}</style>
 </head>
-<body>
+<body${preview ? ' class="preview"' : ''}>
 <header class="bar">
   <div class="brand"><strong>${esc(title)}</strong>${subtitle ? `<span>${esc(subtitle)}</span>` : ''}</div>
   <nav class="views">
@@ -302,6 +331,7 @@ export function renderHtml({ title, subtitle = '', views }) {
     <button data-act="present" class="primary" title="Modo apresentação (P)">Apresentar</button>
   </div>
 </header>
+${preview ? `<div class="preview-banner" role="status">PRÉVIA · não é a base oficial — ${esc(preview.label)}</div>` : ''}
 <svg class="defs" width="0" height="0" aria-hidden="true" focusable="false">${markerDefs('lg')}${sketchDefs('lg')}</svg>
 <main class="stage">${sections}</main>
 <div class="hovercard" role="tooltip" hidden></div>
@@ -388,6 +418,19 @@ body.presenting .stage{inset:0}
 .node.c4.sketchy text,.node.am.sketchy text{fill:var(--sketch-ink)}
 .edge.sketchy .line{stroke:var(--sketch-ink)}
 .node.sketchy.focus .shape,.node.sketchy.anchor .shape{stroke:var(--focus);stroke-width:5}
+.node.ch-removed,.node.ch-retired,.edge.ch-removed{opacity:.5}
+.node .strike line{stroke:var(--removed);stroke-width:3}
+.node .ch-outline{fill:none;stroke:var(--sketch-ink);stroke-width:2.2}
+.mark circle{fill:var(--panel);stroke:var(--sketch-ink);stroke-width:1.8}
+.mark text{fill:var(--sketch-ink)}
+.mark.m-removed circle,.mark.m-retired circle{stroke:var(--removed)}
+.mark.m-removed text,.mark.m-retired text{fill:var(--removed)}
+.mark.m-pending circle{fill:var(--pending);stroke:var(--pending)}
+.mark.m-pending text{fill:#1a1a1a}
+.preview-banner{position:fixed;inset:var(--bar-h) 0 auto 0;height:32px;display:flex;align-items:center;justify-content:center;padding:0 16px;background:var(--pending);color:#1a1a1a;font-weight:600;font-size:14px;z-index:19;text-align:center}
+body.preview .stage{inset:calc(var(--bar-h) + 32px) 0 0 0}
+body.presenting .preview-banner{top:0}
+body.presenting.preview .stage{inset:32px 0 0 0}
 .boundary rect{fill:none;stroke:var(--boundary);stroke-width:2.2;stroke-dasharray:12 7}
 .boundary text{fill:var(--muted)}
 .boundary .b-title{fill:var(--ink)}
@@ -789,12 +832,16 @@ const JS = String.raw`
   function openDrawer(id) {
     const v = view(), n = v.nodes[id]; if (!n) return;
     const name = x => escH(v.nodes[x] ? v.nodes[x].name : x);
+    const fmt = x => (x === undefined || x === null ? '—' : typeof x === 'string' ? x : JSON.stringify(x));
     const rels = v.edges.filter(e => e.from === id || e.to === id);
     const rel = e => escH(e.help.sentence) + (e.derived ? ' <span class="chip">derivada</span>' : '') + (e.technology ? ' <span class="chip">' + escH(e.technology) + '</span>' : '');
     let h = '<h2>' + escH(n.name) + '</h2><div class="kind">' + escH(n.c4Label || n.typeLabel) + (n.c4Label && n.typeLabel ? ' · ArchiMate ' + escH(n.typeLabel) : '') + '</div>';
     if (n.inferred) h += '<p class="warn">⚠︎ Inferido a partir de texto livre: confirme.</p>';
     if (n.status && n.status !== 'active') h += '<p class="warn">' + escH({ draft: 'Rascunho: em discussão.', planned: 'Planejado: ainda não existe.', deprecated: 'Em desativação.', retired: 'Desativado.' }[n.status] || n.status) + '</p>';
     if (n.statusReason) h += '<p style="color:var(--muted)">Motivo: ' + escH(n.statusReason) + '</p>';
+    if (n.change) h += '<p class="warn">' + escH({ added: 'Novo neste delta.', changed: 'Alterado por este delta.', removed: 'Removido por este delta: sai da base junto com o que o plano lista.', retired: 'Desativado por este delta.' }[n.change]) + '</p>';
+    if (n.changeFields && n.changeFields.length) h += '<h3>Mudanças</h3><ul>' + n.changeFields.map(c => '<li><b>' + escH(c.field) + '</b>: ' + escH(fmt(c.before)) + ' → ' + escH(fmt(c.after)) + '</li>').join('') + '</ul>';
+    if (n.pending && n.pending.length) h += '<h3>Decisões pendentes</h3><ul>' + n.pending.map(q => '<li>[' + q.n + '] ' + escH(q.question) + (q.assumed ? ' <span class="chip">a prévia assume: ' + escH(q.assumed) + '</span>' : '') + '</li>').join('') + '</ul>';
     if (n.description) h += '<p>' + escH(n.description) + '</p>';
     h += '<dl>';
     if (n.technology) h += '<dt>Tecnologia</dt><dd>' + escH(n.technology) + '</dd>';

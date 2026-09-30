@@ -5,6 +5,7 @@ import { normalizeModel } from '../scripts/lib/model.mjs';
 import { resolveView } from '../scripts/lib/query.mjs';
 import { layoutView, legibility, layoutQuality, AM_STYLES } from '../scripts/lib/layout.mjs';
 import { renderHtml } from '../scripts/lib/render.mjs';
+import { previewModel, annotateView } from '../scripts/lib/preview.mjs';
 
 const raw = () => JSON.parse(readFileSync(new URL('./fixtures/shop.json', import.meta.url)));
 test('layout assigns absolute coordinates to every node and edge', async () => {
@@ -181,4 +182,27 @@ test('draft database node keeps its rim displaced with the shape and focus highl
   const html = renderHtml({ title: 't', views: [await layoutView(resolveView(m, { key: 'c', notation: 'c4', level: 'container', scope: 'loja' }))] });
   assert.match(html, /<path class="rim" filter="url\(#v0-sk1\)"/);
   assert.match(html, /\.node\.sketchy\.focus \.shape,\.node\.sketchy\.anchor \.shape\{stroke:var\(--focus\)/);
+});
+
+test('preview marks, banner and drawer data are rendered; a normal render has none of them', async () => {
+  const d = { 'archlens-delta': '1.0', source: { kind: 'prompt', ref: 'r' },
+    model: { elements: [{ id: 'loja.worker', type: 'c4:container', name: 'Worker', parent: 'loja' }, { id: 'loja.web', type: 'c4:container', technology: 'Remix' }] },
+    ops: [{ op: 'remove', id: 'loja.db' }] };
+  const p = previewModel(raw(), { delta: d });
+  const v = annotateView(resolveView(normalizeModel(p.raw), { key: 'c', notation: 'c4', level: 'container', scope: 'loja' }, { keep: p.keep }), p);
+  const html = renderHtml({ title: 't', views: [await layoutView(v)], preview: { label: 'delta de teste' } });
+  assert.match(html, /<div class="preview-banner" role="status">PRÉVIA · não é a base oficial — delta de teste<\/div>/);
+  assert.match(html, /<body class="preview">/);
+  assert.match(html, /class="node c4 [^"]*sketchy ch-added"/);
+  assert.match(html, /class="node c4 [^"]*ch-changed pending"/);
+  assert.match(html, /class="node c4 [^"]*ch-removed pending"/);
+  assert.match(html, /<g class="mark m-pending">/);
+  assert.match(html, /<g class="strike">/);
+  assert.match(html, /class="edge [^"]*ch-removed"/);
+  assert.match(html, /mudanças da prévia/);
+  const data = JSON.parse(html.match(/<script id="archlens-data" type="application\/json">([\s\S]*?)<\/script>/)[1]);
+  assert.deepEqual(data.views[0].nodes['loja.web'].changeFields, [{ field: 'technology', before: 'Next.js', after: 'Remix' }]);
+  assert.equal(data.views[0].nodes['loja.db'].pending[0].assumed, 'yes');
+  const plain = renderHtml({ title: 't', views: [await layoutView(resolveView(normalizeModel(raw()), { key: 'c', notation: 'c4', level: 'container', scope: 'loja' }))] });
+  assert.doesNotMatch(plain, /<div class="preview-banner"|<body class="preview"|<g class="mark /);
 });
