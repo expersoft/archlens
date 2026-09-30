@@ -167,3 +167,19 @@ test('resolve --delta prints the annotated IR; a preview of a missing base shows
   assert.deepEqual(ir.nodes.map(n => n.change).sort(), ['added', 'added']);
   assert.ok(!existsSync(join(dir, 'ARCHITECTURE.md')));
 });
+
+test('views --delta --json prints parseable JSON only', () => {
+  const dir = setup();
+  writeFileSync(join(dir, 'd.json'), JSON.stringify(previewDelta));
+  const r = run(['views', 'ARCHITECTURE.md', '--delta', 'd.json', '--json'], dir);
+  assert.equal(r.status, 0, r.stderr);
+  assert.ok(Array.isArray(JSON.parse(r.stdout).defined));
+});
+
+test('a preview command without the base file argument fails cleanly', () => {
+  const dir = setup();
+  writeFileSync(join(dir, 'd.json'), JSON.stringify(previewDelta));
+  const r = run(['build', '--delta', 'd.json'], dir);
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /informe o arquivo da base/);
+});

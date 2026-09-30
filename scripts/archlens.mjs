@@ -211,8 +211,9 @@ async function main() {
   const [cmd, file] = args._;
   if (!cmd || args.help || cmd === 'help') { console.log(HELP); return; }
   const previewing = ['render', 'deliver', 'build', 'resolve', 'views'].includes(cmd) && (args.delta || args.plan);
+  if (previewing && !file) fail('informe o arquivo da base (ARCHITECTURE.md), mesmo que ainda não exista');
   const preview = previewing ? loadPreview(file, args) : null;
-  if (preview && cmd !== 'resolve') console.log(`prévia de ${preview.label}`);
+  if (preview && cmd !== 'resolve' && !args.json) console.log(`prévia de ${preview.label}`);
   const load = () => (preview ? preview.raw : loadRaw(file));
 
   switch (cmd) {
