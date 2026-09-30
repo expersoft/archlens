@@ -206,6 +206,7 @@ test('preview marks, banner and drawer data are rendered; a normal render has no
   assert.deepEqual(data.views[0].nodes['loja.db'].pending[0].options, ['yes', 'no']);
   assert.match(html, /sai: 'sai'|removed: 'sai'/);
   assert.match(html, /opções: /);
+  assert.match(html, /\.node\.c4 \.mark text/);
   const plain = renderHtml({ title: 't', views: [await layoutView(resolveView(normalizeModel(raw()), { key: 'c', notation: 'c4', level: 'container', scope: 'loja' }))] });
   assert.doesNotMatch(plain, /<div class="preview-banner"|<body class="preview"|<g class="mark /);
 });

@@ -92,7 +92,7 @@ const MARK = { added: '+', changed: '~', removed: '−', retired: '−' };
 const changeClass = n => `${n.change ? ` ch-${n.change}` : ''}${n.pending?.length ? ' pending' : ''}`;
 
 /** Preview decorations over a node: sketch outline (changed), sketch strike (removed/retired), corner markers. */
-function decorations(n, prefix) {
+function decorations(n, prefix, side = 'right') {
   const { x, y, w, h } = n;
   let out = '';
   if (n.change === 'changed') {
@@ -102,10 +102,11 @@ function decorations(n, prefix) {
     out += `<g class="strike"><line x1="${f(x + 4)}" y1="${f(y + 4)}" x2="${f(x + w - 4)}" y2="${f(y + h - 4)}" filter="url(#${prefix}-sk1)"/>`
       + `<line x1="${f(x + 4)}" y1="${f(y + h - 4)}" x2="${f(x + w - 4)}" y2="${f(y + 4)}" filter="url(#${prefix}-sk2)"/></g>`;
   }
-  const mark = (cls, cx, glyph) => `<g class="mark ${cls}"><circle cx="${f(cx)}" cy="${f(y + 2)}" r="14"/>`
-    + `<text x="${f(cx)}" y="${f(y + 3)}" font-size="19" font-weight="700" text-anchor="middle" dominant-baseline="middle">${glyph}</text></g>`;
-  if (n.change) out += mark(`m-${n.change}`, x + w - 2, MARK[n.change]);
-  if (n.pending?.length) out += mark('m-pending', x + w - (n.change ? 34 : 2), '?');
+  const mark = (cls, cx, glyph) => `<g class="mark ${cls}"><circle cx="${f(cx)}" cy="${f(y + 15)}" r="11"/>`
+    + `<text x="${f(cx)}" y="${f(y + 16)}" font-size="${glyph === '?' ? 15 : 16}" font-weight="700" text-anchor="middle" dominant-baseline="middle">${glyph}</text></g>`;
+  const at = k => (side === 'left' ? x + 15 + 26 * k : x + w - 15 - 26 * k);
+  if (n.change) out += mark(`m-${n.change}`, at(0), MARK[n.change]);
+  if (n.pending?.length) out += mark('m-pending', at(n.change ? 1 : 0), '?');
   return out;
 }
 
@@ -164,7 +165,7 @@ function amNode(n, i, prefix) {
     + (icon ? `<g class="icon" transform="translate(${f(x + w - 36)},${f(y + 8)})">${icon}</g>` : '')
     + textLines(n.lines.title, x + w / 2 - 6, nameTop, 17, 22, 'title', 650)
     + (n.distance !== null && n.distance !== undefined && !n.isAnchor ? `<text class="dist" x="${f(x + 10)}" y="${f(y + h - 8)}" font-size="15">${n.role === 'dependent' ? '↑' : n.role === 'supporter' ? '↓' : '↕'}${n.distance}</text>` : '')
-    + decorations(n, prefix) + '</g>';
+    + decorations(n, prefix, 'left') + '</g>';
 }
 
 function band(b, layers) {
@@ -427,6 +428,9 @@ body.presenting .stage{inset:0}
 .mark.m-removed text,.mark.m-retired text{fill:var(--removed)}
 .mark.m-pending circle{fill:var(--pending);stroke:var(--pending)}
 .mark.m-pending text{fill:#1a1a1a}
+.node .mark text,.node.c4 .mark text,.node.am .mark text{fill:var(--sketch-ink)}
+.node .mark.m-removed text,.node .mark.m-retired text,.node.c4 .mark.m-removed text,.node.c4 .mark.m-retired text,.node.am .mark.m-removed text,.node.am .mark.m-retired text{fill:var(--removed)}
+.node .mark.m-pending text,.node.c4 .mark.m-pending text,.node.am .mark.m-pending text{fill:#1a1a1a}
 .preview-banner{position:fixed;inset:var(--bar-h) 0 auto 0;height:32px;display:flex;align-items:center;justify-content:center;padding:0 16px;background:var(--pending);color:#1a1a1a;font-weight:600;font-size:14px;z-index:19;text-align:center}
 body.preview .stage{inset:calc(var(--bar-h) + 32px) 0 0 0}
 body.presenting .preview-banner{top:0}
