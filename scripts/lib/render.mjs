@@ -3,6 +3,7 @@ import { ELEMENT_TYPES, LAYER_LABELS, RELATIONSHIP_TYPES } from './registry.mjs'
 import { MIN_SCREEN_PX } from './layout.mjs';
 import { ICONS } from './icons.mjs';
 import { explainEdge, GLOSSARY } from './explain.mjs';
+import { sketchShape as handDrawn, sketchOutline, sketchStrike, sketchEdge } from './sketch.mjs';
 
 const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const f = n => Math.round(n * 10) / 10;
@@ -44,14 +45,6 @@ function markerDefs(prefix) {
     }
   }
   return `<defs>${out}</defs>`;
-}
-
-/** Hand-drawn look for drafts and preview changes: two displacement filters, applied to a doubled outline. */
-function sketchDefs(prefix) {
-  const flt = (id, freq, seed) => `<filter id="${prefix}-${id}" filterUnits="userSpaceOnUse" x="-10%" y="-10%" width="120%" height="120%">`
-    + `<feTurbulence type="fractalNoise" baseFrequency="${freq}" numOctaves="2" seed="${seed}" result="n"/>`
-    + `<feDisplacementMap in="SourceGraphic" in2="n" scale="5"/></filter>`;
-  return `<defs>${flt('sk1', 0.035, 7)}${flt('sk2', 0.04, 21)}</defs>`;
 }
 
 function roundedPolyline(pts, r = 12) {
@@ -98,14 +91,6 @@ function textLines(lines, cx, y, size, lh, cls, weight) {
 
 const statusClass = n => (n.status && n.status !== 'active' ? ` st-${n.status}` : '');
 const sketchy = n => n.status === 'draft' || n.change === 'added';
-/** The shape drawn twice through the sketch filters (the second copy is the thinner, offset stroke). */
-function sketchShape(shape, prefix) {
-  const rims = shape.match(/<path class="rim"[^>]*\/>/g) ?? [];
-  const body = rims.reduce((acc, r) => acc.replace(r, ''), shape);
-  const via = (cls, id) => body.replace(/<(path|rect|circle) class="shape"/g, `<$1 class="${cls}" filter="url(#${prefix}-${id})"`);
-  return via('shape', 'sk1') + via('shape2', 'sk2') + rims.map(r => r.replace('class="rim"', `class="rim" filter="url(#${prefix}-sk1)"`)).join('');
-}
-
 const MARK = { added: '+', changed: '~', removed: '−', retired: '−' };
 const changeClass = n => `${n.change ? ` ch-${n.change}` : ''}${n.pending?.length ? ' pending' : ''}`;
 
@@ -114,11 +99,10 @@ function decorations(n, prefix, side = 'right') {
   const { x, y, w, h } = n;
   let out = '';
   if (n.change === 'changed') {
-    out += `<rect class="ch-outline" x="${f(x - 7)}" y="${f(y - 7)}" width="${f(w + 14)}" height="${f(h + 14)}" rx="16" filter="url(#${prefix}-sk1)"/>`;
+    out += sketchOutline(x - 7, y - 7, w + 14, h + 14, 16, n.id);
   }
   if (n.change === 'removed' || n.change === 'retired') {
-    out += `<g class="strike"><line x1="${f(x + 4)}" y1="${f(y + 4)}" x2="${f(x + w - 4)}" y2="${f(y + h - 4)}" filter="url(#${prefix}-sk1)"/>`
-      + `<line x1="${f(x + 4)}" y1="${f(y + h - 4)}" x2="${f(x + w - 4)}" y2="${f(y + 4)}" filter="url(#${prefix}-sk2)"/></g>`;
+    out += `<g class="strike">${sketchStrike(x, y, w, h, n.id)}</g>`;
   }
   const mark = (cls, cx, glyph) => `<g class="mark ${cls}"><circle cx="${f(cx)}" cy="${f(y + 15)}" r="11"/>`
     + `<text x="${f(cx)}" y="${f(y + 16)}" font-size="${glyph === '?' ? 15 : 16}" font-weight="700" text-anchor="middle" dominant-baseline="middle">${glyph}</text></g>`;
@@ -147,7 +131,7 @@ function c4Node(n, i, prefix) {
   } else {
     shape = `<rect class="shape" x="${f(x)}" y="${f(y)}" width="${f(w)}" height="${f(h)}" rx="12"/>`;
   }
-  if (sketchy(n)) shape = sketchShape(shape, prefix);
+  if (sketchy(n)) shape = handDrawn(shape, n.id);
   const L = n.lines;
   const content = L.title.length * 25 + 6 + L.meta.length * 19 + (L.desc.length ? 10 + L.desc.length * 19 : 0);
   const top = y + n.headH + n.topH + (h - n.headH - n.topH - content) / 2 + (n.c4Kind === 'person' ? 4 : 0);
@@ -177,7 +161,7 @@ function amNode(n, i, prefix) {
   const nameTop = y + (h - n.lines.title.length * 22) / 2;
   const tip = `${n.name} — ${spec.label}${n.technology ? ` [${n.technology}]` : ''}${n.description ? `\n${n.description}` : ''}`;
   let shape = `<rect class="shape" x="${f(x)}" y="${f(y)}" width="${f(w)}" height="${f(h)}" rx="${f(rx)}"/>`;
-  if (sketchy(n)) shape = sketchShape(shape, prefix);
+  if (sketchy(n)) shape = handDrawn(shape, n.id);
   return `<g class="${cls}" data-node="${esc(n.id)}" data-distance="${n.distance ?? ''}" style="--i:${i}" tabindex="0" role="button" aria-label="${esc(tip)}">`
     + shape
     + (icon ? `<g class="icon" transform="translate(${f(x + w - 36)},${f(y + 8)})">${icon}</g>` : '')
@@ -227,7 +211,9 @@ function edge(e, prefix, showLabel) {
   const sketchLine = e.status === 'draft' || e.change === 'added' || e.change === 'changed';
   return `<g class="edge t-${e.type}${e.derived ? ' derived' : ''}${e.implicit ? ' implicit' : ''}${e.status === 'draft' || e.change === 'added' ? ' sketchy' : ''}${e.change ? ` ch-${e.change}` : ''}" data-edge="${esc(e.id)}" data-from="${esc(e.from)}" data-to="${esc(e.to)}"${e.step ? ` data-step="${e.step}"` : ''} aria-label="${esc(title)}">`
     + `<path class="hit" d="${d}"/>`
-    + `<path class="line" d="${d}"${sketchLine ? ` filter="url(#${prefix}-sk1)"` : ''}${dash ? ` stroke-dasharray="${dash}"` : ''}${m('start', start)}${m('end', end)}/>`
+    // Hand-drawn edges keep the plain line (invisible) for its arrowheads, with the sketch stroke on top.
+    + `<path class="line${sketchLine ? ' sk-under' : ''}" d="${d}"${dash ? ` stroke-dasharray="${dash}"` : ''}${m('start', start)}${m('end', end)}/>`
+    + (sketchLine ? sketchEdge(d, e.id) : '')
     + `<path class="flow" d="${d}"/>${label}${badge}</g>`;
 }
 
@@ -259,7 +245,7 @@ function legend(v) {
     if (v.edges.some(e => e.derived)) items.push(`<li>${relSample('serving', { derived: true })}<span><b>derivada</b> — via elementos ocultos</span></li>`);
   }
   if (v.nodes.some(n => n.status === 'draft') || v.edges.some(e => e.status === 'draft')) {
-    items.push(`<li><svg class="sample" viewBox="0 0 64 20" width="64" height="20" aria-hidden="true"><rect x="4" y="3" width="56" height="14" rx="3" fill="var(--c4-container)" fill-opacity=".22" stroke="var(--sketch-ink)" stroke-width="1.8" filter="url(#lg-sk1)"/></svg><span><b>rascunho</b> — em discussão (draft)</span></li>`);
+    items.push(`<li><svg class="sample sketch-sample" viewBox="0 0 64 20" width="64" height="20" aria-hidden="true">${handDrawn('<rect class="shape" x="4" y="3" width="56" height="14" rx="3"/>', 'legend')}</svg><span><b>rascunho</b> — em discussão (draft)</span></li>`);
   }
   if ([...v.nodes, ...v.edges].some(x => x.change || x.pending?.length)) {
     const markSample = (cls, glyph) => `<svg class="sample" viewBox="0 0 64 20" width="64" height="20" aria-hidden="true"><g class="mark ${cls}"><circle cx="32" cy="10" r="9"/><text x="32" y="11" font-size="13" font-weight="700" text-anchor="middle" dominant-baseline="middle">${glyph}</text></g></svg>`;
@@ -300,7 +286,7 @@ function viewSvg(v, idx) {
   const edges = v.edges.map(e => edge(e, prefix, showLabels)).join('');
   const nodes = v.nodes.map((n, i) => v.notation === 'c4' ? c4Node(n, i, prefix) : amNode(n, i, prefix)).join('');
   return `<svg class="diagram n-${v.notation}" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" data-w="${W}" data-h="${H}" role="img" aria-label="${esc(v.title)}" xmlns="http://www.w3.org/2000/svg">`
-    + markerDefs(prefix) + sketchDefs(prefix)
+    + markerDefs(prefix)
     + `<rect class="bgrect" x="0" y="0" width="${W}" height="${H}"/>`
     + `<g class="content">${parts.join('')}<g class="edges">${edges}</g><g class="nodes">${nodes}</g></g></svg>`;
 }
@@ -358,7 +344,7 @@ export function renderHtml({ title, subtitle = '', views, preview }) {
   </div>
 </header>
 ${preview ? `<div class="preview-banner" role="status">PRÉVIA · não é a base oficial — ${esc(preview.label)}</div>` : ''}
-<svg class="defs" width="0" height="0" aria-hidden="true" focusable="false">${markerDefs('lg')}${sketchDefs('lg')}</svg>
+<svg class="defs" width="0" height="0" aria-hidden="true" focusable="false">${markerDefs('lg')}</svg>
 <main class="stage">${sections}</main>
 <div class="hovercard" role="tooltip" hidden></div>
 <div class="caption" hidden></div>
@@ -438,15 +424,24 @@ body.presenting .stage{inset:0}
 .node.st-deprecated{opacity:.55}
 .node.st-deprecated .shape{stroke-dasharray:3 4}
 .node.st-planned .shape{stroke-dasharray:14 5;stroke-width:3}
-.node.sketchy .shape{fill-opacity:.22;stroke:var(--sketch-ink);stroke-width:2.2;stroke-dasharray:none}
-.node.sketchy .shape2{fill:none;stroke:var(--sketch-ink);stroke-width:1.3}
-.node.sketchy .rim{stroke:var(--sketch-ink)}
+.node.k-person{--sk:var(--c4-person)}.node.k-system{--sk:var(--c4-system)}.node.k-container{--sk:var(--c4-container)}.node.k-component{--sk:var(--c4-component)}.node.k-external{--sk:var(--c4-external)}
+.node.l-biz{--sk:var(--biz-s)}.node.l-app{--sk:var(--app-s)}.node.l-tech{--sk:var(--tech-s)}.node.l-mot{--sk:var(--mot-s)}.node.l-str{--sk:var(--str-s)}.node.l-impl{--sk:var(--impl-s)}.node.l-oth{--sk:var(--oth-s)}
+.node.sketchy .shape{fill-opacity:.05;stroke:none;stroke-dasharray:none}
+.node.sketchy .rim{stroke:none}
+.sk-fill,.sk-line,.sk-edge,.sk-strike,.ch-outline{fill:none;stroke-linecap:round;stroke-linejoin:round}
+.node.sketchy .sk-fill{stroke:var(--sk,var(--sketch-ink));stroke-width:1.4}
+.node.sketchy .sk-line{stroke:var(--sketch-ink);stroke-width:1.8}
 .node.c4.sketchy text,.node.am.sketchy text{fill:var(--sketch-ink)}
-.edge.sketchy .line{stroke:var(--sketch-ink)}
+.node.sketchy text{paint-order:stroke;stroke:var(--bg);stroke-width:4px;stroke-linejoin:round}
+.edge .line.sk-under{stroke-opacity:0}
+.edge .sk-edge{stroke:var(--sketch-ink);stroke-width:2}
+.dimming .node:not(.lit) .sk-fill,.dimming .node:not(.lit) .sk-line{opacity:.18}
+.dimming .edge.lit .sk-edge{stroke:var(--down);stroke-width:3}
+.sketch-sample .shape{fill:none;stroke:none}.sketch-sample .sk-fill{stroke:var(--c4-container);stroke-width:1}.sketch-sample .sk-line{stroke:var(--sketch-ink);stroke-width:1.4}
 .node.sketchy.focus .shape,.node.sketchy.anchor .shape{stroke:var(--focus);stroke-width:5}
 .node.ch-removed,.node.ch-retired,.edge.ch-removed{opacity:.5}
-.edge.ch-changed .line{stroke:var(--sketch-ink);stroke-width:3}
-.node .strike line{stroke:var(--removed);stroke-width:3}
+.edge.ch-changed .sk-edge{stroke-width:3}
+.node .sk-strike{stroke:var(--removed);stroke-width:3}
 .node .ch-outline{fill:none;stroke:var(--sketch-ink);stroke-width:2.2}
 .mark circle{fill:var(--panel);stroke:var(--sketch-ink);stroke-width:1.8}
 .mark text{fill:var(--sketch-ink)}

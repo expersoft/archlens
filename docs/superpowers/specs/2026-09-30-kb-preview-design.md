@@ -58,13 +58,16 @@ Comparação entre duas revisões já mergeadas da base; resolver a semelhança 
 
 ### Notação (C4 e ArchiMate)
 
-- Dois filtros SVG definidos uma vez por página: `feTurbulence` (`fractalNoise`, `baseFrequency` ≈ 0,035
-  e 0,04, `numOctaves` 2, sementes distintas) + `feDisplacementMap` (`scale` ≈ 5).
-- Classe **`sketch`** (esboço): preenchimento da cor do tipo com opacidade ≈ 0,22; contorno duplo — um traço
-  de 2px com o primeiro filtro e um de 1,2px levemente deslocado com o segundo —; texto na cor da borda.
-- Nó com `status: draft` → `sketch`, sem marcador. Relação `draft` → linha com o filtro de esboço.
-- Legenda da página: entrada "rascunho (draft)". Painel: "Rascunho: em discussão" + `statusReason`.
-- Exportação SVG/PNG carrega os `defs` dos filtros (verificado por teste).
+- **Revisado em 2026-10-01** (o filtro `feTurbulence` foi trocado após avaliação visual; opção B escolhida pelo
+  usuário): traço à mão gerado pelo **rough.js** 4.6.6 (MIT, vendorizado em `scripts/vendor/`), o mesmo motor do
+  modo *Sketch* do draw.io. Os caminhos SVG são gerados no build (sem script novo no navegador), com semente
+  derivada do id do elemento: o mesmo modelo produz sempre o mesmo traço.
+- Classe **`sketchy`**: preenchimento por **hachura** diagonal (`hachureGap` 7, ângulo −41°) na cor do tipo
+  (nível C4 ou camada ArchiMate), contorno duplo à mão em `--sketch-ink`, texto na cor da borda com halo
+  da cor de fundo. A forma original fica por baixo, quase transparente, para clique, foco e âncora.
+- Nó com `status: draft` → `sketchy`, sem marcador. Relação `draft` (ou nova/alterada na prévia) → linha à mão
+  sobre a linha original, que fica invisível mas mantém as pontas de seta.
+- Exportação SVG/PNG leva o traço junto (são caminhos comuns, sem filtros).
 - `planned` (tracejado largo) e `inferred` (tracejado curto) inalterados.
 
 ## 2. Motor da prévia
@@ -143,7 +146,7 @@ previewModel(baseRaw, { delta } | { plan }) → {
   bloqueado recusado; **prévia sem fantasmas ≡ resultado do apply** (mesmo delta, mesmas respostas); base de
   entrada não mutada.
 - `query` / `render`: `draft` visível por padrão; classes `ch-*`, `pending`, `st-draft` no HTML; fantasmas
-  visíveis com o filtro padrão; exportação contém os filtros SVG.
+  visíveis com o filtro padrão; o traço à mão é determinístico e não usa filtros SVG.
 - `cli`: `build --delta` não toca o `ARCHITECTURE.md`; `--delta` + `--plan` recusado; visão quebrada pulada
   com aviso.
 - `model` / `validate` / schemas: `draft` aceito.

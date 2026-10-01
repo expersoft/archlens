@@ -128,7 +128,7 @@ imprime só o JSON. Os comandos de prévia exigem o arquivo da base mesmo que el
 
 - Todo item tocado ganha a fonte do delta em `sources` (sem duplicar). O `.md` mostra a coluna **Fontes**
   (`P` prompt, `R` repo, `D` doc, `M` manual) e a seção **Fontes**.
-- `status`: `draft` (em discussão), `planned`, `active` (padrão), `deprecated`, `retired`. `draft` é desenhado em esboço. Visões escondem `retired` por padrão; use
+- `status`: `draft` (em discussão), `planned`, `active` (padrão), `deprecated`, `retired`. `draft` é desenhado em esboço à mão (hachura na cor do tipo e contorno duplo, como o modo Sketch do draw.io). Visões escondem `retired` por padrão; use
   `status` na view spec para as-is/to-be. O `validate` avisa `W_RETIRED_DEPENDENCY`.
 - Cada apply que muda algo acrescenta uma entrada em `changelog` (seção **Histórico** do `.md`). Aplicar o mesmo
   delta de novo não muda nada e não cria entrada: o apply imprime `= nada mudou; a base não foi regravada`.
