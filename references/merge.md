@@ -95,11 +95,40 @@ perguntas novas. As respostas do plano anterior entram pré-preenchidas (o relat
 | `E_PLAN_STALE` | a base mudou depois do plano (inclusive por já ter aplicado este plano) | gere o plano de novo |
 | `E_MERGE_INVALID` | o resultado com as respostas reais é inválido | reveja as respostas (ex.: `value:` com id inexistente) |
 
+## Pré-visualizando (antes do apply)
+
+```bash
+node scripts/archlens.mjs deliver ARCHITECTURE.md --delta delta.json --out prévia.html   # pendências no padrão do plano
+node scripts/archlens.mjs deliver ARCHITECTURE.md --plan plano.json --out prévia.html    # usa as respostas já dadas
+node scripts/archlens.mjs build ARCHITECTURE.md --delta delta.json                        # <delta>-preview.html; nunca o .md
+```
+
+A prévia roda o mesmo merge do plano e desenha a base com o delta aplicado:
+
+| Marcador | Significado | No painel |
+|---|---|---|
+| esboço + `+` | novo neste delta | o que o delta traz: nome, tipo, tecnologia |
+| contorno em esboço + `~` | alterado | antes → depois de cada campo |
+| esmaecido, riscado, `−` | removido ou `retired` (fantasma: continua visível com as relações que caem) | o que sai junto |
+| `?` amarelo | decisão pendente (no nó ou no rótulo da relação) | a pergunta, o que a prévia assumiu e as alternativas |
+| relação em esboço, mais grossa | relação alterada | "alterada" na lista de relações |
+
+Visões que o apply apagaria ou apararia (ex.: `scope` removido) continuam na prévia na forma da base, com o
+fantasma; o terminal avisa `visões afetadas pelo delta (somem ou mudam no apply): …`.
+
+Pendências assumem o padrão do plano: `take` em conflitos, `different` em duplicatas, `yes` em remoções. Plano
+bloqueado não tem prévia. Com as mesmas respostas, a prévia mostra exatamente o que o apply gravaria.
+
+Os marcadores ficam dentro do nó (canto superior direito em C4, esquerdo em ArchiMate). Elemento novo com
+`status: draft` mostra `+` na prévia; depois do merge, `draft` é desenhado em esboço, sem marcador. O painel lista as
+alternativas de cada decisão pendente e marca relações como "sai", "nova" ou "alterada". `views --delta … --json`
+imprime só o JSON. Os comandos de prévia exigem o arquivo da base mesmo que ele ainda não exista.
+
 ## Proveniência, ciclo de vida e histórico
 
 - Todo item tocado ganha a fonte do delta em `sources` (sem duplicar). O `.md` mostra a coluna **Fontes**
   (`P` prompt, `R` repo, `D` doc, `M` manual) e a seção **Fontes**.
-- `status`: `planned`, `active` (padrão), `deprecated`, `retired`. Visões escondem `retired` por padrão; use
+- `status`: `draft` (em discussão), `planned`, `active` (padrão), `deprecated`, `retired`. `draft` é desenhado em esboço à mão (hachura na cor do tipo e contorno duplo, como o modo Sketch do draw.io). Visões escondem `retired` por padrão; use
   `status` na view spec para as-is/to-be. O `validate` avisa `W_RETIRED_DEPENDENCY`.
 - Cada apply que muda algo acrescenta uma entrada em `changelog` (seção **Histórico** do `.md`). Aplicar o mesmo
   delta de novo não muda nada e não cria entrada: o apply imprime `= nada mudou; a base não foi regravada`.

@@ -5,6 +5,7 @@ import { normalizeModel } from '../scripts/lib/model.mjs';
 import { resolveView } from '../scripts/lib/query.mjs';
 import { layoutView, legibility, layoutQuality, AM_STYLES } from '../scripts/lib/layout.mjs';
 import { renderHtml } from '../scripts/lib/render.mjs';
+import { previewModel, annotateView } from '../scripts/lib/preview.mjs';
 
 const raw = () => JSON.parse(readFileSync(new URL('./fixtures/shop.json', import.meta.url)));
 test('layout assigns absolute coordinates to every node and edge', async () => {
@@ -150,4 +151,94 @@ test('render marks deprecated and planned nodes', async () => {
   assert.match(html, /class="node c4 k-external[^"]* st-deprecated"/);
   assert.match(html, /class="node am l-[^"]* st-planned"/);
   assert.match(html, /\.node\.st-deprecated\{/);
+});
+
+const nodeG = (html, id) => html.match(new RegExp(`<g class="node [^"]*"[^>]*data-node="${id.replace(/\./g, '\\.')}"[\\s\\S]*?</g>(?=<g class="node |</g></g></svg>)`))?.[0] ?? '';
+
+test('draft nodes and relationships are hand-drawn with rough.js (hachure + double outline), no SVG filters', async () => {
+  const r = raw();
+  r.model.elements.find(e => e.id === 'loja').children.find(c => c.id === 'loja.web').status = 'draft';
+  r.model.elements.find(e => e.id === 'venda').status = 'draft';
+  r.model.relationships.find(x => x.from === 'k8s').status = 'draft';
+  const m = normalizeModel(r);
+  const views = [
+    await layoutView(resolveView(m, { key: 'c', notation: 'c4', level: 'container', scope: 'loja' })),
+    await layoutView(resolveView(m, { key: 's', notation: 'archimate', viewpoint: 'layered', anchor: 'venda', traverse: { mode: 'supporters' } })),
+  ];
+  const html = renderHtml({ title: 't', views });
+  assert.doesNotMatch(html, /feDisplacementMap|class="shape2"/, 'the displacement filters are gone');
+  assert.match(html, /class="node c4 [^"]*st-draft sketchy"/);
+  const web = nodeG(html, 'loja.web');
+  assert.match(web, /<path class="sk-fill" d="M/);
+  assert.ok((web.match(/class="sk-line"/g) || []).length >= 1, 'hand-drawn outline');
+  assert.match(web, /<rect class="shape"/, 'the original shape stays underneath for hit-testing and focus');
+  assert.match(nodeG(html, 'venda'), /<path class="sk-fill" d="M/, 'ArchiMate drafts are hand-drawn too');
+  assert.match(html, /<g class="edge t-serving[^"]* sketchy"[\s\S]*?<path class="sk-edge" d="M/);
+  assert.match(html, /<b>rascunho<\/b>/);
+  assert.match(html, /--sketch-ink:/);
+  assert.match(html, /\.node\.sketchy text\{[^}]*paint-order:stroke/, 'text halo');
+  assert.equal(renderHtml({ title: 't', views }), html, 'deterministic: same model, same strokes');
+});
+
+test('every C4 shape can be hand-drawn: person, database (with rim) and queue', async () => {
+  const r = raw();
+  r.model.elements.find(e => e.id === 'cliente').status = 'draft';
+  const loja = r.model.elements.find(e => e.id === 'loja');
+  loja.children.find(c => c.id === 'loja.db').status = 'draft';
+  loja.children.push({ id: 'loja.fila', type: 'c4:container', name: 'Fila', tags: ['queue'], status: 'draft' });
+  r.model.relationships.push({ from: 'loja.web', to: 'loja.fila' });
+  const m = normalizeModel(r);
+  const html = renderHtml({ title: 't', views: [await layoutView(resolveView(m, { key: 'c', notation: 'c4', level: 'container', scope: 'loja' }))] });
+  for (const id of ['cliente', 'loja.db', 'loja.fila']) assert.match(nodeG(html, id), /<path class="sk-fill" d="M/, id);
+  assert.ok((nodeG(html, 'loja.db').match(/class="sk-line"/g) || []).length >= 2, 'body and rim outlines');
+  assert.ok((nodeG(html, 'cliente').match(/class="sk-line"/g) || []).length >= 2, 'head and body outlines');
+  assert.match(html, /\.node\.sketchy\.focus \.shape,\.node\.sketchy\.anchor \.shape\{stroke:var\(--focus\)/);
+});
+
+test('a render without drafts or preview has no hand-drawn strokes', async () => {
+  const html = renderHtml({ title: 't', views: [await layoutView(resolveView(normalizeModel(raw()), { key: 'c', notation: 'c4', level: 'container', scope: 'loja' }))] });
+  assert.doesNotMatch(html, /class="sk-(fill|line|edge)"/);
+});
+
+test('preview marks, banner and drawer data are rendered; a normal render has none of them', async () => {
+  const d = { 'archlens-delta': '1.0', source: { kind: 'prompt', ref: 'r' },
+    model: { elements: [{ id: 'loja.worker', type: 'c4:container', name: 'Worker', parent: 'loja' }, { id: 'loja.web', type: 'c4:container', technology: 'Remix' }] },
+    ops: [{ op: 'remove', id: 'loja.db' }] };
+  const p = previewModel(raw(), { delta: d });
+  const v = annotateView(resolveView(normalizeModel(p.raw), { key: 'c', notation: 'c4', level: 'container', scope: 'loja' }, { keep: p.keep }), p);
+  const html = renderHtml({ title: 't', views: [await layoutView(v)], preview: { label: 'delta de teste' } });
+  assert.match(html, /<div class="preview-banner" role="status">PRÉVIA · não é a base oficial — delta de teste<\/div>/);
+  assert.match(html, /<body class="preview">/);
+  assert.match(html, /class="node c4 [^"]*sketchy ch-added"/);
+  assert.match(html, /class="node c4 [^"]*ch-changed pending"/);
+  assert.match(html, /class="node c4 [^"]*ch-removed pending"/);
+  assert.match(html, /<g class="mark m-pending">/);
+  assert.match(html, /<g class="strike">/);
+  assert.match(html, /class="edge [^"]*ch-removed"/);
+  assert.match(html, /mudanças da prévia/);
+  const data = JSON.parse(html.match(/<script id="archlens-data" type="application\/json">([\s\S]*?)<\/script>/)[1]);
+  assert.deepEqual(data.views[0].nodes['loja.web'].changeFields, [{ field: 'technology', before: 'Next.js', after: 'Remix' }]);
+  assert.equal(data.views[0].nodes['loja.db'].pending[0].assumed, 'yes');
+  assert.deepEqual(data.views[0].nodes['loja.db'].pending[0].options, ['yes', 'no']);
+  assert.match(html, /sai: 'sai'|removed: 'sai'/);
+  assert.match(html, /opções: /);
+  assert.match(html, /\.node\.c4 \.mark text/);
+  const plain = renderHtml({ title: 't', views: [await layoutView(resolveView(normalizeModel(raw()), { key: 'c', notation: 'c4', level: 'container', scope: 'loja' }))] });
+  assert.doesNotMatch(plain, /<div class="preview-banner"|<body class="preview"|<g class="mark /);
+});
+
+test('a relationship-only change and its open question are visible on the edge, in the legend and in the drawer', async () => {
+  const d = { 'archlens-delta': '1.0', source: { kind: 'prompt', ref: 'r' },
+    model: { relationships: [{ from: 'cliente', to: 'loja.web', type: 'uses', description: 'Compra online' }] } };
+  const p = previewModel(raw(), { delta: d });
+  const v = annotateView(resolveView(normalizeModel(p.raw), { key: 'c', notation: 'c4', level: 'container', scope: 'loja' }, { keep: p.keep }), p);
+  assert.ok(v.nodes.every(n => !n.change && !n.pending), 'no node changes');
+  const html = renderHtml({ title: 't', views: [await layoutView(v)], preview: { label: 'x' } });
+  const g = html.match(/<g class="edge [^"]*ch-changed"[\s\S]*?<path class="flow"[^>]*\/>(?:<g class="elabel[\s\S]*?<\/g>)?(?:<g class="mark[\s\S]*?<\/g>)?/)?.[0];
+  assert.ok(g, 'edge marked ch-changed');
+  assert.match(g, /<path class="sk-edge" d="M/);
+  assert.match(g, /<g class="mark m-pending"><circle [^>]*r="10"\/>/);
+  assert.match(html, /\.edge\.ch-changed \.sk-edge\{stroke-width:3\}/);
+  assert.match(html.slice(html.indexOf('<section class="view"')), /mudanças da prévia/);
+  assert.match(html, /e\.pending && e\.pending\.length/, 'the drawer lists the edge questions');
 });

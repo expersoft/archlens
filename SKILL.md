@@ -33,6 +33,10 @@ Requer Node ≥ 18. A checagem visual (`deliver`/`build`) usa `playwright-core` 
    Sempre preencha `source` (`kind` + `ref`) e `summary`. Reutilize os ids da base.
 4. **Planeje**: `archlens merge ARCHITECTURE.md delta.json --plan plano.json`. Mostre o resumo ao usuário.
    Se o plano vier **bloqueado**, corrija o delta e planeje de novo.
+   **Mostre a prévia** antes das perguntas: `archlens deliver ARCHITECTURE.md --delta delta.json --out prévia.html`
+   (ou `--plan plano.json` depois de algumas respostas). Novo aparece em esboço com `+`, alterado com `~`,
+   removido riscado com `−`, decisão pendente com `?`. A prévia nunca grava a base. O arquivo da base é obrigatório
+   (mesmo que ainda não exista); com `--plan`, se a base mudou desde o plano, a CLI avisa e usa a base atual.
 5. **Pergunte, uma decisão por vez**: cada item com `resolution: null` (conflito, possível duplicata, remoção,
    `retired`), com a sua recomendação. **Comece pelas possíveis duplicatas.** Se alguma for `same`, grave as
    respostas e gere o plano de novo reaproveitando-as:
@@ -67,7 +71,9 @@ Requer Node ≥ 18. A checagem visual (`deliver`/`build`) usa `playwright-core` 
 | matriz de dependência / impacto do componente A | `{notation:"archimate", viewpoint:"impact", anchor:"A"}` (traz a matriz, tecla M) |
 | negócio × tecnologia sem a camada do meio | `{viewpoint:"custom", layers:["business","technology"], anchor:"P", derive:true}` |
 | como está hoje (as-is) | acrescente `status:["active","deprecated"]` |
-| como fica depois das mudanças (to-be) | acrescente `status:["planned","active"]` |
+| como fica depois das mudanças (to-be) | acrescente `status:["draft","planned","active"]` (sem `draft` para só o decidido) |
+| como fica se aplicarmos este delta? | `deliver ARCHITECTURE.md --delta delta.json` (prévia, nada é gravado) |
+| e se eu responder X nesta pergunta? | responda no plano e rode `deliver ARCHITECTURE.md --plan plano.json` |
 
 **Estilo do layout ArchiMate** (`layout.style`, detalhes em `references/views.md`): sem pedido explícito,
 omita-o (`auto` escolhe o mais legível). Se o prompt pedir, grave na visão:
@@ -96,6 +102,8 @@ recorta com scope, focus, depth, anchor, traverse, layers, granularity, collapse
 
 ## Erros comuns
 
+- **Aplicar para "ver como fica"**: use a prévia (`--delta` / `--plan`). O apply grava a base e entra no histórico.
+- **`draft` × `planned`**: `draft` é "em discussão"; `planned` é "decidido, ainda não existe".
 - **Direção do `uses`**: em C4 é consumidor → provedor (`cliente uses web`). A CLI converte para
   ArchiMate (`web serving cliente`). Não inverta à mão.
 - **Camadas desconectadas**: travessias ArchiMate só cruzam camadas por relações. Ligue containers C4

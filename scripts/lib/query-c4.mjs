@@ -74,6 +74,7 @@ export function resolveC4(model, spec) {
     e.count++;
     if (rel) {
       e.relIds.push(rel.id);
+      (e.statuses ??= []).push(rel.status ?? 'active');
       if (rel.description && !e.descriptions.includes(rel.description)) e.descriptions.push(rel.description);
       if (rel.technology && !e.technologies.includes(rel.technology)) e.technologies.push(rel.technology);
     }
@@ -81,10 +82,17 @@ export function resolveC4(model, spec) {
   };
 
   if (level === 'dynamic') {
+    // The nth step over the same pair uses the nth parallel relationship (e.g. POST /balances, then /operations).
+    const seenPairs = new Map();
     (spec.steps || []).forEach((s, i) => {
-      const rel = s.rel ? model.relationships.find(r => r.id === s.rel) : model.relationships.find(r => {
-        const o = c4Orientation(r); return o && o.from === s.from && o.to === s.to;
-      });
+      let rel = null;
+      if (s.rel) rel = model.relationships.find(r => r.id === s.rel);
+      else {
+        const pair = model.relationships.filter(r => { const o = c4Orientation(r); return o && o.from === s.from && o.to === s.to; });
+        const nth = seenPairs.get(`${s.from}>${s.to}`) ?? 0;
+        seenPairs.set(`${s.from}>${s.to}`, nth + 1);
+        rel = pair[nth] ?? pair[0];
+      }
       const from = s.from ?? (rel && c4Orientation(rel).from), to = s.to ?? (rel && c4Orientation(rel).to);
       for (const x of [from, to]) if (!model.elements.has(x)) throw viewError('E_UNKNOWN_REF', `passo ${i + 1} referencia "${x}", que não existe`, 'use ids de elementos ou "rel" com o id de um relacionamento');
       const a = rep(from), b = rep(to);
@@ -155,6 +163,7 @@ export function resolveC4(model, spec) {
     id: e.id, from: e.from, to: e.to, type: 'uses',
     label: e.descriptions.length > 2 ? `${e.descriptions.length} interações: ${e.descriptions.join('; ')}` : e.descriptions.join('; '),
     technology: e.technologies.join(', '),
+    status: e.statuses?.length && e.statuses.every(s => s === 'draft') ? 'draft' : 'active',
     count: e.count, relIds: e.relIds, ...(e.step ? { step: e.step } : {}),
   }));
 
@@ -174,7 +183,7 @@ export function resolveC4(model, spec) {
       parentName: !internal.has(id) && !boundaryOf.has(id) && parent && k !== 'person' && k !== 'softwareSystem' ? parent.name : null,
       isScope: scope?.id === id,
       isFocus: focus.has(id),
-      inferred: !!el.inferred, status: el.status ?? 'active',
+      inferred: !!el.inferred, status: el.status ?? 'active', statusReason: el.statusReason,
     };
   });
 

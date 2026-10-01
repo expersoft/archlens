@@ -67,7 +67,7 @@ test('generateDoc without lifecycle data keeps the old tables', () => {
 test('schemas describe the new fields', async () => {
   const { buildSchemas } = await import('../scripts/gen-schemas.mjs');
   const s = buildSchemas();
-  assert.deepEqual(s.model.$defs.element.properties.status.enum, ['planned', 'active', 'deprecated', 'retired']);
+  assert.deepEqual(s.model.$defs.element.properties.status.enum, ['draft', 'planned', 'active', 'deprecated', 'retired']);
   assert.ok(s.model.$defs.source.properties.kind.enum.includes('repo'));
   assert.ok(s.model.properties.changelog);
   assert.ok(s.view.properties.status);

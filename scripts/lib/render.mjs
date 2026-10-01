@@ -3,6 +3,7 @@ import { ELEMENT_TYPES, LAYER_LABELS, RELATIONSHIP_TYPES } from './registry.mjs'
 import { MIN_SCREEN_PX } from './layout.mjs';
 import { ICONS } from './icons.mjs';
 import { explainEdge, GLOSSARY } from './explain.mjs';
+import { sketchShape as handDrawn, sketchOutline, sketchStrike, sketchEdge } from './sketch.mjs';
 
 const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const f = n => Math.round(n * 10) / 10;
@@ -60,6 +61,24 @@ function roundedPolyline(pts, r = 12) {
   const last = pts[pts.length - 1];
   return d + ` L${f(last.x)},${f(last.y)}`;
 }
+/** The point half-way along an edge (by length for polylines, t=.5 for curves). */
+function pathMiddle(e) {
+  const p = e.points;
+  if (e.curve) {
+    const b = (a, c1, c2, z) => (a + 3 * c1 + 3 * c2 + z) / 8;
+    return { x: b(p[0].x, p[1].x, p[2].x, p[3].x), y: b(p[0].y, p[1].y, p[2].y, p[3].y) };
+  }
+  const seg = p.slice(1).map((q, i) => Math.hypot(q.x - p[i].x, q.y - p[i].y));
+  let left = seg.reduce((a, b) => a + b, 0) / 2;
+  for (let i = 0; i < seg.length; i++) {
+    if (left <= seg[i] && seg[i] > 0) {
+      const k = left / seg[i];
+      return { x: p[i].x + (p[i + 1].x - p[i].x) * k, y: p[i].y + (p[i + 1].y - p[i].y) * k };
+    }
+    left -= seg[i];
+  }
+  return p[0];
+}
 const edgePath = e => e.curve
   ? `M${f(e.points[0].x)},${f(e.points[0].y)} C${f(e.points[1].x)},${f(e.points[1].y)} ${f(e.points[2].x)},${f(e.points[2].y)} ${f(e.points[3].x)},${f(e.points[3].y)}`
   : roundedPolyline(e.points);
@@ -71,11 +90,32 @@ function textLines(lines, cx, y, size, lh, cls, weight) {
 // ------------------------------------------------------------------ C4 shapes
 
 const statusClass = n => (n.status && n.status !== 'active' ? ` st-${n.status}` : '');
+const sketchy = n => n.status === 'draft' || n.change === 'added';
+const MARK = { added: '+', changed: '~', removed: '−', retired: '−' };
+const changeClass = n => `${n.change ? ` ch-${n.change}` : ''}${n.pending?.length ? ' pending' : ''}`;
 
-function c4Node(n, i) {
+/** Preview decorations over a node: sketch outline (changed), sketch strike (removed/retired), corner markers. */
+function decorations(n, prefix, side = 'right') {
+  const { x, y, w, h } = n;
+  let out = '';
+  if (n.change === 'changed') {
+    out += sketchOutline(x - 7, y - 7, w + 14, h + 14, 16, n.id);
+  }
+  if (n.change === 'removed' || n.change === 'retired') {
+    out += `<g class="strike">${sketchStrike(x, y, w, h, n.id)}</g>`;
+  }
+  const mark = (cls, cx, glyph) => `<g class="mark ${cls}"><circle cx="${f(cx)}" cy="${f(y + 15)}" r="11"/>`
+    + `<text x="${f(cx)}" y="${f(y + 16)}" font-size="${glyph === '?' ? 15 : 16}" font-weight="700" text-anchor="middle" dominant-baseline="middle">${glyph}</text></g>`;
+  const at = k => (side === 'left' ? x + 15 + 26 * k : x + w - 15 - 26 * k);
+  if (n.change) out += mark(`m-${n.change}`, at(0), MARK[n.change]);
+  if (n.pending?.length) out += mark('m-pending', at(n.change ? 1 : 0), '?');
+  return out;
+}
+
+function c4Node(n, i, prefix) {
   const { x, y, w, h } = n;
   const kind = n.external ? 'external' : n.c4Kind === 'softwareSystem' ? 'system' : n.c4Kind;
-  const cls = `node c4 k-${kind}${n.isFocus ? ' focus' : ''}${n.isScope ? ' scope' : ''}${n.inferred ? ' inferred' : ''}${statusClass(n)}`;
+  const cls = `node c4 k-${kind}${n.isFocus ? ' focus' : ''}${n.isScope ? ' scope' : ''}${n.inferred ? ' inferred' : ''}${statusClass(n)}${sketchy(n) ? ' sketchy' : ''}${changeClass(n)}`;
   let shape;
   if (n.c4Kind === 'person') {
     shape = `<circle class="shape" cx="${f(x + w / 2)}" cy="${f(y + 30)}" r="28"/><rect class="shape" x="${f(x)}" y="${f(y + 50)}" width="${f(w)}" height="${f(h - 50)}" rx="34"/>`;
@@ -91,6 +131,7 @@ function c4Node(n, i) {
   } else {
     shape = `<rect class="shape" x="${f(x)}" y="${f(y)}" width="${f(w)}" height="${f(h)}" rx="12"/>`;
   }
+  if (sketchy(n)) shape = handDrawn(shape, n.id, { w, h });
   const L = n.lines;
   const content = L.title.length * 25 + 6 + L.meta.length * 19 + (L.desc.length ? 10 + L.desc.length * 19 : 0);
   const top = y + n.headH + n.topH + (h - n.headH - n.topH - content) / 2 + (n.c4Kind === 'person' ? 4 : 0);
@@ -99,7 +140,7 @@ function c4Node(n, i) {
   t += textLines(L.meta, cx, top + L.title.length * 25 + 6, 15, 19, 'meta');
   if (L.desc.length) t += textLines(L.desc, cx, top + L.title.length * 25 + 6 + L.meta.length * 19 + 10, 15, 19, 'desc');
   const tip = `${n.name} [${n.c4Label}${n.technology ? `: ${n.technology}` : ''}]${n.description ? `\n${n.description}` : ''}`;
-  return `<g class="${cls}" data-node="${esc(n.id)}" style="--i:${i}" tabindex="0" role="button" aria-label="${esc(tip)}">${shape}${t}</g>`;
+  return `<g class="${cls}" data-node="${esc(n.id)}" style="--i:${i}" tabindex="0" role="button" aria-label="${esc(tip)}">${shape}${t}${decorations(n, prefix)}</g>`;
 }
 
 function c4Boundary(b) {
@@ -110,21 +151,23 @@ function c4Boundary(b) {
 
 // ------------------------------------------------------------------ ArchiMate shapes
 
-function amNode(n, i) {
+function amNode(n, i, prefix) {
   const { x, y, w, h } = n;
   const spec = ELEMENT_TYPES[n.type];
   const lv = LAYER_VAR[n.layer];
   const rx = spec.icon === 'service' ? h / 2 : spec.aspect === 'behavior' ? 14 : spec.icon === 'value-stream' ? 4 : 3;
-  const cls = `node am l-${lv}${n.isAnchor ? ' anchor' : ''}${n.role ? ` r-${n.role}` : ''}${n.inferred ? ' inferred' : ''}${statusClass(n)}`;
+  const cls = `node am l-${lv}${n.isAnchor ? ' anchor' : ''}${n.role ? ` r-${n.role}` : ''}${n.inferred ? ' inferred' : ''}${statusClass(n)}${sketchy(n) ? ' sketchy' : ''}${changeClass(n)}`;
   const icon = ICONS[spec.icon] ?? '';
   const nameTop = y + (h - n.lines.title.length * 22) / 2;
   const tip = `${n.name} — ${spec.label}${n.technology ? ` [${n.technology}]` : ''}${n.description ? `\n${n.description}` : ''}`;
+  let shape = `<rect class="shape" x="${f(x)}" y="${f(y)}" width="${f(w)}" height="${f(h)}" rx="${f(rx)}"/>`;
+  if (sketchy(n)) shape = handDrawn(shape, n.id, { w, h });
   return `<g class="${cls}" data-node="${esc(n.id)}" data-distance="${n.distance ?? ''}" style="--i:${i}" tabindex="0" role="button" aria-label="${esc(tip)}">`
-    + `<rect class="shape" x="${f(x)}" y="${f(y)}" width="${f(w)}" height="${f(h)}" rx="${f(rx)}"/>`
+    + shape
     + (icon ? `<g class="icon" transform="translate(${f(x + w - 36)},${f(y + 8)})">${icon}</g>` : '')
     + textLines(n.lines.title, x + w / 2 - 6, nameTop, 17, 22, 'title', 650)
     + (n.distance !== null && n.distance !== undefined && !n.isAnchor ? `<text class="dist" x="${f(x + 10)}" y="${f(y + h - 8)}" font-size="15">${n.role === 'dependent' ? '↑' : n.role === 'supporter' ? '↓' : '↕'}${n.distance}</text>` : '')
-    + '</g>';
+    + decorations(n, prefix, 'left') + '</g>';
 }
 
 function band(b, layers) {
@@ -150,19 +193,28 @@ function edge(e, prefix, showLabel) {
   const m = (which, name) => name ? ` marker-${which}="url(#${prefix}-${name}-base)" data-m${which[0]}="${name}"` : '';
   const title = `${e.derived ? 'derivado: ' : ''}${e.type}${e.label ? ` — ${e.label}` : ''}${e.technology ? ` [${e.technology}]` : ''}${e.via?.length ? `\nvia ${e.via.join(' → ')}` : ''}`;
   let label = '';
+  let badgeAt = null;
   if (e.labelBox && e.labelLines?.length) {
     const lh = 19;
     const w = Math.max(...e.labelLines.map(l => l.length)) * 15 * 0.56 + 14;
     const h = e.labelLines.length * lh + 8;
     const cx = e.curve ? e.labelBox.x : e.labelBox.x + e.labelBox.w / 2;
     const cy = e.curve ? e.labelBox.y - h / 2 : e.labelBox.y;
+    badgeAt = { x: cx, y: cy + h / 2 };
     label = `<g class="elabel${showLabel ? '' : ' on-demand'}"><rect x="${f(cx - w / 2)}" y="${f(cy)}" width="${f(w)}" height="${f(h)}" rx="6"/>`
       + textLines(e.labelLines, cx, cy + 5, 15, lh, 'etext') + '</g>';
   }
-  return `<g class="edge t-${e.type}${e.derived ? ' derived' : ''}${e.implicit ? ' implicit' : ''}" data-edge="${esc(e.id)}" data-from="${esc(e.from)}" data-to="${esc(e.to)}"${e.step ? ` data-step="${e.step}"` : ''} aria-label="${esc(title)}">`
+  // An open question on the relationship: a "?" badge on the label, or mid-way along the line.
+  const at = e.pending?.length ? badgeAt ?? pathMiddle(e) : null;
+  const badge = at ? `<g class="mark m-pending"><circle cx="${f(at.x)}" cy="${f(at.y)}" r="10"/>`
+    + `<text x="${f(at.x)}" y="${f(at.y + 1)}" font-size="14" font-weight="700" text-anchor="middle" dominant-baseline="middle">?</text></g>` : '';
+  const sketchLine = e.status === 'draft' || e.change === 'added' || e.change === 'changed';
+  return `<g class="edge t-${e.type}${e.derived ? ' derived' : ''}${e.implicit ? ' implicit' : ''}${e.status === 'draft' || e.change === 'added' ? ' sketchy' : ''}${e.change ? ` ch-${e.change}` : ''}" data-edge="${esc(e.id)}" data-from="${esc(e.from)}" data-to="${esc(e.to)}"${e.step ? ` data-step="${e.step}"` : ''} aria-label="${esc(title)}">`
     + `<path class="hit" d="${d}"/>`
-    + `<path class="line" d="${d}"${dash ? ` stroke-dasharray="${dash}"` : ''}${m('start', start)}${m('end', end)}/>`
-    + `<path class="flow" d="${d}"/>${label}</g>`;
+    // Hand-drawn edges keep the plain line (invisible) for its arrowheads, with the sketch stroke on top.
+    + `<path class="line${sketchLine ? ' sk-under' : ''}" d="${d}"${dash ? ` stroke-dasharray="${dash}"` : ''}${m('start', start)}${m('end', end)}/>`
+    + (sketchLine ? sketchEdge(d, e.id) : '')
+    + `<path class="flow" d="${d}"/>${label}${badge}</g>`;
 }
 
 // ------------------------------------------------------------------ legend
@@ -191,6 +243,17 @@ function legend(v) {
       items.push(`<li>${relSample(t)}<span><b>${esc(g?.label ?? t)}</b> — ${esc(g?.reading.split(':')[1]?.split('.')[0]?.trim() ?? '')}</span></li>`);
     }
     if (v.edges.some(e => e.derived)) items.push(`<li>${relSample('serving', { derived: true })}<span><b>derivada</b> — via elementos ocultos</span></li>`);
+  }
+  if (v.nodes.some(n => n.status === 'draft') || v.edges.some(e => e.status === 'draft')) {
+    items.push(`<li><svg class="sample sketch-sample" viewBox="0 0 64 20" width="64" height="20" aria-hidden="true">${handDrawn('<rect class="shape" x="4" y="3" width="56" height="14" rx="3"/>', 'legend', { w: 56, h: 14 })}</svg><span><b>rascunho</b> — em discussão (draft)</span></li>`);
+  }
+  if ([...v.nodes, ...v.edges].some(x => x.change || x.pending?.length)) {
+    const markSample = (cls, glyph) => `<svg class="sample" viewBox="0 0 64 20" width="64" height="20" aria-hidden="true"><g class="mark ${cls}"><circle cx="32" cy="10" r="9"/><text x="32" y="11" font-size="13" font-weight="700" text-anchor="middle" dominant-baseline="middle">${glyph}</text></g></svg>`;
+    items.push('<li><b>mudanças da prévia</b></li>',
+      `<li>${markSample('m-added', '+')}<span>novo neste delta (em esboço)</span></li>`,
+      `<li>${markSample('m-changed', '~')}<span>alterado (contorno em esboço)</span></li>`,
+      `<li>${markSample('m-removed', '−')}<span>removido ou desativado (riscado)</span></li>`,
+      `<li>${markSample('m-pending', '?')}<span>decisão pendente no plano</span></li>`);
   }
   return `<ul>${items.join('')}</ul><button class="linkish" data-act="glossary">Como ler as relações?</button>`;
 }
@@ -221,7 +284,7 @@ function viewSvg(v, idx) {
   if (v.notation === 'c4') parts.push(...v.boundaries.map(c4Boundary));
   else parts.push(...v.bands.map(b => band(b, v.layers)));
   const edges = v.edges.map(e => edge(e, prefix, showLabels)).join('');
-  const nodes = v.nodes.map((n, i) => v.notation === 'c4' ? c4Node(n, i) : amNode(n, i)).join('');
+  const nodes = v.nodes.map((n, i) => v.notation === 'c4' ? c4Node(n, i, prefix) : amNode(n, i, prefix)).join('');
   return `<svg class="diagram n-${v.notation}" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" data-w="${W}" data-h="${H}" role="img" aria-label="${esc(v.title)}" xmlns="http://www.w3.org/2000/svg">`
     + markerDefs(prefix)
     + `<rect class="bgrect" x="0" y="0" width="${W}" height="${H}"/>`
@@ -236,18 +299,18 @@ function viewData(v) {
     nodes: Object.fromEntries(v.nodes.map(n => [n.id, {
       name: n.name, typeLabel: ELEMENT_TYPES[n.type]?.label, c4Label: n.c4Label ?? null, layer: n.layer,
       technology: n.technology ?? '', description: n.description ?? '', tags: n.tags ?? [], properties: n.properties ?? {},
-      distance: n.distance ?? null, role: n.role ?? null, isAnchor: !!n.isAnchor, inferred: !!n.inferred, status: n.status ?? 'active',
+      distance: n.distance ?? null, role: n.role ?? null, isAnchor: !!n.isAnchor, inferred: !!n.inferred, status: n.status ?? 'active', statusReason: n.statusReason ?? '', change: n.change ?? null, changeFields: n.changeFields ?? [], pending: n.pending ?? [],
       x: n.x, y: n.y, w: n.w, h: n.h,
     }])),
     edges: v.edges.map(e => ({
-      id: e.id, from: e.from, to: e.to, type: e.type, label: e.label ?? '', technology: e.technology ?? '', derived: !!e.derived, via: e.via ?? [], step: e.step ?? null,
+      id: e.id, from: e.from, to: e.to, type: e.type, label: e.label ?? '', technology: e.technology ?? '', derived: !!e.derived, via: e.via ?? [], step: e.step ?? null, change: e.change ?? null, pending: e.pending ?? [],
       help: explainEdge(e, Object.fromEntries(v.nodes.map(n => [n.id, { name: n.name, type: n.type }])), v.notation),
     })),
     matrix: v.matrix ?? null,
   };
 }
 
-export function renderHtml({ title, subtitle = '', views }) {
+export function renderHtml({ title, subtitle = '', views, preview }) {
   const data = views.map(viewData);
   const json = JSON.stringify({ title, minScreenPx: MIN_SCREEN_PX, views: data }).replace(/</g, '\\u003c');
   const sections = views.map((v, i) => `<section class="view" data-view="${esc(v.key)}" data-index="${i}"${i ? ' hidden' : ''}>${viewSvg(v, i)}<div class="legend" hidden>${legend(v)}</div></section>`).join('');
@@ -260,7 +323,7 @@ export function renderHtml({ title, subtitle = '', views }) {
 <title>${esc(title)}</title>
 <style>${CSS}</style>
 </head>
-<body>
+<body${preview ? ' class="preview"' : ''}>
 <header class="bar">
   <div class="brand"><strong>${esc(title)}</strong>${subtitle ? `<span>${esc(subtitle)}</span>` : ''}</div>
   <nav class="views">
@@ -280,6 +343,7 @@ export function renderHtml({ title, subtitle = '', views }) {
     <button data-act="present" class="primary" title="Modo apresentação (P)">Apresentar</button>
   </div>
 </header>
+${preview ? `<div class="preview-banner" role="status">PRÉVIA · não é a base oficial — ${esc(preview.label)}</div>` : ''}
 <svg class="defs" width="0" height="0" aria-hidden="true" focusable="false">${markerDefs('lg')}</svg>
 <main class="stage">${sections}</main>
 <div class="hovercard" role="tooltip" hidden></div>
@@ -309,6 +373,7 @@ const CSS = `
   --biz:#fff5a8;--biz-s:#a89a2c;--app:#b6eef6;--app-s:#338fa0;--tech:#cbe8b9;--tech-s:#558f42;--mot:#dcd6ff;--mot-s:#6f62c9;--str:#f6dcaa;--str-s:#ae8330;--impl:#ffdfe3;--impl-s:#b85f6c;--oth:#ffffff;--oth-s:#8f8f8f;
   --band-biz:#fffbe0;--band-app:#e9fafc;--band-tech:#eef8e8;--band-mot:#f1efff;--band-str:#fdf4e3;--band-impl:#fff1f3;--band-oth:#f7f7f7;
   --am-ink:#18202c;
+  --sketch-ink:#0b3d78;--removed:#b3261e;--pending:#f2a900;
   color-scheme:light;
 }
 :root[data-theme="dark"]{
@@ -317,6 +382,7 @@ const CSS = `
   --biz:#5a5220;--biz-s:#d7c44e;--app:#17454e;--app-s:#56c3d6;--tech:#28481f;--tech-s:#86c96c;--mot:#353061;--mot-s:#a79cf0;--str:#5a4520;--str-s:#e0b25a;--impl:#5a2a31;--impl-s:#ee97a3;--oth:#232b36;--oth-s:#8f98a6;
   --band-biz:#1d1b10;--band-app:#101e22;--band-tech:#121c10;--band-mot:#18162a;--band-str:#1f1910;--band-impl:#221316;--band-oth:#161b22;
   --am-ink:#eef2f7;
+  --sketch-ink:#9cc8f5;--removed:#ff6b5e;--pending:#ffd24a;
   color-scheme:dark;
 }
 *{box-sizing:border-box}
@@ -358,6 +424,40 @@ body.presenting .stage{inset:0}
 .node.st-deprecated{opacity:.55}
 .node.st-deprecated .shape{stroke-dasharray:3 4}
 .node.st-planned .shape{stroke-dasharray:14 5;stroke-width:3}
+.node.k-person{--sk:var(--c4-person)}.node.k-system{--sk:var(--c4-system)}.node.k-container{--sk:var(--c4-container)}.node.k-component{--sk:var(--c4-component)}.node.k-external{--sk:var(--c4-external)}
+.node.l-biz{--sk:var(--biz-s)}.node.l-app{--sk:var(--app-s)}.node.l-tech{--sk:var(--tech-s)}.node.l-mot{--sk:var(--mot-s)}.node.l-str{--sk:var(--str-s)}.node.l-impl{--sk:var(--impl-s)}.node.l-oth{--sk:var(--oth-s)}
+.node.sketchy .shape{fill-opacity:.05;stroke:none;stroke-dasharray:none}
+.node.sketchy .rim{stroke:none}
+.sk-fill,.sk-line,.sk-edge,.sk-strike,.ch-outline{fill:none;stroke-linecap:round;stroke-linejoin:round}
+.node.sketchy .sk-fill{stroke:var(--sk,var(--sketch-ink));stroke-width:1;stroke-opacity:.55}
+.node.sketchy .sk-line{stroke:var(--sketch-ink);stroke-width:1.8}
+.node.c4.sketchy text,.node.am.sketchy text{fill:var(--sketch-ink)}
+.node.sketchy text{paint-order:stroke;stroke:var(--bg);stroke-width:4px;stroke-linejoin:round}
+.edge .line.sk-under{stroke-opacity:0}
+.edge .sk-edge{stroke:var(--sketch-ink);stroke-width:2}
+.dimming .node:not(.lit) .sk-fill,.dimming .node:not(.lit) .sk-line{opacity:.18}
+.dimming .edge.lit .sk-edge{stroke:var(--down);stroke-width:3}
+.sketch-sample .shape{fill:none;stroke:none}.sketch-sample .sk-fill{stroke:var(--c4-container);stroke-width:.8;stroke-opacity:.55}.sketch-sample .sk-line{stroke:var(--sketch-ink);stroke-width:1.4}
+.node.sketchy.focus .shape,.node.sketchy.anchor .shape{stroke:var(--focus);stroke-width:5}
+.node.ch-removed,.node.ch-retired,.edge.ch-removed{opacity:.5}
+.edge.ch-changed .sk-edge{stroke-width:3}
+.node .sk-strike{stroke:var(--removed);stroke-width:3}
+.node .ch-outline{fill:none;stroke:var(--sketch-ink);stroke-width:2.2}
+.mark circle{fill:var(--panel);stroke:var(--sketch-ink);stroke-width:1.8}
+.mark text{fill:var(--sketch-ink)}
+.mark.m-removed circle,.mark.m-retired circle{stroke:var(--removed)}
+.mark.m-removed text,.mark.m-retired text{fill:var(--removed)}
+.mark.m-pending circle{fill:var(--pending);stroke:var(--pending)}
+.mark.m-pending text{fill:#1a1a1a}
+.node .mark text,.node.c4 .mark text,.node.am .mark text{fill:var(--sketch-ink)}
+.node .mark.m-removed text,.node .mark.m-retired text,.node.c4 .mark.m-removed text,.node.c4 .mark.m-retired text,.node.am .mark.m-removed text,.node.am .mark.m-retired text{fill:var(--removed)}
+.node .mark.m-pending text,.node.c4 .mark.m-pending text,.node.am .mark.m-pending text{fill:#1a1a1a}
+.preview-banner{position:fixed;inset:var(--bar-h) 0 auto 0;height:32px;display:flex;align-items:center;justify-content:center;padding:0 16px;background:var(--pending);color:#1a1a1a;font-weight:600;font-size:14px;z-index:19;text-align:center}
+body.preview .stage{inset:calc(var(--bar-h) + 32px) 0 0 0}
+body.presenting .preview-banner{top:0}
+body.presenting.preview .stage{inset:32px 0 0 0}
+body.preview .drawer{top:calc(var(--bar-h) + 44px)}
+body.presenting.preview .drawer{top:44px}
 .boundary rect{fill:none;stroke:var(--boundary);stroke-width:2.2;stroke-dasharray:12 7}
 .boundary text{fill:var(--muted)}
 .boundary .b-title{fill:var(--ink)}
@@ -756,14 +856,22 @@ const JS = String.raw`
 
   // ---------- drawer
   const escH = t => String(t ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const questions = list => '<ul>' + list.map(q => '<li>[' + q.n + '] ' + escH(q.question) + (q.assumed ? ' <span class="chip">a prévia assume: ' + escH(q.assumed) + '</span>' : '') + (q.options && q.options.length ? ' · opções: ' + escH(q.options.join(' | ')) : '') + '</li>').join('') + '</ul>';
   function openDrawer(id) {
     const v = view(), n = v.nodes[id]; if (!n) return;
     const name = x => escH(v.nodes[x] ? v.nodes[x].name : x);
+    const fmt = x => (x === undefined || x === null ? '—' : typeof x === 'string' ? x : JSON.stringify(x));
     const rels = v.edges.filter(e => e.from === id || e.to === id);
-    const rel = e => escH(e.help.sentence) + (e.derived ? ' <span class="chip">derivada</span>' : '') + (e.technology ? ' <span class="chip">' + escH(e.technology) + '</span>' : '');
+    const rel = e => escH(e.help.sentence) + (e.derived ? ' <span class="chip">derivada</span>' : '') + (e.technology ? ' <span class="chip">' + escH(e.technology) + '</span>' : '')
+      + (e.change ? ' <span class="chip">' + { removed: 'sai', retired: 'sai', added: 'nova', changed: 'alterada' }[e.change] + '</span>' : '')
+      + (e.pending && e.pending.length ? questions(e.pending) : '');
     let h = '<h2>' + escH(n.name) + '</h2><div class="kind">' + escH(n.c4Label || n.typeLabel) + (n.c4Label && n.typeLabel ? ' · ArchiMate ' + escH(n.typeLabel) : '') + '</div>';
     if (n.inferred) h += '<p class="warn">⚠︎ Inferido a partir de texto livre: confirme.</p>';
-    if (n.status && n.status !== 'active') h += '<p class="warn">' + escH({ planned: 'Planejado: ainda não existe.', deprecated: 'Em desativação.', retired: 'Desativado.' }[n.status] || n.status) + '</p>';
+    if (n.status && n.status !== 'active') h += '<p class="warn">' + escH({ draft: 'Rascunho: em discussão.', planned: 'Planejado: ainda não existe.', deprecated: 'Em desativação.', retired: 'Desativado.' }[n.status] || n.status) + '</p>';
+    if (n.statusReason) h += '<p style="color:var(--muted)">Motivo: ' + escH(n.statusReason) + '</p>';
+    if (n.change) h += '<p class="warn">' + escH({ added: 'Novo neste delta.', changed: 'Alterado por este delta.', removed: 'Removido por este delta: sai da base junto com o que o plano lista.', retired: 'Desativado por este delta.' }[n.change]) + '</p>';
+    if (n.changeFields && n.changeFields.length) h += '<h3>Mudanças</h3><ul>' + n.changeFields.map(c => '<li><b>' + escH(c.field) + '</b>: ' + escH(fmt(c.before)) + ' → ' + escH(fmt(c.after)) + '</li>').join('') + '</ul>';
+    if (n.pending && n.pending.length) h += '<h3>Decisões pendentes</h3>' + questions(n.pending);
     if (n.description) h += '<p>' + escH(n.description) + '</p>';
     h += '<dl>';
     if (n.technology) h += '<dt>Tecnologia</dt><dd>' + escH(n.technology) + '</dd>';
