@@ -131,7 +131,7 @@ function c4Node(n, i, prefix) {
   } else {
     shape = `<rect class="shape" x="${f(x)}" y="${f(y)}" width="${f(w)}" height="${f(h)}" rx="12"/>`;
   }
-  if (sketchy(n)) shape = handDrawn(shape, n.id);
+  if (sketchy(n)) shape = handDrawn(shape, n.id, { w, h });
   const L = n.lines;
   const content = L.title.length * 25 + 6 + L.meta.length * 19 + (L.desc.length ? 10 + L.desc.length * 19 : 0);
   const top = y + n.headH + n.topH + (h - n.headH - n.topH - content) / 2 + (n.c4Kind === 'person' ? 4 : 0);
@@ -161,7 +161,7 @@ function amNode(n, i, prefix) {
   const nameTop = y + (h - n.lines.title.length * 22) / 2;
   const tip = `${n.name} — ${spec.label}${n.technology ? ` [${n.technology}]` : ''}${n.description ? `\n${n.description}` : ''}`;
   let shape = `<rect class="shape" x="${f(x)}" y="${f(y)}" width="${f(w)}" height="${f(h)}" rx="${f(rx)}"/>`;
-  if (sketchy(n)) shape = handDrawn(shape, n.id);
+  if (sketchy(n)) shape = handDrawn(shape, n.id, { w, h });
   return `<g class="${cls}" data-node="${esc(n.id)}" data-distance="${n.distance ?? ''}" style="--i:${i}" tabindex="0" role="button" aria-label="${esc(tip)}">`
     + shape
     + (icon ? `<g class="icon" transform="translate(${f(x + w - 36)},${f(y + 8)})">${icon}</g>` : '')
@@ -245,7 +245,7 @@ function legend(v) {
     if (v.edges.some(e => e.derived)) items.push(`<li>${relSample('serving', { derived: true })}<span><b>derivada</b> — via elementos ocultos</span></li>`);
   }
   if (v.nodes.some(n => n.status === 'draft') || v.edges.some(e => e.status === 'draft')) {
-    items.push(`<li><svg class="sample sketch-sample" viewBox="0 0 64 20" width="64" height="20" aria-hidden="true">${handDrawn('<rect class="shape" x="4" y="3" width="56" height="14" rx="3"/>', 'legend')}</svg><span><b>rascunho</b> — em discussão (draft)</span></li>`);
+    items.push(`<li><svg class="sample sketch-sample" viewBox="0 0 64 20" width="64" height="20" aria-hidden="true">${handDrawn('<rect class="shape" x="4" y="3" width="56" height="14" rx="3"/>', 'legend', { w: 56, h: 14 })}</svg><span><b>rascunho</b> — em discussão (draft)</span></li>`);
   }
   if ([...v.nodes, ...v.edges].some(x => x.change || x.pending?.length)) {
     const markSample = (cls, glyph) => `<svg class="sample" viewBox="0 0 64 20" width="64" height="20" aria-hidden="true"><g class="mark ${cls}"><circle cx="32" cy="10" r="9"/><text x="32" y="11" font-size="13" font-weight="700" text-anchor="middle" dominant-baseline="middle">${glyph}</text></g></svg>`;
@@ -429,7 +429,7 @@ body.presenting .stage{inset:0}
 .node.sketchy .shape{fill-opacity:.05;stroke:none;stroke-dasharray:none}
 .node.sketchy .rim{stroke:none}
 .sk-fill,.sk-line,.sk-edge,.sk-strike,.ch-outline{fill:none;stroke-linecap:round;stroke-linejoin:round}
-.node.sketchy .sk-fill{stroke:var(--sk,var(--sketch-ink));stroke-width:1.4}
+.node.sketchy .sk-fill{stroke:var(--sk,var(--sketch-ink));stroke-width:1;stroke-opacity:.55}
 .node.sketchy .sk-line{stroke:var(--sketch-ink);stroke-width:1.8}
 .node.c4.sketchy text,.node.am.sketchy text{fill:var(--sketch-ink)}
 .node.sketchy text{paint-order:stroke;stroke:var(--bg);stroke-width:4px;stroke-linejoin:round}
@@ -437,7 +437,7 @@ body.presenting .stage{inset:0}
 .edge .sk-edge{stroke:var(--sketch-ink);stroke-width:2}
 .dimming .node:not(.lit) .sk-fill,.dimming .node:not(.lit) .sk-line{opacity:.18}
 .dimming .edge.lit .sk-edge{stroke:var(--down);stroke-width:3}
-.sketch-sample .shape{fill:none;stroke:none}.sketch-sample .sk-fill{stroke:var(--c4-container);stroke-width:1}.sketch-sample .sk-line{stroke:var(--sketch-ink);stroke-width:1.4}
+.sketch-sample .shape{fill:none;stroke:none}.sketch-sample .sk-fill{stroke:var(--c4-container);stroke-width:.8;stroke-opacity:.55}.sketch-sample .sk-line{stroke:var(--sketch-ink);stroke-width:1.4}
 .node.sketchy.focus .shape,.node.sketchy.anchor .shape{stroke:var(--focus);stroke-width:5}
 .node.ch-removed,.node.ch-retired,.edge.ch-removed{opacity:.5}
 .edge.ch-changed .sk-edge{stroke-width:3}

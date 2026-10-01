@@ -5,7 +5,12 @@ import rough from '../vendor/rough.esm.mjs';
 
 const gen = rough.generator();
 const BASE = { roughness: 1.4, bowing: 1.2, strokeWidth: 1.8 };
-const HACHURE = { fillStyle: 'hachure', hachureGap: 7, hachureAngle: -41, fillWeight: 1.4 };
+const HACHURE = { fillStyle: 'hachure', hachureAngle: -41, fillWeight: 1 };
+
+/** Hachure gap proportional to the box: about an eighth of its shorter side, between 7 and 16 units. */
+export function hachureGapFor(w, h) {
+  return Math.max(7, Math.min(16, Math.round(Math.min(w, h) / 8)));
+}
 
 /** Stable positive seed for an id (FNV-1a), offset by a salt so different parts of one element differ. */
 export function seedOf(id, salt = 0) {
@@ -32,9 +37,9 @@ function toSvg(drawable, lineClass = 'sk-line') {
   return gen.toPaths(drawable).map(p => `<path class="${p.strokeWidth < BASE.strokeWidth ? 'sk-fill' : lineClass}" d="${short(p.d)}"/>`).join('');
 }
 
-function drawable(tag, seed, fill) {
+function drawable(tag, seed, fill, size) {
   const a = attrs(tag);
-  const opts = { ...BASE, seed, ...(fill ? { ...HACHURE, fill: '#000' } : {}) };
+  const opts = { ...BASE, seed, ...(fill ? { ...HACHURE, hachureGap: hachureGapFor(size.w, size.h), fill: '#000' } : {}) };
   if (tag.startsWith('<circle')) return gen.circle(num(a.cx), num(a.cy), 2 * num(a.r), opts);
   if (tag.startsWith('<rect')) return gen.path(roundedRect(num(a.x), num(a.y), num(a.width), num(a.height), num(a.rx ?? 0)), opts);
   return gen.path(a.d, opts);
@@ -44,12 +49,12 @@ function drawable(tag, seed, fill) {
  * Hand-drawn version of a node's shape markup. The original shapes stay (class "shape", styled almost
  * transparent) for hit-testing and the focus ring; each one gets hachure + outline, rims get an outline.
  */
-export function sketchShape(shape, id) {
+export function sketchShape(shape, id, size = { w: 120, h: 60 }) {
   const parts = shape.match(/<(?:path|rect|circle) class="(?:shape|rim)"[^>]*\/>/g) ?? [];
   let out = shape;
   parts.forEach((tag, i) => {
     const isRim = tag.includes('class="rim"');
-    out += toSvg(drawable(tag, seedOf(id, i), !isRim));
+    out += toSvg(drawable(tag, seedOf(id, i), !isRim, size));
   });
   return out;
 }
