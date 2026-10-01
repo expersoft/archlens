@@ -396,18 +396,19 @@ export function relationshipKeys(raw) {
 }
 
 function mergeRelationships(ctx) {
-  const byKey = new Map();
+  const byKey = new Map(); // from|type|to → relationships (parallels share a key)
   const byId = new Map();
+  const fresh = new Set(); // relationships added by this delta
   const ids = relIds(ctx);
-  for (const [r, id] of ids) {
-    const k = relKey(ctx, r);
-    if (k && !byKey.has(k)) byKey.set(k, r);
+  const index = (r, id, k) => {
     byId.set(id, r);
-  }
+    if (k) byKey.set(k, [...(byKey.get(k) ?? []), r]);
+  };
+  for (const [r, id] of ids) index(r, id, relKey(ctx, r));
   (ctx.delta.model?.relationships || []).forEach((dr, i) => {
     const r = { ...dr, from: resolveRef(ctx, dr.from), to: resolveRef(ctx, dr.to) };
     const k = relKey(ctx, r);
-    const base = (r.id && byId.get(r.id)) || (k && byKey.get(k));
+    const base = (r.id && byId.get(r.id)) || (k && sameRelationship(byKey.get(k) ?? [], r, fresh));
     if (base) { mergeRelInto(ctx, base, ids.get(base), r, i); return; }
     const { source, sources, ...rest } = r;
     const generated = relId(ctx, { ...r, id: undefined });
@@ -417,12 +418,22 @@ function mergeRelationships(ctx) {
     const srcs = deltaSources(dr, ctx.delta.source);
     if (srcs.length) node.sources = srcs;
     ctx.raw.model.relationships.push(node);
-    byId.set(id, node);
     ids.set(node, id);
-    if (k) byKey.set(k, node);
+    fresh.add(node);
+    index(node, id, k);
     ctx.log.added.push(id);
     note(ctx, { key: `rel:${i}`, class: 'new', kind: 'relationship', target: id, from: r.from, to: r.to, type: r.type ?? 'uses' });
   });
+}
+
+/**
+ * Which relationship of a from|type|to group the delta relationship `r` is: the one with the same description,
+ * else the same technology; else the first one already in the base (a changed description is a conflict).
+ * Relationships this delta added only match on description/technology, so parallels in one delta stay distinct.
+ */
+function sameRelationship(group, r, fresh) {
+  const same = f => r[f] !== undefined && group.find(g => g[f] !== undefined && sameValue(f, g[f], r[f]));
+  return same('description') || same('technology') || group.find(g => !fresh.has(g)) || null;
 }
 
 function mergeRelInto(ctx, base, id, r, i) {

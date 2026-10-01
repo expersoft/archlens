@@ -82,10 +82,17 @@ export function resolveC4(model, spec) {
   };
 
   if (level === 'dynamic') {
+    // The nth step over the same pair uses the nth parallel relationship (e.g. POST /balances, then /operations).
+    const seenPairs = new Map();
     (spec.steps || []).forEach((s, i) => {
-      const rel = s.rel ? model.relationships.find(r => r.id === s.rel) : model.relationships.find(r => {
-        const o = c4Orientation(r); return o && o.from === s.from && o.to === s.to;
-      });
+      let rel = null;
+      if (s.rel) rel = model.relationships.find(r => r.id === s.rel);
+      else {
+        const pair = model.relationships.filter(r => { const o = c4Orientation(r); return o && o.from === s.from && o.to === s.to; });
+        const nth = seenPairs.get(`${s.from}>${s.to}`) ?? 0;
+        seenPairs.set(`${s.from}>${s.to}`, nth + 1);
+        rel = pair[nth] ?? pair[0];
+      }
       const from = s.from ?? (rel && c4Orientation(rel).from), to = s.to ?? (rel && c4Orientation(rel).to);
       for (const x of [from, to]) if (!model.elements.has(x)) throw viewError('E_UNKNOWN_REF', `passo ${i + 1} referencia "${x}", que não existe`, 'use ids de elementos ou "rel" com o id de um relacionamento');
       const a = rep(from), b = rep(to);

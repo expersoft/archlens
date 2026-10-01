@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { planMerge, applyPlan, previewMerge, relationshipIds, canonicalJson } from '../scripts/lib/merge.mjs';
 import { normalizeModel } from '../scripts/lib/model.mjs';
+import { validateModel } from '../scripts/lib/validate.mjs';
 import { formatPlanReport } from '../scripts/lib/merge-report.mjs';
 
 const shop = () => JSON.parse(readFileSync(new URL('./fixtures/shop.json', import.meta.url)));
@@ -523,4 +524,49 @@ test('relationshipIds names relationships exactly like normalizeModel, parallels
   const base = shop();
   base.model.relationships.push({ from: 'cliente', to: 'loja.web', description: 'Volta a comprar' });
   assert.deepEqual([...relationshipIds(base).values()], normalizeModel(base).relationships.map(r => r.id));
+});
+
+test('parallel relationships in the same delta are both new, with no false conflict', () => {
+  const d = delta({ relationships: [
+    { from: 'loja.api.catalogo', to: 'pagamentos', description: 'Consulta saldo', technology: 'POST /balances' },
+    { from: 'loja.api.catalogo', to: 'pagamentos', description: 'Movimenta', technology: 'POST /operations' },
+  ] });
+  const plan = planMerge(shop(), d, TODAY);
+  assert.equal(plan.items.filter(i => i.class === 'conflict').length, 0);
+  assert.equal(plan.summary.new, 2);
+  const { raw } = applyPlan(shop(), plan, TODAY);
+  const par = raw.model.relationships.filter(r => r.from === 'loja.api.catalogo' && r.to === 'pagamentos');
+  assert.deepEqual(par.map(r => r.technology), ['POST /balances', 'POST /operations']);
+  assert.deepEqual(par.map(r => r.id), ['pagamentos-serving-loja.api.catalogo', 'pagamentos-serving-loja.api.catalogo#2']);
+  assert.deepEqual(validateModel(raw).errors, []);
+  const again = planMerge(raw, d, TODAY);
+  assert.deepEqual(again.summary, { unchanged: 2 }, 'idempotent');
+});
+
+test('a delta relationship matches the parallel with the same description, not the first one', () => {
+  const base = shop();
+  base.model.relationships.push(
+    { from: 'loja.api.checkout', to: 'pagamentos', description: 'Consulta saldo', technology: 'POST /balances' },
+    { from: 'loja.api.checkout', to: 'pagamentos', description: 'Movimenta', technology: 'POST /operations' },
+  );
+  const plan = planMerge(base, delta({ relationships: [
+    { from: 'loja.api.checkout', to: 'pagamentos', description: 'Movimenta', tags: ['financeiro'] },
+  ] }), TODAY);
+  assert.equal(plan.items.filter(i => i.class === 'conflict').length, 0);
+  const { raw } = applyPlan(base, plan, TODAY);
+  const mov = raw.model.relationships.find(r => r.description === 'Movimenta');
+  assert.deepEqual(mov.tags, ['financeiro']);
+  assert.equal(raw.model.relationships.filter(r => r.from === 'loja.api.checkout' && r.to === 'pagamentos').length, 3);
+});
+
+test('the same relationship listed twice in one delta is added once', () => {
+  const r = { from: 'loja.api.catalogo', to: 'pagamentos', description: 'Estorna', technology: 'HTTPS' };
+  const plan = planMerge(shop(), delta({ relationships: [r, { ...r }] }), TODAY);
+  const { raw } = applyPlan(shop(), plan, TODAY);
+  assert.equal(raw.model.relationships.filter(x => x.description === 'Estorna').length, 1);
+});
+
+test('a single changed description against a single base relationship is still a conflict', () => {
+  const plan = planMerge(shop(), delta({ relationships: [{ from: 'cliente', to: 'loja.web', description: 'Navega e compra' }] }), TODAY);
+  assert.equal(plan.items.filter(i => i.class === 'conflict').length, 1);
 });

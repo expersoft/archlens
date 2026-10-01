@@ -211,3 +211,14 @@ test('resolveView can keep ids visible that the status filter would hide (previe
   assert.ok(!ids(resolveView(m, { key: 'c', notation: 'c4', level: 'container', scope: 'loja' })).includes('loja.db'));
   assert.ok(ids(resolveView(m, { key: 'c', notation: 'c4', level: 'container', scope: 'loja' }, { keep: new Set(['loja.db']) })).includes('loja.db'));
 });
+
+test('dynamic steps over parallel relationships use them in order', () => {
+  const m = modelWith(r => r.model.relationships.push(
+    { from: 'loja.api.checkout', to: 'pagamentos', description: 'Captura', technology: 'POST /captures' },
+  ));
+  const v = resolveView(m, { key: 'd', notation: 'c4', level: 'dynamic', scope: 'loja', steps: [
+    { from: 'loja.api.checkout', to: 'pagamentos', description: 'Autoriza' },
+    { from: 'loja.api.checkout', to: 'pagamentos', description: 'Captura' },
+  ] });
+  assert.deepEqual(v.edges.map(e => e.technology), ['HTTPS', 'POST /captures']);
+});
