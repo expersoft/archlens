@@ -29,7 +29,7 @@ export function buildSchemas() {
     properties: {
       id: { type: 'string', minLength: 1 }, type: { enum: elementTypes }, name: str, description: str, technology: str,
       tags: { type: 'array', items: str }, external: { type: 'boolean' }, archimate: { enum: Object.keys(ELEMENT_TYPES).flatMap(t => [t, `archimate:${t}`]) },
-      parent: str, group: str, children: { type: 'array', items: { $ref: '#/$defs/element' } },
+      parent: str, group: { type: ['string', 'null'] }, children: { type: 'array', items: { $ref: '#/$defs/element' } },
       properties: { type: 'object', additionalProperties: { type: ['string', 'number', 'boolean'] } },
       owner: str, url: str, inferred: { type: 'boolean' }, confidence: { enum: ['alta', 'média', 'baixa', 'high', 'medium', 'low'] }, source: str,
       aliases: { type: 'array', items: str }, status, statusReason: str, sources,

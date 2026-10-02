@@ -52,6 +52,15 @@ export function previewModel(baseRaw, { delta, plan } = {}) {
     attach(raw, after, el, b.parent ?? null);
     changes.set(id, { kind: 'removed' });
   }
+  // Members of a removed grouping keep it in the preview, so its frame shows as removed around them.
+  const removedGroups = new Set([...before].filter(([id, b]) => changes.get(id)?.kind === 'removed' && String(b.el.type).replace(/^archimate:/, '') === 'grouping').map(([id]) => id));
+  if (removedGroups.size) {
+    for (const [id, a] of after) {
+      const b = before.get(id);
+      const g = b && [b.el.group, b.parent].find(x => removedGroups.has(x));
+      if (g && a.el.group == null && a.el.type !== 'grouping') a.el.group = g;
+    }
+  }
 
   const { relChanges, relMap } = diffRelationships(baseRaw, raw);
 

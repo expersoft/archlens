@@ -72,7 +72,7 @@ export function normalizeModel(raw) {
       }
       checkSources(node.sources, p);
       elements.set(e.id, node);
-      if (e.group !== undefined && typeof e.group !== 'string') {
+      if (e.group != null && typeof e.group !== 'string') { // null: explicitly no group
         issue('error', 'E_SCHEMA', `"group" de "${e.id}" não é um id`, `${p}.group`, 'use o id de um elemento do tipo "grouping"');
         node.group = null;
       }

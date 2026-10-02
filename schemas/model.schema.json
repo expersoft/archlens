@@ -347,7 +347,10 @@
           "type": "string"
         },
         "group": {
-          "type": "string"
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "children": {
           "type": "array",

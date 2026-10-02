@@ -599,3 +599,57 @@ test('a delta that points to a missing grouping blocks the plan with E_GROUP_REF
   assert.equal(plan.blocked, true);
   assert.ok(plan.errors.some(e => e.code === 'E_GROUP_REF'));
 });
+
+test('"group": null takes an element out of its group: a conflict whose take removes the key; null on no group is a no-op', () => {
+  const d = { 'archlens-delta': '1.0', model: { elements: [{ id: 'tokenizacao', group: null }, { id: 'pg', group: null }] } };
+  const plan = planMerge(platBase(), d, TODAY);
+  assert.equal(plan.blocked, false, JSON.stringify(plan.errors));
+  const c = plan.items.find(i => i.class === 'conflict' && i.target === 'tokenizacao');
+  assert.deepEqual([c.field, c.base, c.delta], ['group', 'plat-aut', null]);
+  assert.ok(plan.items.some(i => i.target === 'pg' && i.class === 'unchanged'));
+  const { raw } = applyPlan(platBase(), answer(plan, { [c.key]: 'take' }), TODAY);
+  assert.ok(!('group' in find(raw, 'tokenizacao')));
+  assert.ok(!('group' in find(raw, 'pg')));
+  assert.equal(normalizeModel(raw).elements.get('tokenizacao').groupId, null);
+});
+
+const withGroupView = (extra = {}) => {
+  const b = platBase();
+  b.views = [
+    { key: 'cruzado', notation: 'c4', level: 'landscape', groups: { only: ['plat-aut', 'plat-cred'], crossOnly: true, ...extra } },
+    { key: 'credito', notation: 'c4', level: 'landscape', groups: { only: ['plat-cred'] } },
+  ];
+  return b;
+};
+
+test('removing a grouping clears its members and trims or drops the views that list it, shown in the cascade', () => {
+  const plan = planMerge(withGroupView(), { 'archlens-delta': '1.0', ops: [{ op: 'remove', id: 'plat-cred' }] }, TODAY);
+  assert.equal(plan.blocked, false, JSON.stringify(plan.errors));
+  const it = plan.items.find(i => i.op === 'remove');
+  assert.deepEqual(it.cascade.elements, ['plat-cred']);
+  assert.deepEqual(it.cascade.members.sort(), ['limites', 'motor', 'proc-limite']);
+  assert.deepEqual(it.cascade.views, [{ key: 'cruzado', action: 'trim' }, { key: 'credito', action: 'remove' }]);
+  assert.match(formatPlanReport(plan), /membros sem agrupamento: .*motor/);
+  const { raw } = applyPlan(withGroupView(), answer(plan, { [it.key]: 'yes' }), TODAY);
+  for (const id of ['motor', 'limites', 'proc-limite']) assert.ok(!('group' in find(raw, id)), id);
+  assert.equal(find(raw, 'plat-cred'), undefined);
+  assert.deepEqual(raw.views.map(v => v.key), ['cruzado']);
+  assert.deepEqual(raw.views[0].groups.only, ['plat-aut']);
+  assert.ok(!raw.views[0].groups.crossOnly);
+  assert.deepEqual(validateModel(raw).errors, []);
+});
+
+test('removing a grouping keeps the elements nested in it, now top-level and groupless', () => {
+  const b = platBase();
+  const take = id => { const i = b.model.elements.findIndex(e => e.id === id); return b.model.elements.splice(i, 1)[0]; };
+  const motor = take('motor');
+  delete motor.group;
+  b.model.elements.find(e => e.id === 'plat-cred').children = [motor];
+  const plan = planMerge(b, { 'archlens-delta': '1.0', ops: [{ op: 'remove', id: 'plat-cred' }] }, TODAY);
+  assert.equal(plan.blocked, false, JSON.stringify(plan.errors));
+  const it = plan.items.find(i => i.op === 'remove');
+  assert.deepEqual(it.cascade.elements, ['plat-cred']);
+  const { raw } = applyPlan(b, answer(plan, { [it.key]: 'yes' }), TODAY);
+  assert.ok(raw.model.elements.some(e => e.id === 'motor'));
+  assert.equal(raw.model.relationships.filter(r => r.from === 'motor' || r.to === 'motor').length, 4);
+});

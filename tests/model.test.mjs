@@ -206,7 +206,7 @@ test('an empty grouping is a warning, and groupings are never reported as orphan
 test('schemas accept "group" on elements', async () => {
   const { buildSchemas } = await import('../scripts/gen-schemas.mjs');
   const s = buildSchemas();
-  assert.deepEqual(s.model.$defs.element.properties.group, { type: 'string' });
+  assert.deepEqual(s.model.$defs.element.properties.group, { type: ['string', 'null'] });
 });
 
 // A base where the credit systems sit inside their grouping (nested, or with "parent") instead of using "group".
@@ -240,4 +240,13 @@ test('a grouping nested in another grouping is still E_GROUP_NESTED', () => {
   r.model.elements.splice(r.model.elements.indexOf(cred), 1);
   r.model.elements.find(e => e.id === 'plat-aut').children = [cred];
   assert.ok(validateModel(r).errors.some(e => e.code === 'E_GROUP_NESTED'));
+});
+
+test('"group": null means no group (not a schema error)', async () => {
+  const r = platforms();
+  r.model.elements.find(e => e.id === 'pg').group = null;
+  assert.deepEqual(validateModel(r).errors, []);
+  assert.equal(normalizeModel(r).elements.get('pg').groupId, null);
+  const { buildSchemas } = await import('../scripts/gen-schemas.mjs');
+  assert.deepEqual(buildSchemas().delta.$defs.element.properties.group, { type: ['string', 'null'] });
 });
