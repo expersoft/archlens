@@ -349,3 +349,20 @@ for (const form of ['nested', 'parent']) {
     assert.ok(edge(v, 'autorizador', 'motor'));
   });
 }
+
+test('E_VIEW_GROUP tells a missing id from a non-grouping one and from one hidden by the status filter', () => {
+  const r = JSON.parse(readFileSync(new URL('./fixtures/platforms.json', import.meta.url)));
+  r.model.elements.find(e => e.id === 'plat-cred').status = 'retired';
+  const m = normalizeModel(r);
+  const spec = only => ({ key: 'x', notation: 'c4', level: 'landscape', groups: { only } });
+  assert.throws(() => resolveView(m, spec(['plat-autt'])), /E_VIEW_GROUP[\s\S]*não existe/);
+  assert.throws(() => resolveView(m, spec(['motor'])), /E_VIEW_GROUP[\s\S]*não é um agrupamento/);
+  assert.throws(() => resolveView(m, spec(['plat-cred'])), /E_VIEW_GROUP[\s\S]*oculto pelo filtro de status/);
+  assert.ok(resolveView(m, { ...spec(['plat-cred']), status: ['active', 'retired'] }).groups.some(g => g.id === 'plat-cred'));
+  r.views = [spec(['plat-autt']), { ...spec(['motor']), key: 'y' }, { ...spec(['plat-cred']), key: 'z' }, { ...spec(['plat-cred']), key: 'w', status: ['active', 'retired'] }];
+  const msgs = validateModel(r).errors.filter(e => e.code === 'E_VIEW_GROUP').map(e => e.message);
+  assert.equal(msgs.length, 3);
+  assert.match(msgs[0], /não existe/);
+  assert.match(msgs[1], /não é um agrupamento/);
+  assert.match(msgs[2], /oculto pelo filtro de status/);
+});

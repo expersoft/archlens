@@ -653,3 +653,13 @@ test('removing a grouping keeps the elements nested in it, now top-level and gro
   assert.ok(raw.model.elements.some(e => e.id === 'motor'));
   assert.equal(raw.model.relationships.filter(r => r.from === 'motor' || r.to === 'motor').length, 4);
 });
+
+test('retiring a grouping listed in a view\'s groups.only warns in the plan, and the result fails validation with a status hint', () => {
+  const plan = planMerge(withGroupView(), { 'archlens-delta': '1.0', ops: [{ op: 'status', id: 'plat-cred', status: 'retired' }] }, TODAY);
+  const it = plan.items.find(i => i.op === 'status');
+  assert.deepEqual(it.views, ['cruzado', 'credito']);
+  const e = plan.errors.find(x => x.code === 'E_VIEW_GROUP');
+  assert.ok(e, 'the result does not build: blocked');
+  assert.match(e.message, /oculto pelo filtro de status/);
+  assert.match(e.hint, /retired/);
+});

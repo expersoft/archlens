@@ -13,10 +13,9 @@ export function groupSpec(model, spec) {
       throw viewError('E_VIEW_GROUP', `"groups.only" da visão "${spec.key}" precisa ser uma lista de agrupamentos`, 'ex.: ["plat-autorizacao", "plat-credito"]');
     }
     for (const id of g.only) {
-      if (model.elements.get(id)?.type !== 'grouping') {
-        throw viewError('E_VIEW_GROUP', `"${id}" em groups.only da visão "${spec.key}" não é um agrupamento visível`,
-          'use ids de elementos do tipo "grouping"; um agrupamento fora do filtro de status da visão (ex.: retired) não pode ser listado');
-      }
+      const el = model.elements.get(id);
+      if (!el) throw viewError('E_VIEW_GROUP', `"${id}" em groups.only da visão "${spec.key}" não existe`, 'use o id de um elemento do tipo "grouping"');
+      if (el.type !== 'grouping') throw viewError('E_VIEW_GROUP', `"${id}" em groups.only da visão "${spec.key}" não é um agrupamento`, 'use ids de elementos do tipo "grouping"');
     }
     only = new Set(g.only);
   }

@@ -560,12 +560,12 @@ function runOps(ctx) {
   });
 }
 
-/** Saved views that stop resolving when `id` (and what is nested in it) is retired: it is their scope, anchor or focus. */
+/** Saved views that stop resolving when `id` (and what is nested in it) is retired: it is their scope, anchor, focus or a group in groups.only. */
 function viewsHiding(ctx, id) {
   const hidden = new Set([id, ...descendantsOf(ctx.tree, id)]);
   return (ctx.raw.views || [])
     .filter(v => !(Array.isArray(v.status) && v.status.includes('retired')))
-    .filter(v => [v.scope, v.anchor, ...(Array.isArray(v.focus) ? v.focus : [])].some(x => hidden.has(x)))
+    .filter(v => [v.scope, v.anchor, ...(Array.isArray(v.focus) ? v.focus : []), ...(Array.isArray(v.groups?.only) ? v.groups.only : [])].some(x => hidden.has(x)))
     .map(v => v.key);
 }
 

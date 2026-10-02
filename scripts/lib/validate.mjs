@@ -48,10 +48,15 @@ export function validateModel(raw) {
       errors.push({ code: 'E_VIEW_STATUS', message: `visão "${v.key}" tem "status" inválido: ${JSON.stringify(v.status)}`, path: `views[${i}].status`,
         hint: `use uma lista com ${STATUSES.join(' | ')}, ex.: ["planned","active"]` });
     }
-    for (const gid of v.groups?.only || []) {
-      if (model.elements.get(gid)?.type !== 'grouping') {
-        errors.push({ code: 'E_VIEW_GROUP', message: `visão "${v.key}" lista "${gid}" em groups.only, que não é um agrupamento`, path: `views[${i}].groups.only`,
-          hint: 'use ids de elementos do tipo "grouping"' });
+    const shown = Array.isArray(v.status) ? v.status : STATUSES.filter(s => s !== 'retired');
+    for (const gid of Array.isArray(v.groups?.only) ? v.groups.only : []) {
+      const g = model.elements.get(gid);
+      const at = { code: 'E_VIEW_GROUP', path: `views[${i}].groups.only` };
+      if (!g) errors.push({ ...at, message: `visão "${v.key}" lista "${gid}" em groups.only, que não existe`, hint: 'use o id de um elemento do tipo "grouping"' });
+      else if (g.type !== 'grouping') errors.push({ ...at, message: `visão "${v.key}" lista "${gid}" em groups.only, que não é um agrupamento`, hint: 'use ids de elementos do tipo "grouping"' });
+      else if (!shown.includes(g.status)) {
+        errors.push({ ...at, message: `visão "${v.key}" lista "${gid}" em groups.only, que está oculto pelo filtro de status (${g.status})`,
+          hint: `remova "${gid}" de groups.only ou acrescente "${g.status}" em "status" da visão` });
       }
     }
     for (const f of ['scope', 'anchor', ...(v.focus || []), ...(v.expand || [])].map(k => (k === 'scope' || k === 'anchor') ? v[k] : k)) {
