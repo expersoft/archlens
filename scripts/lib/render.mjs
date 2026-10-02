@@ -1,6 +1,6 @@
 // Renderer: laid-out views → one self-contained, animated HTML page (inline SVG + CSS + JS, no network).
 import { ELEMENT_TYPES, LAYER_LABELS, RELATIONSHIP_TYPES } from './registry.mjs';
-import { MIN_SCREEN_PX } from './layout.mjs';
+import { MIN_SCREEN_PX, frameChipWidth } from './layout.mjs';
 import { ICONS } from './icons.mjs';
 import { explainEdge, GLOSSARY } from './explain.mjs';
 import { sketchShape as handDrawn, sketchOutline, seedOf, sketchStrike, sketchEdge } from './sketch.mjs';
@@ -157,7 +157,7 @@ function groupFrame(fr, compact) {
   const sketchy = fr.status === 'draft' || fr.change === 'added';
   const cls = `gframe gc-${c}${sketchy ? ' sketchy' : ''}${fr.change ? ` ch-${fr.change}` : ''}`;
   const chipH = compact ? 36 : 56;
-  const chipW = Math.ceil(Math.max(compact ? 120 : 170, fr.name.length * 17 * 0.58 + 52)) + (fr.change ? 30 : 0);
+  const chipW = frameChipWidth(fr.name, compact, !!fr.change);
   const cx = fr.x + 14, cy = fr.y + 12;
   const mark = fr.change
     ? `<g class="mark m-${fr.change}"><circle cx="${f(cx + chipW - 18)}" cy="${f(cy + 18)}" r="11"/><text x="${f(cx + chipW - 18)}" y="${f(cy + 19)}" font-size="16" font-weight="700" text-anchor="middle" dominant-baseline="middle">${MARK[fr.change]}</text></g>`

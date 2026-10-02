@@ -38,9 +38,42 @@ export function wrap(text, fontSize, maxWidth, maxLines = 99) {
 }
 const textWidth = (lines, size) => Math.max(0, ...lines.map(l => l.length * size * CHAR));
 
+/** Width of a grouping frame's chip (C4 chip has two lines, ArchiMate is compact; a preview mark adds room). */
+export function frameChipWidth(name, compact, change = false) {
+  return Math.ceil(Math.max(compact ? 120 : 170, name.length * 17 * 0.58 + 52)) + (change ? 30 : 0);
+}
+/** ELK options that keep a frame at least as wide as its chip (14px margin each side). */
+const frameMin = (name, compact) => ({
+  'elk.nodeSize.constraints': 'MINIMUM_SIZE',
+  'elk.nodeSize.minimum': `(${frameChipWidth(name, compact) + 28}, ${compact ? 100 : 124})`,
+});
+
+/** Frames keep a margin of at least FRAME_MARGIN units from the left/right canvas edges. */
+const FRAME_MARGIN = 16;
+function frameMargin(laid) {
+  const fr = laid.frames ?? [];
+  if (!fr.length) return laid;
+  const dx = Math.max(0, FRAME_MARGIN - Math.min(...fr.map(q => q.x)));
+  const width = Math.ceil(Math.max(laid.width + dx, Math.max(...fr.map(q => q.x + q.w)) + dx + FRAME_MARGIN));
+  if (!dx && width === laid.width) return laid;
+  const mv = o => ({ ...o, x: o.x + dx });
+  const pt = p => ({ ...p, x: p.x + dx });
+  const bands = (laid.bands ?? []).map((b, i, all) => {
+    if (b.vertical) {
+      const x = i ? b.x + dx : 0;
+      return { ...b, x, width: (i < all.length - 1 ? b.x + b.width + dx : width) - x };
+    }
+    return { ...b, x: 0, width };
+  });
+  return {
+    ...laid, width, bands,
+    nodes: laid.nodes.map(mv), boundaries: (laid.boundaries ?? []).map(mv), frames: fr.map(mv),
+    edges: laid.edges.map(e => ({ ...e, points: e.points.map(pt), labelBox: e.labelBox ? mv(e.labelBox) : e.labelBox })),
+  };
+}
+
 export async function layoutView(view) {
-  if (view.notation === 'c4') return layoutC4(view);
-  return layoutArchimateStyled(view);
+  return frameMargin(view.notation === 'c4' ? await layoutC4(view) : await layoutArchimateStyled(view));
 }
 
 /** On-screen legibility of a laid-out view in a viewport of vw × vh pixels. */
@@ -97,7 +130,7 @@ async function runElk(view, direction, ratio, layerGap = 120) {
   for (const n of view.nodes.filter(n => !n.boundary)) (inFrame.get(n.group) ?? top).push(toElkNode(n));
   const children = [
     ...frames.filter(g => inFrame.get(g.id).length).map(g => ({
-      id: `frame:${g.id}`, layoutOptions: { 'elk.padding': '[top=84,left=32,bottom=32,right=32]' }, children: inFrame.get(g.id),
+      id: `frame:${g.id}`, layoutOptions: { 'elk.padding': '[top=84,left=32,bottom=32,right=32]', ...frameMin(g.name, false) }, children: inFrame.get(g.id),
     })),
     ...top,
   ];
@@ -267,7 +300,7 @@ async function runAmElk(view, DIR) {
     children: [
       ...frames.map(f => ({
         id: f.key,
-        layoutOptions: { 'elk.partitioning.partition': String(Math.max(0, view.layers.indexOf(f.layer)) * 3 + 1), 'elk.padding': AM_FRAME_PAD },
+        layoutOptions: { 'elk.partitioning.partition': String(Math.max(0, view.layers.indexOf(f.layer)) * 3 + 1), 'elk.padding': AM_FRAME_PAD, ...frameMin(f.name, true) },
         children: f.members.map(id => ({ id, width: boxes.get(id).w, height: boxes.get(id).h })),
       })),
       ...view.nodes.filter(n => !framed.has(n.id)).map(n => ({ id: n.id, width: boxes.get(n.id).w, height: boxes.get(n.id).h,
@@ -570,7 +603,7 @@ async function layoutArchimateMix(view) {
         ...(bandFrames.length ? { 'elk.hierarchyHandling': 'INCLUDE_CHILDREN' } : {}),
       },
       children: [
-        ...bandFrames.map(f => ({ id: f.key, layoutOptions: { 'elk.padding': AM_FRAME_PAD },
+        ...bandFrames.map(f => ({ id: f.key, layoutOptions: { 'elk.padding': AM_FRAME_PAD, ...frameMin(f.name, true) },
           children: f.members.map(id => ({ id, width: boxes.get(id).w, height: boxes.get(id).h })) })),
         ...ids.filter(id => !framed.has(id)).map(id => ({ id, width: boxes.get(id).w, height: boxes.get(id).h })),
       ],

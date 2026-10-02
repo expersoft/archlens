@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { wrap, layoutView } from '../scripts/lib/layout.mjs';
+import { wrap, layoutView, frameChipWidth } from '../scripts/lib/layout.mjs';
 import { normalizeModel } from '../scripts/lib/model.mjs';
 import { resolveView } from '../scripts/lib/query.mjs';
 
@@ -87,4 +87,23 @@ test('ArchiMate: frames only in the layers the view shows', async () => {
 test('ArchiMate without frames lays out as before', async () => {
   const laid = await layoutView(resolveView(plat(), { key: 'l', notation: 'archimate', viewpoint: 'layered', granularity: 'system', layout: { style: 'flow' } }));
   assert.deepEqual(laid.frames, []);
+});
+
+test('frames are at least as wide as their chip and stay inside the canvas margin', async () => {
+  const platRaw = () => JSON.parse(readFileSync(new URL('./fixtures/platforms.json', import.meta.url)));
+  const specs = [
+    { key: 'l', notation: 'c4', level: 'landscape', groups: { frames: true } },
+    { key: 'g', notation: 'archimate', viewpoint: 'layered', granularity: 'system', groups: { only: ['plat-aut', 'plat-cred'] }, layout: { style: 'flow' } },
+    { key: 'g', notation: 'archimate', viewpoint: 'layered', granularity: 'system', groups: { only: ['plat-aut', 'plat-cred'] }, layout: { style: 'bands-flow' } },
+  ];
+  for (const spec of specs) {
+    const laid = await layoutView(resolveView(normalizeModel(platRaw()), spec));
+    assert.ok(laid.frames.length > 0, spec.layout?.style ?? spec.notation);
+    for (const f of laid.frames) {
+      const tag = `${spec.notation}/${spec.layout?.style} ${f.id}`;
+      assert.ok(f.w >= frameChipWidth(f.name, spec.notation === 'archimate') + 28, `${tag} width ${f.w}`);
+      assert.ok(f.x >= 16 && f.x + f.w <= laid.width - 16, `${tag} horizontal ${f.x}..${f.x + f.w} of ${laid.width}`);
+      assert.ok(f.y >= 0 && f.y + f.h <= laid.height, `${tag} vertical`);
+    }
+  }
 });
