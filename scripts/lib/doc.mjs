@@ -81,7 +81,8 @@ export function generateDoc(raw, { notes = {}, source = 'architecture/' } = {}) 
 
   // Summary
   out.push('## Resumo', '');
-  const byLayer = LAYER_ORDER.map(l => [LAYER_LABELS[l], els.filter(e => e.layer === l).length]).filter(r => r[1]);
+  const layered = els.filter(e => e.type !== 'grouping'); // groupings have their own section
+  const byLayer = LAYER_ORDER.map(l => [LAYER_LABELS[l], layered.filter(e => e.layer === l).length]).filter(r => r[1]);
   out.push(table(['Camada', 'Elementos'], byLayer), '');
   if (hasC4) {
     const c4counts = ['person', 'softwareSystem', 'container', 'component'].map(k => [C4_LABELS[k], els.filter(e => kind(e) === k).length]).filter(r => r[1]);
@@ -99,6 +100,7 @@ export function generateDoc(raw, { notes = {}, source = 'architecture/' } = {}) 
     out.push('## Agrupamentos', '');
     for (const g of groupings) {
       out.push(`### ${g.name}`, '');
+      out.push(`\`${g.id}\`${g.status !== 'active' ? ` · status: ${g.status}` : ''}`, '');
       if (g.description) out.push(g.description, '');
       const direct = els.filter(e => e.group === g.id);
       const rows = LAYER_ORDER.map(l => [LAYER_LABELS[l], direct.filter(e => e.layer === l).map(e => e.name).join(', ')]).filter(r => r[1]);
@@ -128,7 +130,7 @@ export function generateDoc(raw, { notes = {}, source = 'architecture/' } = {}) 
 
   // ArchiMate layers
   for (const layer of LAYER_ORDER) {
-    const list = els.filter(e => e.layer === layer);
+    const list = layered.filter(e => e.layer === layer);
     if (!list.length) continue;
     out.push(`## Camada de ${LAYER_LABELS[layer]}`, '');
     out.push(table(['Elemento', 'Tipo ArchiMate', 'Descrição', ...extraHead, 'id'], list.map(e => [

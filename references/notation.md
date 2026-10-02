@@ -123,6 +123,7 @@ moldura.
 
 - `group` vale para elementos de qualquer tipo e camada.
 - **Herança:** elemento sem `group` herda o do ancestral mais próximo (`parent`) que tenha um.
+- `"group": null` vale como "sem grupo" (no delta, tira o elemento do grupo; veja `merge.md`).
 - Um grupo por elemento, sem aninhar: um `grouping` não tem `group`.
 - Relação com um agrupamento em uma das pontas é proibida: ligue os membros.
 - Não aninhe elementos dentro de um `grouping` (em `children` ou com `parent`); use `group`. Um elemento aninhado é

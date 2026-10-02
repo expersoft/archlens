@@ -84,8 +84,18 @@ test('schemas describe the new fields', async () => {
 test('generateDoc lists the groupings and their direct members by layer', () => {
   const md = generateDoc(JSON.parse(readFileSync(new URL('./fixtures/platforms.json', import.meta.url))));
   assert.match(md, /## Contexto e atores[\s\S]*## Agrupamentos[\s\S]*### Plataforma de Autorização/);
-  assert.match(md, /### Plataforma de Autorização\n\nAutoriza e tokeniza transações\n\n\| Camada \| Membros \|/);
+  assert.match(md, /### Plataforma de Autorização\n\n`plat-aut`\n\nAutoriza e tokeniza transações\n\n\| Camada \| Membros \|/);
   assert.match(md, /\| Aplicação \| Autorizador, Tokenização \|/);
   assert.doesNotMatch(md.slice(md.indexOf('## Agrupamentos'), md.indexOf('## Modelo C4')), /API de Autorização/, 'inherited members are not repeated');
   assert.doesNotMatch(generateDoc(raw()), /## Agrupamentos/);
+});
+
+test('generateDoc: groupings stay out of the layer tables and counts, and each group shows its id (and status)', () => {
+  const r = JSON.parse(readFileSync(new URL('./fixtures/platforms.json', import.meta.url)));
+  r.model.elements.find(e => e.id === 'plat-cred').status = 'draft';
+  const md = generateDoc(r);
+  assert.doesNotMatch(md, /## Camada de Outros/);
+  assert.doesNotMatch(md.slice(md.indexOf('## Resumo'), md.indexOf('## Contexto e atores')), /Outros/);
+  assert.match(md, /### Plataforma de Autorização\n\n`plat-aut`\n\nAutoriza/);
+  assert.match(md, /### Plataforma de Crédito\n\n`plat-cred` · status: draft\n/);
 });

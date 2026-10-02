@@ -25,7 +25,6 @@ Plataforma de e-commerce B2C: vitrine web e app, checkout com antifraude e gatew
 | Negócio | 17 |
 | Aplicação | 29 |
 | Tecnologia | 12 |
-| Outros | 2 |
 
 | Tipo C4 | Quantidade |
 | --- | --- |
@@ -47,6 +46,8 @@ Plataforma de e-commerce B2C: vitrine web e app, checkout com antifraude e gatew
 
 ### Plataforma de Vendas
 
+`plat-vendas`
+
 Sistemas que sustentam a jornada de compra: vitrine, checkout e análise de risco.
 
 | Camada | Membros |
@@ -54,6 +55,8 @@ Sistemas que sustentam a jornada de compra: vitrine, checkout e análise de risc
 | Aplicação | Plataforma de E-commerce, Serviço Antifraude |
 
 ### Plataforma de Back-office
+
+`plat-backoffice`
 
 Sistemas internos de faturamento, expedição e atendimento.
 
@@ -189,13 +192,6 @@ Coleta e rastreio
 | Servidor SAP (on-premises) | Node | — | — | `tn-sap` |
 | VPN site-to-site | Communication Network | — | — | `cn-vpn` |
 | pedidos-api.jar | Artifact | — | — | `art-pedidos` |
-
-## Camada de Outros
-
-| Elemento | Tipo ArchiMate | Descrição | Fontes | id |
-| --- | --- | --- | --- | --- |
-| Plataforma de Vendas | Grouping | Sistemas que sustentam a jornada de compra: vitrine, checkout e análise de risco. | P | `plat-vendas` |
-| Plataforma de Back-office | Grouping | Sistemas internos de faturamento, expedição e atendimento. | P | `plat-backoffice` |
 
 ## Relacionamentos
 

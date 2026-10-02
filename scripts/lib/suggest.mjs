@@ -32,7 +32,7 @@ export function suggestViews(model) {
   }
   if (els.filter(e => e.type === 'grouping').length > 1) {
     out.push({ key: 'landscape-plataformas', notation: 'c4', level: 'landscape', groups: { frames: true }, why: 'sistemas nas molduras dos agrupamentos' });
-    out.push({ key: 'aplicacao-plataformas', notation: 'archimate', viewpoint: 'application', groups: { frames: true }, why: 'aplicações nas molduras dos agrupamentos' });
+    out.push({ key: 'aplicacao-plataformas', notation: 'archimate', viewpoint: 'application', granularity: 'container', groups: { frames: true }, why: 'aplicações nas molduras dos agrupamentos' });
   }
   return out;
 }

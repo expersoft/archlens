@@ -330,6 +330,7 @@ test('with two or more groupings, views suggests framed panoramas', () => {
   const keys = suggestViews(plat()).map(s => s.key);
   assert.ok(keys.includes('landscape-plataformas'));
   assert.ok(keys.includes('aplicacao-plataformas'));
+  assert.equal(suggestViews(plat()).find(s => s.key === 'aplicacao-plataformas').granularity, 'container');
   assert.ok(!suggestViews(model()).some(s => s.key === 'landscape-plataformas'));
 });
 
