@@ -1,5 +1,0 @@
-- "Paga com cartão" implica um gateway de pagamento externo; o fornecedor não foi informado.
-- O worker de notificações foi inferido a partir de "lembretes por WhatsApp"; pode ser parte da própria API.
-- A integração com o PEP (Tasy) foi assumida via HL7 FHIR a partir do portal médico.
-- Como o PEP está no datacenter e o restante na AWS, assumiu-se uma VPN site-to-site entre eles.
-- A assinatura ICP-Brasil foi modelada como serviço externo de assinatura em nuvem.

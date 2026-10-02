@@ -116,7 +116,7 @@ $A resolve  architecture/ --view containers --json        # IR da visão (nós e
 | `doc` | regenera o `ARCHITECTURE.md` a partir da pasta |
 | `migrate` | converte uma base antiga (modelo dentro do `.md`) para `architecture/` e confere que o modelo é idêntico |
 | `check` | valida o modelo e confere se o `ARCHITECTURE.md` está em dia; código 1 se não (CI, pre-commit) |
-| `extract` | tira o JSON de dentro do `.md` |
+| `extract` | imprime o modelo canônico (JSON) da base |
 | `views` | lista as visões definidas e sugere outras (contexto por sistema, suporte por produto, impacto por aplicação…) |
 | `render` | HTML, sem checagem |
 | `deliver` | HTML + screenshots 1920×1080 e 1280×720 + checagem de largura (≥ 90%) e fonte (≥ 14px). `--strict` não substitui a saída se falhar |
@@ -124,7 +124,8 @@ $A resolve  architecture/ --view containers --json        # IR da visão (nós e
 | `merge … --plan p.json [--answers antigo.json]` | compara um delta com a base e grava o plano com as perguntas; `--answers` reaproveita as respostas de um plano anterior |
 | `merge … --apply p.json` | aplica o plano respondido: valida, grava `architecture/`, regenera o `ARCHITECTURE.md` e registra o histórico |
 
-Todos aceitam a pasta, o `ARCHITECTURE.md` gerado ou nada (procura a partir do diretório atual); bases antigas são só lidas até o `migrate`.
+Todos aceitam a pasta, o `ARCHITECTURE.md` gerado ou nada (procura a partir do diretório atual); bases antigas
+são só lidas até o `migrate`. O `migrate` é a exceção: recebe o `.md` antigo ou um `model.json`.
 
 ## Apresentando
 

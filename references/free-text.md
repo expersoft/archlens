@@ -1,8 +1,9 @@
 # Do texto livre ao modelo
 
 Objetivo: um **delta** (`references/merge.md`) **fiel ao que foi dito**, com as lacunas visíveis. Não invente
-arquitetura para deixar o diagrama bonito. Se já existe uma base (`architecture/`), leia-a antes (o `ARCHITECTURE.md` gerado é o resumo legível): reutilize os ids
-e acrescente só o que é novo ou diferente — o merge cuida do resto.
+arquitetura para deixar o diagrama bonito. Se já existe uma base (`architecture/`), leia-a antes (o
+`ARCHITECTURE.md` gerado é o resumo legível): reutilize os ids e acrescente só o que é novo ou diferente — o merge
+cuida do resto.
 
 ## Procedimento
 

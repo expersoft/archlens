@@ -35,10 +35,6 @@ node scripts/archlens.mjs build examples/loja-online/architecture
 | Exemplos | [examples/loja-online](examples/loja-online), [examples/telemedicina](examples/telemedicina) |
 | Plano de implementação | [docs/plans/](docs/plans/) |
 
-## Licença
-
-[MIT](LICENSE) © 2026 Expersoft. O [ELK](https://eclipse.dev/elk/), usado no layout e incluído em `scripts/vendor/`, mantém a própria licença (EPL-2.0, ver `scripts/vendor/ELK-LICENSE.md`). O [rough.js](https://roughjs.com/) 4.6.6, usado no traço à mão dos rascunhos, também está em `scripts/vendor/` (MIT, ver `scripts/vendor/ROUGH-LICENSE.md`).
-
 ## Manter o ARCHITECTURE.md em dia
 
 ```bash
@@ -50,3 +46,7 @@ node path/to/archlens/scripts/archlens.mjs check || exit 1
 # CI (GitHub Actions)
 - run: node path/to/archlens/scripts/archlens.mjs check
 ```
+
+## Licença
+
+[MIT](LICENSE) © 2026 Expersoft. O [ELK](https://eclipse.dev/elk/), usado no layout e incluído em `scripts/vendor/`, mantém a própria licença (EPL-2.0, ver `scripts/vendor/ELK-LICENSE.md`). O [rough.js](https://roughjs.com/) 4.6.6, usado no traço à mão dos rascunhos, também está em `scripts/vendor/` (MIT, ver `scripts/vendor/ROUGH-LICENSE.md`).

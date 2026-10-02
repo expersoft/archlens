@@ -206,6 +206,7 @@ Cadeias de suporte calculadas a partir do modelo (o que sustenta cada oferta, e 
 - A integração com o PEP (Tasy) foi assumida via HL7 FHIR a partir do portal médico.
 - Como o PEP está no datacenter e o restante na AWS, assumiu-se uma VPN site-to-site entre eles.
 - A assinatura ICP-Brasil foi modelada como serviço externo de assinatura em nuvem.
+- O PEP em nuvem entra em produção antes do desligamento do Tasy.
 
 | Item | Tipo | Confiança | Origem no texto |
 | --- | --- | --- | --- |

@@ -1,8 +1,9 @@
 # Evoluindo a base: delta → plano → apply
 
-A base de conhecimento (a pasta `architecture/`, ou o `ARCHITECTURE.md` gerado, que aponta para ela; se nenhuma existe, o apply a cria) muda por **merge**. O agente descreve o que há de novo num
-**delta**; a CLI compara com a base, classifica cada item e grava um **plano** com as perguntas; o usuário
-responde; o `apply` grava a base, regenera o documento e registra a rodada no **Histórico**.
+A base de conhecimento (a pasta `architecture/`, ou o `ARCHITECTURE.md` gerado, que aponta para ela; se nenhuma
+existe, o apply a cria) muda por **merge**. O agente descreve o que há de novo num **delta**; a CLI compara com a
+base, classifica cada item e grava um **plano** com as perguntas; o usuário responde; o `apply` grava a base,
+regenera o documento e registra a rodada no **Histórico**.
 Nada é decidido em silêncio: conflitos, possíveis duplicatas, remoções e `retired` esperam resposta.
 
 ```bash
