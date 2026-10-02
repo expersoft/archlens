@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // archlens CLI — model → knowledge base (ARCHITECTURE.md) → C4 / ArchiMate views → animated HTML.
-import { readFileSync, writeFileSync, existsSync, renameSync, mkdirSync, rmSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, renameSync, mkdirSync, rmSync, readdirSync } from 'node:fs';
 import { dirname, basename, extname, join, resolve, relative, sep } from 'node:path';
 import { spawn } from 'node:child_process';
 import { normalizeModel } from './lib/model.mjs';
@@ -351,12 +351,17 @@ async function main() {
       if (target.exists) fail(`E_STORE_EXISTS: ${relPath(to)} já tem uma base (${MANIFEST}); escolha outra pasta com --to`);
       const docPath = extname(loc.path).toLowerCase() === '.md' ? loc.path : join(dirname(loc.path), 'ARCHITECTURE.md');
       const dest = openStore({ ...target, docPath });
+      const existed = existsSync(to); // resolveBase only lets an empty folder through, so everything inside is ours
       try {
         dest.save(raw, { notes });
         const back = dest.load();
         if (canonicalJson(back.raw) !== canonicalJson(raw)) throw new Error('E_STORE_MIGRATE: a pasta gravada não reproduz o modelo original; nada foi trocado');
         if (hashRaw(back.raw) !== hashRaw(raw)) console.warn('  aviso: a ordem das chaves mudou; planos gerados antes da migração precisarão ser refeitos');
-      } catch (e) { rmSync(to, { recursive: true, force: true }); fail(e.message); }
+      } catch (e) {
+        if (existed) for (const n of readdirSync(to)) rmSync(join(to, n), { recursive: true, force: true });
+        else rmSync(to, { recursive: true, force: true });
+        fail(e.message);
+      }
       const doc = writeDoc(dest, raw, notes);
       console.log(`✓ ${dest.describe()} criada; ${relPath(doc)} regenerado (formato novo)`);
       console.log(`  notas: ${Object.keys(notes).length ? Object.keys(notes).map(n => `notes/${n}.md`).join(', ') : '(nenhuma)'}`);
