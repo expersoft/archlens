@@ -4,6 +4,7 @@ import { mkdtempSync, readFileSync, writeFileSync, mkdirSync, existsSync } from 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { loadFolder, saveFolder } from '../scripts/lib/store/folder.mjs';
+import { resolveBase, openStore } from '../scripts/lib/store/index.mjs';
 
 const shop = () => JSON.parse(readFileSync(new URL('./fixtures/shop.json', import.meta.url)));
 const tmp = () => mkdtempSync(join(tmpdir(), 'archlens-store-'));
@@ -101,4 +102,78 @@ test('invalid JSON names the file; an external "store" is refused for now; no ma
   writeFileSync(join(d2, 'archlens.json'), JSON.stringify({ archlens: '1.0', name: 'x', store: { kind: 's3' } }));
   assert.throws(() => loadFolder(d2), e => e.code === 'E_STORE_UNSUPPORTED');
   assert.throws(() => loadFolder(tmp()), e => e.code === 'E_STORE_NOT_BASE');
+});
+
+const legacyMd = (raw, keeps = {}) => [
+  '---', `name: ${raw.name}`, '---', '', `# ${raw.name}`, '',
+  ...Object.entries(keeps).flatMap(([k, v]) => [`<!-- keep:${k} -->`, v, `<!-- /keep:${k} -->`, '']),
+  '## Modelo canônico', '', '```archlens-json', JSON.stringify(raw, null, 2), '```', '',
+].join('\n');
+
+test('legacy: reads the block and the hand-written keep blocks (guide texts dropped); writing is refused', () => {
+  const dir = tmp();
+  writeFileSync(join(dir, 'ARCHITECTURE.md'), legacyMd(shop(), {
+    overview: 'Visão à mão.', assumptions: '- p1', notes: '_Decisões, riscos e pendências._',
+  }));
+  const loc = resolveBase('ARCHITECTURE.md', { cwd: dir });
+  assert.equal(loc.kind, 'legacy');
+  assert.equal(loc.docPath, join(dir, 'ARCHITECTURE.md'));
+  const store = openStore(loc);
+  const { raw, notes } = store.load();
+  assert.deepEqual(raw, shop());
+  assert.deepEqual(notes, { overview: 'Visão à mão.', assumptions: '- p1' });
+  assert.equal(store.writable, false);
+  assert.throws(() => store.save(raw), e => e.code === 'E_STORE_LEGACY' && /archlens migrate/.test(e.message));
+  assert.throws(() => store.assertWritable(), e => e.code === 'E_STORE_LEGACY');
+});
+
+test('legacy: a raw model .json is read-only too', () => {
+  const dir = tmp();
+  writeFileSync(join(dir, 'm.json'), JSON.stringify(shop()));
+  const store = openStore(resolveBase('m.json', { cwd: dir }));
+  assert.equal(store.kind, 'legacy');
+  assert.deepEqual(store.load().raw, shop());
+  assert.deepEqual(store.load().notes, {});
+});
+
+test('resolveBase: folder, manifest, generated .md (source:), and the folder found from a subdirectory', () => {
+  const dir = tmp();
+  saveFolder(join(dir, 'architecture'), shop());
+  writeFileSync(join(dir, 'ARCHITECTURE.md'), '---\nname: "Loja"\nsource: architecture/\n---\n# Loja\n');
+  mkdirSync(join(dir, 'src', 'deep'), { recursive: true });
+  const base = join(dir, 'architecture');
+  for (const [arg, cwd] of [['architecture', dir], ['architecture/archlens.json', dir], ['ARCHITECTURE.md', dir], [undefined, join(dir, 'src', 'deep')]]) {
+    const loc = resolveBase(arg, { cwd });
+    assert.equal(loc.kind, 'folder', String(arg));
+    assert.equal(loc.path, base, String(arg));
+    assert.equal(loc.docPath, join(dir, 'ARCHITECTURE.md'), String(arg));
+    assert.equal(loc.exists, true);
+  }
+  assert.deepEqual(openStore(resolveBase('architecture', { cwd: dir })).load().raw, shop());
+});
+
+test('resolveBase: a hand-written .md is not a base, and the message says what to do', () => {
+  const dir = tmp();
+  writeFileSync(join(dir, 'ARCHITECTURE.md'), '# Minha arquitetura\n\nTexto livre.\n');
+  assert.throws(() => resolveBase('ARCHITECTURE.md', { cwd: dir }),
+    e => e.code === 'E_STORE_NOT_BASE' && /texto livre/.test(e.message) && /merge/.test(e.message));
+});
+
+test('resolveBase: missing bases are created only when asked', () => {
+  const dir = tmp();
+  assert.throws(() => resolveBase(undefined, { cwd: dir }), e => e.code === 'E_STORE_NOT_FOUND');
+  assert.throws(() => resolveBase('architecture', { cwd: dir }), e => e.code === 'E_STORE_NOT_FOUND');
+  const viaMd = resolveBase('ARCHITECTURE.md', { cwd: dir, create: true });
+  assert.deepEqual([viaMd.kind, viaMd.path, viaMd.exists, viaMd.docPath], ['folder', join(dir, 'architecture'), false, join(dir, 'ARCHITECTURE.md')]);
+  assert.equal(openStore(viaMd).load().raw, null);
+  assert.equal(resolveBase(undefined, { cwd: dir, create: true }).path, join(dir, 'architecture'));
+  writeFileSync(join(dir, 'ARCHITECTURE.md'), '---\nsource: architecture/\n---\n');
+  assert.throws(() => resolveBase('ARCHITECTURE.md', { cwd: dir }), e => e.code === 'E_STORE_NOT_FOUND');
+});
+
+test('resolveBase: an existing non-empty folder without manifest is never taken as a base', () => {
+  const dir = tmp();
+  mkdirSync(join(dir, 'architecture'));
+  writeFileSync(join(dir, 'architecture', 'leia-me.txt'), 'outra coisa');
+  assert.throws(() => resolveBase('architecture', { cwd: dir, create: true }), e => e.code === 'E_STORE_NOT_BASE');
 });

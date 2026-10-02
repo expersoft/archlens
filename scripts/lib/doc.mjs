@@ -6,6 +6,20 @@ import { ELEMENT_TYPES, LAYER_ORDER, LAYER_LABELS, C4_LABELS } from './registry.
 /** Hand-written notes of a knowledge base (architecture/notes/<name>.md). */
 export const NOTE_NAMES = ['overview', 'notes', 'assumptions'];
 
+export const NOTE_GUIDES = {
+  overview: '_Descreva aqui o propósito da arquitetura, o problema de negócio e as principais decisões._',
+  notes: '_Decisões, riscos e pendências._',
+};
+
+/** What the document shows for each note when the base has none. */
+export function noteDefaults(raw) {
+  return {
+    overview: raw?.description || NOTE_GUIDES.overview,
+    assumptions: (raw?.assumptions || []).map(a => `- ${a}`).join('\n') || '_Nenhuma premissa registrada._',
+    notes: NOTE_GUIDES.notes,
+  };
+}
+
 const BLOCK_RE = /```archlens-json[^\n]*\n([\s\S]*?)\n```/;
 const KEEP_RE = /<!-- keep:([\w-]+) -->\n?([\s\S]*?)\n?<!-- \/keep:\1 -->/g;
 
