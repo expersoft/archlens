@@ -346,3 +346,102 @@ test('check: 0 when the document is current, 1 when it was edited by hand or the
   writeFileSync(join(dir, 'architecture', 'model.json'), JSON.stringify(m));
   assert.equal(run(['check'], dir).status, 1);
 });
+
+const PROSE = '# Nossa arquitetura\n\nTexto escrito à mão.\n';
+
+test('a hand-written ARCHITECTURE.md is never overwritten: merge --apply, doc and build refuse, writing nothing', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'archlens-'));
+  writeFileSync(join(dir, 'ARCHITECTURE.md'), PROSE);
+  writeFileSync(join(dir, 'delta.json'), JSON.stringify({ 'archlens-delta': '1.0', name: 'Nova', source: { kind: 'manual', ref: 'k' },
+    model: { elements: [{ id: 'sis', type: 'c4:softwareSystem', name: 'Sistema' }] } }));
+  const p = run(['merge', 'architecture/', 'delta.json', '--plan', 'p.json'], dir);
+  assert.equal(p.status, 0, p.stderr);
+  const a = run(['merge', 'architecture/', '--apply', 'p.json'], dir);
+  assert.equal(a.status, 1);
+  assert.match(a.stderr, /E_STORE_DOC_FOREIGN[\s\S]*source:[\s\S]*--out/);
+  assert.equal(readFileSync(join(dir, 'ARCHITECTURE.md'), 'utf8'), PROSE);
+  assert.ok(!existsSync(join(dir, 'architecture', 'archlens.json')), 'the base is not written either');
+  saveFolder(join(dir, 'architecture'), shop());
+  for (const args of [['doc', 'architecture'], ['build', 'architecture']]) {
+    const r = run(args, dir);
+    assert.equal(r.status, 1, args.join(' '));
+    assert.match(r.stderr, /E_STORE_DOC_FOREIGN/);
+  }
+  assert.equal(readFileSync(join(dir, 'ARCHITECTURE.md'), 'utf8'), PROSE);
+  assert.ok(!existsSync(join(dir, 'architecture', 'diagrams')));
+  const o = run(['doc', 'architecture', '--out', 'other.md'], dir);
+  assert.equal(o.status, 0, o.stderr);
+  assert.match(readFileSync(join(dir, 'other.md'), 'utf8'), /source: architecture\//);
+});
+
+test('migrate of a model .json refuses an unrelated ARCHITECTURE.md next to it, creating nothing', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'archlens-'));
+  writeFileSync(join(dir, 'm.json'), JSON.stringify(shop()));
+  writeFileSync(join(dir, 'ARCHITECTURE.md'), PROSE);
+  const r = run(['migrate', 'm.json'], dir);
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /E_STORE_DOC_FOREIGN/);
+  assert.ok(!existsSync(join(dir, 'architecture')));
+  assert.equal(readFileSync(join(dir, 'ARCHITECTURE.md'), 'utf8'), PROSE);
+});
+
+test('merge --apply on a split model writes the document from what is on disk (check passes right after)', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'archlens-'));
+  const base = join(dir, 'architecture');
+  mkdirSync(join(base, 'model'), { recursive: true });
+  writeFileSync(join(base, 'archlens.json'), JSON.stringify({ archlens: '1.0', name: 'Split', layout: { model: 'model/' } }));
+  writeFileSync(join(base, 'model', 'a.json'), JSON.stringify({ elements: [{ id: 'a', type: 'c4:softwareSystem', name: 'A' }], relationships: [] }));
+  writeFileSync(join(base, 'model', 'b.json'), JSON.stringify({ elements: [{ id: 'b', type: 'c4:softwareSystem', name: 'B' }],
+    relationships: [{ from: 'b', to: 'a', type: 'uses', description: 'b usa a' }] }));
+  assert.equal(run(['doc', 'architecture'], dir).status, 0);
+  writeFileSync(join(dir, 'delta.json'), JSON.stringify({ 'archlens-delta': '1.0', source: { kind: 'manual', ref: 'r' },
+    model: { relationships: [{ from: 'a', to: 'b', type: 'uses', description: 'a usa b' }] } }));
+  assert.equal(run(['merge', 'architecture', 'delta.json', '--plan', 'p.json'], dir).status, 0);
+  const a = run(['merge', 'architecture', '--apply', 'p.json'], dir);
+  assert.equal(a.status, 0, a.stderr);
+  const c = run(['check', 'architecture'], dir);
+  assert.equal(c.status, 0, c.stdout);
+});
+
+test('migrate drops a keep:assumptions block that is only an old copy of the list', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'archlens-'));
+  const raw = { ...shop(), assumptions: ['Premissa um', 'Premissa dois'] };
+  writeFileSync(join(dir, 'ARCHITECTURE.md'), ['---', `name: ${raw.name}`, '---', '',
+    '<!-- keep:assumptions -->', '- Premissa um', '<!-- /keep:assumptions -->', '',
+    '```archlens-json', JSON.stringify(raw, null, 2), '```', ''].join('\n'));
+  const r = run(['migrate', 'ARCHITECTURE.md'], dir);
+  assert.equal(r.status, 0, r.stderr);
+  assert.ok(!existsSync(join(dir, 'architecture', 'notes', 'assumptions.md')));
+  const md = readFileSync(join(dir, 'ARCHITECTURE.md'), 'utf8');
+  assert.match(md, /- Premissa um\n- Premissa dois/);
+});
+
+test('migrate warns when a hand-written assumptions note replaces the manifest list', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'archlens-'));
+  const raw = { ...shop(), assumptions: ['Premissa um'] };
+  writeFileSync(join(dir, 'ARCHITECTURE.md'), ['---', `name: ${raw.name}`, '---', '',
+    '<!-- keep:assumptions -->', 'Premissas discutidas na reunião de 12/03.', '<!-- /keep:assumptions -->', '',
+    '```archlens-json', JSON.stringify(raw, null, 2), '```', ''].join('\n'));
+  const r = run(['migrate', 'ARCHITECTURE.md'], dir);
+  assert.equal(r.status, 0, r.stderr);
+  assert.ok(existsSync(join(dir, 'architecture', 'notes', 'assumptions.md')));
+  assert.match(r.stdout + r.stderr, /aviso: notes\/assumptions\.md substitui a lista de premissas do manifesto/);
+});
+
+test('check ignores line endings: a CRLF copy of the generated document is current', () => {
+  const dir = setup();
+  const md = join(dir, 'ARCHITECTURE.md');
+  writeFileSync(md, readFileSync(md, 'utf8').replace(/\n/g, '\r\n'));
+  const c = run(['check'], dir);
+  assert.equal(c.status, 0, c.stdout + c.stderr);
+});
+
+test('migrate into a non-empty architecture/ suggests --to', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'archlens-'));
+  writeFileSync(join(dir, 'ARCHITECTURE.md'), legacyMd(shop()));
+  mkdirSync(join(dir, 'architecture', 'adr'), { recursive: true });
+  writeFileSync(join(dir, 'architecture', 'adr', '0001.md'), '# ADR 1\n');
+  const r = run(['migrate', 'ARCHITECTURE.md'], dir);
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /E_STORE_NOT_BASE[\s\S]*--to <pasta>/);
+});

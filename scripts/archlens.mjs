@@ -14,7 +14,7 @@ import { inspectHtml } from './lib/deliver.mjs';
 import { planMerge, applyPlan, mergeError, canonicalJson, hashRaw, PLAN_VERSION } from './lib/merge.mjs';
 import { formatPlanReport } from './lib/merge-report.mjs';
 import { previewModel, previewSummary, annotateView } from './lib/preview.mjs';
-import { resolveBase, openStore, MANIFEST } from './lib/store/index.mjs';
+import { resolveBase, openStore, frontmatterSource, MANIFEST } from './lib/store/index.mjs';
 
 const HELP = `archlens — arquitetura como modelo, diagramas como consultas
 
@@ -91,8 +91,22 @@ function assertWritable(store) {
   try { store.assertWritable(); } catch (e) { fail(e.message); }
 }
 
+/**
+ * Refuses to replace a document this base does not own: `out` may be missing, generated from this base (its
+ * `source:` points to the folder), or the file being converted (`replacing`, e.g. the old .md migrate read).
+ */
+function assertDocOwned(store, out = store.locator.docPath, { replacing } = {}) {
+  const p = resolve(out);
+  if (!existsSync(p) || (replacing && resolve(replacing) === p)) return;
+  const src = frontmatterSource(readFileSync(p, 'utf8'));
+  if (src && resolve(dirname(p), src) === resolve(store.locator.path)) return;
+  fail(`E_STORE_DOC_FOREIGN: ${relPath(p)} existe e não foi gerado por esta base (sem "source:" apontando para ${relPath(store.locator.path)}/); `
+    + 'mova-o, gere em outro lugar com --out, ou transforme o conteúdo dele em um delta (texto livre) antes.');
+}
+
 /** Regenerates ARCHITECTURE.md (or `out`) from a folder base; `source:` is the folder relative to the document. */
-function writeDoc(store, raw, notes, out = store.locator.docPath) {
+function writeDoc(store, raw, notes, out = store.locator.docPath, { replacing } = {}) {
+  assertDocOwned(store, out, { replacing });
   atomicWrite(out, generateDoc(raw, { notes, source: docSource(store, out) }));
   return out;
 }
@@ -347,14 +361,19 @@ async function main() {
       if (errors.length) { printIssues(errors, 'ERRO'); fail('corrija os erros do modelo antes de migrar; nada foi gravado', 2); }
       const to = resolve(args.to && args.to !== true ? args.to : join(dirname(loc.path), 'architecture'));
       let target;
-      try { target = resolveBase(to, { create: true }); } catch (e) { fail(e.message); }
+      try { target = resolveBase(to, { create: true }); } catch (e) {
+        fail(e.code === 'E_STORE_NOT_BASE' && !(args.to && args.to !== true) ? `${e.message}; use --to <pasta> para escolher outro destino` : e.message);
+      }
       if (target.exists) fail(`E_STORE_EXISTS: ${relPath(to)} já tem uma base (${MANIFEST}); escolha outra pasta com --to`);
       const docPath = extname(loc.path).toLowerCase() === '.md' ? loc.path : join(dirname(loc.path), 'ARCHITECTURE.md');
       const dest = openStore({ ...target, docPath });
+      const replacing = docPath === loc.path ? loc.path : undefined; // the old .md is replaced by the generated one
+      assertDocOwned(dest, docPath, { replacing });
       const existed = existsSync(to); // resolveBase only lets an empty folder through, so everything inside is ours
+      let back;
       try {
         dest.save(raw, { notes });
-        const back = dest.load();
+        back = dest.load();
         if (canonicalJson(back.raw) !== canonicalJson(raw)) throw new Error('E_STORE_MIGRATE: a pasta gravada não reproduz o modelo original; nada foi trocado');
         if (hashRaw(back.raw) !== hashRaw(raw)) console.warn('  aviso: a ordem das chaves mudou; planos gerados antes da migração precisarão ser refeitos');
       } catch (e) {
@@ -362,7 +381,10 @@ async function main() {
         else rmSync(to, { recursive: true, force: true });
         fail(e.message);
       }
-      const doc = writeDoc(dest, raw, notes);
+      if (back.notes.assumptions != null && raw.assumptions?.length) {
+        console.warn(`  aviso: notes/assumptions.md substitui a lista de premissas do manifesto no documento`);
+      }
+      const doc = writeDoc(dest, back.raw, back.notes, docPath, { replacing });
       console.log(`✓ ${dest.describe()} criada; ${relPath(doc)} regenerado (formato novo)`);
       console.log(`  notas: ${Object.keys(notes).length ? Object.keys(notes).map(n => `notes/${n}.md`).join(', ') : '(nenhuma)'}`);
       console.log(`  commit sugerido: git add ${relPath(to)} ${relPath(doc)} && git commit -m "chore(archlens): base migrada para ${relPath(to)}/"`);
@@ -373,7 +395,9 @@ async function main() {
       const { raw, notes } = base;
       const { errors } = validateModel(raw);
       const docPath = store.locator.docPath;
-      const stale = !errors.length && (!existsSync(docPath) || readFileSync(docPath, 'utf8') !== generateDoc(raw, { notes, source: docSource(store) }));
+      const lf = t => t.replace(/\r\n/g, '\n');
+      const stale = !errors.length && (!existsSync(docPath)
+        || lf(readFileSync(docPath, 'utf8')) !== lf(generateDoc(raw, { notes, source: docSource(store) })));
       if (args.json) console.log(JSON.stringify({ ok: !errors.length && !stale, errors, stale }, null, 2));
       else {
         printIssues(errors, 'ERRO');
@@ -408,8 +432,10 @@ async function main() {
           fail(e.message, 2);
         }
         if (!res.entry) { console.log('= nada mudou; a base não foi regravada'); break; }
+        assertDocOwned(store);
         try { store.save(res.raw, { notes }); } catch (e) { fail(e.message); }
-        const doc = writeDoc(store, res.raw, notes);
+        const saved = loadBase(store); // the document follows what is on disk (a split model regroups items by file)
+        const doc = writeDoc(store, saved.raw, saved.notes);
         const e = res.entry;
         const st = Object.keys(e.status).length;
         console.log(`✓ ${store.describe()} e ${relPath(doc)} (revisão ${res.raw.changelog.length}): +${e.added.length} ~${e.changed.length} −${e.removed.length}${st ? `, ${st} mudança(s) de status` : ''}`);
