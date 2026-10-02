@@ -212,5 +212,9 @@ export function annotateView(view, p) {
     const q = (e.relIds || []).flatMap(id => p.pending.get(id) ?? []);
     if (q.length) e.pending = q;
   }
+  for (const g of view.groups ?? []) {
+    const c = p.changes.get(g.id);
+    if (c) g.change = c.kind;
+  }
   return view;
 }
