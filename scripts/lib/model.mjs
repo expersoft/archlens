@@ -90,6 +90,21 @@ export function normalizeModel(raw) {
     }
   }
 
+  // An element nested in (or "parent" of) a grouping is read as its member: groupings are not containers.
+  for (const n of elements.values()) {
+    const g = n.parent != null ? elements.get(n.parent) : null;
+    if (g?.type !== 'grouping') continue;
+    n.parent = null;
+    if (n.type === 'grouping') {
+      issue('error', 'E_GROUP_NESTED', `o agrupamento "${n.id}" não pode ficar dentro de outro ("${g.id}")`, n.path,
+        'agrupamentos não se aninham; mova-o para o topo do modelo');
+      continue;
+    }
+    if (n.group == null) n.group = g.id;
+    issue('warning', 'W_GROUP_CHILD', `${n.id} está aninhado no agrupamento ${g.id}; foi tratado como membro — prefira "group": "${g.id}" no elemento`, n.path,
+      `mova "${n.id}" para o topo do modelo com "group": "${g.id}"`);
+  }
+
   // Groupings: "group" names a grouping element; members inherit it down the parent hierarchy.
   for (const n of elements.values()) {
     if (n.group == null) continue;

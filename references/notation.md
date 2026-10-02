@@ -125,13 +125,16 @@ moldura.
 - **Herança:** elemento sem `group` herda o do ancestral mais próximo (`parent`) que tenha um.
 - Um grupo por elemento, sem aninhar: um `grouping` não tem `group`.
 - Relação com um agrupamento em uma das pontas é proibida: ligue os membros.
+- Não aninhe elementos dentro de um `grouping` (em `children` ou com `parent`); use `group`. Um elemento aninhado é
+  tratado como membro, com o aviso `W_GROUP_CHILD`, para que a base seja corrigida.
 
 | Código | Nível | Significado |
 |---|---|---|
 | `E_GROUP_REF` | erro | `group` aponta para id inexistente ou para elemento que não é `grouping` |
-| `E_GROUP_NESTED` | erro | um `grouping` tem `group` |
+| `E_GROUP_NESTED` | erro | um `grouping` tem `group` ou está aninhado em outro |
 | `E_GROUP_REL` | erro | relação com um `grouping` em uma das pontas |
 | `W_GROUP_EMPTY` | aviso | `grouping` sem nenhum membro (direto ou herdado) |
+| `W_GROUP_CHILD` | aviso | elemento aninhado em um `grouping`; foi tratado como membro — prefira `group` |
 
 ## Validação
 

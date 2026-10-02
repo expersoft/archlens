@@ -208,3 +208,36 @@ test('schemas accept "group" on elements', async () => {
   const s = buildSchemas();
   assert.deepEqual(s.model.$defs.element.properties.group, { type: 'string' });
 });
+
+// A base where the credit systems sit inside their grouping (nested, or with "parent") instead of using "group".
+const nestedInGrouping = form => {
+  const r = platforms();
+  const cred = r.model.elements.find(e => e.id === 'plat-cred');
+  const take = id => { const i = r.model.elements.findIndex(e => e.id === id); return r.model.elements.splice(i, 1)[0]; };
+  const motor = take('motor'), limites = take('limites');
+  delete motor.group; delete limites.group;
+  if (form === 'nested') cred.children = [motor, limites];
+  else { motor.parent = 'plat-cred'; limites.parent = 'plat-cred'; r.model.elements.push(motor, limites); }
+  return r;
+};
+
+for (const form of ['nested', 'parent']) {
+  test(`elements under a grouping (${form}) are treated as its members, with W_GROUP_CHILD`, () => {
+    const r = nestedInGrouping(form);
+    const m = normalizeModel(r);
+    assert.equal(m.elements.get('motor').parent, null);
+    assert.equal(m.elements.get('motor').group, 'plat-cred');
+    assert.equal(m.elements.get('limites').groupId, 'plat-cred');
+    const { errors, warnings } = validateModel(r);
+    assert.deepEqual(errors, []);
+    assert.ok(warnings.some(w => w.code === 'W_GROUP_CHILD' && /motor/.test(w.message) && /plat-cred/.test(w.message)));
+  });
+}
+
+test('a grouping nested in another grouping is still E_GROUP_NESTED', () => {
+  const r = platforms();
+  const cred = r.model.elements.find(e => e.id === 'plat-cred');
+  r.model.elements.splice(r.model.elements.indexOf(cred), 1);
+  r.model.elements.find(e => e.id === 'plat-aut').children = [cred];
+  assert.ok(validateModel(r).errors.some(e => e.code === 'E_GROUP_NESTED'));
+});

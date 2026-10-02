@@ -128,6 +128,8 @@ recorta com scope, focus, depth, anchor, traverse, layers, granularity, collapse
 - **Agrupador virando sistema**: "Camada de Autorização", "Plataforma de Crédito" e afins organizam sistemas;
   modele como `grouping` e preencha `group` nos membros. Um `c4:softwareSystem` falso aparece como caixa e quebra
   as relações entre as aplicações.
+- **Elemento dentro do `grouping`**: não aninhe membros em `children` (nem use `parent`) de um agrupamento; use
+  `"group": "<agrupamento>"`. Aninhado, ele é lido como membro com o aviso `W_GROUP_CHILD`.
 - **Base no formato antigo**: comandos de leitura, `merge --plan` e as prévias funcionam; só `merge --apply`, `doc`
   e `build` recusam. Rode `archlens migrate` (com o ok do usuário).
 - **Duplicata aceita sem perguntar**: `possible-duplicate` é sempre pergunta ao usuário. Um `same` errado funde

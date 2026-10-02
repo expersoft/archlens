@@ -332,3 +332,20 @@ test('with two or more groupings, views suggests framed panoramas', () => {
   assert.ok(keys.includes('aplicacao-plataformas'));
   assert.ok(!suggestViews(model()).some(s => s.key === 'landscape-plataformas'));
 });
+
+for (const form of ['nested', 'parent']) {
+  test(`systems under a grouping (${form}) appear in the landscape as its members`, () => {
+    const r = JSON.parse(readFileSync(new URL('./fixtures/platforms.json', import.meta.url)));
+    const cred = r.model.elements.find(e => e.id === 'plat-cred');
+    const take = id => { const i = r.model.elements.findIndex(e => e.id === id); return r.model.elements.splice(i, 1)[0]; };
+    const motor = take('motor'), limites = take('limites');
+    delete motor.group; delete limites.group;
+    if (form === 'nested') cred.children = [motor, limites];
+    else { motor.parent = 'plat-cred'; limites.parent = 'plat-cred'; r.model.elements.push(motor, limites); }
+    const v = resolveView(normalizeModel(r), { key: 'l', notation: 'c4', level: 'landscape', groups: { frames: true } });
+    assert.equal(v.nodes.find(n => n.id === 'motor')?.group, 'plat-cred');
+    assert.equal(v.nodes.find(n => n.id === 'limites')?.group, 'plat-cred');
+    assert.ok(edge(v, 'motor', 'limites'));
+    assert.ok(edge(v, 'autorizador', 'motor'));
+  });
+}
