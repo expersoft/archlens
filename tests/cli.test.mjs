@@ -5,7 +5,8 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, readdi
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { saveFolder } from '../scripts/lib/store/folder.mjs';
+import { saveFolder, loadFolder } from '../scripts/lib/store/folder.mjs';
+import { hashRaw } from '../scripts/lib/merge.mjs';
 
 const CLI = fileURLToPath(new URL('../scripts/archlens.mjs', import.meta.url));
 const run = (args, cwd) => spawnSync(process.execPath, [CLI, ...args], { cwd, encoding: 'utf8' });
@@ -147,6 +148,8 @@ test('commands that write refuse an old-format base and point to migrate; readin
     assert.equal(r.status, 1, args.join(' '));
     assert.match(r.stderr, /E_STORE_LEGACY[\s\S]*archlens migrate/);
   }
+  assert.equal(run(['build', 'ARCHITECTURE.md', '--out-dir', 'out'], dir).status, 1);
+  assert.ok(!existsSync(join(dir, 'out')), 'a refused build creates no output directory');
   assert.equal(run(['validate', 'ARCHITECTURE.md'], dir).status, 0);
   assert.equal(run(['views', 'ARCHITECTURE.md', '--json'], dir).status, 0);
   writeFileSync(join(dir, 'd.json'), JSON.stringify(previewDelta));
@@ -268,4 +271,67 @@ test('a view the delta drops still renders in the preview, with the ghost, and i
   const v = run(['views', 'ARCHITECTURE.md', '--delta', 'd.json', '--json'], dir);
   assert.ok(JSON.parse(v.stdout).defined.some(x => x.key === 'ctx'));
   assert.match(v.stderr, /visões afetadas/);
+});
+
+test('migrate turns an old base into architecture/ with the same raw, notes from keep blocks, and a generated .md', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'archlens-'));
+  writeFileSync(join(dir, 'ARCHITECTURE.md'), legacyMd(shop()));
+  const r = run(['migrate', 'ARCHITECTURE.md'], dir);
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /git add architecture ARCHITECTURE\.md/);
+  const back = loadFolder(join(dir, 'architecture'));
+  assert.deepEqual(back.raw, shop());
+  assert.equal(hashRaw(back.raw), hashRaw(shop()), 'plans made before the migration still apply');
+  assert.deepEqual(back.notes, { notes: 'Nota antiga.' });
+  const md = readFileSync(join(dir, 'ARCHITECTURE.md'), 'utf8');
+  assert.doesNotMatch(md, /archlens-json/);
+  assert.match(md, /Nota antiga\./);
+  assert.equal(run(['check'], dir).status, 0);
+  const again = run(['migrate', 'ARCHITECTURE.md'], dir);
+  assert.equal(again.status, 1);
+  assert.match(again.stderr, /já está no formato novo/);
+});
+
+test('a plan made before migrate applies after it', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'archlens-'));
+  writeFileSync(join(dir, 'ARCHITECTURE.md'), legacyMd(shop()));
+  writeFileSync(join(dir, 'd.json'), JSON.stringify({ 'archlens-delta': '1.0', source: { kind: 'prompt', ref: 'r' },
+    model: { elements: [{ id: 'loja.worker', type: 'c4:container', name: 'Worker', parent: 'loja' }] } }));
+  assert.equal(run(['merge', 'ARCHITECTURE.md', 'd.json', '--plan', 'p.json'], dir).status, 0);
+  assert.equal(run(['migrate', 'ARCHITECTURE.md'], dir).status, 0);
+  const a = run(['merge', 'ARCHITECTURE.md', '--apply', 'p.json'], dir);
+  assert.equal(a.status, 0, a.stderr);
+});
+
+test('migrate refuses a destination that already holds a base and an invalid model, writing nothing', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'archlens-'));
+  writeFileSync(join(dir, 'ARCHITECTURE.md'), legacyMd(shop()));
+  saveFolder(join(dir, 'outra'), shop());
+  const r = run(['migrate', 'ARCHITECTURE.md', '--to', 'outra'], dir);
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /E_STORE_EXISTS/);
+  const bad = shop();
+  bad.model.relationships.push({ from: 'loja', to: 'nada' });
+  writeFileSync(join(dir, 'ARCHITECTURE.md'), legacyMd(bad));
+  const v = run(['migrate', 'ARCHITECTURE.md'], dir);
+  assert.equal(v.status, 2);
+  assert.ok(!existsSync(join(dir, 'architecture')));
+  assert.match(readFileSync(join(dir, 'ARCHITECTURE.md'), 'utf8'), /archlens-json/, 'the old document stays');
+});
+
+test('check: 0 when the document is current, 1 when it was edited by hand or the model is invalid', () => {
+  const dir = setup();
+  assert.equal(run(['check'], dir).status, 0);
+  const md = join(dir, 'ARCHITECTURE.md');
+  writeFileSync(md, readFileSync(md, 'utf8').replace('# Loja Mini', '# Loja Mini editada'));
+  const stale = run(['check', 'architecture'], dir);
+  assert.equal(stale.status, 1);
+  assert.match(stale.stdout, /desatualizado[\s\S]*architecture\/notes/);
+  const j = run(['check', '--json'], dir);
+  assert.deepEqual(JSON.parse(j.stdout), { ok: false, errors: [], stale: true });
+  run(['doc', 'architecture'], dir);
+  const m = JSON.parse(readFileSync(join(dir, 'architecture', 'model.json'), 'utf8'));
+  m.relationships.push({ from: 'loja', to: 'nada' });
+  writeFileSync(join(dir, 'architecture', 'model.json'), JSON.stringify(m));
+  assert.equal(run(['check'], dir).status, 1);
 });

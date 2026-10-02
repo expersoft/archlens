@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // archlens CLI — model → knowledge base (ARCHITECTURE.md) → C4 / ArchiMate views → animated HTML.
-import { readFileSync, writeFileSync, existsSync, renameSync, mkdirSync } from 'node:fs';
-import { dirname, basename, join, resolve, relative, sep } from 'node:path';
+import { readFileSync, writeFileSync, existsSync, renameSync, mkdirSync, rmSync } from 'node:fs';
+import { dirname, basename, extname, join, resolve, relative, sep } from 'node:path';
 import { spawn } from 'node:child_process';
 import { normalizeModel } from './lib/model.mjs';
 import { validateModel } from './lib/validate.mjs';
@@ -14,7 +14,7 @@ import { inspectHtml } from './lib/deliver.mjs';
 import { planMerge, applyPlan, mergeError, canonicalJson, hashRaw, PLAN_VERSION } from './lib/merge.mjs';
 import { formatPlanReport } from './lib/merge-report.mjs';
 import { previewModel, previewSummary, annotateView } from './lib/preview.mjs';
-import { resolveBase, openStore } from './lib/store/index.mjs';
+import { resolveBase, openStore, MANIFEST } from './lib/store/index.mjs';
 
 const HELP = `archlens — arquitetura como modelo, diagramas como consultas
 
@@ -36,6 +36,8 @@ Comandos
   render    <base> --out f.html [seleção]    gera o HTML animado
   deliver   <base> --out f.html [seleção]    render + screenshots 1920×1080/1280×720 + checagens
   build     <base> [--out-dir DIR]           ARCHITECTURE.md + HTML (padrão: architecture/diagrams/)
+  migrate   <ARCHITECTURE.md|m.json> [--to DIR]  converte uma base antiga para a pasta architecture/
+  check     [base] [--json]               valida e confere se o ARCHITECTURE.md está em dia (CI / pre-commit)
 
 Seleção de visões (render/deliver)
   --view k1,k2        visões do modelo pelo key (padrão: todas as definidas)
@@ -91,10 +93,13 @@ function assertWritable(store) {
 
 /** Regenerates ARCHITECTURE.md (or `out`) from a folder base; `source:` is the folder relative to the document. */
 function writeDoc(store, raw, notes, out = store.locator.docPath) {
-  const source = relative(dirname(resolve(out)), store.locator.path).split(sep).join('/') || '.';
-  atomicWrite(out, generateDoc(raw, { notes, source: `${source}/` }));
+  atomicWrite(out, generateDoc(raw, { notes, source: docSource(store, out) }));
   return out;
 }
+
+/** The `source:` value of the document at `out`: the folder base relative to it, with a trailing slash. */
+const docSource = (store, out = store.locator.docPath) =>
+  `${relative(dirname(resolve(out)), store.locator.path).split(sep).join('/') || '.'}/`;
 
 function fail(msg, code = 1) { console.error(`archlens: ${msg}`); process.exit(code); }
 
@@ -317,19 +322,60 @@ async function main() {
       const loc = store.locator;
       const dir = args['out-dir'] && args['out-dir'] !== true ? args['out-dir']
         : loc.kind === 'folder' && loc.exists ? join(loc.path, 'diagrams') : dirname(loc.path);
-      mkdirSync(dir, { recursive: true });
       if (!preview) {
         assertWritable(store);
         const { errors } = validateModel(raw);
         if (errors.length) { printIssues(errors, 'ERRO'); fail('corrija os erros do modelo', 2); }
         console.log(`✓ ${relPath(writeDoc(store, raw, base.notes))}`);
       }
+      mkdirSync(dir, { recursive: true });
       const name = args.name && args.name !== true ? args.name
         : preview ? preview.name
           : loc.kind === 'folder' ? 'architecture'
             : basename(loc.path).replace(/\.(json|md)$/i, '').replace(/^ARCHITECTURE$/i, 'architecture').replace(/\.model$/, '');
       const problems = await deliver(raw, specsOf(model), join(dir, `${name}.html`), args, preview);
       process.exitCode = problems ? 3 : 0;
+      break;
+    }
+    case 'migrate': {
+      if (!file) fail('uso: archlens migrate <ARCHITECTURE.md | modelo.json> [--to <pasta>]');
+      let loc;
+      try { loc = resolveBase(file); } catch (e) { fail(e.message); }
+      if (loc.kind !== 'legacy') fail(`${file} já está no formato novo (${relPath(loc.path)}/)`);
+      const { raw, notes } = loadBase(openStore(loc));
+      const { errors } = validateModel(raw);
+      if (errors.length) { printIssues(errors, 'ERRO'); fail('corrija os erros do modelo antes de migrar; nada foi gravado', 2); }
+      const to = resolve(args.to && args.to !== true ? args.to : join(dirname(loc.path), 'architecture'));
+      let target;
+      try { target = resolveBase(to, { create: true }); } catch (e) { fail(e.message); }
+      if (target.exists) fail(`E_STORE_EXISTS: ${relPath(to)} já tem uma base (${MANIFEST}); escolha outra pasta com --to`);
+      const docPath = extname(loc.path).toLowerCase() === '.md' ? loc.path : join(dirname(loc.path), 'ARCHITECTURE.md');
+      const dest = openStore({ ...target, docPath });
+      try {
+        dest.save(raw, { notes });
+        const back = dest.load();
+        if (canonicalJson(back.raw) !== canonicalJson(raw)) throw new Error('E_STORE_MIGRATE: a pasta gravada não reproduz o modelo original; nada foi trocado');
+        if (hashRaw(back.raw) !== hashRaw(raw)) console.warn('  aviso: a ordem das chaves mudou; planos gerados antes da migração precisarão ser refeitos');
+      } catch (e) { rmSync(to, { recursive: true, force: true }); fail(e.message); }
+      const doc = writeDoc(dest, raw, notes);
+      console.log(`✓ ${dest.describe()} criada; ${relPath(doc)} regenerado (formato novo)`);
+      console.log(`  notas: ${Object.keys(notes).length ? Object.keys(notes).map(n => `notes/${n}.md`).join(', ') : '(nenhuma)'}`);
+      console.log(`  commit sugerido: git add ${relPath(to)} ${relPath(doc)} && git commit -m "chore(archlens): base migrada para ${relPath(to)}/"`);
+      break;
+    }
+    case 'check': {
+      assertWritable(store);
+      const { raw, notes } = base;
+      const { errors } = validateModel(raw);
+      const docPath = store.locator.docPath;
+      const stale = !errors.length && (!existsSync(docPath) || readFileSync(docPath, 'utf8') !== generateDoc(raw, { notes, source: docSource(store) }));
+      if (args.json) console.log(JSON.stringify({ ok: !errors.length && !stale, errors, stale }, null, 2));
+      else {
+        printIssues(errors, 'ERRO');
+        if (stale) console.log(`✗ ${relPath(docPath)} desatualizado: foi editado à mão ou falta rodar "archlens doc". Edite ${relPath(store.locator.path)}/notes/*.md e regenere.`);
+        else if (!errors.length) console.log(`✓ ${relPath(docPath)} em dia com ${store.describe()}`);
+      }
+      process.exitCode = errors.length || stale ? 1 : 0;
       break;
     }
     case 'merge': {
