@@ -80,3 +80,12 @@ test('schemas describe the new fields', async () => {
   assert.deepEqual(s.delta.$defs.element.required, ['id']);
   assert.equal(s.plan.properties['archlens-plan'].const, '1.0');
 });
+
+test('generateDoc lists the groupings and their direct members by layer', () => {
+  const md = generateDoc(JSON.parse(readFileSync(new URL('./fixtures/platforms.json', import.meta.url))));
+  assert.match(md, /## Contexto e atores[\s\S]*## Agrupamentos[\s\S]*### Plataforma de Autorização/);
+  assert.match(md, /### Plataforma de Autorização\n\nAutoriza e tokeniza transações\n\n\| Camada \| Membros \|/);
+  assert.match(md, /\| Aplicação \| Autorizador, Tokenização \|/);
+  assert.doesNotMatch(md.slice(md.indexOf('## Agrupamentos'), md.indexOf('## Modelo C4')), /API de Autorização/, 'inherited members are not repeated');
+  assert.doesNotMatch(generateDoc(raw()), /## Agrupamentos/);
+});

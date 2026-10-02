@@ -9,7 +9,7 @@ import { canonicalRel } from './model.mjs';
 import { indexTree, orderDelta, attach, detach, descendantsOf } from './raw-tree.mjs';
 
 export const PLAN_VERSION = '1.0';
-const ELEMENT_FIELDS = ['type', 'name', 'description', 'technology', 'external', 'archimate', 'owner', 'url', 'status', 'statusReason'];
+const ELEMENT_FIELDS = ['type', 'name', 'description', 'technology', 'external', 'archimate', 'owner', 'url', 'status', 'statusReason', 'group'];
 const REL_FIELDS = ['description', 'technology', 'accessType', 'status', 'statusReason'];
 export const VIEW_REFS = ['scope', 'anchor'];
 export const VIEW_LISTS = ['focus', 'expand', 'include'];
@@ -189,7 +189,12 @@ function findMatch(ctx, el, parentId) {
 }
 
 function mergeElements(ctx) {
-  for (const { el, parent } of orderDelta(ctx.delta.model?.elements)) {
+  const isGrouping = el => resolveType(el.type, { tags: el.tags || [], archimate: el.archimate }).type === 'grouping';
+  // Groupings first, so a member's "group" already resolves to the base id (duplicate answered same, alias, name).
+  const list = orderDelta(ctx.delta.model?.elements);
+  const ordered = [...list.filter(x => x.el.type && isGrouping(x.el)), ...list.filter(x => !(x.el.type && isGrouping(x.el)))];
+  for (const { el: raw, parent } of ordered) {
+    const el = raw.group != null ? { ...raw, group: resolveRef(ctx, raw.group) } : raw;
     const parentId = parent == null ? null : resolveRef(ctx, parent);
     const match = findMatch(ctx, el, parentId);
     if (match.id) {

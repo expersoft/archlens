@@ -93,6 +93,19 @@ export function generateDoc(raw, { notes = {}, source = 'architecture/' } = {}) 
   out.push('## Contexto e atores', '');
   out.push(table(['Ator', 'Tipo', 'Descrição', 'id'], actors.map(a => [a.name, ELEMENT_TYPES[a.type].label, a.description, `\`${a.id}\``])), '');
 
+  // Groupings: their direct members by layer (inherited ones — containers, components — are not repeated)
+  const groupings = els.filter(e => e.type === 'grouping');
+  if (groupings.length) {
+    out.push('## Agrupamentos', '');
+    for (const g of groupings) {
+      out.push(`### ${g.name}`, '');
+      if (g.description) out.push(g.description, '');
+      const direct = els.filter(e => e.group === g.id);
+      const rows = LAYER_ORDER.map(l => [LAYER_LABELS[l], direct.filter(e => e.layer === l).map(e => e.name).join(', ')]).filter(r => r[1]);
+      out.push(rows.length ? table(['Camada', 'Membros'], rows) : '_Sem membros._', '');
+    }
+  }
+
   // C4 hierarchy
   if (hasC4) {
     out.push('## Modelo C4', '');

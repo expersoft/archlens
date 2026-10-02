@@ -5,7 +5,7 @@ import { previewMerge, relationshipIds, relationshipKeys, canonicalJson, mergeEr
 import { indexTree, attach } from './raw-tree.mjs';
 import { describeItem } from './merge-report.mjs';
 
-const ELEMENT_COMPARED = ['name', 'type', 'description', 'technology', 'external', 'archimate', 'parent', 'status', 'statusReason', 'tags', 'aliases', 'properties', 'owner', 'url'];
+const ELEMENT_COMPARED = ['name', 'type', 'description', 'technology', 'external', 'archimate', 'parent', 'group', 'status', 'statusReason', 'tags', 'aliases', 'properties', 'owner', 'url'];
 const REL_COMPARED = ['description', 'technology', 'accessType', 'status', 'statusReason', 'tags', 'properties'];
 const OPTIONS = { conflict: ['keep', 'take', 'value:<x>'], 'view-conflict': ['keep', 'take'], 'possible-duplicate': ['same', 'different'], op: ['yes', 'no'] };
 const ASSUMED = { conflict: 'take', 'possible-duplicate': 'different', op: 'yes' };

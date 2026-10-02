@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { normalizeModel } from '../scripts/lib/model.mjs';
 import { resolveView } from '../scripts/lib/query.mjs';
 import { validateModel } from '../scripts/lib/validate.mjs';
+import { suggestViews } from '../scripts/lib/suggest.mjs';
 
 const model = () => normalizeModel(JSON.parse(readFileSync(new URL('./fixtures/shop.json', import.meta.url))));
 const ids = v => v.nodes.map(n => n.id).sort();
@@ -323,4 +324,11 @@ test('context scope stays even when it is outside groups.only', () => {
   const v = resolveView(plat(), { key: 'x', notation: 'c4', level: 'context', scope: 'autorizador', groups: { only: ['plat-cred'] } });
   assert.ok(v.nodes.some(n => n.id === 'autorizador'));
   assert.ok(v.nodes.some(n => n.id === 'motor'));
+});
+
+test('with two or more groupings, views suggests framed panoramas', () => {
+  const keys = suggestViews(plat()).map(s => s.key);
+  assert.ok(keys.includes('landscape-plataformas'));
+  assert.ok(keys.includes('aplicacao-plataformas'));
+  assert.ok(!suggestViews(model()).some(s => s.key === 'landscape-plataformas'));
 });

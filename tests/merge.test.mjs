@@ -570,3 +570,32 @@ test('a single changed description against a single base relationship is still a
   const plan = planMerge(shop(), delta({ relationships: [{ from: 'cliente', to: 'loja.web', description: 'Navega e compra' }] }), TODAY);
   assert.equal(plan.items.filter(i => i.class === 'conflict').length, 1);
 });
+
+const platBase = () => JSON.parse(readFileSync(new URL('./fixtures/platforms.json', import.meta.url)));
+
+test('moving an element to another group is a conflict; filling an empty group is an enrichment', () => {
+  const plan = planMerge(platBase(), { 'archlens-delta': '1.0', model: { elements: [
+    { id: 'tokenizacao', group: 'plat-cred' },
+    { id: 'pg', group: 'plat-cred' },
+  ] } });
+  const conflict = plan.items.find(i => i.class === 'conflict' && i.target === 'tokenizacao' && i.field === 'group');
+  assert.ok(conflict);
+  assert.equal(conflict.base, 'plat-aut');
+  assert.ok(plan.items.some(i => i.target === 'pg' && i.class === 'enrich'));
+});
+
+test('a delta grouping matched to the base one carries its members along', () => {
+  const delta = { 'archlens-delta': '1.0', model: { elements: [
+    { id: 'antifraude', type: 'c4:softwareSystem', name: 'Antifraude', group: 'plataforma-autorizacao' },
+    { id: 'plataforma-autorizacao', type: 'grouping', name: 'Plataforma de Autorização' },
+  ] } };
+  const { raw } = previewMerge(platBase(), delta, { answers: new Map([['dup:plataforma-autorizacao', 'same']]) });
+  const anti = raw.model.elements.find(e => e.id === 'antifraude');
+  assert.equal(anti.group, 'plat-aut');
+});
+
+test('a delta that points to a missing grouping blocks the plan with E_GROUP_REF', () => {
+  const plan = planMerge(platBase(), { 'archlens-delta': '1.0', model: { elements: [{ id: 'pg', group: 'nada' }] } });
+  assert.equal(plan.blocked, true);
+  assert.ok(plan.errors.some(e => e.code === 'E_GROUP_REF'));
+});
