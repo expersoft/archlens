@@ -24,7 +24,10 @@ Requer Node ≥ 18. A checagem visual (`deliver`/`build`) usa `playwright-core` 
 
 1. **Localize a base.** Procure `architecture/archlens.json` (a CLI também acha sozinha, subindo a
    partir do diretório atual). Se só existir um `ARCHITECTURE.md` com bloco `archlens-json` (formato antigo), proponha
-   `archlens migrate ARCHITECTURE.md` e **pergunte antes**. Se não existe base, o primeiro delta a cria.
+   `archlens migrate ARCHITECTURE.md` e **pergunte antes**. Se não existe base, o primeiro delta a cria; mas, se o
+   repositório já tem um `ARCHITECTURE.md` que não foi gerado pelo archlens (sem `source:` no cabeçalho), **pergunte
+   antes** ao usuário: movê-lo, ou usar o conteúdo dele como texto livre do primeiro delta. A CLI nunca o sobrescreve
+   (`E_STORE_DOC_FOREIGN`).
 2. **Só pedido de visão, nada novo a modelar?** Vá ao passo 7.
 3. **Traduza a informação nova em delta** (`references/merge.md`):
    - **texto livre**: siga `references/free-text.md` (`source` com o trecho, `inferred` + `confidence`,
@@ -118,8 +121,8 @@ recorta com scope, focus, depth, anchor, traverse, layers, granularity, collapse
   `sistema.container.componente`.
 - **Editar o `ARCHITECTURE.md`**: é gerado e será sobrescrito. Texto autoral vai em `architecture/notes/*.md`; o
   modelo muda por delta. Recomende `archlens check` no CI ou no pre-commit.
-- **Base no formato antigo**: comandos de leitura funcionam, mas merge/doc/build recusam; rode `archlens migrate`
-  (com o ok do usuário).
+- **Base no formato antigo**: comandos de leitura, `merge --plan` e as prévias funcionam; só `merge --apply`, `doc`
+  e `build` recusam. Rode `archlens migrate` (com o ok do usuário).
 - **Duplicata aceita sem perguntar**: `possible-duplicate` é sempre pergunta ao usuário. Um `same` errado funde
   dois elementos diferentes.
 - **Visão gigante**: um diagrama com 60 nós não comunica nada. Prefira várias visões, que as setas

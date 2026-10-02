@@ -194,7 +194,10 @@ Exemplos de pre-commit e de passo de CI vão no `README.md`.
 ### Erros novos
 
 `E_STORE_LEGACY`, `E_STORE_NOT_BASE`, `E_STORE_NOT_FOUND`, `E_STORE_DUP_ID`, `E_STORE_JSON` (arquivo e
-posição), `E_STORE_EXISTS`, `E_STORE_MIGRATE`, `E_STORE_UNSUPPORTED`.
+posição), `E_STORE_EXISTS`, `E_STORE_MIGRATE`, `E_STORE_UNSUPPORTED`, `E_STORE_LAYOUT` (`layout.model` que não é
+um `.json` ou uma pasta terminada em `/` dentro da base, ou `defaultFile` fora dela: gravaria arquivos que a leitura
+não vê), `E_STORE_DOC_FOREIGN` (o `ARCHITECTURE.md` de destino existe e não foi gerado por esta base: a CLI nunca
+o sobrescreve).
 
 ## 3. Skill, exemplos e documentação
 

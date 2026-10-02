@@ -139,4 +139,5 @@ imprime só o JSON. Os comandos de prévia exigem o arquivo da base mesmo que el
 
 - Um delta por fonte e por rodada: facilita o histórico e a revisão.
 - Reutilize ids da base (`archlens views architecture/` e as tabelas do `.md` mostram os ids).
-- Depois do apply, sugira o commit do `ARCHITECTURE.md` ao usuário.
+- Depois do apply, sugira o commit da pasta `architecture/` e do `ARCHITECTURE.md` ao usuário (a CLI imprime
+  `git add architecture ARCHITECTURE.md`).

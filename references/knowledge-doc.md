@@ -34,7 +34,8 @@ arquivo de onde veio; elementos novos vão para o arquivo do pai ou, sem pai, pa
 
 Bases com o modelo num bloco `archlens-json` dentro do `.md` são lidas por todos os comandos de leitura (e pela
 prévia). Para gravar, converta: `archlens migrate ARCHITECTURE.md` cria a pasta (os blocos `keep` viram
-`notes/*.md`), confere que o modelo é idêntico e só então regenera o `.md`. Planos gerados antes continuam válidos.
+`notes/*.md`), confere que o modelo é idêntico e só então regenera o `.md`. Planos gerados antes continuam válidos,
+desde que o migrate não avise que a ordem das chaves mudou.
 
 ## Uso como base de conhecimento
 
