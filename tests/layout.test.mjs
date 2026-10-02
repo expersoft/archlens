@@ -53,3 +53,38 @@ test('C4 without frames lays out exactly as before', async () => {
   const laid = await layoutView(resolveView(plat(), { key: 'l', notation: 'c4', level: 'landscape' }));
   assert.deepEqual(laid.frames, []);
 });
+
+const amSpec = extra => ({ key: 'g', notation: 'archimate', viewpoint: 'layered', granularity: 'system', groups: { only: ['plat-aut', 'plat-cred'] }, ...extra });
+
+for (const style of ['flow', 'bands-flow']) {
+  test(`ArchiMate ${style}: one frame per group × layer, inside its band, around its members`, async () => {
+    const laid = await layoutView(resolveView(plat(), amSpec({ layout: { style } })));
+    assert.equal(laid.layoutStyle, style);
+    assert.deepEqual(laid.frames.map(f => `${f.id}@${f.layer}`).sort(),
+      ['plat-aut@application', 'plat-aut@business', 'plat-aut@technology', 'plat-cred@application', 'plat-cred@business']);
+    for (const f of laid.frames) {
+      const band = laid.bands.find(b => b.layer === f.layer);
+      if (!band.vertical) assert.ok(f.y >= band.y - 0.5 && f.y + f.h <= band.y + band.height + 0.5, `${f.key} inside its band`);
+      for (const n of laid.nodes.filter(n => n.group === f.id && n.layer === f.layer)) assert.ok(inside(n, f), `${n.id} in ${f.key}`);
+    }
+  });
+}
+
+test('ArchiMate: "bands" cannot draw frames, so it switches to bands-flow and says so; auto never picks bands', async () => {
+  const asked = await layoutView(resolveView(plat(), amSpec({ layout: { style: 'bands' } })));
+  assert.equal(asked.layoutStyle, 'bands-flow');
+  assert.match(asked.layoutNote, /bands/);
+  const auto = await layoutView(resolveView(plat(), amSpec()));
+  assert.notEqual(auto.layoutStyle, 'bands');
+  assert.ok(!('bands' in (auto.layoutScores ?? {})));
+});
+
+test('ArchiMate: frames only in the layers the view shows', async () => {
+  const laid = await layoutView(resolveView(plat(), amSpec({ viewpoint: 'custom', layers: ['business', 'application'], layout: { style: 'bands-flow' } })));
+  assert.ok(laid.frames.every(f => ['business', 'application'].includes(f.layer)));
+});
+
+test('ArchiMate without frames lays out as before', async () => {
+  const laid = await layoutView(resolveView(plat(), { key: 'l', notation: 'archimate', viewpoint: 'layered', granularity: 'system', layout: { style: 'flow' } }));
+  assert.deepEqual(laid.frames, []);
+});

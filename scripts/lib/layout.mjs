@@ -218,7 +218,22 @@ async function layoutArchimateElk(view) {
   return best;
 }
 
+/** ArchiMate frames: one per (grouping × layer) with members on the view, so no frame crosses a band. */
+function amFrames(view) {
+  const out = [];
+  for (const layer of view.layers) {
+    for (const g of view.groups ?? []) {
+      const members = view.nodes.filter(n => n.layer === layer && n.group === g.id).map(n => n.id);
+      if (members.length) out.push({ ...g, layer, key: `frame:${g.id}@${layer}`, members });
+    }
+  }
+  return out;
+}
+const AM_FRAME_PAD = '[top=60,left=24,bottom=24,right=24]';
+
 async function runAmElk(view, DIR) {
+  const frames = amFrames(view);
+  const framed = new Set(frames.flatMap(f => f.members));
   const boxes = new Map(view.nodes.map(n => [n.id, amNodeBox(n)]));
   const part = new Map(view.nodes.map(n => [n.id, Math.max(0, view.layers.indexOf(n.layer)) * 3 + amGroup(n)]));
   const labels = new Map(view.edges.map(e => [e.id, edgeLabel(e)]));
@@ -247,9 +262,17 @@ async function runAmElk(view, DIR) {
       'elk.layered.considerModelOrder.strategy': 'NODES_AND_EDGES',
       'elk.json.edgeCoords': 'ROOT',
       'elk.json.shapeCoords': 'ROOT',
+      ...(frames.length ? { 'elk.hierarchyHandling': 'INCLUDE_CHILDREN' } : {}),
     },
-    children: view.nodes.map(n => ({ id: n.id, width: boxes.get(n.id).w, height: boxes.get(n.id).h,
-      layoutOptions: { 'elk.partitioning.partition': String(part.get(n.id)) } })),
+    children: [
+      ...frames.map(f => ({
+        id: f.key,
+        layoutOptions: { 'elk.partitioning.partition': String(Math.max(0, view.layers.indexOf(f.layer)) * 3 + 1), 'elk.padding': AM_FRAME_PAD },
+        children: f.members.map(id => ({ id, width: boxes.get(id).w, height: boxes.get(id).h })),
+      })),
+      ...view.nodes.filter(n => !framed.has(n.id)).map(n => ({ id: n.id, width: boxes.get(n.id).w, height: boxes.get(n.id).h,
+        layoutOptions: { 'elk.partitioning.partition': String(part.get(n.id)) } })),
+    ],
     edges: edges.map(e => {
       const [src, dst] = flipped.has(e.id) ? [e.to, e.from] : [e.from, e.to];
       const lab = labels.get(e.id);
@@ -258,13 +281,15 @@ async function runAmElk(view, DIR) {
     }),
   };
   const res = await elk.layout(graph);
-  const pos = new Map(res.children.map(c => [c.id, c]));
+  const pos = new Map();
+  const visit = c => { pos.set(c.id, c); (c.children || []).forEach(visit); };
+  (res.children || []).forEach(visit);
   const width = Math.ceil(res.width), height = Math.ceil(res.height);
 
   // Bands (or columns): split halfway between the last node of a layer and the first node of the next.
   const Y = H ? 'x' : 'y', S = H ? 'width' : 'height';
   const extent = view.layers.map(layer => {
-    const ps = view.nodes.filter(n => n.layer === layer).map(n => pos.get(n.id));
+    const ps = [...view.nodes.filter(n => n.layer === layer).map(n => pos.get(n.id)), ...frames.filter(f => f.layer === layer).map(f => pos.get(f.key))];
     return ps.length ? { layer, top: Math.min(...ps.map(p => p[Y])), bottom: Math.max(...ps.map(p => p[Y] + p[S])) } : null;
   }).filter(Boolean);
   const bands = extent.map((b, i) => {
@@ -285,7 +310,8 @@ async function runAmElk(view, DIR) {
     const l = le?.labels?.[0];
     return { ...e, points, labelBox: l ? { x: l.x, y: l.y, w: l.width, h: l.height } : null, labelLines: e.label ? labels.get(e.id).lines : [] };
   });
-  return { ...view, direction: DIR, width, height, nodes, edges: outEdges, boundaries: [], bands, minFont: MIN_FONT, fonts: FONT };
+  const outFrames = frames.map(({ members, ...f }) => { const p = pos.get(f.key); return { ...f, x: p.x, y: p.y, w: p.width, h: p.height }; });
+  return { ...view, direction: DIR, width, height, nodes, edges: outEdges, boundaries: [], bands, frames: outFrames, minFont: MIN_FONT, fonts: FONT };
 }
 
 // ---------------------------------------------------------------- ArchiMate — style "bands"
@@ -498,7 +524,7 @@ function layoutArchimateRouted(view) {
       bands.push({ layer, label: LAYER_LABELS[layer], x: 0, y: top, width, height: bottom - top });
     }
     const nodes = view.nodes.map(n => ({ ...n, ...node(n.id), lines: boxes.get(n.id).lines }));
-    return { ...view, direction: 'DOWN', width, height: Math.ceil(height), nodes, edges, boundaries: [], bands, columns: C, minFont: MIN_FONT, fonts: FONT };
+    return { ...view, direction: 'DOWN', width, height: Math.ceil(height), nodes, edges, boundaries: [], bands, frames: [], columns: C, minFont: MIN_FONT, fonts: FONT };
   };
   // Channels grow with the edges, so re-run once with a canvas wide enough for the final height.
   let laid = attempt(Math.ceil(Math.max(measure(C).w, measure(C).h * ratio)));
@@ -526,6 +552,8 @@ async function layoutArchimateMix(view) {
   for (const layer of layers) {
     const ids = view.nodes.filter(n => n.layer === layer).map(n => n.id);
     const set = new Set(ids);
+    const bandFrames = amFrames(view).filter(f => f.layer === layer);
+    const framed = new Set(bandFrames.flatMap(f => f.members));
     const inner = edges.filter(e => set.has(e.from) && set.has(e.to));
     const res = await elk.layout({
       id: 'band',
@@ -539,19 +567,27 @@ async function layoutArchimateMix(view) {
         'elk.edgeLabels.placement': 'CENTER', 'elk.layered.nodePlacement.strategy': 'NETWORK_SIMPLEX',
         'elk.layered.considerModelOrder.strategy': 'NODES_AND_EDGES',
         'elk.json.edgeCoords': 'ROOT', 'elk.json.shapeCoords': 'ROOT',
+        ...(bandFrames.length ? { 'elk.hierarchyHandling': 'INCLUDE_CHILDREN' } : {}),
       },
-      children: ids.map(id => ({ id, width: boxes.get(id).w, height: boxes.get(id).h })),
+      children: [
+        ...bandFrames.map(f => ({ id: f.key, layoutOptions: { 'elk.padding': AM_FRAME_PAD },
+          children: f.members.map(id => ({ id, width: boxes.get(id).w, height: boxes.get(id).h })) })),
+        ...ids.filter(id => !framed.has(id)).map(id => ({ id, width: boxes.get(id).w, height: boxes.get(id).h })),
+      ],
       edges: inner.map(e => ({ id: e.id, sources: [e.from], targets: [e.to],
         labels: e.label ? [{ id: e.id + ':label', text: labels.get(e.id).lines.join(' '), width: labels.get(e.id).w, height: labels.get(e.id).h }] : [] })),
     });
-    bandsLaid.push({ layer, ids, inner, res, w: res.width, h: res.height });
+    bandsLaid.push({ layer, ids, inner, res, bandFrames, w: res.width, h: res.height });
   }
 
   // 2. horizontal alignment: shift each band toward the median offset of its cross-band neighbours
   const contentW = Math.max(...bandsLaid.map(b => b.w));
   const left = STRIP + PAD_X, width = Math.ceil(left + contentW + PAD_X);
   const local = new Map();
-  for (const b of bandsLaid) for (const c of b.res.children) local.set(c.id, { x: c.x, y: c.y });
+  for (const b of bandsLaid) {
+    const visit = c => { local.set(c.id, { x: c.x, y: c.y, width: c.width, height: c.height }); (c.children || []).forEach(visit); };
+    (b.res.children || []).forEach(visit);
+  }
   const off = bandsLaid.map(b => left + (contentW - b.w) / 2);
   const cross = edges.filter(e => layerOf.get(e.from) !== layerOf.get(e.to));
   for (let pass = 0; pass < 4; pass++) {
@@ -626,7 +662,11 @@ async function layoutArchimateMix(view) {
     out.set(e.id, { ...e, points: pts, labelBox: lb, labelLines: wrap(e.label, FONT.edge, 200, 2) });
   }
   const nodes = view.nodes.map(n => ({ ...n, ...node(n.id), lines: boxes.get(n.id).lines }));
-  return { ...view, direction: 'DOWN', width, height, nodes, edges: edges.map(e => out.get(e.id)).filter(Boolean), boundaries: [], bands, minFont: MIN_FONT, fonts: FONT };
+  const outFrames = bandsLaid.flatMap((b, i) => b.bandFrames.map(({ members, ...f }) => {
+    const p = local.get(f.key);
+    return { ...f, x: off[i] + p.x, y: top[i] + p.y, w: p.width, h: p.height };
+  }));
+  return { ...view, direction: 'DOWN', width, height, nodes, edges: edges.map(e => out.get(e.id)).filter(Boolean), boundaries: [], bands, frames: outFrames, minFont: MIN_FONT, fonts: FONT };
 }
 
 // Orthogonal A* on a GRID-sized lattice: boxes are obstacles, bends cost, reusing a cell in the same
@@ -707,10 +747,15 @@ export const AM_STYLES = ['flow', 'bands', 'bands-flow'];
 const AM_ENGINES = { flow: layoutArchimateElk, bands: layoutArchimateRouted, 'bands-flow': layoutArchimateMix };
 
 async function layoutArchimateStyled(view) {
+  const framed = (view.groups?.length ?? 0) > 0;
   const want = view.layout?.style ?? 'auto';
+  if (framed && want === 'bands') {
+    return { ...(await AM_ENGINES['bands-flow'](view)), layoutStyle: 'bands-flow', layoutAuto: false,
+      layoutNote: 'o estilo "bands" não desenha molduras de agrupamento; usei "bands-flow"' };
+  }
   if (AM_ENGINES[want]) return { ...(await AM_ENGINES[want](view)), layoutStyle: want, layoutAuto: false };
   const tried = [];
-  for (const style of AM_STYLES) {
+  for (const style of AM_STYLES.filter(s => !(framed && s === 'bands'))) {
     const laid = await AM_ENGINES[style](view);
     tried.push({ style, laid, q: layoutQuality(laid) });
   }
