@@ -28,7 +28,10 @@ export function groupSpec(model, spec) {
 }
 
 /** Effective grouping of an element (its own or inherited); null when none. */
-export const groupOf = (model, id) => model.elements.get(id)?.groupId ?? null;
+export const groupOf = (model, id) => {
+  const gid = model.elements.get(id)?.groupId ?? null;
+  return gid && model.elements.has(gid) ? gid : null; // a grouping hidden by the status filter is no group here
+};
 
 /**
  * The cut of `only`: members of the listed groups plus neighbours up to `depth` along `edges`; with crossOnly, only

@@ -299,6 +299,7 @@ test('a retired grouping draws no frame and cannot be listed in only', () => {
   const v = resolveView(m, { key: 'a', notation: 'c4', level: 'landscape', groups: { frames: true } });
   assert.deepEqual(v.groups.map(g => g.id), ['plat-aut']);
   assert.ok(v.nodes.some(n => n.id === 'motor'), 'members stay, loose');
+  assert.ok(!('group' in v.nodes.find(n => n.id === 'motor')), 'no dangling group reference');
   assert.throws(() => resolveView(m, { key: 'b', notation: 'c4', level: 'landscape', groups: { only: ['plat-cred'] } }), /E_VIEW_GROUP[\s\S]*status/);
 });
 
@@ -316,4 +317,10 @@ test('views without groups resolve exactly as before', () => {
     assert.equal(v.groups, undefined);
     assert.ok(v.nodes.every(n => !('group' in n)));
   }
+});
+
+test('context scope stays even when it is outside groups.only', () => {
+  const v = resolveView(plat(), { key: 'x', notation: 'c4', level: 'context', scope: 'autorizador', groups: { only: ['plat-cred'] } });
+  assert.ok(v.nodes.some(n => n.id === 'autorizador'));
+  assert.ok(v.nodes.some(n => n.id === 'motor'));
 });
