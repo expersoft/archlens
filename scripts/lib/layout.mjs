@@ -81,15 +81,27 @@ function edgeLabel(e) {
 async function runElk(view, direction, ratio, layerGap = 120) {
   const boxes = new Map(view.nodes.map(n => [n.id, c4NodeBox(n)]));
   const toElkNode = n => ({ id: n.id, width: boxes.get(n.id).w, height: boxes.get(n.id).h });
-  const children = [];
-  for (const b of view.boundaries) {
-    children.push({
-      id: `boundary:${b.id}`,
-      layoutOptions: { 'elk.padding': '[top=64,left=36,bottom=36,right=36]' },
-      children: view.nodes.filter(n => n.boundary === b.id).map(toElkNode),
-    });
-  }
-  children.push(...view.nodes.filter(n => !n.boundary).map(toElkNode));
+
+  // Create boundary nodes wrapped with their members.
+  const boundaryNode = b => ({
+    id: `boundary:${b.id}`,
+    layoutOptions: { 'elk.padding': '[top=64,left=36,bottom=36,right=36]' },
+    children: view.nodes.filter(n => n.boundary === b.id).map(toElkNode),
+  });
+
+  // Group frames (compound nodes): loose members and opened boundaries go inside the frame of their group.
+  const frames = view.groups ?? [];
+  const inFrame = new Map(frames.map(g => [g.id, []]));
+  const top = [];
+  for (const b of view.boundaries) (inFrame.get(b.group) ?? top).push(boundaryNode(b));
+  for (const n of view.nodes.filter(n => !n.boundary)) (inFrame.get(n.group) ?? top).push(toElkNode(n));
+  const children = [
+    ...frames.filter(g => inFrame.get(g.id).length).map(g => ({
+      id: `frame:${g.id}`, layoutOptions: { 'elk.padding': '[top=84,left=32,bottom=32,right=32]' }, children: inFrame.get(g.id),
+    })),
+    ...top,
+  ];
+
   const labels = new Map(view.edges.map(e => [e.id, edgeLabel(e)]));
   const graph = {
     id: 'root',
@@ -141,7 +153,7 @@ async function layoutC4(view) {
   // Still narrower than the target? Widen the gaps between layers (never the boxes) to fill the width.
   if (best.dir === 'RIGHT' && best.res.width / best.res.height < ratio) {
     const layers = new Set();
-    const walkX = n => { if (!n.id.startsWith('boundary:')) layers.add(Math.round(n.x / 20)); (n.children || []).forEach(walkX); };
+    const walkX = n => { if (!n.id.startsWith('boundary:') && !n.id.startsWith('frame:')) layers.add(Math.round(n.x / 20)); (n.children || []).forEach(walkX); };
     (best.res.children || []).forEach(walkX);
     const gaps = Math.max(1, layers.size - 1);
     const extra = (best.res.height * ratio - best.res.width) / gaps;
@@ -168,7 +180,11 @@ async function layoutC4(view) {
     const lab = labels.get(e.id);
     return { ...e, points, labelBox: l ? { x: l.x, y: l.y, w: l.width, h: l.height } : null, labelLines: lab.lines };
   });
-  return { ...view, direction: best.dir, width: Math.ceil(res.width), height: Math.ceil(res.height), nodes, edges, boundaries, bands: [], minFont: MIN_FONT, fonts: FONT };
+  const frames = (view.groups ?? []).filter(g => pos.has(`frame:${g.id}`)).map(g => {
+    const p = pos.get(`frame:${g.id}`);
+    return { ...g, x: p.x, y: p.y, w: p.width, h: p.height };
+  });
+  return { ...view, direction: best.dir, width: Math.ceil(res.width), height: Math.ceil(res.height), nodes, edges, boundaries, frames, bands: [], minFont: MIN_FONT, fonts: FONT };
 }
 
 // ---------------------------------------------------------------- ArchiMate
