@@ -3,6 +3,9 @@ import { normalizeModel, c4KindOf, childrenOf, c4Orientation } from './model.mjs
 import { resolveView } from './query.mjs';
 import { ELEMENT_TYPES, LAYER_ORDER, LAYER_LABELS, C4_LABELS } from './registry.mjs';
 
+/** Hand-written notes of a knowledge base (architecture/notes/<name>.md). */
+export const NOTE_NAMES = ['overview', 'notes', 'assumptions'];
+
 const BLOCK_RE = /```archlens-json[^\n]*\n([\s\S]*?)\n```/;
 const KEEP_RE = /<!-- keep:([\w-]+) -->\n?([\s\S]*?)\n?<!-- \/keep:\1 -->/g;
 
