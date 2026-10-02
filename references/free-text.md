@@ -1,7 +1,7 @@
 # Do texto livre ao modelo
 
 Objetivo: um **delta** (`references/merge.md`) **fiel ao que foi dito**, com as lacunas visíveis. Não invente
-arquitetura para deixar o diagrama bonito. Se já existe um `ARCHITECTURE.md`, leia-o antes: reutilize os ids
+arquitetura para deixar o diagrama bonito. Se já existe uma base (`architecture/`), leia-a antes (o `ARCHITECTURE.md` gerado é o resumo legível): reutilize os ids
 e acrescente só o que é novo ou diferente — o merge cuida do resto.
 
 ## Procedimento
@@ -44,5 +44,5 @@ e acrescente só o que é novo ou diferente — o merge cuida do resto.
 - Um processo sem application service: a visão de suporte vai parar no negócio. Verifique se o
   texto indica qual sistema o apoia.
 
-O exemplo completo está em `examples/telemedicina/`: `entrada.md` (texto original), o `ARCHITECTURE.md` gerado,
+O exemplo completo está em `examples/telemedicina/`: `entrada.md` (texto original), a base em `architecture/` e o `ARCHITECTURE.md` gerado,
 com a seção de premissas, e `delta-01.json`/`plano-01.json`, uma rodada seguinte de enriquecimento.

@@ -1,0 +1,177 @@
+[
+  {
+    "key": "landscape",
+    "notation": "c4",
+    "level": "landscape",
+    "title": "Panorama de sistemas"
+  },
+  {
+    "key": "contexto",
+    "notation": "c4",
+    "level": "context",
+    "scope": "loja",
+    "title": "Contexto — Plataforma de E-commerce"
+  },
+  {
+    "key": "containers",
+    "notation": "c4",
+    "level": "container",
+    "scope": "loja",
+    "title": "Containers — Plataforma de E-commerce"
+  },
+  {
+    "key": "containers-foco-pedidos",
+    "notation": "c4",
+    "level": "container",
+    "scope": "loja",
+    "focus": [
+      "loja.pedidos"
+    ],
+    "depth": 1,
+    "title": "Containers — foco na API de Pedidos"
+  },
+  {
+    "key": "componentes-pedidos",
+    "notation": "c4",
+    "level": "component",
+    "scope": "loja.pedidos",
+    "title": "Componentes — API de Pedidos"
+  },
+  {
+    "key": "checkout-dinamico",
+    "notation": "c4",
+    "level": "dynamic",
+    "scope": "loja.pedidos",
+    "title": "Dinâmico — fechamento de pedido",
+    "steps": [
+      {
+        "from": "cliente",
+        "to": "loja.web",
+        "description": "Clica em Finalizar compra"
+      },
+      {
+        "from": "loja.web",
+        "to": "loja.bff",
+        "description": "mutation checkout"
+      },
+      {
+        "from": "loja.bff",
+        "to": "loja.pedidos.checkout",
+        "description": "POST /pedidos"
+      },
+      {
+        "from": "loja.pedidos.checkout",
+        "to": "loja.pedidos.carrinho",
+        "description": "Obtém itens e cupons"
+      },
+      {
+        "from": "loja.pedidos.checkout",
+        "to": "loja.pedidos.pagamento",
+        "description": "Solicita autorização"
+      },
+      {
+        "from": "loja.pedidos.pagamento",
+        "to": "antifraude",
+        "description": "Avalia risco"
+      },
+      {
+        "from": "loja.pedidos.pagamento",
+        "to": "gateway",
+        "description": "Autoriza cartão"
+      },
+      {
+        "from": "loja.pedidos.checkout",
+        "to": "loja.pedidos.repo",
+        "description": "Persiste pedido"
+      },
+      {
+        "from": "loja.pedidos.repo",
+        "to": "loja.db-pedidos",
+        "description": "INSERT pedido"
+      },
+      {
+        "from": "loja.pedidos.checkout",
+        "to": "loja.pedidos.eventos",
+        "description": "PedidoCriado"
+      },
+      {
+        "from": "loja.pedidos.eventos",
+        "to": "loja.eventos",
+        "description": "Publica no tópico pedidos"
+      }
+    ]
+  },
+  {
+    "key": "negocio",
+    "notation": "archimate",
+    "viewpoint": "business",
+    "title": "Camada de Negócio"
+  },
+  {
+    "key": "aplicacao",
+    "notation": "archimate",
+    "viewpoint": "application",
+    "granularity": "container",
+    "title": "Camada de Aplicação (sistemas e containers)"
+  },
+  {
+    "key": "tecnologia",
+    "notation": "archimate",
+    "viewpoint": "technology",
+    "title": "Camada de Tecnologia"
+  },
+  {
+    "key": "suporte-venda-online",
+    "notation": "archimate",
+    "viewpoint": "product-support",
+    "anchor": "prod-venda",
+    "traverse": {
+      "mode": "supporters"
+    },
+    "collapse": [
+      "application-service",
+      "technology-service"
+    ],
+    "title": "Oferta Venda Online — o que a sustenta"
+  },
+  {
+    "key": "suporte-checkout",
+    "notation": "archimate",
+    "viewpoint": "layered",
+    "anchor": "bp-checkout",
+    "traverse": {
+      "mode": "supporters"
+    },
+    "granularity": "container",
+    "title": "Processo de Checkout — dependências por camada"
+  },
+  {
+    "key": "impacto-api-pedidos",
+    "notation": "archimate",
+    "viewpoint": "impact",
+    "anchor": "loja.pedidos",
+    "traverse": {
+      "mode": "both"
+    },
+    "output": [
+      "diagram",
+      "matrix"
+    ],
+    "title": "API de Pedidos — matriz de dependência e impacto"
+  },
+  {
+    "key": "negocio-x-tecnologia",
+    "notation": "archimate",
+    "viewpoint": "custom",
+    "layers": [
+      "business",
+      "technology"
+    ],
+    "anchor": "prod-venda",
+    "traverse": {
+      "mode": "supporters"
+    },
+    "derive": true,
+    "title": "Venda Online — negócio × tecnologia (relações derivadas)"
+  }
+]

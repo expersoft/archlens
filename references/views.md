@@ -1,6 +1,6 @@
 # View specs
 
-Uma visão é uma **consulta** sobre o modelo. O mesmo `ARCHITECTURE.md` responde a qualquer número
+Uma visão é uma **consulta** sobre o modelo. O mesmo modelo (`architecture/`) responde a qualquer número
 de visões novas sem remodelar. Campos comuns:
 
 | Campo | Descrição |

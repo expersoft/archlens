@@ -1,0 +1,41 @@
+[
+  {
+    "key": "contexto",
+    "notation": "c4",
+    "level": "context",
+    "scope": "tele",
+    "title": "Contexto — Plataforma de Teleconsulta"
+  },
+  {
+    "key": "containers",
+    "notation": "c4",
+    "level": "container",
+    "scope": "tele",
+    "title": "Containers — Plataforma de Teleconsulta"
+  },
+  {
+    "key": "suporte-teleconsulta",
+    "notation": "archimate",
+    "viewpoint": "product-support",
+    "anchor": "prod-tele",
+    "title": "Oferta Teleconsulta — do negócio à infraestrutura"
+  },
+  {
+    "key": "impacto-api-agenda",
+    "notation": "archimate",
+    "viewpoint": "impact",
+    "anchor": "tele.api",
+    "title": "API de Agendamento — matriz de impacto"
+  },
+  {
+    "key": "containers-to-be",
+    "notation": "c4",
+    "level": "container",
+    "scope": "tele",
+    "status": [
+      "planned",
+      "active"
+    ],
+    "title": "Containers — to-be (sem o que está em desativação)"
+  }
+]

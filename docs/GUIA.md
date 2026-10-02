@@ -1,7 +1,7 @@
 # Guia do archlens
 
 O archlens transforma uma descrição de arquitetura (texto livre ou JSON) em uma **base de
-conhecimento** (`ARCHITECTURE.md`) e extrai dela diagramas **C4** e **ArchiMate** em HTML animado,
+conhecimento** (a pasta `architecture/` e o `ARCHITECTURE.md` gerado) e extrai dela diagramas **C4** e **ArchiMate** em HTML animado,
 feitos para apresentação em tela cheia.
 
 - [Instalação](#instalação)
@@ -28,12 +28,17 @@ Sem o Chromium, tudo funciona, exceto os screenshots e a medição de largura e 
 
 ## Usando com o Claude
 
+**Onde a base mora.** O modelo fica na pasta `architecture/` (manifesto, `model.json`, `views.json`,
+`changelog.json`, notas em `notes/`). O `ARCHITECTURE.md` é o documento legível gerado dela: não se edita; o texto
+autoral vai em `architecture/notes/*.md`. `archlens check` confere se o documento está em dia (útil no CI) e
+`archlens migrate` converte uma base antiga, com o modelo dentro do `.md`.
+
 A skill é acionada por pedidos como:
 
 > Tenho esta arquitetura: *(texto)*. Gere o C4 de contexto e containers, e um ArchiMate com tudo que
 > sustenta a oferta "Teleconsulta".
 
-> A partir do `docs/ARCHITECTURE.md`, me mostre a matriz de impacto do ERP.
+> A partir da base em `docs/architecture/`, me mostre a matriz de impacto do ERP.
 
 > Containers da plataforma, mas focando só na API de Pedidos e vizinhos.
 
@@ -45,11 +50,11 @@ O Claude:
 1. monta um delta (marcando o que inferiu e anotando premissas) e roda o merge, perguntando o que for conflito
    (a validação acontece dentro do merge: um plano com erros sai bloqueado e o apply não grava nada inválido);
 2. escreve as visões pedidas;
-3. roda `build`, que gera o `ARCHITECTURE.md`, o HTML e os screenshots;
+3. roda `build`, que regenera o `ARCHITECTURE.md` e gera o HTML (em `architecture/diagrams/`) e os screenshots;
 4. lê o relatório de qualidade e divide visões grandes demais;
-5. escreve a interpretação no documento.
+5. escreve a interpretação em `architecture/notes/`.
 
-Nas próximas conversas, basta apontar o `ARCHITECTURE.md` e pedir novas visões. O modelo não é refeito.
+Nas próximas conversas, basta apontar a pasta `architecture/` e pedir novas visões. O modelo não é refeito.
 
 ## Evoluindo a base
 
@@ -70,11 +75,11 @@ a mesma 'API de Agendamento'?"), remoções e desativações. Depois aplica, e o
 Pela linha de comando:
 
 ```bash
-$A merge ARCHITECTURE.md delta.json --plan plano.json   # relatório + plano com as perguntas
+$A merge architecture/ delta.json --plan plano.json   # relatório + plano com as perguntas
 # responda primeiro as possíveis duplicatas (same | different); se alguma for "same", replaneje com as respostas:
-$A merge ARCHITECTURE.md delta.json --plan plano2.json --answers plano.json
+$A merge architecture/ delta.json --plan plano2.json --answers plano.json
 # edite "resolution" nos itens pendentes: keep | take | value:<x> | same | different | yes | no
-$A merge ARCHITECTURE.md --apply plano2.json           # grava, regenera e registra
+$A merge architecture/ --apply plano2.json           # grava, regenera e registra
 ```
 
 Aplicar de novo um delta que já entrou não muda nada: o apply imprime `= nada mudou; a base não foi regravada`.
@@ -86,7 +91,7 @@ Veja `examples/telemedicina/delta-01.json` e `plano-01.json`, e o formato comple
 Peça "mostre como fica" e o Claude gera a **prévia** do delta: a base oficial desenhada normalmente e, por
 cima, o que muda — novo em esboço com `+`, alterado com `~`, removido riscado com `−`, decisão pendente com `?`.
 Nada é gravado; responda as perguntas, veja a prévia de novo com `--plan` e só então aplique. Exemplo:
-`examples/telemedicina/delta-02.json` e `delta-02-preview.html`.
+`examples/telemedicina/delta-02.json` e `examples/telemedicina/architecture/diagrams/delta-02-preview.html`.
 
 Itens ainda em discussão podem entrar na base com `status: "draft"`: aparecem em esboço, sem marcador.
 
@@ -94,28 +99,32 @@ Itens ainda em discussão podem entrar na base com `status: "draft"`: aparecem e
 
 ```bash
 A="node scripts/archlens.mjs"
-$A validate examples/loja-online/ARCHITECTURE.md
-$A views    examples/loja-online/ARCHITECTURE.md            # visões definidas + sugestões
-$A doc      examples/loja-online/ARCHITECTURE.md            # gera/atualiza ARCHITECTURE.md
-$A build    examples/loja-online/ARCHITECTURE.md --out-dir out/
-$A deliver  out/ARCHITECTURE.md --view impacto-api-pedidos --out out/impacto.html --open
-$A deliver  out/ARCHITECTURE.md --spec '{"key":"erp","notation":"archimate","viewpoint":"impact","anchor":"erp"}' --out out/erp.html
-$A resolve  ARCHITECTURE.md --view containers --json        # IR da visão (nós e arestas), para depuração
+$A validate examples/loja-online/architecture
+$A views    examples/loja-online/architecture               # visões definidas + sugestões
+$A doc      examples/loja-online/architecture               # regenera o ARCHITECTURE.md
+$A build    examples/loja-online/architecture
+$A check    examples/loja-online/architecture               # modelo válido e ARCHITECTURE.md em dia (CI)
+$A migrate  ARCHITECTURE.md                                 # formato antigo → architecture/
+$A deliver  examples/loja-online/architecture --view impacto-api-pedidos --out out/impacto.html --open
+$A deliver  examples/loja-online/architecture --spec '{"key":"erp","notation":"archimate","viewpoint":"impact","anchor":"erp"}' --out out/erp.html
+$A resolve  architecture/ --view containers --json        # IR da visão (nós e arestas), para depuração
 ```
 
 | Comando | O que faz |
 |---|---|
 | `validate` | erros (`E_*`) e avisos (`W_*`) com caminho e dica |
-| `doc` | `ARCHITECTURE.md`, preservando blocos `keep` |
+| `doc` | regenera o `ARCHITECTURE.md` a partir da pasta |
+| `migrate` | converte uma base antiga (modelo dentro do `.md`) para `architecture/` e confere que o modelo é idêntico |
+| `check` | valida o modelo e confere se o `ARCHITECTURE.md` está em dia; código 1 se não (CI, pre-commit) |
 | `extract` | tira o JSON de dentro do `.md` |
 | `views` | lista as visões definidas e sugere outras (contexto por sistema, suporte por produto, impacto por aplicação…) |
 | `render` | HTML, sem checagem |
 | `deliver` | HTML + screenshots 1920×1080 e 1280×720 + checagem de largura (≥ 90%) e fonte (≥ 14px). `--strict` não substitui a saída se falhar |
 | `build` | `doc` + `deliver` de todas as visões |
 | `merge … --plan p.json [--answers antigo.json]` | compara um delta com a base e grava o plano com as perguntas; `--answers` reaproveita as respostas de um plano anterior |
-| `merge … --apply p.json` | aplica o plano respondido: valida, regenera o `ARCHITECTURE.md` e registra o histórico |
+| `merge … --apply p.json` | aplica o plano respondido: valida, grava `architecture/`, regenera o `ARCHITECTURE.md` e registra o histórico |
 
-Todos aceitam `model.json` ou `ARCHITECTURE.md`, menos o `merge`, que trabalha sempre sobre o `ARCHITECTURE.md`.
+Todos aceitam a pasta, o `ARCHITECTURE.md` gerado ou nada (procura a partir do diretório atual); bases antigas são só lidas até o `migrate`.
 
 ## Apresentando
 

@@ -5,7 +5,7 @@ Skill para Claude Code: **arquitetura como modelo, diagramas como consultas.**
 - Aceita **texto livre** ou uma **DSL JSON** documentada (`references/notation.md`).
 - Um metamodelo só: **ArchiMate 3.2** com **perfil C4** por cima. O mesmo container é caixa azul no
   C4 e application component no ArchiMate.
-- Gera um **`ARCHITECTURE.md`** (base de conhecimento com o modelo canônico embutido) de onde se
+- Mantém a base em **`architecture/`** e gera dela o **`ARCHITECTURE.md`**, de onde se
   extraem visões novas a qualquer momento.
 - **Base que evolui:** cada informação nova vira um delta; `archlens merge` casa entidades (id, alias, nome parecido),
   pergunta conflitos e duplicatas, e registra proveniência, ciclo de vida (as-is/to-be) e histórico.
@@ -22,7 +22,7 @@ Skill para Claude Code: **arquitetura como modelo, diagramas como consultas.**
 
 ```bash
 npm install && npx playwright install chromium
-node scripts/archlens.mjs build examples/loja-online/ARCHITECTURE.md --out-dir /tmp/loja
+node scripts/archlens.mjs build examples/loja-online/architecture
 ```
 
 | | |
@@ -38,3 +38,15 @@ node scripts/archlens.mjs build examples/loja-online/ARCHITECTURE.md --out-dir /
 ## Licença
 
 [MIT](LICENSE) © 2026 Expersoft. O [ELK](https://eclipse.dev/elk/), usado no layout e incluído em `scripts/vendor/`, mantém a própria licença (EPL-2.0, ver `scripts/vendor/ELK-LICENSE.md`). O [rough.js](https://roughjs.com/) 4.6.6, usado no traço à mão dos rascunhos, também está em `scripts/vendor/` (MIT, ver `scripts/vendor/ROUGH-LICENSE.md`).
+
+## Manter o ARCHITECTURE.md em dia
+
+```bash
+# .git/hooks/pre-commit
+node path/to/archlens/scripts/archlens.mjs check || exit 1
+```
+
+```yaml
+# CI (GitHub Actions)
+- run: node path/to/archlens/scripts/archlens.mjs check
+```
