@@ -43,9 +43,9 @@ export function frameChipWidth(name, compact, change = false) {
   return Math.ceil(Math.max(compact ? 120 : 170, name.length * 17 * 0.58 + 52)) + (change ? 30 : 0);
 }
 /** ELK options that keep a frame at least as wide as its chip (14px margin each side). */
-const frameMin = (name, compact) => ({
+const frameMin = (name, compact, change = false) => ({
   'elk.nodeSize.constraints': 'MINIMUM_SIZE',
-  'elk.nodeSize.minimum': `(${frameChipWidth(name, compact) + 28}, ${compact ? 100 : 124})`,
+  'elk.nodeSize.minimum': `(${frameChipWidth(name, compact, change) + 28}, ${compact ? 100 : 124})`,
 });
 
 /** Frames keep a margin of at least FRAME_MARGIN units from the left/right canvas edges. */
@@ -130,7 +130,7 @@ async function runElk(view, direction, ratio, layerGap = 120) {
   for (const n of view.nodes.filter(n => !n.boundary)) (inFrame.get(n.group) ?? top).push(toElkNode(n));
   const children = [
     ...frames.filter(g => inFrame.get(g.id).length).map(g => ({
-      id: `frame:${g.id}`, layoutOptions: { 'elk.padding': '[top=84,left=32,bottom=32,right=32]', ...frameMin(g.name, false) }, children: inFrame.get(g.id),
+      id: `frame:${g.id}`, layoutOptions: { 'elk.padding': '[top=84,left=32,bottom=32,right=32]', ...frameMin(g.name, false, !!g.change) }, children: inFrame.get(g.id),
     })),
     ...top,
   ];
@@ -300,7 +300,7 @@ async function runAmElk(view, DIR) {
     children: [
       ...frames.map(f => ({
         id: f.key,
-        layoutOptions: { 'elk.partitioning.partition': String(Math.max(0, view.layers.indexOf(f.layer)) * 3 + 1), 'elk.padding': AM_FRAME_PAD, ...frameMin(f.name, true) },
+        layoutOptions: { 'elk.partitioning.partition': String(Math.max(0, view.layers.indexOf(f.layer)) * 3 + 1), 'elk.padding': AM_FRAME_PAD, ...frameMin(f.name, true, !!f.change) },
         children: f.members.map(id => ({ id, width: boxes.get(id).w, height: boxes.get(id).h })),
       })),
       ...view.nodes.filter(n => !framed.has(n.id)).map(n => ({ id: n.id, width: boxes.get(n.id).w, height: boxes.get(n.id).h,
@@ -603,7 +603,7 @@ async function layoutArchimateMix(view) {
         ...(bandFrames.length ? { 'elk.hierarchyHandling': 'INCLUDE_CHILDREN' } : {}),
       },
       children: [
-        ...bandFrames.map(f => ({ id: f.key, layoutOptions: { 'elk.padding': AM_FRAME_PAD, ...frameMin(f.name, true) },
+        ...bandFrames.map(f => ({ id: f.key, layoutOptions: { 'elk.padding': AM_FRAME_PAD, ...frameMin(f.name, true, !!f.change) },
           children: f.members.map(id => ({ id, width: boxes.get(id).w, height: boxes.get(id).h })) })),
         ...ids.filter(id => !framed.has(id)).map(id => ({ id, width: boxes.get(id).w, height: boxes.get(id).h })),
       ],

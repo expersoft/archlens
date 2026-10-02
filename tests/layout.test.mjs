@@ -107,3 +107,15 @@ test('frames are at least as wide as their chip and stay inside the canvas margi
     }
   }
 });
+
+test('a frame in a preview is wide enough for its chip with the change mark', async () => {
+  const raw = JSON.parse(readFileSync(new URL('./fixtures/platforms.json', import.meta.url)));
+  // one member and a long-ish name: the chip (not the members) decides the frame width
+  raw.model.elements.find(e => e.id === 'plat-cred').name = 'Plataforma de Crédito Digital';
+  delete raw.model.elements.find(e => e.id === 'limites').group;
+  const v = resolveView(normalizeModel(raw), { key: 'l', notation: 'c4', level: 'landscape', groups: { frames: true } });
+  v.groups.find(g => g.id === 'plat-cred').change = 'added';
+  const laid = await layoutView(v);
+  const fr = laid.frames.find(f => f.id === 'plat-cred');
+  assert.ok(fr.w >= frameChipWidth(fr.name, false, true) + 28, `width ${fr.w}`);
+});
