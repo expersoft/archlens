@@ -55,6 +55,8 @@ export function buildSchemas() {
       layout: { type: 'object', properties: { direction: { enum: ['RIGHT', 'DOWN', 'LEFT', 'UP', 'auto'] }, aspectRatio: { type: 'number', exclusiveMinimum: 0 }, style: { enum: ['auto', 'flow', 'bands', 'bands-flow'] } }, additionalProperties: false },
       animation: { enum: ['trace', 'story', 'impact', 'layers'] }, edgeLabels: { type: 'boolean' },
       level: { enum: ['landscape', 'context', 'container', 'component', 'dynamic'] }, scope: str,
+      groups: { description: 'groupings: cut the view to their members (only, crossOnly) and draw frames', type: 'object', additionalProperties: false,
+        properties: { only: { type: 'array', items: str, minItems: 1 }, crossOnly: { type: 'boolean' }, frames: { type: 'boolean' } } },
       expand: { description: 'C4 container/dynamic: other software systems whose containers are also shown, each inside its own boundary', type: 'array', items: str },
       focus: { type: 'array', items: str }, depth: { type: 'integer', minimum: 0 },
       steps: { type: 'array', items: { type: 'object', properties: { from: str, to: str, rel: str, description: str, technology: str } } },

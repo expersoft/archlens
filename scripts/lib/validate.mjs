@@ -48,6 +48,12 @@ export function validateModel(raw) {
       errors.push({ code: 'E_VIEW_STATUS', message: `visão "${v.key}" tem "status" inválido: ${JSON.stringify(v.status)}`, path: `views[${i}].status`,
         hint: `use uma lista com ${STATUSES.join(' | ')}, ex.: ["planned","active"]` });
     }
+    for (const gid of v.groups?.only || []) {
+      if (model.elements.get(gid)?.type !== 'grouping') {
+        errors.push({ code: 'E_VIEW_GROUP', message: `visão "${v.key}" lista "${gid}" em groups.only, que não é um agrupamento`, path: `views[${i}].groups.only`,
+          hint: 'use ids de elementos do tipo "grouping"' });
+      }
+    }
     for (const f of ['scope', 'anchor', ...(v.focus || []), ...(v.expand || [])].map(k => (k === 'scope' || k === 'anchor') ? v[k] : k)) {
       if (f && !model.elements.has(f)) errors.push({ code: 'E_UNKNOWN_REF', message: `visão "${v.key}" referencia "${f}", que não existe`, path: `views[${i}]`, hint: 'use o id de um elemento do modelo' });
     }

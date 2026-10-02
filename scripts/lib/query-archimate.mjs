@@ -3,6 +3,7 @@
 import { LAYER_ORDER, LAYER_LABELS, RELATIONSHIP_TYPES, ELEMENT_TYPES, supportDirection, orientBySupport } from './registry.mjs';
 import { c4KindOf } from './model.mjs';
 import { viewError, matchesPattern } from './query-util.mjs';
+import { groupSpec, groupOf, cutByGroups, cutEdges, frameGroups } from './query-groups.mjs';
 
 const VIEWPOINT_LAYERS = {
   business: ['business'],
@@ -37,7 +38,7 @@ export function resolveArchimate(model, spec) {
   const derive = spec.derive ?? true;
   const kind = el => c4KindOf(model, el);
   const excluded = el => (spec.exclude || []).some(p => matchesPattern(el, p, kind));
-  const allowed = el => layers.includes(el.layer) && (!types || types.has(el.type)) && !collapse.has(el.type) && !excluded(el);
+  const allowed = el => el.type !== 'grouping' && layers.includes(el.layer) && (!types || types.has(el.type)) && !collapse.has(el.type) && !excluded(el);
 
   let anchor = null;
   const info = new Map(); // id → { distance, role, pred, move }
@@ -77,6 +78,11 @@ export function resolveArchimate(model, spec) {
   };
   const kept = new Set(candidates.filter(e => e.id === anchor?.id || (allowed(e) && !tooFine(e))).map(e => e.id));
   for (const id of spec.include || []) if (model.elements.has(id)) kept.add(id);
+  const gs = groupSpec(model, spec);
+  if (gs.only) {
+    const cut = cutByGroups(model, gs, kept, model.relationships, { depth: spec.depth ?? 0, keepIds: anchor ? [anchor.id] : [] });
+    for (const id of [...kept]) if (!cut.has(id)) kept.delete(id);
+  }
 
   // Real + implicit (nesting) edges among kept elements.
   const edges = [];
@@ -130,6 +136,7 @@ export function resolveArchimate(model, spec) {
     }
   }
 
+  const shownEdges = cutEdges(model, gs, edges);
   const order = [...model.elements.keys()];
   const nodes = [...kept].sort((a, b) => order.indexOf(a) - order.indexOf(b)).map(id => {
     const el = model.elements.get(id);
@@ -138,8 +145,10 @@ export function resolveArchimate(model, spec) {
       id, name: el.name, type: el.type, typeLabel: ELEMENT_TYPES[el.type].label, layer: el.layer, aspect: el.aspect,
       c4Kind: kind(el), technology: el.technology, description: el.description, tags: el.tags, properties: el.properties,
       isAnchor: id === anchor?.id, distance: i?.distance ?? null, role: i?.role ?? null, inferred: !!el.inferred, status: el.status ?? 'active', statusReason: el.statusReason,
+      ...(groupOf(model, id) ? { group: groupOf(model, id) } : {}),
     };
   });
+  const groups = frameGroups(model, gs, nodes);
   const presentLayers = LAYER_ORDER.filter(l => nodes.some(n => n.layer === l));
 
   let matrix = null;
@@ -167,7 +176,8 @@ export function resolveArchimate(model, spec) {
     animation: spec.animation ?? (anchor ? 'impact' : 'layers'),
     direction: 'DOWN',
     layout: spec.layout ?? null,
-    layers: presentLayers, nodes, edges, matrix,
+    layers: presentLayers, nodes, edges: shownEdges, matrix,
+    ...(groups ? { groups } : {}),
   };
 }
 
