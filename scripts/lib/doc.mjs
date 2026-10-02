@@ -1,10 +1,26 @@
-// ARCHITECTURE.md: human-readable knowledge base whose last block is the canonical model.
+// ARCHITECTURE.md: the human-readable knowledge-base document, generated from the base folder (never read back).
 import { normalizeModel, c4KindOf, childrenOf, c4Orientation } from './model.mjs';
 import { resolveView } from './query.mjs';
 import { ELEMENT_TYPES, LAYER_ORDER, LAYER_LABELS, C4_LABELS } from './registry.mjs';
 
+/** Hand-written notes of a knowledge base (architecture/notes/<name>.md). */
+export const NOTE_NAMES = ['overview', 'notes', 'assumptions'];
+
+export const NOTE_GUIDES = {
+  overview: '_Descreva aqui o propósito da arquitetura, o problema de negócio e as principais decisões._',
+  notes: '_Decisões, riscos e pendências._',
+};
+
+/** What the document shows for each note when the base has none. */
+export function noteDefaults(raw) {
+  return {
+    overview: raw?.description || NOTE_GUIDES.overview,
+    assumptions: (raw?.assumptions || []).map(a => `- ${a}`).join('\n') || '_Nenhuma premissa registrada._',
+    notes: NOTE_GUIDES.notes,
+  };
+}
+
 const BLOCK_RE = /```archlens-json[^\n]*\n([\s\S]*?)\n```/;
-const KEEP_RE = /<!-- keep:([\w-]+) -->\n?([\s\S]*?)\n?<!-- \/keep:\1 -->/g;
 
 export function extractModel(markdown) {
   const m = BLOCK_RE.exec(markdown);
@@ -27,11 +43,10 @@ const table = (head, rows) => rows.length
   ? [`| ${head.join(' | ')} |`, `| ${head.map(() => '---').join(' | ')} |`, ...rows.map(r => `| ${r.map(cell).join(' | ')} |`)].join('\n')
   : '_Nenhum._';
 
-export function generateDoc(raw, { existing, date } = {}) {
+export function generateDoc(raw, { notes = {}, source = 'architecture/' } = {}) {
   const model = normalizeModel(raw);
-  const keep = new Map();
-  if (existing) for (const m of existing.matchAll(KEEP_RE)) keep.set(m[1], m[2]);
-  const keepBlock = (name, fallback) => `<!-- keep:${name} -->\n${keep.has(name) ? keep.get(name) : fallback}\n<!-- /keep:${name} -->`;
+  const src = source.endsWith('/') ? source : `${source}/`;
+  const note = name => notes[name] ?? noteDefaults(raw)[name];
   const els = [...model.elements.values()];
   const name = id => model.elements.get(id)?.name ?? id;
   const kind = el => c4KindOf(model, el);
@@ -50,23 +65,19 @@ export function generateDoc(raw, { existing, date } = {}) {
   out.push('---');
   out.push(`archlens: "${raw.archlens ?? '1.0'}"`);
   out.push(`name: ${JSON.stringify(model.name)}`);
+  out.push(`source: ${src}`);
   const changelog = raw.changelog || [];
-  const today = date ?? new Date().toISOString().slice(0, 10);
-  out.push(`generated: ${today}`);
   out.push(`revision: ${changelog.length}`);
-  out.push(`updated: ${changelog.at(-1)?.date ?? today}`);
+  if (changelog.length) out.push(`updated: ${changelog.at(-1).date}`);
   out.push(`notations: [${[hasC4 && 'c4', hasArchimate && 'archimate'].filter(Boolean).join(', ')}]`);
   out.push(`elements: ${els.length}`);
   out.push(`relationships: ${model.relationships.length}`);
   out.push('---', '');
   out.push(`# ${model.name}`, '');
-  out.push('> Base de conhecimento gerada pela skill **archlens**. As tabelas são derivadas do bloco',
-    '> `archlens-json` no fim do documento, que é a fonte de verdade. Evolua a base com `archlens merge`',
-    '> (delta → plano → apply); editar o bloco à mão e regenerar com `archlens doc` continua possível.',
-    '> Texto entre marcadores `<!-- keep:... -->` é preservado ao regenerar.', '');
+  out.push(`> Gerado por archlens a partir de \`${src}\`. Não edite: escreva em \`${src}notes/*.md\` e evolua a base com \`archlens merge\`.`, '');
 
   out.push('## Visão geral', '');
-  out.push(keepBlock('overview', model.description || '_Descreva aqui o propósito da arquitetura, o problema de negócio e as principais decisões._'), '');
+  out.push(note('overview'), '');
 
   // Summary
   out.push('## Resumo', '');
@@ -158,8 +169,7 @@ export function generateDoc(raw, { existing, date } = {}) {
   out.push('## Premissas e inferências', '');
   const inferred = els.filter(e => e.inferred);
   const inferredRels = model.relationships.filter(r => r.inferred);
-  const assumptionLines = (model.assumptions || []).map(a => `- ${a}`).join('\n');
-  out.push(keepBlock('assumptions', assumptionLines || '_Nenhuma premissa registrada._'), '');
+  out.push(note('assumptions'), '');
   if (inferred.length || inferredRels.length) {
     out.push(table(['Item', 'Tipo', 'Confiança', 'Origem no texto'], [
       ...inferred.map(e => [e.name, ELEMENT_TYPES[e.type].label, e.confidence, e.sources.map(s => s.excerpt).filter(Boolean).join(' · ')]),
@@ -200,15 +210,14 @@ export function generateDoc(raw, { existing, date } = {}) {
         Object.keys(e.status ?? {}).length ? `status ${Object.keys(e.status).length}` : ''].filter(Boolean).join(' '),
       (e.decisions ?? []).join('; '),
     ])), '');
-    if (changelog.length > 10) out.push(`_Mostrando as 10 rodadas mais recentes de ${changelog.length}; o histórico completo está em \`changelog\` no bloco \`archlens-json\`._`, '');
+    if (changelog.length > 10) out.push(`_Mostrando as 10 rodadas mais recentes de ${changelog.length}; o histórico completo está em \`${src}changelog.json\`._`, '');
   }
 
-  out.push('## Notas', '');
-  out.push(keepBlock('notes', '_Decisões, riscos e pendências._'), '');
+  out.push('## Notas', '', note('notes'), '');
 
   out.push('## Modelo canônico', '');
-  out.push('```archlens-json');
-  out.push(JSON.stringify(raw, null, 2));
-  out.push('```', '');
+  out.push(`A fonte de verdade está em \`${src}\`: \`archlens.json\` (manifesto), \`model.json\` ou \`model/*.json\``
+    + ' (elementos e relações), `views.json` (visões), `changelog.json` (histórico) e `notes/*.md` (texto autoral).'
+    + ' Consulte-a com a CLI (`archlens views`, `archlens resolve`) em vez de copiar trechos daqui.', '');
   return out.join('\n');
 }

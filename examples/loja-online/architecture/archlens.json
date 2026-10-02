@@ -1,0 +1,5 @@
+{
+  "archlens": "1.0",
+  "name": "Loja Online",
+  "description": "Plataforma de e-commerce B2C: vitrine web e app, checkout com antifraude e gateway externo, faturamento e expedição no ERP legado. O modelo junta a visão C4 dos sistemas com as camadas ArchiMate de negócio, aplicação e tecnologia, para rastrear ofertas e processos até a infraestrutura."
+}

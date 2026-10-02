@@ -6,7 +6,8 @@ description: Use when the user wants architecture diagrams in C4 (landscape, con
 # archlens
 
 Arquitetura como **modelo**, diagramas como **consultas**. O modelo (metamodelo ArchiMate, com perfil C4
-por cima) mora no `ARCHITECTURE.md`, a base de conhecimento: o bloco `archlens-json` é a fonte de verdade.
+por cima) mora na pasta `architecture/`, a base de conhecimento (manifesto, `model.json`, `views.json`,
+`changelog.json`, `notes/`). O `ARCHITECTURE.md` é o documento legível gerado a partir dela: nunca o edite.
 A base **evolui por rodadas**: cada informação nova (prompt, texto, documento, repositório) vira um
 **delta**, que passa por `merge --plan` → perguntas ao usuário → `merge --apply`, com proveniência,
 ciclo de vida e histórico. Cada diagrama é uma *view spec* resolvida sobre a base e renderizada em HTML
@@ -21,8 +22,12 @@ Requer Node ≥ 18. A checagem visual (`deliver`/`build`) usa `playwright-core` 
 
 ## Fluxo
 
-1. **Localize a base.** Procure o `ARCHITECTURE.md` do projeto (ou pergunte onde fica). Se não existe, o
-   primeiro delta a cria.
+1. **Localize a base.** Procure `architecture/archlens.json` (a CLI também acha sozinha, subindo a
+   partir do diretório atual). Se só existir um `ARCHITECTURE.md` com bloco `archlens-json` (formato antigo), proponha
+   `archlens migrate ARCHITECTURE.md` e **pergunte antes**. Se não existe base, o primeiro delta a cria; mas, se o
+   repositório já tem um `ARCHITECTURE.md` que não foi gerado pelo archlens (sem `source:` no cabeçalho), **pergunte
+   antes** ao usuário: movê-lo, ou usar o conteúdo dele como texto livre do primeiro delta. A CLI nunca o sobrescreve
+   (`E_STORE_DOC_FOREIGN`).
 2. **Só pedido de visão, nada novo a modelar?** Vá ao passo 7.
 3. **Traduza a informação nova em delta** (`references/merge.md`):
    - **texto livre**: siga `references/free-text.md` (`source` com o trecho, `inferred` + `confidence`,
@@ -31,28 +36,28 @@ Requer Node ≥ 18. A checagem visual (`deliver`/`build`) usa `playwright-core` 
    - **"X foi desligado / será substituído / renomeie Y"**: `ops` (`status`, `rename`, `alias`, `remove`).
 
    Sempre preencha `source` (`kind` + `ref`) e `summary`. Reutilize os ids da base.
-4. **Planeje**: `archlens merge ARCHITECTURE.md delta.json --plan plano.json`. Mostre o resumo ao usuário.
+4. **Planeje**: `archlens merge architecture/ delta.json --plan plano.json`. Mostre o resumo ao usuário.
    Se o plano vier **bloqueado**, corrija o delta e planeje de novo.
-   **Mostre a prévia** antes das perguntas: `archlens deliver ARCHITECTURE.md --delta delta.json --out prévia.html`
+   **Mostre a prévia** antes das perguntas: `archlens deliver architecture/ --delta delta.json --out prévia.html`
    (ou `--plan plano.json` depois de algumas respostas). Novo aparece em esboço com `+`, alterado com `~`,
    removido riscado com `−`, decisão pendente com `?`. A prévia nunca grava a base. O arquivo da base é obrigatório
    (mesmo que ainda não exista); com `--plan`, se a base mudou desde o plano, a CLI avisa e usa a base atual.
 5. **Pergunte, uma decisão por vez**: cada item com `resolution: null` (conflito, possível duplicata, remoção,
    `retired`), com a sua recomendação. **Comece pelas possíveis duplicatas.** Se alguma for `same`, grave as
    respostas e gere o plano de novo reaproveitando-as:
-   `archlens merge ARCHITECTURE.md delta.json --plan plano2.json --answers plano.json` (relações e filhos passam a
+   `archlens merge architecture/ delta.json --plan plano2.json --answers plano.json` (relações e filhos passam a
    apontar para o elemento da base e podem surgir perguntas novas); depois responda o resto no plano novo. **Nunca
    decida sozinho.**
-6. **Aplique**: grave as respostas no plano e rode `archlens merge ARCHITECTURE.md --apply plano.json`. Ele
-   valida, regenera o documento e registra a rodada. Sugira o commit que ele imprime.
+6. **Aplique**: grave as respostas no plano e rode `archlens merge architecture/ --apply plano.json`. Ele
+   valida, grava `architecture/`, regenera o `ARCHITECTURE.md` e registra a rodada. Sugira o commit que ele imprime.
 7. **Traduza cada pedido de visão em view spec** (tabela abaixo; detalhes em `references/views.md`). Visões que
    o usuário quer manter entram na base por delta (`views`); consultas avulsas usam `--spec`.
-   `archlens views ARCHITECTURE.md` lista as definidas e sugere outras.
-8. **Gere**: `archlens build ARCHITECTURE.md --out-dir <pasta>` (documento + HTML com todas as visões +
-   screenshots 1920×1080 / 1280×720) ou `archlens deliver ARCHITECTURE.md --spec '<json>' --out x.html`.
+   `archlens views architecture/` lista as definidas e sugere outras.
+8. **Gere**: `archlens build architecture/` (documento + HTML em `architecture/diagrams/` +
+   screenshots 1920×1080 / 1280×720) ou `archlens deliver architecture/ --spec '<json>' --out x.html`.
 9. **Leia o relatório de qualidade** e aja (seção *Alertas*). Olhe ao menos um screenshot por visão nova.
-10. **Escreva a interpretação** nos blocos `<!-- keep:overview -->` (propósito, decisões, riscos) e
-    `<!-- keep:notes -->`. O resto do documento é regenerado.
+10. **Escreva a interpretação** em `architecture/notes/overview.md` (propósito, decisões, riscos) e
+    `architecture/notes/notes.md`; depois `archlens doc architecture/`.
 11. **Entregue**: caminhos do `.md` e do `.html`, visões, premissas abertas, alertas e o commit sugerido.
 
 ## Pedido → view spec
@@ -72,8 +77,8 @@ Requer Node ≥ 18. A checagem visual (`deliver`/`build`) usa `playwright-core` 
 | negócio × tecnologia sem a camada do meio | `{viewpoint:"custom", layers:["business","technology"], anchor:"P", derive:true}` |
 | como está hoje (as-is) | acrescente `status:["active","deprecated"]` |
 | como fica depois das mudanças (to-be) | acrescente `status:["draft","planned","active"]` (sem `draft` para só o decidido) |
-| como fica se aplicarmos este delta? | `deliver ARCHITECTURE.md --delta delta.json` (prévia, nada é gravado) |
-| e se eu responder X nesta pergunta? | responda no plano e rode `deliver ARCHITECTURE.md --plan plano.json` |
+| como fica se aplicarmos este delta? | `deliver architecture/ --delta delta.json` (prévia, nada é gravado) |
+| e se eu responder X nesta pergunta? | responda no plano e rode `deliver architecture/ --plan plano.json` |
 
 **Estilo do layout ArchiMate** (`layout.style`, detalhes em `references/views.md`): sem pedido explícito,
 omita-o (`auto` escolhe o mais legível). Se o prompt pedir, grave na visão:
@@ -114,8 +119,10 @@ recorta com scope, focus, depth, anchor, traverse, layers, granularity, collapse
 - **Hierarquia C4**: component dentro de container, que fica dentro de softwareSystem (`E_C4_HIERARCHY`).
 - **Ids instáveis**: ids são a chave da base de conhecimento. Não os renomeie sem necessidade; use
   `sistema.container.componente`.
-- **Editar o bloco à mão**: funciona (rode `archlens doc ARCHITECTURE.md` depois), mas perde proveniência e
-  histórico. Prefira um delta, mesmo pequeno.
+- **Editar o `ARCHITECTURE.md`**: é gerado e será sobrescrito. Texto autoral vai em `architecture/notes/*.md`; o
+  modelo muda por delta. Recomende `archlens check` no CI ou no pre-commit.
+- **Base no formato antigo**: comandos de leitura, `merge --plan` e as prévias funcionam; só `merge --apply`, `doc`
+  e `build` recusam. Rode `archlens migrate` (com o ok do usuário).
 - **Duplicata aceita sem perguntar**: `possible-duplicate` é sempre pergunta ao usuário. Um `same` errado funde
   dois elementos diferentes.
 - **Visão gigante**: um diagrama com 60 nós não comunica nada. Prefira várias visões, que as setas
@@ -129,7 +136,7 @@ recorta com scope, focus, depth, anchor, traverse, layers, granularity, collapse
 - `references/archimate.md`: catálogo ArchiMate 3.2, regras de relacionamento, direção de suporte
 - `references/c4.md`: níveis C4, mapeamento para ArchiMate, elevação de relações
 - `references/free-text.md`: como extrair o modelo de texto livre
-- `references/knowledge-doc.md`: estrutura do ARCHITECTURE.md e atualização incremental
+- `references/knowledge-doc.md`: a pasta `architecture/`, o `ARCHITECTURE.md` gerado, `check` e `migrate`
 - `docs/GUIA.md`: guia do usuário (apresentação, atalhos, exemplos)
 - `examples/`: `loja-online` (DSL completa, 13 visões) e `telemedicina` (texto livre + `delta-01.json`/`plano-01.json`,
   uma rodada de merge com duplicata, `deprecated`/`planned` e a visão to-be)

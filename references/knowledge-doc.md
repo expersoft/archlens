@@ -1,48 +1,48 @@
-# ARCHITECTURE.md: a base de conhecimento
+# A base de conhecimento: `architecture/` e o `ARCHITECTURE.md`
 
-`archlens merge` (ou `doc`/`build`) gera e mantém um markdown que serve a duas coisas:
+A base é uma **pasta** (padrão `architecture/`, ao lado do `ARCHITECTURE.md`):
 
-1. **Leitura humana:** interpretação da arquitetura, elementos por notação e camada, relações,
-   rastreabilidade e premissas.
-2. **Fonte de verdade:** o último bloco ```` ```archlens-json ```` guarda o modelo completo. Qualquer
-   comando da CLI aceita o `.md` no lugar do `.json`.
+| Arquivo | Conteúdo | Quem escreve |
+|---|---|---|
+| `archlens.json` | manifesto: `archlens`, `name`, `description`, `assumptions`, `layout` | merge |
+| `model.json` (ou `model/*.json`) | `{ elements, relationships }` | merge |
+| `views.json` | visões salvas | merge (delta com `views`) |
+| `changelog.json` | rodadas de merge | merge |
+| `notes/overview.md` | visão geral: propósito, decisões, riscos | pessoas / agente |
+| `notes/notes.md` | decisões, riscos, pendências | pessoas / agente |
+| `notes/assumptions.md` | prosa de premissas (opcional; sem ele, a lista de `assumptions`) | pessoas / agente |
+| `diagrams/` | HTML e screenshots do `build` | build |
 
-## Seções
+O **`ARCHITECTURE.md` é 100% gerado** (por `merge --apply`, `doc` e `build`): resumo, contexto, modelo C4, camadas
+ArchiMate, relacionamentos, rastreabilidade, ciclo de vida, premissas, fontes, visões, histórico e notas. O
+frontmatter traz `source:` (a pasta), e a CLI aceita o `.md` como atalho para ela. Não edite o `.md`.
 
-| Seção | Origem |
-|---|---|
-| frontmatter (`name`, `generated`, `notations`, contagens) | gerado |
-| Visão geral | **keep:overview**: escrita pelo agente/usuário, preservada |
-| Resumo | contagem por camada e por tipo C4 |
-| Contexto e atores | atores, papéis, stakeholders |
-| Modelo C4 | sistema → containers → componentes (tabelas) |
-| Camada de Estratégia/Negócio/Aplicação/Tecnologia/… | uma tabela por camada presente, com tipo ArchiMate e perfil C4 |
-| Relacionamentos | origem, relação ("usa" para C4), destino, descrição, tecnologia |
-| Rastreabilidade | para cada produto/capacidade: o que o sustenta, por camada. Para cada aplicação: negócio que depende dela e tecnologia que a sustenta |
-| Ciclo de vida | itens `planned`, `deprecated`, `retired`, com o motivo |
-| Premissas e inferências | **keep:assumptions** + tabela de itens inferidos com confiança e trecho de origem |
-| Fontes | cada fonte (prompt, repo, doc, manual) e quantos itens ela sustenta |
-| Visões | catálogo das visões definidas |
-| Histórico | últimas 10 rodadas de merge (data, fonte, resumo, mudanças, decisões); o completo fica em `changelog` |
-| Notas | **keep:notes**: decisões, riscos, pendências |
-| Modelo canônico | bloco `archlens-json` |
+## Dividir por domínio
 
-## Regras de edição
+Com a base grande, troque `model.json` por uma pasta: no manifesto, `"layout": { "model": "model/" }` e mova os
+elementos para `model/<domínio>.json` (cada um com `{ elements, relationships }`). O merge grava cada elemento no
+arquivo de onde veio; elementos novos vão para o arquivo do pai ou, sem pai, para `layout.defaultFile` (padrão
+`model/geral.json`); relações ficam no arquivo do elemento de origem. Ids repetidos entre arquivos são erro.
 
-- Para mudar a arquitetura, use **`archlens merge`** (`references/merge.md`): proveniência e histórico ficam
-  registrados. Editar o bloco `archlens-json` à mão e rodar `archlens doc ARCHITECTURE.md` também funciona.
-  As tabelas não são lidas de volta.
-- Texto dentro de `<!-- keep:nome -->…<!-- /keep:nome -->` sobrevive à regeneração.
-- Ids são a chave de tudo. Renomear um id quebra visões e referências: prefira mudar `name`.
+## Manter em dia
+
+- `archlens check` valida o modelo e confere se o `ARCHITECTURE.md` corresponde à pasta (código 1 se não). Use no CI
+  ou no pre-commit.
+- `archlens doc architecture/` regenera o documento depois de editar as notas.
+
+## Formato antigo
+
+Bases com o modelo num bloco `archlens-json` dentro do `.md` são lidas por todos os comandos de leitura (e pela
+prévia). Para gravar, converta: `archlens migrate ARCHITECTURE.md` cria a pasta (os blocos `keep` viram
+`notes/*.md`), confere que o modelo é idêntico e só então regenera o `.md`. Planos gerados antes continuam válidos,
+desde que o migrate não avise que a ordem das chaves mudou.
 
 ## Uso como base de conhecimento
 
-Numa conversa futura, com o `.md` em mãos:
-
 ```bash
-node scripts/archlens.mjs views ARCHITECTURE.md
-node scripts/archlens.mjs deliver ARCHITECTURE.md --spec '{"key":"x","notation":"archimate","viewpoint":"impact","anchor":"erp"}' --out erp-impacto.html
+node scripts/archlens.mjs views architecture/
+node scripts/archlens.mjs deliver architecture/ --spec '{"key":"x","notation":"archimate","viewpoint":"impact","anchor":"erp"}' --out erp-impacto.html
 ```
 
-Nenhuma remodelagem: a pergunta nova vira uma view spec nova sobre o mesmo estado. Para guardar a visão na
-base, mande-a num delta (`views`) e rode o merge. Para acrescentar conhecimento, delta → `merge --plan` → `--apply`.
+Nenhuma remodelagem: a pergunta nova vira uma view spec sobre o mesmo estado. Para guardar a visão na base, mande-a
+num delta (`views`). Para acrescentar conhecimento, delta → `merge --plan` → `--apply`.

@@ -1,19 +1,21 @@
 # Evoluindo a base: delta → plano → apply
 
-A base de conhecimento (`ARCHITECTURE.md`) muda por **merge**. O agente descreve o que há de novo num
-**delta**; a CLI compara com a base, classifica cada item e grava um **plano** com as perguntas; o usuário
-responde; o `apply` grava a base, regenera o documento e registra a rodada no **Histórico**.
+A base de conhecimento (a pasta `architecture/`, ou o `ARCHITECTURE.md` gerado, que aponta para ela; se nenhuma
+existe, o apply a cria) muda por **merge**. O agente descreve o que há de novo num **delta**; a CLI compara com a
+base, classifica cada item e grava um **plano** com as perguntas; o usuário responde; o `apply` grava a base,
+regenera o documento e registra a rodada no **Histórico**.
 Nada é decidido em silêncio: conflitos, possíveis duplicatas, remoções e `retired` esperam resposta.
 
 ```bash
-node scripts/archlens.mjs merge ARCHITECTURE.md delta.json --plan plano.json   # relatório + plano
+node scripts/archlens.mjs merge architecture/ delta.json --plan plano.json   # relatório + plano
 # … responda as possíveis duplicatas; se alguma for "same", gere o plano de novo com as respostas:
-node scripts/archlens.mjs merge ARCHITECTURE.md delta.json --plan plano2.json --answers plano.json
+node scripts/archlens.mjs merge architecture/ delta.json --plan plano2.json --answers plano.json
 # … responda os itens restantes com "resolution": null …
-node scripts/archlens.mjs merge ARCHITECTURE.md --apply plano2.json           # grava e registra
+node scripts/archlens.mjs merge architecture/ --apply plano2.json           # grava e registra
 ```
 
-Se o `ARCHITECTURE.md` não existe, o primeiro delta o cria (`name` e `description` do delta viram os da base).
+Se a base não existe, o primeiro delta a cria (`name` e `description` do delta viram os da base).
+Planos gerados antes de um `migrate` continuam válidos depois (o hash é sobre o modelo, não sobre o arquivo).
 
 ## O delta
 
@@ -98,9 +100,9 @@ perguntas novas. As respostas do plano anterior entram pré-preenchidas (o relat
 ## Pré-visualizando (antes do apply)
 
 ```bash
-node scripts/archlens.mjs deliver ARCHITECTURE.md --delta delta.json --out prévia.html   # pendências no padrão do plano
-node scripts/archlens.mjs deliver ARCHITECTURE.md --plan plano.json --out prévia.html    # usa as respostas já dadas
-node scripts/archlens.mjs build ARCHITECTURE.md --delta delta.json                        # <delta>-preview.html; nunca o .md
+node scripts/archlens.mjs deliver architecture/ --delta delta.json --out prévia.html   # pendências no padrão do plano
+node scripts/archlens.mjs deliver architecture/ --plan plano.json --out prévia.html    # usa as respostas já dadas
+node scripts/archlens.mjs build architecture/ --delta delta.json                          # diagrams/<delta>-preview.html; nunca o .md
 ```
 
 A prévia roda o mesmo merge do plano e desenha a base com o delta aplicado:
@@ -136,5 +138,6 @@ imprime só o JSON. Os comandos de prévia exigem o arquivo da base mesmo que el
 ## Boas práticas
 
 - Um delta por fonte e por rodada: facilita o histórico e a revisão.
-- Reutilize ids da base (`archlens views ARCHITECTURE.md` e as tabelas do `.md` mostram os ids).
-- Depois do apply, sugira o commit do `ARCHITECTURE.md` ao usuário.
+- Reutilize ids da base (`archlens views architecture/` e as tabelas do `.md` mostram os ids).
+- Depois do apply, sugira o commit da pasta `architecture/` e do `ARCHITECTURE.md` ao usuário (a CLI imprime
+  `git add architecture ARCHITECTURE.md`).
