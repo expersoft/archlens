@@ -150,6 +150,13 @@
           ],
           "description": "Tópicos de pedidos e estoque"
         }
+      ],
+      "group": "plat-vendas",
+      "sources": [
+        {
+          "kind": "prompt",
+          "ref": "agrupamentos"
+        }
       ]
     },
     {
@@ -160,14 +167,28 @@
       "description": "Faturamento, fiscal e expedição (legado on-premises)",
       "properties": {
         "owner": "TI Corporativa"
-      }
+      },
+      "group": "plat-backoffice",
+      "sources": [
+        {
+          "kind": "prompt",
+          "ref": "agrupamentos"
+        }
+      ]
     },
     {
       "id": "crm",
       "type": "c4:softwareSystem",
       "name": "CRM",
       "external": true,
-      "description": "Atendimento (SaaS)"
+      "description": "Atendimento (SaaS)",
+      "group": "plat-backoffice",
+      "sources": [
+        {
+          "kind": "prompt",
+          "ref": "agrupamentos"
+        }
+      ]
     },
     {
       "id": "gateway",
@@ -181,7 +202,14 @@
       "type": "c4:softwareSystem",
       "name": "Serviço Antifraude",
       "external": true,
-      "description": "Score de risco da transação"
+      "description": "Score de risco da transação",
+      "group": "plat-vendas",
+      "sources": [
+        {
+          "kind": "prompt",
+          "ref": "agrupamentos"
+        }
+      ]
     },
     {
       "id": "transportadora",
@@ -372,6 +400,30 @@
       "id": "req-latencia",
       "type": "archimate:requirement",
       "name": "Checkout < 2s (p95)"
+    },
+    {
+      "id": "plat-vendas",
+      "type": "grouping",
+      "name": "Plataforma de Vendas",
+      "description": "Sistemas que sustentam a jornada de compra: vitrine, checkout e análise de risco.",
+      "sources": [
+        {
+          "kind": "prompt",
+          "ref": "agrupamentos"
+        }
+      ]
+    },
+    {
+      "id": "plat-backoffice",
+      "type": "grouping",
+      "name": "Plataforma de Back-office",
+      "description": "Sistemas internos de faturamento, expedição e atendimento.",
+      "sources": [
+        {
+          "kind": "prompt",
+          "ref": "agrupamentos"
+        }
+      ]
     }
   ],
   "relationships": [

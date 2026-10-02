@@ -127,6 +127,29 @@ Camada de aplicação sem ruído de componentes:
 { "key": "aplicacao", "notation": "archimate", "viewpoint": "application", "granularity": "container" }
 ```
 
+## Agrupamentos e molduras
+
+`groups` recorta e desenha por agrupamento (`grouping`, veja `notation.md`):
+
+```json
+{ "key": "aut-x-cred", "notation": "c4", "level": "landscape",
+  "groups": { "only": ["plat-autorizacao", "plat-credito"], "crossOnly": false, "frames": true } }
+```
+
+- **`only`**: restringe a visão aos membros desses grupos e às relações entre eles. Compõe com notação, nível,
+  viewpoint, camadas e `status`.
+- **`depth` com `only`**: acrescenta vizinhos externos aos grupos até a distância pedida.
+- **`crossOnly`** (padrão `false`): só elementos com relação de um grupo listado para outro, e só essas relações.
+  Exige `only` com 2+ grupos.
+- **`frames`**: explícito vem do pedido; omitido vale `true` com `only` e `false` sem. Com `frames` e sem `only`,
+  cada membro visível fica na moldura do seu grupo.
+- `E_VIEW_GROUP`: id em `only` que não é `grouping`, ou `crossOnly` com menos de 2 grupos.
+
+Desenho. **C4:** moldura → fronteira do sistema → containers; a fronteira do sistema aberto fica dentro da moldura
+do grupo dele, e as setas ligam elementos, nunca a moldura. **ArchiMate:** uma moldura por grupo × camada (nenhuma
+atravessa faixas). `bands` não agrupa: com molduras, `auto` escolhe entre `flow` e `bands-flow`, e `bands` pedido
+vira `bands-flow` com aviso no build.
+
 ## Layout
 
 - **C4:** ELK *layered* com boundaries aninhados. O padrão é `RIGHT` (paisagem, 16:9). Se `RIGHT` sair alto e

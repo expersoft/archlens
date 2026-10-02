@@ -204,6 +204,13 @@ A partir de texto livre (itens inferidos aparecem tracejados):
 
 ![Texto livre](img/texto-livre-suporte.png)
 
+### Plataformas e agrupamentos
+
+Quando os sistemas formam plataformas, modele cada uma como `grouping` e preencha `group` nos membros. Peça, por
+exemplo, "mostre as interações entre a Plataforma de Vendas e a de Back-office": a visão `vendas-x-backoffice` do
+exemplo (`groups: { only: [...], crossOnly: true }`) mostra só os sistemas que se falam entre as plataformas, cada
+uma numa moldura. A visão `plataformas` traz o panorama C4 com as molduras.
+
 ## Problemas comuns
 
 | Sintoma | Causa provável |

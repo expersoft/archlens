@@ -2,9 +2,10 @@
 archlens: "1.0"
 name: "Loja Online"
 source: architecture/
-revision: 0
+revision: 1
+updated: 2026-10-02
 notations: [c4, archimate]
-elements: 60
+elements: 62
 relationships: 78
 ---
 
@@ -24,6 +25,7 @@ Plataforma de e-commerce B2C: vitrine web e app, checkout com antifraude e gatew
 | Negócio | 17 |
 | Aplicação | 29 |
 | Tecnologia | 12 |
+| Outros | 2 |
 
 | Tipo C4 | Quantidade |
 | --- | --- |
@@ -41,34 +43,52 @@ Plataforma de e-commerce B2C: vitrine web e app, checkout com antifraude e gatew
 | Operador de Logística | Business Actor | Separa e despacha pedidos | `operador` |
 | Comprador | Business Role | — | `br-comprador` |
 
+## Agrupamentos
+
+### Plataforma de Vendas
+
+Sistemas que sustentam a jornada de compra: vitrine, checkout e análise de risco.
+
+| Camada | Membros |
+| --- | --- |
+| Aplicação | Plataforma de E-commerce, Serviço Antifraude |
+
+### Plataforma de Back-office
+
+Sistemas internos de faturamento, expedição e atendimento.
+
+| Camada | Membros |
+| --- | --- |
+| Aplicação | ERP, CRM |
+
 ## Modelo C4
 
 ### Plataforma de E-commerce — Software System
 
 Vitrine, carrinho e checkout
 
-| Container | Tecnologia | Descrição | id |
-| --- | --- | --- | --- |
-| Web Storefront | Next.js | Vitrine e checkout web | `loja.web` |
-| App Mobile | React Native | App iOS/Android | `loja.app` |
-| BFF | Node.js / GraphQL | Agrega APIs para os canais | `loja.bff` |
-| API de Pedidos | Java / Spring Boot | Carrinho, checkout e ciclo de vida do pedido | `loja.pedidos` |
-| API de Catálogo | Go | Produtos, preços e estoque | `loja.catalogo` |
-| Índice de Busca 🛢 | Elasticsearch | Busca textual de produtos | `loja.busca` |
-| Cache de Carrinho 🛢 | Redis | Carrinhos ativos | `loja.cache` |
-| DB Pedidos 🛢 | PostgreSQL | Pedidos e pagamentos | `loja.db-pedidos` |
-| DB Catálogo 🛢 | MongoDB | Produtos e atributos | `loja.db-catalogo` |
-| Barramento de Eventos | Kafka | Tópicos de pedidos e estoque | `loja.eventos` |
+| Container | Tecnologia | Descrição | Fontes | id |
+| --- | --- | --- | --- | --- |
+| Web Storefront | Next.js | Vitrine e checkout web | — | `loja.web` |
+| App Mobile | React Native | App iOS/Android | — | `loja.app` |
+| BFF | Node.js / GraphQL | Agrega APIs para os canais | — | `loja.bff` |
+| API de Pedidos | Java / Spring Boot | Carrinho, checkout e ciclo de vida do pedido | — | `loja.pedidos` |
+| API de Catálogo | Go | Produtos, preços e estoque | — | `loja.catalogo` |
+| Índice de Busca 🛢 | Elasticsearch | Busca textual de produtos | — | `loja.busca` |
+| Cache de Carrinho 🛢 | Redis | Carrinhos ativos | — | `loja.cache` |
+| DB Pedidos 🛢 | PostgreSQL | Pedidos e pagamentos | — | `loja.db-pedidos` |
+| DB Catálogo 🛢 | MongoDB | Produtos e atributos | — | `loja.db-catalogo` |
+| Barramento de Eventos | Kafka | Tópicos de pedidos e estoque | — | `loja.eventos` |
 
 #### Componentes de API de Pedidos
 
-| Componente | Tecnologia | Descrição | id |
-| --- | --- | --- | --- |
-| Checkout Controller | Spring MVC | Orquestra o fechamento do pedido | `loja.pedidos.checkout` |
-| Carrinho Service | Spring Bean | Itens, preços e cupons | `loja.pedidos.carrinho` |
-| Pagamento Adapter | Spring Bean | Antifraude + autorização no gateway | `loja.pedidos.pagamento` |
-| Pedido Repository | Spring Data JPA | Persistência de pedidos | `loja.pedidos.repo` |
-| Publicador de Eventos | Kafka client | Publica eventos de domínio | `loja.pedidos.eventos` |
+| Componente | Tecnologia | Descrição | Fontes | id |
+| --- | --- | --- | --- | --- |
+| Checkout Controller | Spring MVC | Orquestra o fechamento do pedido | — | `loja.pedidos.checkout` |
+| Carrinho Service | Spring Bean | Itens, preços e cupons | — | `loja.pedidos.carrinho` |
+| Pagamento Adapter | Spring Bean | Antifraude + autorização no gateway | — | `loja.pedidos.pagamento` |
+| Pedido Repository | Spring Data JPA | Persistência de pedidos | — | `loja.pedidos.repo` |
+| Publicador de Eventos | Kafka client | Publica eventos de domínio | — | `loja.pedidos.eventos` |
 
 ### ERP — Software System
 
@@ -92,83 +112,90 @@ Coleta e rastreio
 
 ## Camada de Motivação
 
-| Elemento | Tipo ArchiMate | Descrição | id |
-| --- | --- | --- | --- |
-| Reduzir abandono de carrinho | Goal | — | `goal-abandono` |
-| Checkout < 2s (p95) | Requirement | — | `req-latencia` |
+| Elemento | Tipo ArchiMate | Descrição | Fontes | id |
+| --- | --- | --- | --- | --- |
+| Reduzir abandono de carrinho | Goal | — | — | `goal-abandono` |
+| Checkout < 2s (p95) | Requirement | — | — | `req-latencia` |
 
 ## Camada de Negócio
 
-| Elemento | Tipo ArchiMate | Descrição | id |
-| --- | --- | --- | --- |
-| Cliente | Business Actor (C4 Person) | Compra produtos pela web ou pelo app | `cliente` |
-| Atendente SAC | Business Actor (C4 Person) | Resolve dúvidas e problemas de pedidos | `atendente` |
-| Operador de Logística | Business Actor (C4 Person) | Separa e despacha pedidos | `operador` |
-| Venda Online | Product | Oferta principal: comprar pela web/app e receber em casa | `prod-venda` |
-| Entrega Expressa | Product | Entrega em até 24h nas capitais | `prod-expressa` |
-| Termos de Compra | Contract | — | `ct-termos` |
-| Compra online | Business Service | — | `bs-compra` |
-| Pagamento seguro | Business Service | — | `bs-pagamento` |
-| Entrega do pedido | Business Service | — | `bs-entrega` |
-| Atendimento pós-venda | Business Service | — | `bs-atendimento` |
-| Comprador | Business Role | — | `br-comprador` |
-| Checkout | Business Process | Do carrinho ao pedido pago | `bp-checkout` |
-| Faturamento | Business Process | — | `bp-faturamento` |
-| Expedição | Business Process | — | `bp-expedicao` |
-| Tratar solicitação | Business Process | — | `bp-atendimento` |
-| Pedido | Business Object | — | `bo-pedido` |
-| Nota Fiscal | Business Object | — | `bo-nota` |
+| Elemento | Tipo ArchiMate | Descrição | Fontes | id |
+| --- | --- | --- | --- | --- |
+| Cliente | Business Actor (C4 Person) | Compra produtos pela web ou pelo app | — | `cliente` |
+| Atendente SAC | Business Actor (C4 Person) | Resolve dúvidas e problemas de pedidos | — | `atendente` |
+| Operador de Logística | Business Actor (C4 Person) | Separa e despacha pedidos | — | `operador` |
+| Venda Online | Product | Oferta principal: comprar pela web/app e receber em casa | — | `prod-venda` |
+| Entrega Expressa | Product | Entrega em até 24h nas capitais | — | `prod-expressa` |
+| Termos de Compra | Contract | — | — | `ct-termos` |
+| Compra online | Business Service | — | — | `bs-compra` |
+| Pagamento seguro | Business Service | — | — | `bs-pagamento` |
+| Entrega do pedido | Business Service | — | — | `bs-entrega` |
+| Atendimento pós-venda | Business Service | — | — | `bs-atendimento` |
+| Comprador | Business Role | — | — | `br-comprador` |
+| Checkout | Business Process | Do carrinho ao pedido pago | — | `bp-checkout` |
+| Faturamento | Business Process | — | — | `bp-faturamento` |
+| Expedição | Business Process | — | — | `bp-expedicao` |
+| Tratar solicitação | Business Process | — | — | `bp-atendimento` |
+| Pedido | Business Object | — | — | `bo-pedido` |
+| Nota Fiscal | Business Object | — | — | `bo-nota` |
 
 ## Camada de Aplicação
 
-| Elemento | Tipo ArchiMate | Descrição | id |
-| --- | --- | --- | --- |
-| Plataforma de E-commerce | Application Component (C4 Software System) | Vitrine, carrinho e checkout | `loja` |
-| Web Storefront | Application Component (C4 Container) | Vitrine e checkout web | `loja.web` |
-| App Mobile | Application Component (C4 Container) | App iOS/Android | `loja.app` |
-| BFF | Application Component (C4 Container) | Agrega APIs para os canais | `loja.bff` |
-| API de Pedidos | Application Component (C4 Container) | Carrinho, checkout e ciclo de vida do pedido | `loja.pedidos` |
-| Checkout Controller | Application Component (C4 Component) | Orquestra o fechamento do pedido | `loja.pedidos.checkout` |
-| Carrinho Service | Application Component (C4 Component) | Itens, preços e cupons | `loja.pedidos.carrinho` |
-| Pagamento Adapter | Application Component (C4 Component) | Antifraude + autorização no gateway | `loja.pedidos.pagamento` |
-| Pedido Repository | Application Component (C4 Component) | Persistência de pedidos | `loja.pedidos.repo` |
-| Publicador de Eventos | Application Component (C4 Component) | Publica eventos de domínio | `loja.pedidos.eventos` |
-| API de Catálogo | Application Component (C4 Container) | Produtos, preços e estoque | `loja.catalogo` |
-| Índice de Busca | Data Object (C4 Container) | Busca textual de produtos | `loja.busca` |
-| Cache de Carrinho | Data Object (C4 Container) | Carrinhos ativos | `loja.cache` |
-| DB Pedidos | Data Object (C4 Container) | Pedidos e pagamentos | `loja.db-pedidos` |
-| DB Catálogo | Data Object (C4 Container) | Produtos e atributos | `loja.db-catalogo` |
-| Barramento de Eventos | Application Component (C4 Container) | Tópicos de pedidos e estoque | `loja.eventos` |
-| ERP | Application Component (C4 Software System) | Faturamento, fiscal e expedição (legado on-premises) | `erp` |
-| CRM | Application Component (C4 Software System) | Atendimento (SaaS) | `crm` |
-| Gateway de Pagamentos | Application Component (C4 Software System) | Autoriza cartões e Pix | `gateway` |
-| Serviço Antifraude | Application Component (C4 Software System) | Score de risco da transação | `antifraude` |
-| API da Transportadora | Application Component (C4 Software System) | Coleta e rastreio | `transportadora` |
-| Serviço de Checkout | Application Service | — | `as-checkout` |
-| Serviço de Catálogo | Application Service | — | `as-catalogo` |
-| Serviço de Pagamento | Application Service | — | `as-pagamento` |
-| Serviço de Faturamento | Application Service | — | `as-faturamento` |
-| Serviço de Logística | Application Service | — | `as-logistica` |
-| Consulta de Pedidos | Application Service | — | `as-consulta` |
-| Registro de Pedido | Data Object | — | `do-pedido` |
-| Registro de Produto | Data Object | — | `do-produto` |
+| Elemento | Tipo ArchiMate | Descrição | Fontes | id |
+| --- | --- | --- | --- | --- |
+| Plataforma de E-commerce | Application Component (C4 Software System) | Vitrine, carrinho e checkout | P | `loja` |
+| Web Storefront | Application Component (C4 Container) | Vitrine e checkout web | — | `loja.web` |
+| App Mobile | Application Component (C4 Container) | App iOS/Android | — | `loja.app` |
+| BFF | Application Component (C4 Container) | Agrega APIs para os canais | — | `loja.bff` |
+| API de Pedidos | Application Component (C4 Container) | Carrinho, checkout e ciclo de vida do pedido | — | `loja.pedidos` |
+| Checkout Controller | Application Component (C4 Component) | Orquestra o fechamento do pedido | — | `loja.pedidos.checkout` |
+| Carrinho Service | Application Component (C4 Component) | Itens, preços e cupons | — | `loja.pedidos.carrinho` |
+| Pagamento Adapter | Application Component (C4 Component) | Antifraude + autorização no gateway | — | `loja.pedidos.pagamento` |
+| Pedido Repository | Application Component (C4 Component) | Persistência de pedidos | — | `loja.pedidos.repo` |
+| Publicador de Eventos | Application Component (C4 Component) | Publica eventos de domínio | — | `loja.pedidos.eventos` |
+| API de Catálogo | Application Component (C4 Container) | Produtos, preços e estoque | — | `loja.catalogo` |
+| Índice de Busca | Data Object (C4 Container) | Busca textual de produtos | — | `loja.busca` |
+| Cache de Carrinho | Data Object (C4 Container) | Carrinhos ativos | — | `loja.cache` |
+| DB Pedidos | Data Object (C4 Container) | Pedidos e pagamentos | — | `loja.db-pedidos` |
+| DB Catálogo | Data Object (C4 Container) | Produtos e atributos | — | `loja.db-catalogo` |
+| Barramento de Eventos | Application Component (C4 Container) | Tópicos de pedidos e estoque | — | `loja.eventos` |
+| ERP | Application Component (C4 Software System) | Faturamento, fiscal e expedição (legado on-premises) | P | `erp` |
+| CRM | Application Component (C4 Software System) | Atendimento (SaaS) | P | `crm` |
+| Gateway de Pagamentos | Application Component (C4 Software System) | Autoriza cartões e Pix | — | `gateway` |
+| Serviço Antifraude | Application Component (C4 Software System) | Score de risco da transação | P | `antifraude` |
+| API da Transportadora | Application Component (C4 Software System) | Coleta e rastreio | — | `transportadora` |
+| Serviço de Checkout | Application Service | — | — | `as-checkout` |
+| Serviço de Catálogo | Application Service | — | — | `as-catalogo` |
+| Serviço de Pagamento | Application Service | — | — | `as-pagamento` |
+| Serviço de Faturamento | Application Service | — | — | `as-faturamento` |
+| Serviço de Logística | Application Service | — | — | `as-logistica` |
+| Consulta de Pedidos | Application Service | — | — | `as-consulta` |
+| Registro de Pedido | Data Object | — | — | `do-pedido` |
+| Registro de Produto | Data Object | — | — | `do-produto` |
 
 ## Camada de Tecnologia
 
-| Elemento | Tipo ArchiMate | Descrição | id |
-| --- | --- | --- | --- |
-| Cluster Kubernetes (EKS) | Node | — | `tn-k8s` |
-| Hospedagem de contêineres | Technology Service | — | `ts-hosting` |
-| Mensageria | Technology Service | — | `ts-mensageria` |
-| PostgreSQL 16 (RDS) | System Software | — | `ss-postgres` |
-| MongoDB Atlas | System Software | — | `ss-mongo` |
-| Redis (ElastiCache) | System Software | — | `ss-redis` |
-| Apache Kafka (MSK) | System Software | — | `ss-kafka` |
-| Elasticsearch | System Software | — | `ss-elastic` |
-| CDN CloudFront | Node | — | `tn-cdn` |
-| Servidor SAP (on-premises) | Node | — | `tn-sap` |
-| VPN site-to-site | Communication Network | — | `cn-vpn` |
-| pedidos-api.jar | Artifact | — | `art-pedidos` |
+| Elemento | Tipo ArchiMate | Descrição | Fontes | id |
+| --- | --- | --- | --- | --- |
+| Cluster Kubernetes (EKS) | Node | — | — | `tn-k8s` |
+| Hospedagem de contêineres | Technology Service | — | — | `ts-hosting` |
+| Mensageria | Technology Service | — | — | `ts-mensageria` |
+| PostgreSQL 16 (RDS) | System Software | — | — | `ss-postgres` |
+| MongoDB Atlas | System Software | — | — | `ss-mongo` |
+| Redis (ElastiCache) | System Software | — | — | `ss-redis` |
+| Apache Kafka (MSK) | System Software | — | — | `ss-kafka` |
+| Elasticsearch | System Software | — | — | `ss-elastic` |
+| CDN CloudFront | Node | — | — | `tn-cdn` |
+| Servidor SAP (on-premises) | Node | — | — | `tn-sap` |
+| VPN site-to-site | Communication Network | — | — | `cn-vpn` |
+| pedidos-api.jar | Artifact | — | — | `art-pedidos` |
+
+## Camada de Outros
+
+| Elemento | Tipo ArchiMate | Descrição | Fontes | id |
+| --- | --- | --- | --- | --- |
+| Plataforma de Vendas | Grouping | Sistemas que sustentam a jornada de compra: vitrine, checkout e análise de risco. | P | `plat-vendas` |
+| Plataforma de Back-office | Grouping | Sistemas internos de faturamento, expedição e atendimento. | P | `plat-backoffice` |
 
 ## Relacionamentos
 
@@ -292,7 +319,9 @@ _Nenhuma premissa registrada._
 
 ## Fontes
 
-_Nenhuma fonte registrada._
+| Tipo | Referência | Data | Itens |
+| --- | --- | --- | --- |
+| prompt | agrupamentos | — | 6 |
 
 ## Visões
 
@@ -311,10 +340,14 @@ _Nenhuma fonte registrada._
 | `suporte-checkout` | archimate | layered (supporters) | Checkout | Processo de Checkout — dependências por camada |
 | `impacto-api-pedidos` | archimate | impact (both) | API de Pedidos | API de Pedidos — matriz de dependência e impacto |
 | `negocio-x-tecnologia` | archimate | custom (supporters) | Venda Online | Venda Online — negócio × tecnologia (relações derivadas) |
+| `plataformas` | c4 | landscape | — | Plataformas |
+| `vendas-x-backoffice` | archimate | application | — | Vendas × Back-office |
 
 ## Histórico
 
-_Nenhuma rodada de merge registrada._
+| Data | Fonte | Resumo | Mudanças | Decisões |
+| --- | --- | --- | --- | --- |
+| 2026-10-02 | prompt agrupamentos | Plataformas de vendas e de back-office | +4 ~4 −0 | — |
 
 ## Notas
 
