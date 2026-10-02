@@ -45,6 +45,7 @@ export function resolveArchimate(model, spec) {
   if (spec.anchor) {
     anchor = model.elements.get(spec.anchor);
     if (!anchor) throw viewError('E_UNKNOWN_REF', `anchor "${spec.anchor}" não existe`, 'use o id de um elemento do modelo');
+    if (anchor.type === 'grouping') throw viewError('E_VIEW_GROUP', `anchor "${spec.anchor}" é um agrupamento, que não é nó`, 'use groups.only para recortar por agrupamento');
     const mode = spec.traverse?.mode ?? DEFAULT_MODE[viewpoint] ?? 'supporters';
     if (!['supporters', 'dependents', 'both'].includes(mode)) throw viewError('E_VIEW_TRAVERSE', `modo "${mode}" inválido`, 'use supporters | dependents | both');
     const via = new Set(spec.traverse?.via ?? DEFAULT_VIA);
@@ -77,7 +78,7 @@ export function resolveArchimate(model, spec) {
     return false;
   };
   const kept = new Set(candidates.filter(e => e.id === anchor?.id || (allowed(e) && !tooFine(e))).map(e => e.id));
-  for (const id of spec.include || []) if (model.elements.has(id)) kept.add(id);
+  for (const id of spec.include || []) if (model.elements.has(id) && model.elements.get(id).type !== 'grouping') kept.add(id);
   const gs = groupSpec(model, spec);
   if (gs.only) {
     const cut = cutByGroups(model, gs, kept, model.relationships, { depth: spec.depth ?? 0, keepIds: anchor ? [anchor.id] : [] });

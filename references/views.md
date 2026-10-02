@@ -143,7 +143,16 @@ Camada de aplicação sem ruído de componentes:
   Exige `only` com 2+ grupos.
 - **`frames`**: explícito vem do pedido; omitido vale `true` com `only` e `false` sem. Com `frames` e sem `only`,
   cada membro visível fica na moldura do seu grupo.
-- `E_VIEW_GROUP`: id em `only` que não é `grouping`, ou `crossOnly` com menos de 2 grupos.
+- **O que fica sempre:** o `scope` da visão de contexto e o interior da fronteira aberta (containers da visão
+  container, componentes da visão component) ficam mesmo fora de `only`.
+- **Dinâmica** (`level: "dynamic"`): `only`/`crossOnly` não recortam, porque os passos são autorais; as molduras
+  valem.
+- **ArchiMate:** um agrupamento nunca é nó: como `anchor` dá `E_VIEW_GROUP` (use `only`), e em `include` é ignorado.
+- **Matriz de impacto:** lista a travessia inteira a partir da âncora, não só o que o recorte por grupo mostra
+  (o que o recorte esconde aparece marcado como "oculto na visão").
+- `E_VIEW_GROUP`: id em `only` que não existe, que não é `grouping` ou que está oculto pelo filtro de `status` da
+  visão (ex.: agrupamento `retired`: tire-o de `only` ou acrescente `"retired"` em `status`); ou `crossOnly` com
+  menos de 2 grupos.
 
 Desenho. **C4:** moldura → fronteira do sistema → containers; a fronteira do sistema aberto fica dentro da moldura
 do grupo dele, e as setas ligam elementos, nunca a moldura. **ArchiMate:** uma moldura por grupo × camada (nenhuma

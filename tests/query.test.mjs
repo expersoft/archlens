@@ -366,3 +366,24 @@ test('E_VIEW_GROUP tells a missing id from a non-grouping one and from one hidde
   assert.match(msgs[1], /não é um agrupamento/);
   assert.match(msgs[2], /oculto pelo filtro de status/);
 });
+
+test('archimate: a grouping is never an anchor (E_VIEW_GROUP) and is ignored in include', () => {
+  const m = plat();
+  assert.throws(() => resolveView(m, { key: 'a', notation: 'archimate', viewpoint: 'layered', anchor: 'plat-aut' }), /E_VIEW_GROUP[\s\S]*groups\.only/);
+  const v = resolveView(m, { key: 'i', notation: 'archimate', viewpoint: 'business', include: ['plat-aut'] });
+  assert.ok(!v.nodes.some(n => n.type === 'grouping'));
+});
+
+test('dynamic views ignore the group cut (steps are authored) but keep the frames', () => {
+  const v = resolveView(plat(), { key: 'd', notation: 'c4', level: 'dynamic', scope: 'autorizador', groups: { only: ['plat-cred'] }, steps: [
+    { from: 'portador', to: 'autorizador.api' }, { from: 'autorizador.api', to: 'autorizador.regras' }, { from: 'autorizador.regras', to: 'motor' },
+  ] });
+  assert.deepEqual(ids(v), ['autorizador.api', 'autorizador.regras', 'motor', 'portador']);
+  assert.equal(v.edges.length, 3);
+  assert.deepEqual(v.groups.map(g => g.id).sort(), BOTH);
+});
+
+test('container view: the opened boundary stays under groups.only', () => {
+  const v = resolveView(plat(), { key: 'c', notation: 'c4', level: 'container', scope: 'autorizador', groups: { only: ['plat-cred'] } });
+  assert.deepEqual(ids(v), ['autorizador.api', 'autorizador.regras', 'motor']);
+});

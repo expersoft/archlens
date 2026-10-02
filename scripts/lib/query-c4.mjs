@@ -139,7 +139,12 @@ export function resolveC4(model, spec) {
     if (r) nodes.add(r);
   }
 
-  nodes = cutByGroups(model, gs, nodes, edges, { depth: spec.focus?.length ? 0 : (spec.depth ?? 0), keepIds: scope && level === 'context' ? [scope.id] : [] });
+  // Dynamic steps are authored, so the group cut does not apply there (frames still do). The context scope and the
+  // inside of the opened boundary always stay.
+  if (level !== 'dynamic') {
+    const keepIds = level === 'context' ? [scope.id] : [...internal];
+    nodes = cutByGroups(model, gs, nodes, edges, { depth: spec.focus?.length ? 0 : (spec.depth ?? 0), keepIds });
+  }
 
   // Focus: keep the neighbourhood (undirected) of the focused elements up to `depth`.
   const focus = new Set();
