@@ -24,10 +24,27 @@ function writeIfChanged(path, text) {
   renameSync(tmp, path);
 }
 
+/** A relative path inside the base folder: not absolute, no ".." segment. */
+const inside = p => typeof p === 'string' && p !== '' && !/^([\\/]|[A-Za-z]:)/.test(p) && !p.split(/[\\/]/).includes('..');
+
+/**
+ * Where the model lives: one file ("model.json") or a folder ("model/") whose *.json files are joined. Anything
+ * else is refused, because saving would write files that loading never reads back.
+ */
 function modelLayout(layout = {}) {
   const model = layout.model ?? 'model.json';
+  const bad = why => storeError('E_STORE_LAYOUT', `"layout" em ${MANIFEST}: ${why}`);
+  if (!inside(model) || !(model.endsWith('/') || model.endsWith('.json'))) {
+    throw bad(`"model" deve ser um arquivo .json ou uma pasta terminada em "/", relativo à base e sem ".." (recebido ${JSON.stringify(model)})`);
+  }
   const split = model.endsWith('/');
-  return { model, split, defaultFile: layout.defaultFile ?? (split ? `${model}geral.json` : model) };
+  if (!split) return { model, split, defaultFile: model };
+  const defaultFile = layout.defaultFile ?? `${model}geral.json`;
+  const name = typeof defaultFile === 'string' && defaultFile.startsWith(model) ? defaultFile.slice(model.length) : '';
+  if (!inside(defaultFile) || !name.endsWith('.json') || /[\\/]/.test(name)) {
+    throw bad(`"defaultFile" deve ser um arquivo .json direto em ${model} (recebido ${JSON.stringify(defaultFile)})`);
+  }
+  return { model, split, defaultFile };
 }
 
 /** Model files relative to the base folder ("model.json", or "model/a.json", "model/b.json"… in name order). */
@@ -133,6 +150,10 @@ export function saveFolder(dir, raw, { notes = {}, origins, layout } = {}) {
   if (views !== undefined) writeIfChanged(join(dir, 'views.json'), json(views));
   if (changelog !== undefined) writeIfChanged(join(dir, 'changelog.json'), json(changelog));
   for (const name of NOTE_NAMES) {
-    if (notes[name] != null) writeIfChanged(join(dir, 'notes', `${name}.md`), `${notes[name]}\n`);
+    if (notes[name] == null) continue;
+    const p = join(dir, 'notes', `${name}.md`);
+    // A note file without its trailing newline already holds this note: leave it as the user wrote it.
+    if (existsSync(p) && readFileSync(p, 'utf8') === notes[name]) continue;
+    writeIfChanged(p, `${notes[name]}\n`);
   }
 }

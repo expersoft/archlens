@@ -177,3 +177,37 @@ test('resolveBase: an existing non-empty folder without manifest is never taken 
   writeFileSync(join(dir, 'architecture', 'leia-me.txt'), 'outra coisa');
   assert.throws(() => resolveBase('architecture', { cwd: dir, create: true }), e => e.code === 'E_STORE_NOT_BASE');
 });
+
+test('resolveBase: a generated .md with CRLF line endings still points to its folder', () => {
+  const dir = tmp();
+  saveFolder(join(dir, 'architecture'), shop());
+  writeFileSync(join(dir, 'ARCHITECTURE.md'), '---\r\nname: "Loja"\r\nsource: architecture/\r\n---\r\n# Loja\r\n');
+  const loc = resolveBase('ARCHITECTURE.md', { cwd: dir });
+  assert.equal(loc.kind, 'folder');
+  assert.equal(loc.path, join(dir, 'architecture'));
+});
+
+test('a layout that would write model files the folder never reads is refused (E_STORE_LAYOUT)', () => {
+  const outside = splitBase();
+  const manifest = JSON.parse(read(outside, 'archlens.json'));
+  writeFileSync(join(outside, 'archlens.json'), JSON.stringify({ ...manifest, layout: { model: 'model/', defaultFile: 'outro/geral.json' } }));
+  assert.throws(() => loadFolder(outside), e => e.code === 'E_STORE_LAYOUT');
+  assert.throws(() => saveFolder(tmp(), shop(), { layout: { model: 'model/', defaultFile: 'outro/geral.json' } }), e => e.code === 'E_STORE_LAYOUT');
+  for (const layout of [{ model: '../x/' }, { model: '/abs/' }, { model: 'model' }, { model: 'model/', defaultFile: 'model/sub/a.json' }]) {
+    assert.throws(() => saveFolder(tmp(), shop(), { layout }), e => e.code === 'E_STORE_LAYOUT', JSON.stringify(layout));
+  }
+  const up = tmp();
+  saveFolder(up, shop());
+  writeFileSync(join(up, 'archlens.json'), JSON.stringify({ archlens: '1.0', name: 'x', layout: { model: '../x/' } }));
+  assert.throws(() => loadFolder(up), e => e.code === 'E_STORE_LAYOUT');
+});
+
+test('a note file without a trailing newline is left untouched by save', () => {
+  const dir = tmp();
+  saveFolder(dir, shop());
+  mkdirSync(join(dir, 'notes'));
+  writeFileSync(join(dir, 'notes', 'notes.md'), 'Sem quebra no fim.');
+  const { raw, notes, origins, layout } = loadFolder(dir);
+  saveFolder(dir, raw, { notes, origins, layout });
+  assert.equal(read(dir, 'notes/notes.md'), 'Sem quebra no fim.');
+});

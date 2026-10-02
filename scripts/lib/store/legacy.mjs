@@ -22,13 +22,22 @@ export function loadLegacy(path) {
   }
 }
 
+/** An assumptions block that is only an old copy of (part of) the model's list: "- <text>" lines, all in the list. */
+function staleAssumptions(text, list) {
+  const lines = text.split(/\r?\n/).filter(l => l.trim());
+  const known = new Set((Array.isArray(list) ? list : []).map(a => String(a).trim()));
+  return lines.length > 0 && lines.every(l => /^- /.test(l.trim()) && known.has(l.trim().slice(2).trim()));
+}
+
 /** keep blocks → notes, leaving out the ones that only repeat what the document shows by default. */
 export function legacyNotes(raw, keeps) {
   const defaults = noteDefaults(raw);
   const notes = {};
   for (const name of NOTE_NAMES) {
     const t = keeps.get(name);
-    if (t != null && t.trim() !== defaults[name].trim()) notes[name] = t;
+    if (t == null || t.trim() === defaults[name].trim()) continue;
+    if (name === 'assumptions' && staleAssumptions(t, raw.assumptions)) continue;
+    notes[name] = t;
   }
   return notes;
 }

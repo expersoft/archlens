@@ -12,9 +12,10 @@ export { storeError, MANIFEST };
 const BLOCK_RE = /```archlens-json/;
 const rel = p => relative(process.cwd(), p) || '.';
 
-function frontmatterSource(md) {
-  const fm = /^---\n([\s\S]*?)\n---/.exec(md);
-  const line = fm && /^source:\s*(.+)$/m.exec(fm[1]);
+/** The `source:` of a document's frontmatter (LF or CRLF line endings), or null. */
+export function frontmatterSource(md) {
+  const fm = /^---\r?\n([\s\S]*?)\r?\n---/.exec(md);
+  const line = fm && /^source:[ \t]*(.+?)\r?$/m.exec(fm[1]);
   return line ? line[1].trim().replace(/^"(.*)"$/, '$1') : null;
 }
 
