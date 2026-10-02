@@ -57,6 +57,7 @@ export function normalizeModel(raw) {
         aspect: spec.aspect,
         c4: r.c4Kind ? { kind: r.c4Kind, external: !!e.external } : null,
         parent: e.parent ?? parent ?? null,
+        group: e.group ?? null,
         tags,
         properties: { ...(e.properties || {}) },
         status: e.status ?? 'active',
@@ -71,6 +72,10 @@ export function normalizeModel(raw) {
       }
       checkSources(node.sources, p);
       elements.set(e.id, node);
+      if (e.group !== undefined && typeof e.group !== 'string') {
+        issue('error', 'E_SCHEMA', `"group" de "${e.id}" não é um id`, `${p}.group`, 'use o id de um elemento do tipo "grouping"');
+        node.group = null;
+      }
       if (e.parent && parent) issue('warning', 'W_PARENT_CONFLICT', `"${e.id}" tem "parent" e também está aninhado`, p, 'use só uma das formas');
       if (e.parent) pending.push(node);
       walk(e.children, e.id, `${p}.children`);
@@ -84,6 +89,31 @@ export function normalizeModel(raw) {
       n.parent = null;
     }
   }
+
+  // Groupings: "group" names a grouping element; members inherit it down the parent hierarchy.
+  for (const n of elements.values()) {
+    if (n.group == null) continue;
+    const g = elements.get(n.group);
+    if (n.type === 'grouping') {
+      issue('error', 'E_GROUP_NESTED', `o agrupamento "${n.id}" não pode pertencer a outro ("${n.group}")`, `${n.path}.group`,
+        'agrupamentos não se aninham; remova "group" do agrupamento');
+      n.group = null;
+    } else if (!g || g.type !== 'grouping') {
+      issue('error', 'E_GROUP_REF', g ? `"group" de "${n.id}" aponta para "${n.group}", que não é um agrupamento`
+        : `"group" de "${n.id}" aponta para "${n.group}", que não existe`, `${n.path}.group`, 'use o id de um elemento do tipo "grouping"');
+      n.group = null;
+    }
+  }
+  const effectiveGroup = id => {
+    const seen = new Set();
+    for (let cur = id; cur != null && !seen.has(cur); cur = elements.get(cur)?.parent) {
+      seen.add(cur);
+      const g = elements.get(cur)?.group;
+      if (g) return g;
+    }
+    return null;
+  };
+  for (const n of elements.values()) n.groupId = n.type === 'grouping' ? null : effectiveGroup(n.id);
 
   // Aliases identify one element only (compared like the merge compares them).
   const aliasOwner = new Map();
@@ -129,6 +159,12 @@ export function normalizeModel(raw) {
       }
     }
     if (bad) return;
+    const grp = ['from', 'to'].find(end => elements.get(r[end]).type === 'grouping');
+    if (grp) {
+      issue('error', 'E_GROUP_REL', `relação com o agrupamento "${r[grp]}"`, `${p}.${grp}`,
+        'agrupamentos não são nós: indique os membros com "group" em vez de relacioná-los ao agrupamento');
+      return;
+    }
     const c = canonicalRel(r, id => elements.get(id)?.type);
     if (c.error) {
       issue('error', 'E_REL_TYPE', `tipo de relacionamento desconhecido "${r.type}"`, `${p}.type`,

@@ -434,6 +434,9 @@
         "parent": {
           "type": "string"
         },
+        "group": {
+          "type": "string"
+        },
         "children": {
           "type": "array",
           "items": {

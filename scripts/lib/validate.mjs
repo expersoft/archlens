@@ -15,7 +15,15 @@ export function validateModel(raw) {
     if (e.parent) { connected.add(e.id); connected.add(e.parent); }
   }
   for (const e of model.elements.values()) {
+    if (e.type === 'grouping') continue;
     if (!connected.has(e.id)) warnings.push({ code: 'W_ORPHAN', message: `"${e.id}" não tem relacionamentos`, path: e.path, hint: 'conecte-o ou remova-o; elementos isolados não aparecem em visões com âncora' });
+  }
+  const withMembers = new Set([...model.elements.values()].map(e => e.groupId).filter(Boolean));
+  for (const g of model.elements.values()) {
+    if (g.type === 'grouping' && !withMembers.has(g.id)) {
+      warnings.push({ code: 'W_GROUP_EMPTY', message: `agrupamento "${g.id}" não tem membros`, path: g.path,
+        hint: 'preencha "group" nos elementos que pertencem a ele, ou remova o agrupamento' });
+    }
   }
   for (const r of model.relationships) {
     if (r.status === 'retired') continue;
