@@ -6,8 +6,15 @@ export function readYaml(text) {
   const docs = [...parseAllDocuments(text, { lineCounter: lc, uniqueKeys: false })];
   return docs.map(doc => {
     if (doc.errors.length) throw new Error(doc.errors[0].message);
+    let data;
+    try {
+      data = doc.toJS({ maxAliasCount: 1000 });
+    } catch {
+      // Unresolved aliases (e.g., cross-document references) result in null; the document will be filtered out.
+      data = null;
+    }
     return {
-      data: doc.toJS({ maxAliasCount: 1000 }),
+      data,
       lineOf: (...path) => {
         const node = path.length ? doc.getIn(path, true) : doc.contents;
         const off = node?.range?.[0];

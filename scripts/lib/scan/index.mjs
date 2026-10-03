@@ -5,6 +5,8 @@ import { listFiles, detect } from './walk.mjs';
 import { readYaml } from './yaml.mjs';
 import { repoInfo, repoName, normalizeRepoUrl, isGitUrl, cloneShallow, assertFolder } from './git.mjs';
 import { composeFacts } from './compose.mjs';
+import { k8sFacts } from './k8s.mjs';
+import { helmChartFacts, helmValuesFacts } from './helm.mjs';
 
 const MAX = 2 * 1024 * 1024, MAX_GRAPH = 64 * 1024 * 1024;
 const isoToday = () => new Date().toISOString().slice(0, 10);
@@ -12,7 +14,17 @@ const isoToday = () => new Date().toISOString().slice(0, 10);
 /** One file → { kind: inventory file counter | null, facts }. Content-typed YAML/JSON is decided here. */
 function extract(type, path, text, ctx) {
   if (type === 'compose') return { kind: 'compose', facts: composeFacts(path, text) };
-  if (type === 'yaml') readYaml(text); // syntax errors surface as "unreadable"
+  if (type === 'helm-chart') {
+    const facts = helmChartFacts(path, text);
+    ctx.chartNames.set(dirname(path), facts[0].name);
+    return { kind: 'helm', facts };
+  }
+  if (type === 'helm-values') return { kind: 'helm', facts: helmValuesFacts(path, text, ctx.chartNames.get(dirname(path)) ?? 'chart') };
+  if (type === 'yaml') {
+    const docs = readYaml(text);
+    if (docs.some(d => d.data?.apiVersion && d.data?.kind)) return { kind: 'k8s', facts: k8sFacts(path, docs) };
+    return { kind: null, facts: [] };
+  }
   return { kind: null, facts: [] };
 }
 
