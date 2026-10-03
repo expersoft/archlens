@@ -59,4 +59,4 @@ architecture/**/*.png binary
 
 ## Licença
 
-[MIT](LICENSE) © 2026 Expersoft. O [ELK](https://eclipse.dev/elk/), usado no layout e incluído em `scripts/vendor/`, mantém a própria licença (EPL-2.0, ver `scripts/vendor/ELK-LICENSE.md`). O [rough.js](https://roughjs.com/) 4.6.6, usado no traço à mão dos rascunhos, também está em `scripts/vendor/` (MIT, ver `scripts/vendor/ROUGH-LICENSE.md`).
+[MIT](LICENSE) © 2026 Expersoft. O [ELK](https://eclipse.dev/elk/), usado no layout e incluído em `scripts/vendor/`, mantém a própria licença (EPL-2.0, ver `scripts/vendor/ELK-LICENSE.md`). O [rough.js](https://roughjs.com/) 4.6.6, usado no traço à mão dos rascunhos, também está em `scripts/vendor/` (MIT, ver `scripts/vendor/ROUGH-LICENSE.md`). O [yaml](https://eemeli.org/yaml/) 2.9.1, usado na leitura de manifestos YAML com número de linha (`archlens scan`), também está em `scripts/vendor/yaml/` (ISC, ver `scripts/vendor/YAML-LICENSE`).

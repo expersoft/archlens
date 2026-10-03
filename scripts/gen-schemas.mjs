@@ -13,7 +13,7 @@ export function buildSchemas() {
   const sources = { type: 'array', items: { $ref: '#/$defs/source' } };
   const source = {
     type: 'object', required: ['kind'], additionalProperties: false,
-    properties: { kind: { enum: SOURCE_KINDS }, ref: str, path: str, excerpt: str, date: str },
+    properties: { kind: { enum: SOURCE_KINDS }, ref: str, path: str, line: { type: 'integer', minimum: 1 }, excerpt: str, date: str },
   };
   const changelogEntry = {
     type: 'object', required: ['id', 'date'],

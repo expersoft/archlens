@@ -3,7 +3,7 @@ export const SOURCE_KINDS = ['prompt', 'repo', 'doc', 'manual'];
 
 /** Identity of a source inside one item's list; the excerpt only distinguishes sources without ref/path. */
 export function sourceKey(s) {
-  return s.ref || s.path ? `${s.kind}|${s.ref ?? ''}|${s.path ?? ''}` : `${s.kind}|~${s.excerpt ?? ''}`;
+  return s.ref || s.path ? `${s.kind}|${s.ref ?? ''}|${s.path ?? ''}${s.line != null ? `|${s.line}` : ''}` : `${s.kind}|~${s.excerpt ?? ''}`;
 }
 
 /** Sources declared on a raw element/relationship, accepting the legacy `source: "<excerpt>"`. */
