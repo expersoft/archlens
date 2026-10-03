@@ -7,10 +7,12 @@ const EXECUTABLE_GRADLE = /com\.android\.application|plugins\.android\.applicati
 const read = p => (existsSync(p) ? readFileSync(p, 'utf8') : null);
 
 export function gradleModules(text) {
+  // Comments first, then only the word `include` (not includeBuild) followed by quoted names, possibly across lines.
+  const clean = text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
   const out = [];
-  for (const m of text.matchAll(/include\s*\(?([^)\n]+)\)?/g)) {
-    for (const part of m[1].split(',')) {
-      const name = part.trim().replace(/^["']|["']$/g, '').replace(/^:/, '').replace(/:/g, '/');
+  for (const m of clean.matchAll(/\binclude\s*\(?\s*((?:["'][^"'\n]*["']\s*,?\s*)+)/g)) {
+    for (const q of m[1].matchAll(/["']([^"'\n]*)["']/g)) {
+      const name = q[1].trim().replace(/^:/, '').replace(/:/g, '/');
       if (name) out.push(name);
     }
   }
@@ -25,9 +27,15 @@ export function buildFacts(path, text, ctx) {
       const file = existsSync(join(ctx.root, m, 'build.gradle.kts')) ? `${m}/build.gradle.kts` : `${m}/build.gradle`;
       const bt = read(join(ctx.root, file)) ?? '';
       facts.push({ kind: 'module', name: m, executable: EXECUTABLE_GRADLE.test(bt), at: at(path) });
+      const deps = new Map(); // one fact per target: counts summed, first line kept
       bt.split('\n').forEach((l, i) => {
-        for (const d of l.matchAll(/project\(\s*["']:([^"']+)["']\s*\)/g)) facts.push({ kind: 'module-dep', from: m, to: d[1].replace(/:/g, '/'), count: 1, at: at(file, i + 1) });
+        for (const d of l.matchAll(/project\(\s*["']:([^"']+)["']\s*\)/g)) {
+          const to = d[1].replace(/:/g, '/');
+          if (deps.has(to)) deps.get(to).count++;
+          else deps.set(to, { kind: 'module-dep', from: m, to, count: 1, at: at(file, i + 1) });
+        }
       });
+      facts.push(...deps.values());
     }
   } else if (path === 'pom.xml') {
     for (const [, m] of text.matchAll(/<module>\s*([^<\s]+)\s*<\/module>/g)) {

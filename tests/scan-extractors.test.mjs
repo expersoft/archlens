@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdtempSync, mkdirSync, rmSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -182,8 +182,9 @@ test('graphify: modules, aggregated dependencies, flows, domain concepts, stale 
   assert.deepEqual(pick(facts, 'module', 'name').sort(), [['app'], ['data'], ['domain']]);
   const deps = Object.fromEntries(facts.filter(f => f.kind === 'module-dep').map(f => [`${f.from}>${f.to}`, f.count]));
   assert.deepEqual(deps, { 'app>domain': 2, 'data>domain': 2 });
-  const [flow] = facts.filter(f => f.kind === 'flow');
+  const [flow, docFlow] = facts.filter(f => f.kind === 'flow');
   assert.deepEqual([flow.label, flow.participants.sort(), flow.confidence], ['Registrar dose tomada', ['app', 'data', 'domain'], 'média']);
+  assert.deepEqual(docFlow.participants, ['domain'], 'document node borrows modules of linked code nodes');
   assert.deepEqual(pick(facts, 'domain-concept', 'label', 'module'), [['Treatment', 'domain'], ['DoseEvent', 'domain']], 'tests excluded, most connected first');
   assert.equal(facts.find(f => f.kind === 'domain-concept').at.line, 10);
   assert.deepEqual(pick(facts, 'graph-stale', 'builtAt', 'commit'), [['0000000', 'abc1234def']]);
@@ -193,4 +194,20 @@ test('scanDir: graphify and build files are counted', () => {
   const inv = scanDir(fx('app-modular'));
   assert.equal(inv.files.graphify, 1);
   assert.equal(inv.files.build, 1);
+});
+
+test('gradleModules: comments, includeBuild, multi-line and Groovy forms', () => {
+  assert.deepEqual(gradleModules('includeBuild("../x")\n// include ":c"\n/* include ":d" */\ninclude(\n ":a",\n ":b"\n)\n'), ['a', 'b']);
+  assert.deepEqual(gradleModules("include ':a', ':b'\n"), ['a', 'b']);
+  assert.deepEqual(gradleModules('include(":x:y")'), ['x/y']);
+});
+
+test('gradle: duplicate project() dependencies aggregate into one fact', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gr-'));
+  try {
+    mkdirSync(join(dir, 'a')); writeFileSync(join(dir, 'settings.gradle.kts'), 'include(":a", ":b")');
+    writeFileSync(join(dir, 'a/build.gradle.kts'), 'dependencies {\n implementation(project(":b"))\n testImplementation(project(":b"))\n}\n');
+    const deps = buildFacts('settings.gradle.kts', 'include(":a", ":b")', { root: dir }).filter(f => f.kind === 'module-dep');
+    assert.deepEqual(deps.map(d => [d.from, d.to, d.count, d.at.line]), [['a', 'b', 2, 2]]);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });

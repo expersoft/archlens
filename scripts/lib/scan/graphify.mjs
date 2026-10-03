@@ -39,7 +39,13 @@ export function graphifyFacts(path, text, ctx) {
   }
   for (const [k, count] of deps) { const [from, to] = k.split('>'); facts.push({ kind: 'module-dep', from, to, count, at }); }
   for (const h of g.hyperedges ?? g.graph?.hyperedges ?? []) {
-    const participants = [...new Set((h.nodes ?? []).map(id => modOf(byId.get(id)?.source_file)).filter(Boolean))];
+    const own = (h.nodes ?? []).map(id => modOf(byId.get(id)?.source_file));
+    // A node outside any module (document, concept) borrows the modules of its code-node neighbours.
+    const viaLinks = (h.nodes ?? []).filter((id, i) => !own[i]).flatMap(id => links
+      .filter(l => l.source === id || l.target === id)
+      .map(l => byId.get(l.source === id ? l.target : l.source))
+      .filter(n => n?.file_type === 'code').map(n => modOf(n.source_file)));
+    const participants = [...new Set([...own, ...viaLinks].filter(Boolean))];
     facts.push({ kind: 'flow', label: h.label ?? h.id, participants, confidence: confidence(h.confidence_score ?? 1), at: { file: h.source_file ?? path, line: 1 } });
   }
   const degree = new Map();

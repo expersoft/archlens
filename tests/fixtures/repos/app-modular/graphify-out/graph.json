@@ -1,19 +1,120 @@
-{ "directed": true, "multigraph": true, "graph": {}, "built_at_commit": "0000000",
-  "nodes": [
-    { "id": "a1", "label": "MainActivity", "file_type": "code", "source_file": "app/src/Main.kt", "source_location": "L3" },
-    { "id": "a2", "label": "TodayViewModel", "file_type": "code", "source_file": "app/src/Today.kt", "source_location": "L5" },
-    { "id": "d1", "label": "Treatment", "file_type": "code", "source_file": "domain/src/Treatment.kt", "source_location": "L10" },
-    { "id": "d2", "label": "DoseEvent", "file_type": "code", "source_file": "domain/src/DoseEvent.kt", "source_location": "L7" },
-    { "id": "d3", "label": "TreatmentTest", "file_type": "code", "source_file": "domain/src/test/TreatmentTest.kt", "source_location": "L1" },
-    { "id": "r1", "label": "RoomDoseRepository", "file_type": "code", "source_file": "data/src/Repo.kt", "source_location": "L2" },
-    { "id": "k1", "label": "Fluxo de dose", "file_type": "document", "source_file": "docs/spec.md" }
-  ],
-  "links": [
-    { "source": "a2", "target": "d1", "relation": "imports" }, { "source": "a2", "target": "d2", "relation": "calls" },
-    { "source": "a1", "target": "a2", "relation": "calls" }, { "source": "r1", "target": "d2", "relation": "implements" },
-    { "source": "r1", "target": "d1", "relation": "references" }, { "source": "d3", "target": "d1", "relation": "calls" },
-    { "source": "d2", "target": "d1", "relation": "references" }
-  ],
-  "hyperedges": [
-    { "id": "h1", "label": "Registrar dose tomada", "nodes": ["a2", "d2", "r1"], "confidence_score": 0.85, "source_file": "docs/spec.md" }
-  ] }
+{
+ "directed": true,
+ "multigraph": true,
+ "graph": {},
+ "built_at_commit": "0000000",
+ "nodes": [
+  {
+   "id": "a1",
+   "label": "MainActivity",
+   "file_type": "code",
+   "source_file": "app/src/Main.kt",
+   "source_location": "L3"
+  },
+  {
+   "id": "a2",
+   "label": "TodayViewModel",
+   "file_type": "code",
+   "source_file": "app/src/Today.kt",
+   "source_location": "L5"
+  },
+  {
+   "id": "d1",
+   "label": "Treatment",
+   "file_type": "code",
+   "source_file": "domain/src/Treatment.kt",
+   "source_location": "L10"
+  },
+  {
+   "id": "d2",
+   "label": "DoseEvent",
+   "file_type": "code",
+   "source_file": "domain/src/DoseEvent.kt",
+   "source_location": "L7"
+  },
+  {
+   "id": "d3",
+   "label": "TreatmentTest",
+   "file_type": "code",
+   "source_file": "domain/src/test/TreatmentTest.kt",
+   "source_location": "L1"
+  },
+  {
+   "id": "r1",
+   "label": "RoomDoseRepository",
+   "file_type": "code",
+   "source_file": "data/src/Repo.kt",
+   "source_location": "L2"
+  },
+  {
+   "id": "k1",
+   "label": "Fluxo de dose",
+   "file_type": "document",
+   "source_file": "docs/spec.md"
+  }
+ ],
+ "links": [
+  {
+   "source": "a2",
+   "target": "d1",
+   "relation": "imports"
+  },
+  {
+   "source": "a2",
+   "target": "d2",
+   "relation": "calls"
+  },
+  {
+   "source": "a1",
+   "target": "a2",
+   "relation": "calls"
+  },
+  {
+   "source": "r1",
+   "target": "d2",
+   "relation": "implements"
+  },
+  {
+   "source": "r1",
+   "target": "d1",
+   "relation": "references"
+  },
+  {
+   "source": "d3",
+   "target": "d1",
+   "relation": "calls"
+  },
+  {
+   "source": "d2",
+   "target": "d1",
+   "relation": "references"
+  },
+  {
+   "source": "k1",
+   "target": "d1",
+   "relation": "references"
+  }
+ ],
+ "hyperedges": [
+  {
+   "id": "h1",
+   "label": "Registrar dose tomada",
+   "nodes": [
+    "a2",
+    "d2",
+    "r1"
+   ],
+   "confidence_score": 0.85,
+   "source_file": "docs/spec.md"
+  },
+  {
+   "id": "h2",
+   "label": "Fluxo documental",
+   "nodes": [
+    "k1"
+   ],
+   "confidence_score": 0.5,
+   "source_file": "docs/spec.md"
+  }
+ ]
+}
