@@ -388,3 +388,12 @@ test('container view: the opened boundary stays under groups.only', () => {
   const v = resolveView(plat(), { key: 'c', notation: 'c4', level: 'container', scope: 'autorizador', groups: { only: ['plat-cred'] } });
   assert.deepEqual(ids(v), ['autorizador.api', 'autorizador.regras', 'motor']);
 });
+
+test('the impact viewpoint follows flow by default; other viewpoints do not', () => {
+  const r = JSON.parse(readFileSync(new URL('./fixtures/shop.json', import.meta.url)));
+  r.model.elements.push({ id: 'topic.x', type: 'c4:container', name: 'x', tags: ['topic'] }, { id: 'consumidor', type: 'c4:softwareSystem', name: 'Consumidor' });
+  r.model.relationships.push({ from: 'loja.api', to: 'topic.x', type: 'archimate:flow' }, { from: 'topic.x', to: 'consumidor', type: 'archimate:flow' });
+  const m = normalizeModel(r);
+  assert.ok(resolveView(m, { key: 'i', notation: 'archimate', viewpoint: 'impact', anchor: 'loja.api' }).nodes.some(n => n.id === 'consumidor'));
+  assert.ok(!resolveView(m, { key: 'l', notation: 'archimate', viewpoint: 'layered', anchor: 'loja.api', traverse: { mode: 'dependents' } }).nodes.some(n => n.id === 'consumidor'));
+});
