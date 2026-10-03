@@ -10,6 +10,8 @@ import { helmChartFacts, helmValuesFacts } from './helm.mjs';
 import { terraformFacts } from './terraform.mjs';
 import { openapiFacts } from './openapi.mjs';
 import { asyncapiFacts } from './asyncapi.mjs';
+import { graphifyFacts } from './graphify.mjs';
+import { buildFacts } from './build.mjs';
 
 const MAX = 2 * 1024 * 1024, MAX_GRAPH = 64 * 1024 * 1024;
 const isoToday = () => new Date().toISOString().slice(0, 10);
@@ -23,6 +25,8 @@ function extract(type, path, text, ctx) {
     return { kind: 'helm', facts };
   }
   if (type === 'helm-values') return { kind: 'helm', facts: helmValuesFacts(path, text, ctx.chartNames.get(dirname(path)) ?? 'chart') };
+  if (type === 'graphify') return { kind: 'graphify', facts: graphifyFacts(path, text, ctx) };
+  if (type === 'build') return { kind: 'build', facts: buildFacts(path, text, ctx) };
   if (type === 'terraform') return { kind: 'terraform', facts: terraformFacts(path, text) };
   if (type === 'yaml' || type === 'json') {
     let docs;

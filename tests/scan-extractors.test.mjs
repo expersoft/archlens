@@ -10,6 +10,8 @@ import { helmChartFacts, helmValuesFacts } from '../scripts/lib/scan/helm.mjs';
 import { terraformFacts } from '../scripts/lib/scan/terraform.mjs';
 import { openapiFacts } from '../scripts/lib/scan/openapi.mjs';
 import { asyncapiFacts } from '../scripts/lib/scan/asyncapi.mjs';
+import { gradleModules, buildFacts } from '../scripts/lib/scan/build.mjs';
+import { graphifyFacts } from '../scripts/lib/scan/graphify.mjs';
 import { scanDir } from '../scripts/lib/scan/index.mjs';
 
 const fx = p => fileURLToPath(new URL(`./fixtures/repos/${p}`, import.meta.url));
@@ -160,4 +162,35 @@ test('terraform: heredoc markers in strings/comments are not detected', () => {
   const facts = terraformFacts('test.tf', tf);
   const db = facts.find(f => f.kind === 'cloud-resource');
   assert.equal(db.attrs.engine, 'postgres', 'resource closed normally, heredoc markers in string/comment ignored');
+});
+
+test('gradle: modules, executable by plugin, project() dependencies', () => {
+  assert.deepEqual(gradleModules('include(":app", ":domain")\ninclude ":data"\n'), ['app', 'domain', 'data']);
+  const facts = buildFacts('settings.gradle.kts', read('app-modular/settings.gradle.kts'), { root: fx('app-modular') });
+  assert.deepEqual(pick(facts, 'module', 'name', 'executable'), [['app', true], ['domain', false], ['data', false]]);
+  assert.deepEqual(pick(facts, 'module-dep', 'from', 'to').sort(), [['app', 'data'], ['app', 'domain'], ['data', 'domain']]);
+});
+
+test('npm workspaces: packages, executable by start/bin, dependencies between them', () => {
+  const facts = buildFacts('package.json', read('web-workspaces/package.json'), { root: fx('web-workspaces') });
+  assert.deepEqual(pick(facts, 'module', 'name', 'executable').sort(), [['packages/ui', false], ['packages/web', true]]);
+  assert.deepEqual(pick(facts, 'module-dep', 'from', 'to'), [['packages/web', 'packages/ui']]);
+});
+
+test('graphify: modules, aggregated dependencies, flows, domain concepts, stale graph', () => {
+  const facts = graphifyFacts('graphify-out/graph.json', read('app-modular/graphify-out/graph.json'), { root: fx('app-modular'), commit: 'abc1234def' });
+  assert.deepEqual(pick(facts, 'module', 'name').sort(), [['app'], ['data'], ['domain']]);
+  const deps = Object.fromEntries(facts.filter(f => f.kind === 'module-dep').map(f => [`${f.from}>${f.to}`, f.count]));
+  assert.deepEqual(deps, { 'app>domain': 2, 'data>domain': 2 });
+  const [flow] = facts.filter(f => f.kind === 'flow');
+  assert.deepEqual([flow.label, flow.participants.sort(), flow.confidence], ['Registrar dose tomada', ['app', 'data', 'domain'], 'média']);
+  assert.deepEqual(pick(facts, 'domain-concept', 'label', 'module'), [['Treatment', 'domain'], ['DoseEvent', 'domain']], 'tests excluded, most connected first');
+  assert.equal(facts.find(f => f.kind === 'domain-concept').at.line, 10);
+  assert.deepEqual(pick(facts, 'graph-stale', 'builtAt', 'commit'), [['0000000', 'abc1234def']]);
+});
+
+test('scanDir: graphify and build files are counted', () => {
+  const inv = scanDir(fx('app-modular'));
+  assert.equal(inv.files.graphify, 1);
+  assert.equal(inv.files.build, 1);
 });
