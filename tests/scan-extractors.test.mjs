@@ -1,7 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { readYaml } from '../scripts/lib/scan/yaml.mjs';
 import { k8sFacts } from '../scripts/lib/scan/k8s.mjs';
 import { helmChartFacts, helmValuesFacts } from '../scripts/lib/scan/helm.mjs';
@@ -75,4 +77,51 @@ test('scanDir dispatches terraform, openapi (yaml) and asyncapi (yaml and json)'
   assert.equal(ped.files.asyncapi, 1);
   assert.equal(scanDir(fx('pagamentos')).files.asyncapi, 1);
   assert.equal(scanDir(fx('infra')).files.terraform, 1);
+});
+
+test('terraform: interpolated strings are not extracted; literals and references in interpolations are', () => {
+  const tf = `resource "aws_db_instance" "test" {
+  name = "\${var.x}-db"
+  bucket = "fixed"
+  url = "https://x.com"
+  arn = "\${aws_msk_cluster.eventos.arn}"
+}`;
+  const facts = terraformFacts('test.tf', tf);
+  const db = facts.find(f => f.kind === 'cloud-resource');
+  assert.equal(db.attrs.name, undefined, 'interpolated string name omitted');
+  assert.equal(db.attrs.bucket, 'fixed', 'literal string extracted');
+  assert.equal(db.attrs.url, 'https://x.com', 'URL literal extracted');
+  assert.ok(pick(facts, 'tf-ref', 'to').some(r => r[0] === 'aws_msk_cluster.eventos'), 'reference inside interpolation found');
+});
+
+test('terraform: heredocs do not swallow following resources', () => {
+  const tf = `resource "aws_security_group" "db" {
+  description = <<EOF
+this has { and } inside
+EOF
+}
+resource "aws_db_instance" "pedidos" {
+  engine = "postgres"
+}`;
+  const facts = terraformFacts('test.tf', tf);
+  const resources = pick(facts, 'cloud-resource', 'type', 'name');
+  assert.deepEqual(resources, [['aws_db_instance', 'pedidos']], 'only known resource extracted, heredoc did not swallow the closing brace');
+});
+
+test('terraform: unclosed block throws error', () => {
+  const tf = `resource "aws_db_instance" "pedidos" {
+  engine = "postgres"`;
+  assert.throws(() => terraformFacts('test.tf', tf), /bloco HCL não fechado.*resource.*pedidos/);
+});
+
+test('scanDir: invalid JSON is ignored, not unreadable', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'archlens-test-'));
+  try {
+    writeFileSync(join(dir, 'broken.json'), '{', 'utf8');
+    const inv = scanDir(dir);
+    assert.equal(inv.files.ignored, 1, 'broken JSON counts as ignored');
+    assert.ok(!inv.facts.some(f => f.kind === 'unreadable'), 'no unreadable facts for invalid JSON');
+  } finally {
+    rmSync(dir, { recursive: true });
+  }
 });
