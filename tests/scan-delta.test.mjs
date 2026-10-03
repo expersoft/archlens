@@ -170,3 +170,30 @@ test('producer and consumer repos are linked by the topic; the producer impact r
   const impact = resolveView(m, { key: 'i', notation: 'archimate', viewpoint: 'impact', anchor: 'loja.pedidos' });
   assert.ok(impact.nodes.some(n => n.id === 'financeiro.pagamentos'), 'consumer appears as dependent of the producer');
 });
+
+test('re-reading the producer links the host to the real container, not to a stale ext.*, which is retired', () => {
+  const prod = toDelta(inv(pedidosFacts, { path: '/r/pedidos', name: 'pedidos' }), { role: 'service', system: 'loja' });
+  let raw = applyNew(prod);
+  const cons = toDelta(inv([{ kind: 'workload', kindK8s: 'Deployment', name: 'pagamentos', at: a('k8s/deploy.yaml', 8) }], { path: '/r/pagamentos', name: 'pagamentos' }),
+    { role: 'service', system: 'financeiro', base: normalizeModel(raw) });
+  raw = applyNew(cons, raw);
+  const again = toDelta(inv(pedidosFacts, { path: '/r/pedidos', name: 'pedidos', commit: 'fffffff999' }), { role: 'service', system: 'loja', base: normalizeModel(raw) });
+  const r = rel(again, 'loja.pedidos', 'financeiro.pagamentos');
+  assert.deepEqual([r?.type, r?.description], ['uses', 'via PAGAMENTOS_URL']);
+  assert.ok(!rel(again, 'loja.pedidos', 'ext.pagamentos'));
+  assert.deepEqual((again.ops ?? []).map(o => [o.op, o.id, o.status]), [['status', 'ext.pagamentos', 'retired']]);
+});
+
+test('a host equal to a topic id suffix does not link to the topic', () => {
+  const base = terminus();
+  const d = toDelta(inv([{ kind: 'service', name: 'api', build: '.', ports: [], at: a('compose.yml', 2) },
+    { kind: 'env-ref', from: 'api', var: 'REQ_URL', host: 'assignment-requested', at: a('compose.yml', 4) }]), { role: 'service', system: 'terminus', id: 'terminus.assignment', base });
+  assert.ok(!rel(d, 'terminus.assignment', 'topic.assignment-requested'));
+  assert.ok(rel(d, 'terminus.assignment', 'ext.assignment-requested'));
+});
+
+test('without a commit the reference keeps "sem-commit" whole', () => {
+  const d = toDelta(inv([], { path: '/r/vazio', name: 'vazio', commit: undefined }), { role: 'service', system: 'loja' });
+  assert.equal(d.source.ref, '/r/vazio@sem-commit');
+  assert.equal(el(d, 'loja.vazio').sources[0].ref, '/r/vazio@sem-commit');
+});

@@ -17,7 +17,7 @@ const DEFAULT_ROOT_AT = { file: '.', line: 1 };
 
 export function toDelta(inv, { role, system, id, base = null } = {}) {
   const key = repoKey(inv.repo);
-  const ref = `${key}@${(inv.repo.commit ?? 'sem-commit').slice(0, 7)}`;
+  const ref = `${key}@${inv.repo.commit ? inv.repo.commit.slice(0, 7) : 'sem-commit'}`;
   const facts = inv.facts;
   const inBase = x => !!base?.elements.has(x);
   const elements = new Map();
@@ -157,7 +157,13 @@ export function toDelta(inv, { role, system, id, base = null } = {}) {
   const baseHost = host => {
     if (!base) return null;
     const k = aliasKey(host);
-    return [...base.elements.values()].find(e => e.id === norm(host) || e.id.endsWith(`.${norm(host)}`) || e.aliases.some(x => aliasKey(x) === k))?.id ?? null;
+    // Only what a host can be (a live container or software system, never a topic); rank the real
+    // container first, then an internal system, and only then an external/ext.* placeholder.
+    const rank = e => (e.c4.external || e.id.startsWith('ext.') ? 2 : e.c4.kind === 'container' ? 0 : 1);
+    const hits = [...base.elements.values()].filter(e => ['container', 'softwareSystem'].includes(e.c4?.kind)
+      && e.status !== 'retired' && !e.tags.includes('topic') && !e.id.startsWith('topic.')
+      && (e.id === norm(host) || e.id.endsWith(`.${norm(host)}`) || e.aliases.some(x => aliasKey(x) === k)));
+    return hits.sort((x, y) => rank(x) - rank(y))[0]?.id ?? null;
   };
   for (const f of facts.filter(x => x.kind === 'depends-on')) link(runId(f.from), runId(f.to), 'uses', f.at, { description: 'depends_on' });
   for (const f of facts.filter(x => x.kind === 'env-ref')) {
