@@ -85,13 +85,17 @@ test('terraform: interpolated strings are not extracted; literals and references
   bucket = "fixed"
   url = "https://x.com"
   arn = "\${aws_msk_cluster.eventos.arn}"
+}
+
+resource "aws_msk_cluster" "eventos" {
+  cluster_name = "eventos"
 }`;
   const facts = terraformFacts('test.tf', tf);
-  const db = facts.find(f => f.kind === 'cloud-resource');
+  const db = facts.find(f => f.kind === 'cloud-resource' && f.name === 'test');
   assert.equal(db.attrs.name, undefined, 'interpolated string name omitted');
   assert.equal(db.attrs.bucket, 'fixed', 'literal string extracted');
   assert.equal(db.attrs.url, 'https://x.com', 'URL literal extracted');
-  assert.ok(pick(facts, 'tf-ref', 'to').some(r => r[0] === 'aws_msk_cluster.eventos'), 'reference inside interpolation found');
+  assert.ok(pick(facts, 'tf-ref', 'to').some(r => r[0] === 'aws_msk_cluster.eventos'), 'reference to emitted resource found');
 });
 
 test('terraform: heredocs do not swallow following resources', () => {
@@ -124,4 +128,36 @@ test('scanDir: invalid JSON is ignored, not unreadable', () => {
   } finally {
     rmSync(dir, { recursive: true });
   }
+});
+
+test('terraform: references only between emitted resources', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'archlens-test-'));
+  try {
+    writeFileSync(join(dir, 'db.tf'), 'resource "aws_db_instance" "d" {\n  arn = "${aws_sqs_queue.ghost.arn}"\n  msk = "${aws_msk_cluster.eventos.arn}"\n}', 'utf8');
+    writeFileSync(join(dir, 'msk.tf'), 'resource "aws_msk_cluster" "eventos" {\n  cluster_name = "eventos"\n}', 'utf8');
+    const inv = scanDir(dir);
+    const refs = pick(inv.facts, 'tf-ref', 'to');
+    assert.ok(refs.some(r => r[0] === 'aws_msk_cluster.eventos'), 'cross-file ref to emitted resource kept');
+    assert.ok(!refs.some(r => r[0] === 'aws_sqs_queue.ghost'), 'ref to non-emitted resource dropped');
+  } finally {
+    rmSync(dir, { recursive: true });
+  }
+});
+
+test('terraform: unclosed block in scanDir records unreadable', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'archlens-test-'));
+  try {
+    writeFileSync(join(dir, 'broken.tf'), 'resource "aws_db_instance" "d" {\n  engine = "postgres"', 'utf8');
+    const inv = scanDir(dir);
+    assert.ok(inv.facts.some(f => f.kind === 'unreadable' && f.at.file.endsWith('broken.tf')), 'unclosed block recorded as unreadable');
+  } finally {
+    rmSync(dir, { recursive: true });
+  }
+});
+
+test('terraform: heredoc markers in strings/comments are not detected', () => {
+  const tf = 'resource "aws_db_instance" "d" {\n  url = "https://docs.example.com/<<EOF"\n  # this is a comment with <<EOF\n  engine = "postgres"\n}';
+  const facts = terraformFacts('test.tf', tf);
+  const db = facts.find(f => f.kind === 'cloud-resource');
+  assert.equal(db.attrs.engine, 'postgres', 'resource closed normally, heredoc markers in string/comment ignored');
 });

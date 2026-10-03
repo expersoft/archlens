@@ -60,14 +60,14 @@ export function terraformFacts(path, text) {
     // Mask strings before processing
     const { masked, strings } = maskStrings(raw);
 
-    // Check for heredoc start before stripping comments (heredocs survive comment syntax)
-    const heredocMatch = raw.match(HEREDOC_START);
+    // Strip comments from masked line
+    const line = masked.replace(/#.*$|\/\/.*$/, '');
+
+    // Check for heredoc start on masked/comment-stripped line (so <<X in strings or comments is ignored)
+    const heredocMatch = line.match(HEREDOC_START);
     if (heredocMatch) {
       inHeredoc = heredocMatch[1];
     }
-
-    // Strip comments from masked line
-    const line = masked.replace(/#.*$|\/\/.*$/, '');
 
     // Try to start a new resource block
     if (!cur && depth === 0) {

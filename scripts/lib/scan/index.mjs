@@ -77,10 +77,20 @@ export function scanDir(root, { url, today = isoToday(), helmRender = false } = 
       facts.push({ kind: 'unreadable', error: String(e.message).split('\n')[0], at: { file: f.path, line: 1 } });
     }
   }
+
+  // Post-pass: filter tf-refs to only those between emitted resources
+  const emittedResources = new Set(facts.filter(f => f.kind === 'cloud-resource').map(f => `${f.type}.${f.name}`));
+  const filteredFacts = facts.filter(f => {
+    if (f.kind === 'tf-ref') {
+      return emittedResources.has(f.from) && emittedResources.has(f.to);
+    }
+    return true;
+  });
+
   return {
     'archlens-inventory': '1.0',
     repo: { ...(url ? { url: normalizeRepoUrl(url) } : {}), path: root, name: repoName(url ?? root), commit: info.commit, dirty: info.dirty, scannedAt: today },
-    files, facts,
+    files, facts: filteredFacts,
   };
 }
 
