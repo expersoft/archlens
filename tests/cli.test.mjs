@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync } from 'node:fs';
+import { spawnSync, spawnSync as sp } from 'node:child_process';
+import { cpSync, mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -444,4 +444,69 @@ test('migrate into a non-empty architecture/ suggests --to', () => {
   const r = run(['migrate', 'ARCHITECTURE.md'], dir);
   assert.equal(r.status, 1);
   assert.match(r.stderr, /E_STORE_NOT_BASE[\s\S]*--to <pasta>/);
+});
+
+const repoCopy = name => {
+  const dir = mkdtempSync(join(tmpdir(), `archlens-${name}-`));
+  cpSync(fileURLToPath(new URL(`./fixtures/repos/${name}/`, import.meta.url)), dir, { recursive: true });
+  const g = (...a) => sp('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', '-c', 'init.defaultBranch=main', ...a], { cwd: dir });
+  g('init', '-q'); g('add', '-A'); g('commit', '-qm', 'init');
+  return dir;
+};
+
+test('scan without --as prints the summary (text and pure --json) and writes the inventory with --out', () => {
+  const repo = repoCopy('pedidos');
+  const dir = setup();
+  const r = run(['scan', repo, '--base', 'architecture', '--out', 'inv.json'], dir);
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /papel sugerido: service/);
+  assert.equal(JSON.parse(readFileSync(join(dir, 'inv.json'), 'utf8'))['archlens-inventory'], '1.0');
+  const j = run(['scan', repo, '--base', 'architecture', '--json'], dir);
+  assert.equal(JSON.parse(j.stdout).role.suggested, 'service');
+});
+
+test('scan --delta needs a role; service needs an existing system; nothing is written on error', () => {
+  const repo = repoCopy('pedidos');
+  const dir = setup();
+  const noRole = run(['scan', repo, '--base', 'architecture', '--delta', 'd.json'], dir);
+  assert.equal(noRole.status, 1);
+  assert.match(noRole.stderr, /E_SCAN_ROLE/);
+  const noSys = run(['scan', repo, '--base', 'architecture', '--as', 'service', '--delta', 'd.json'], dir);
+  assert.match(noSys.stderr, /E_SCAN_ROLE/);
+  const badSys = run(['scan', repo, '--base', 'architecture', '--as', 'service', '--system', 'nada', '--delta', 'd.json'], dir);
+  assert.equal(badSys.status, 1);
+  assert.match(badSys.stderr, /E_SCAN_TARGET/);
+  assert.ok(!existsSync(join(dir, 'd.json')));
+});
+
+test('scan → merge → apply on a base; reading the same commit again changes nothing', () => {
+  const repo = repoCopy('pedidos');
+  const dir = setup();
+  const s = run(['scan', repo, '--base', 'architecture', '--as', 'service', '--system', 'loja', '--delta', 'd.json'], dir);
+  assert.equal(s.status, 0, s.stderr);
+  assert.equal(run(['merge', 'architecture', 'd.json', '--plan', 'p.json'], dir).status, 0);
+  const plan = JSON.parse(readFileSync(join(dir, 'p.json'), 'utf8'));
+  for (const it of plan.items) if ('resolution' in it && it.resolution == null) it.resolution = it.class === 'possible-duplicate' ? 'different' : 'take';
+  writeFileSync(join(dir, 'p.json'), JSON.stringify(plan));
+  assert.equal(run(['merge', 'architecture', '--apply', 'p.json'], dir).status, 0);
+  assert.equal(run(['check'], dir).status, 0);
+  run(['scan', repo, '--base', 'architecture', '--as', 'service', '--system', 'loja', '--delta', 'd2.json'], dir);
+  const again = run(['merge', 'architecture', 'd2.json', '--plan', 'p2.json', '--json'], dir);
+  assert.deepEqual(Object.keys(JSON.parse(again.stdout).summary), ['unchanged']);
+});
+
+test('scan reads a git url (file://) and --from reuses an inventory; no base found → warning', () => {
+  const repo = repoCopy('pedidos');
+  const empty = mkdtempSync(join(tmpdir(), 'archlens-'));
+  const r = run(['scan', `file://${repo}`, '--out', 'inv.json', '--as', 'service', '--system', 'loja', '--delta', 'd.json'], empty);
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stderr, /nenhuma base encontrada/);
+  const d = JSON.parse(readFileSync(join(empty, 'd.json'), 'utf8'));
+  assert.equal(d.source.ref.startsWith(`file://${repo}@`), true);
+  const again = run(['scan', '--from', 'inv.json', '--as', 'service', '--system', 'loja', '--delta', 'd2.json'], empty);
+  assert.equal(again.status, 0, again.stderr);
+  assert.deepEqual(JSON.parse(readFileSync(join(empty, 'd2.json'), 'utf8')), d);
+  const bad = run(['scan', '/nao/existe'], empty);
+  assert.equal(bad.status, 1);
+  assert.match(bad.stderr, /E_SCAN_SOURCE/);
 });

@@ -3,7 +3,7 @@
 import { readFileSync, writeFileSync, existsSync, renameSync, mkdirSync, rmSync, readdirSync } from 'node:fs';
 import { dirname, basename, extname, join, resolve, relative, sep } from 'node:path';
 import { spawn } from 'node:child_process';
-import { normalizeModel } from './lib/model.mjs';
+import { normalizeModel, c4KindOf } from './lib/model.mjs';
 import { validateModel } from './lib/validate.mjs';
 import { generateDoc } from './lib/doc.mjs';
 import { resolveView } from './lib/query.mjs';
@@ -15,6 +15,9 @@ import { planMerge, applyPlan, mergeError, canonicalJson, hashRaw, PLAN_VERSION 
 import { formatPlanReport } from './lib/merge-report.mjs';
 import { previewModel, previewSummary, annotateView } from './lib/preview.mjs';
 import { resolveBase, openStore, frontmatterSource, MANIFEST } from './lib/store/index.mjs';
+import { scanSource } from './lib/scan/index.mjs';
+import { summarize, formatSummary } from './lib/scan/summary.mjs';
+import { toDelta } from './lib/scan/to-delta.mjs';
 
 const HELP = `archlens — arquitetura como modelo, diagramas como consultas
 
@@ -38,6 +41,8 @@ Comandos
   build     <base> [--out-dir DIR]           ARCHITECTURE.md + HTML (padrão: architecture/diagrams/)
   migrate   <ARCHITECTURE.md|m.json> [--to DIR]  converte uma base antiga para a pasta architecture/
   check     [base] [--json]               valida e confere se o ARCHITECTURE.md está em dia (CI / pre-commit)
+  scan      <pasta|url> [--base b] [--out inv.json] [--json]   lê um repositório: inventário e papel sugerido
+            <pasta|url> --as system|service [--system id] [--id id] --delta d.json [--from inv.json]   monta o delta
 
 Seleção de visões (render/deliver)
   --view k1,k2        visões do modelo pelo key (padrão: todas as definidas)
@@ -389,6 +394,45 @@ async function main() {
       console.log(`✓ ${dest.describe()} criada; ${relPath(doc)} regenerado (formato novo)`);
       console.log(`  notas: ${Object.keys(notes).length ? Object.keys(notes).map(n => `notes/${n}.md`).join(', ') : '(nenhuma)'}`);
       console.log(`  commit sugerido: git add ${relPath(to)} ${relPath(doc)} && git commit -m "chore(archlens): base migrada para ${relPath(to)}/"`);
+      break;
+    }
+    case 'scan': {
+      const usage = 'uso: archlens scan <pasta|url-git> [--ref r] [--base b] [--out inventario.json] [--json]\n'
+        + '      archlens scan <pasta|url-git> --as system|service [--system <id>] [--id <id>] --delta d.json [--from inventario.json]';
+      const val = k => (args[k] && args[k] !== true ? args[k] : undefined);
+      if (!file && !val('from')) fail(usage);
+      let base = null;
+      try {
+        const loaded = openStore(resolveBase(val('base'))).load();
+        base = loaded.raw ? normalizeModel(loaded.raw) : null;
+      } catch (e) {
+        if (val('base')) fail(e.message);
+        console.warn('  aviso: nenhuma base encontrada; o delta será para uma base nova. Use --base para apontar a base existente.');
+      }
+      if (args.delta) {
+        const role = val('as');
+        if (!['system', 'service'].includes(role)) fail('E_SCAN_ROLE: informe o papel do repositório com --as system|service (rode sem --delta para ver a sugestão)');
+        if (role === 'service' && !val('system')) fail('E_SCAN_ROLE: com --as service, informe o sistema com --system <id>');
+        const kindOf = x => (base?.elements.get(x) ? c4KindOf(base, base.elements.get(x)) : null);
+        if (base && role === 'service' && !base.elements.has(val('system'))) fail(`E_SCAN_TARGET: o sistema "${val('system')}" não existe na base`);
+        if (base && val('system') && base.elements.has(val('system')) && kindOf(val('system')) !== 'softwareSystem') fail(`E_SCAN_TARGET: "${val('system')}" não é um software system`);
+        if (base && val('id') && base.elements.has(val('id')) && kindOf(val('id')) !== (role === 'system' ? 'softwareSystem' : 'container')) {
+          fail(`E_SCAN_TARGET: "${val('id')}" na base não é um ${role === 'system' ? 'software system' : 'container'}`);
+        }
+      }
+      let inv;
+      try { inv = val('from') ? readJson(val('from')) : scanSource(file, { ref: val('ref'), helmRender: !!args['helm-render'] }); } catch (e) { fail(e.message); }
+      if (val('out')) atomicWrite(val('out'), JSON.stringify(inv, null, 2) + '\n');
+      if (!args.delta) {
+        const s = summarize(inv, base);
+        console.log(args.json ? JSON.stringify(s, null, 2) : formatSummary(s));
+        break;
+      }
+      if (args.delta === true) fail(usage);
+      const delta = toDelta(inv, { role: val('as'), system: val('system'), id: val('id'), base });
+      atomicWrite(args.delta, JSON.stringify(delta, null, 2) + '\n');
+      console.log(`✓ delta em ${args.delta}: ${delta.model.elements.length} elemento(s), ${delta.model.relationships.length} relação(ões)${delta.ops ? `, ${delta.ops.length} sugestão(ões) de retired para confirmar` : ''}`);
+      console.log(`  próximo passo: archlens merge <base> ${args.delta} --plan plano.json`);
       break;
     }
     case 'check': {
