@@ -5,6 +5,9 @@ import { fileURLToPath } from 'node:url';
 import { readYaml } from '../scripts/lib/scan/yaml.mjs';
 import { k8sFacts } from '../scripts/lib/scan/k8s.mjs';
 import { helmChartFacts, helmValuesFacts } from '../scripts/lib/scan/helm.mjs';
+import { terraformFacts } from '../scripts/lib/scan/terraform.mjs';
+import { openapiFacts } from '../scripts/lib/scan/openapi.mjs';
+import { asyncapiFacts } from '../scripts/lib/scan/asyncapi.mjs';
 import { scanDir } from '../scripts/lib/scan/index.mjs';
 
 const fx = p => fileURLToPath(new URL(`./fixtures/repos/${p}`, import.meta.url));
@@ -40,4 +43,36 @@ test('scanDir dispatches k8s and helm files', () => {
   assert.equal(inv.files.k8s, 1);
   assert.equal(inv.files.helm, 2);
   assert.ok(inv.facts.some(f => f.kind === 'chart'));
+});
+
+test('terraform: known categories only, literal attributes, references between them', () => {
+  const facts = terraformFacts('main.tf', read('infra/main.tf'));
+  assert.deepEqual(pick(facts, 'cloud-resource', 'type', 'name', 'category'), [
+    ['aws_db_instance', 'pedidos', 'database'], ['aws_msk_cluster', 'eventos', 'messaging'], ['aws_eks_cluster', 'principal', 'cluster']]);
+  const db = facts.find(f => f.name === 'pedidos');
+  assert.equal(db.attrs.engine_version, '16.3');
+  assert.equal(db.at.line, 1);
+  assert.deepEqual(pick(facts, 'tf-ref', 'from', 'to'), [['aws_eks_cluster.principal', 'aws_msk_cluster.eventos']], 'refs to unknown kinds (security group) are dropped');
+});
+
+test('openapi: title, version, servers, operation count and tags', () => {
+  const [doc] = readYaml(read('pedidos/api/openapi.yaml'));
+  const [api] = openapiFacts('api/openapi.yaml', doc);
+  assert.deepEqual([api.title, api.version, api.servers, api.operations, api.tags], ['API de Pedidos', '1.4.0', ['https://pedidos.acme.com'], 3, ['pedidos']]);
+  assert.equal(api.at.line, 3);
+});
+
+test('asyncapi: 2.x subscribe means the app sends; 3.x send/receive', () => {
+  const [v2] = readYaml(read('pedidos/api/asyncapi.yaml'));
+  assert.deepEqual(pick(asyncapiFacts('api/asyncapi.yaml', v2), 'channel', 'name', 'action', 'message'), [['pedido-criado', 'publish', 'PedidoCriado']]);
+  const v3 = { data: JSON.parse(read('pagamentos/asyncapi.json')), lineOf: () => 1 };
+  assert.deepEqual(pick(asyncapiFacts('asyncapi.json', v3), 'channel', 'name', 'action').sort(), [['pagamento-aprovado', 'publish'], ['pedido-criado', 'subscribe']]);
+});
+
+test('scanDir dispatches terraform, openapi (yaml) and asyncapi (yaml and json)', () => {
+  const ped = scanDir(fx('pedidos'));
+  assert.equal(ped.files.openapi, 1);
+  assert.equal(ped.files.asyncapi, 1);
+  assert.equal(scanDir(fx('pagamentos')).files.asyncapi, 1);
+  assert.equal(scanDir(fx('infra')).files.terraform, 1);
 });

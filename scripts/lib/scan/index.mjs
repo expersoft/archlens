@@ -7,6 +7,9 @@ import { repoInfo, repoName, normalizeRepoUrl, isGitUrl, cloneShallow, assertFol
 import { composeFacts } from './compose.mjs';
 import { k8sFacts } from './k8s.mjs';
 import { helmChartFacts, helmValuesFacts } from './helm.mjs';
+import { terraformFacts } from './terraform.mjs';
+import { openapiFacts } from './openapi.mjs';
+import { asyncapiFacts } from './asyncapi.mjs';
 
 const MAX = 2 * 1024 * 1024, MAX_GRAPH = 64 * 1024 * 1024;
 const isoToday = () => new Date().toISOString().slice(0, 10);
@@ -20,9 +23,22 @@ function extract(type, path, text, ctx) {
     return { kind: 'helm', facts };
   }
   if (type === 'helm-values') return { kind: 'helm', facts: helmValuesFacts(path, text, ctx.chartNames.get(dirname(path)) ?? 'chart') };
-  if (type === 'yaml') {
-    const docs = readYaml(text);
-    if (docs.some(d => d.data?.apiVersion && d.data?.kind)) return { kind: 'k8s', facts: k8sFacts(path, docs) };
+  if (type === 'terraform') return { kind: 'terraform', facts: terraformFacts(path, text) };
+  if (type === 'yaml' || type === 'json') {
+    let docs;
+    if (type === 'json') {
+      try {
+        docs = [{ data: JSON.parse(text), lineOf: () => 1 }];
+      } catch {
+        return { kind: null, facts: [] };
+      }
+    } else {
+      docs = readYaml(text);
+    }
+    const first = docs[0]?.data ?? {};
+    if (first.openapi || first.swagger) return { kind: 'openapi', facts: openapiFacts(path, docs[0]) };
+    if (first.asyncapi) return { kind: 'asyncapi', facts: asyncapiFacts(path, docs[0]) };
+    if (type === 'yaml' && docs.some(d => d.data?.apiVersion && d.data?.kind)) return { kind: 'k8s', facts: k8sFacts(path, docs) };
     return { kind: null, facts: [] };
   }
   return { kind: null, facts: [] };

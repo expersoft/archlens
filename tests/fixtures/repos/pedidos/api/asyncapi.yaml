@@ -1,0 +1,6 @@
+asyncapi: 2.6.0
+info: { title: Eventos de Pedidos, version: 1.0.0 }
+channels:
+  pedido-criado:
+    subscribe:
+      message: { name: PedidoCriado }
