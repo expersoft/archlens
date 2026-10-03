@@ -5,9 +5,11 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: pagamentos
-  labels:
+  labels: &deploy-labels
     app: pagamentos
 spec:
+  selector:
+    matchLabels: *deploy-labels
   template:
     spec:
       containers:

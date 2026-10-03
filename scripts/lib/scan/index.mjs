@@ -35,6 +35,20 @@ export function scanDir(root, { url, today = isoToday(), helmRender = false } = 
   const facts = [];
   const all = listFiles(root);
   const chartDirs = new Set(all.filter(f => f.path.endsWith('Chart.yaml')).map(f => dirname(f.path)));
+
+  // Pre-read Chart.yaml files to populate ctx.chartNames before processing values files
+  for (const f of all) {
+    if (f.path.endsWith('Chart.yaml') && f.size <= MAX) {
+      try {
+        const text = readFileSync(f.abs, 'utf8');
+        const chartFacts = helmChartFacts(f.path, text);
+        ctx.chartNames.set(dirname(f.path), chartFacts[0].name);
+      } catch {
+        // Chart.yaml parse errors will be reported as unreadable in the main loop
+      }
+    }
+  }
+
   for (const f of all) {
     const type = detect(f.path, chartDirs);
     if (!type || f.size > (type === 'graphify' ? MAX_GRAPH : MAX)) { files.ignored++; continue; }

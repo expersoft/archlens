@@ -36,6 +36,20 @@ test('readYaml reads every document with line numbers', () => {
   assert.throws(() => readYaml('a: [b'));
 });
 
+test('readYaml throws on unresolved alias', () => {
+  assert.throws(() => readYaml('a: *nope\nkind: X\n'), /Unresolved alias/i);
+});
+
+test('scanDir records unreadable for a compose with bad alias', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'archlens-bad-alias-'));
+  writeFileSync(join(dir, 'compose.yaml'), 'services:\n  a:\n    image: x\n  b: *missing\n');
+  const inv = scanDir(dir);
+  const bad = inv.facts.find(f => f.kind === 'unreadable');
+  assert.ok(bad, 'unreadable fact should exist for bad alias');
+  assert.equal(bad.at.file, 'compose.yaml');
+  assert.match(bad.error, /Unresolved alias/i);
+});
+
 test('infra images and hosts', () => {
   assert.deepEqual(infraOf('postgres:16-alpine'), { engine: 'postgres', category: 'database', version: '16' });
   assert.equal(infraOf('confluentinc/cp-kafka:7.6.0').engine, 'kafka');

@@ -12,13 +12,17 @@ const read = p => readFileSync(fx(p), 'utf8');
 const pick = (facts, kind, ...keys) => facts.filter(f => f.kind === kind).map(f => keys.map(k => f[k]));
 
 test('k8s: workloads, infra workloads, services, ingress and env hosts, every document, anchors ok', () => {
-  const facts = k8sFacts('k8s/deploy.yaml', readYaml(read('pagamentos/k8s/deploy.yaml')));
+  const docs = readYaml(read('pagamentos/k8s/deploy.yaml'));
+  const facts = k8sFacts('k8s/deploy.yaml', docs);
   assert.deepEqual(pick(facts, 'workload', 'kindK8s', 'name', 'image'), [['Deployment', 'pagamentos', 'ghcr.io/acme/pagamentos:2.1.0']]);
   assert.deepEqual(pick(facts, 'infra-image', 'service', 'engine', 'version'), [['pagamentos-db', 'postgres', '15']]);
   assert.deepEqual(pick(facts, 'k8s-service', 'name'), [['pagamentos']]);
   assert.deepEqual(pick(facts, 'ingress', 'host', 'service'), [['pagamentos.acme.com', 'pagamentos']]);
   assert.deepEqual(pick(facts, 'env-ref', 'from', 'var', 'host').sort(), [['pagamentos', 'KAFKA_BROKERS', 'kafka'], ['pagamentos', 'PEDIDOS_URL', 'pedidos-api']]);
   assert.equal(facts.find(f => f.kind === 'workload').at.line, 7, 'line of metadata.name');
+  // Verify anchor alias resolved: metadata.labels and spec.selector.matchLabels should be the same
+  const deploymentDoc = docs.find(d => d.data?.kind === 'Deployment');
+  assert.deepEqual(deploymentDoc.data.metadata.labels, deploymentDoc.data.spec.selector.matchLabels, 'anchor alias resolved correctly');
 });
 
 test('helm: chart with known dependencies, values with image, ingress and env', () => {
