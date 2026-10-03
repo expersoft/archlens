@@ -1,9 +1,9 @@
 // Renderer: laid-out views → one self-contained, animated HTML page (inline SVG + CSS + JS, no network).
 import { ELEMENT_TYPES, LAYER_LABELS, RELATIONSHIP_TYPES } from './registry.mjs';
-import { MIN_SCREEN_PX } from './layout.mjs';
+import { MIN_SCREEN_PX, frameChipWidth } from './layout.mjs';
 import { ICONS } from './icons.mjs';
 import { explainEdge, GLOSSARY } from './explain.mjs';
-import { sketchShape as handDrawn, sketchOutline, sketchStrike, sketchEdge } from './sketch.mjs';
+import { sketchShape as handDrawn, sketchOutline, seedOf, sketchStrike, sketchEdge } from './sketch.mjs';
 
 const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const f = n => Math.round(n * 10) / 10;
@@ -149,6 +149,30 @@ function c4Boundary(b) {
     + `<text class="b-meta" x="${f(b.x + 22)}" y="${f(b.y + 40)}" font-size="15" dominant-baseline="hanging">[${esc(b.c4Label)}]</text></g>`;
 }
 
+const GROUP_COLORS = 8;
+
+/** A grouping frame: tinted box, chip with the name (C4 also says "AGRUPAMENTO"), preview mark on the chip. */
+function groupFrame(fr, compact) {
+  const c = seedOf(fr.id) % GROUP_COLORS;
+  const sketchy = fr.status === 'draft' || fr.change === 'added';
+  const cls = `gframe gc-${c}${sketchy ? ' sketchy' : ''}${fr.change ? ` ch-${fr.change}` : ''}`;
+  const chipH = compact ? 36 : 56;
+  const chipW = frameChipWidth(fr.name, compact, !!fr.change);
+  const cx = fr.x + 14, cy = fr.y + 12;
+  const mark = fr.change
+    ? `<g class="mark m-${fr.change}"><circle cx="${f(cx + chipW - 18)}" cy="${f(cy + 18)}" r="11"/><text x="${f(cx + chipW - 18)}" y="${f(cy + 19)}" font-size="16" font-weight="700" text-anchor="middle" dominant-baseline="middle">${MARK[fr.change]}</text></g>`
+    : '';
+  return `<g class="${cls}" data-frame="${esc(fr.id)}">`
+    + `<rect class="f-box" x="${f(fr.x)}" y="${f(fr.y)}" width="${f(fr.w)}" height="${f(fr.h)}" rx="18"/>`
+    + (sketchy ? sketchOutline(fr.x, fr.y, fr.w, fr.h, 18, `frame:${fr.key ?? fr.id}`) : '')
+    + `<g class="f-chip" tabindex="0" role="button" aria-label="Agrupamento ${esc(fr.name)}">`
+    + `<rect x="${f(cx)}" y="${f(cy)}" width="${f(chipW)}" height="${chipH}" rx="10"/>`
+    + `<circle class="f-dot" cx="${f(cx + 18)}" cy="${f(cy + 18)}" r="6"/>`
+    + `<text class="f-name" x="${f(cx + 32)}" y="${f(cy + 19)}" font-size="17" dominant-baseline="middle">${esc(fr.name)}</text>`
+    + (compact ? '' : `<text class="f-kind" x="${f(cx + 16)}" y="${f(cy + 42)}" font-size="15" dominant-baseline="middle">AGRUPAMENTO</text>`)
+    + `${mark}</g></g>`;
+}
+
 // ------------------------------------------------------------------ ArchiMate shapes
 
 function amNode(n, i, prefix) {
@@ -244,6 +268,9 @@ function legend(v) {
     }
     if (v.edges.some(e => e.derived)) items.push(`<li>${relSample('serving', { derived: true })}<span><b>derivada</b> — via elementos ocultos</span></li>`);
   }
+  if (v.frames?.length) {
+    items.push(`<li><svg class="sample" viewBox="0 0 64 20" width="64" height="20" aria-hidden="true"><g class="gframe gc-${seedOf(v.frames[0].id) % GROUP_COLORS}"><rect class="f-box" x="3" y="2" width="58" height="16" rx="5"/></g></svg><span><b>agrupamento</b> — moldura dos membros de uma plataforma ou grupo</span></li>`);
+  }
   if (v.nodes.some(n => n.status === 'draft') || v.edges.some(e => e.status === 'draft')) {
     items.push(`<li><svg class="sample sketch-sample" viewBox="0 0 64 20" width="64" height="20" aria-hidden="true">${handDrawn('<rect class="shape" x="4" y="3" width="56" height="14" rx="3"/>', 'legend', { w: 56, h: 14 })}</svg><span><b>rascunho</b> — em discussão (draft)</span></li>`);
   }
@@ -281,8 +308,9 @@ function viewSvg(v, idx) {
   const W = Math.ceil(v.width), H = Math.ceil(v.height);
   const showLabels = v.edgeLabels ?? v.notation === 'c4';
   const parts = [];
-  if (v.notation === 'c4') parts.push(...v.boundaries.map(c4Boundary));
-  else parts.push(...v.bands.map(b => band(b, v.layers)));
+  const frames = (v.frames ?? []).map(fr => groupFrame(fr, v.notation === 'archimate'));
+  if (v.notation === 'c4') parts.push(...frames, ...v.boundaries.map(c4Boundary));
+  else parts.push(...v.bands.map(b => band(b, v.layers)), ...frames);
   const edges = v.edges.map(e => edge(e, prefix, showLabels)).join('');
   const nodes = v.nodes.map((n, i) => v.notation === 'c4' ? c4Node(n, i, prefix) : amNode(n, i, prefix)).join('');
   return `<svg class="diagram n-${v.notation}" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" data-w="${W}" data-h="${H}" role="img" aria-label="${esc(v.title)}" xmlns="http://www.w3.org/2000/svg">`
@@ -296,6 +324,10 @@ function viewData(v) {
     key: v.key, title: v.title, description: v.description, notation: v.notation, animation: v.animation,
     level: v.level ?? null, viewpoint: v.viewpoint ?? null, anchor: v.anchor ?? null, scope: v.scope ?? null, mode: v.mode ?? null,
     width: Math.ceil(v.width), height: Math.ceil(v.height), minFont: v.minFont,
+    frames: Object.fromEntries((v.frames ?? []).map(fr => [fr.id, {
+      name: fr.name, description: fr.description ?? '', status: fr.status ?? 'active', change: fr.change ?? null,
+      members: v.nodes.filter(n => n.group === fr.id).map(n => n.id),
+    }])),
     nodes: Object.fromEntries(v.nodes.map(n => [n.id, {
       name: n.name, typeLabel: ELEMENT_TYPES[n.type]?.label, c4Label: n.c4Label ?? null, layer: n.layer,
       technology: n.technology ?? '', description: n.description ?? '', tags: n.tags ?? [], properties: n.properties ?? {},
@@ -373,6 +405,7 @@ const CSS = `
   --biz:#fff5a8;--biz-s:#a89a2c;--app:#b6eef6;--app-s:#338fa0;--tech:#cbe8b9;--tech-s:#558f42;--mot:#dcd6ff;--mot-s:#6f62c9;--str:#f6dcaa;--str-s:#ae8330;--impl:#ffdfe3;--impl-s:#b85f6c;--oth:#ffffff;--oth-s:#8f8f8f;
   --band-biz:#fffbe0;--band-app:#e9fafc;--band-tech:#eef8e8;--band-mot:#f1efff;--band-str:#fdf4e3;--band-impl:#fff1f3;--band-oth:#f7f7f7;
   --am-ink:#18202c;
+  --g0:#6a4bd6;--g1:#c2417a;--g2:#0d8577;--g3:#a8571c;--g4:#6b7a1e;--g5:#3949ab;--g6:#8e3fa0;--g7:#b23b3b;--g-fill:.07;
   --sketch-ink:#0b3d78;--removed:#b3261e;--pending:#f2a900;
   color-scheme:light;
 }
@@ -382,6 +415,7 @@ const CSS = `
   --biz:#5a5220;--biz-s:#d7c44e;--app:#17454e;--app-s:#56c3d6;--tech:#28481f;--tech-s:#86c96c;--mot:#353061;--mot-s:#a79cf0;--str:#5a4520;--str-s:#e0b25a;--impl:#5a2a31;--impl-s:#ee97a3;--oth:#232b36;--oth-s:#8f98a6;
   --band-biz:#1d1b10;--band-app:#101e22;--band-tech:#121c10;--band-mot:#18162a;--band-str:#1f1910;--band-impl:#221316;--band-oth:#161b22;
   --am-ink:#eef2f7;
+  --g0:#a08cff;--g1:#f07aac;--g2:#4fd1c0;--g3:#f0a060;--g4:#c3d36a;--g5:#8ea2ff;--g6:#d58cf0;--g7:#ff8a8a;--g-fill:.11;
   --sketch-ink:#9cc8f5;--removed:#ff6b5e;--pending:#ffd24a;
   color-scheme:dark;
 }
@@ -498,6 +532,17 @@ body.labels .elabel.on-demand,.edge.up .elabel.on-demand,.edge.down .elabel.on-d
 .intro .edge{animation:fade .6s ease both;animation-delay:calc(var(--n) * 45ms + 150ms)}
 .intro .band{animation:fade .5s ease both;animation-delay:calc(var(--b) * 160ms)}
 .intro .boundary{animation:fade .5s ease both}
+.gc-0{--gc:var(--g0)}.gc-1{--gc:var(--g1)}.gc-2{--gc:var(--g2)}.gc-3{--gc:var(--g3)}.gc-4{--gc:var(--g4)}.gc-5{--gc:var(--g5)}.gc-6{--gc:var(--g6)}.gc-7{--gc:var(--g7)}
+.gframe .f-box{fill:var(--gc);fill-opacity:var(--g-fill);stroke:var(--gc);stroke-width:2}
+.gframe.sketchy .f-box{stroke:none}
+.gframe .ch-outline{stroke:var(--gc);stroke-width:2}
+.gframe .f-chip{cursor:pointer}
+.gframe .f-chip rect{fill:var(--panel);stroke:var(--gc);stroke-width:1.6}
+.gframe .f-chip:focus-visible rect{stroke-width:3}
+.gframe .f-dot{fill:var(--gc)}
+.gframe .f-name{fill:var(--gc);font-weight:700}
+.gframe .f-kind{fill:var(--muted);letter-spacing:.08em}
+.intro .gframe{animation:fade .5s ease both}
 @keyframes pop{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 @keyframes fade{from{opacity:0}to{opacity:1}}
 .hidden-step{opacity:0!important;transition:opacity .3s}
@@ -584,7 +629,7 @@ svg.defs{position:absolute;width:0;height:0;overflow:hidden}
 kbd{border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;padding:0 5px;font-size:13px}
 @media (max-width:1400px){.brand{flex:0 1 22vw}.tools [data-act=flow],.tools [data-act=labels],.tools [data-act=legend],.tools [data-act=theme]{display:none}}
 @media (max-width:900px){.brand span{display:none}.tools button:not(.primary):not([data-act=play]){display:none}}
-@media (prefers-reduced-motion:reduce){.intro .node,.intro .edge,.intro .band,.intro .boundary{animation:none}body.flowing .edge .flow,.edge.pv .flow,.edge.up .flow,.edge.down .flow{animation:none}.edge.pv .flow{opacity:0}.flash{animation:none}}
+@media (prefers-reduced-motion:reduce){.intro .node,.intro .edge,.intro .band,.intro .boundary,.intro .gframe{animation:none}body.flowing .edge .flow,.edge.pv .flow,.edge.up .flow,.edge.down .flow{animation:none}.edge.pv .flow{opacity:0}.flash{animation:none}}
 `;
 
 const JS = String.raw`
@@ -701,6 +746,8 @@ const JS = String.raw`
     const end = e => { if (!drag) return; const moved = drag.moved; drag = null; dragging = false; s.classList.remove('panning'); if (!moved && !e.target.closest('.node, .edge')) { clearTrace(); unpin(); } };
     s.addEventListener('pointerup', end); s.addEventListener('pointercancel', end);
     s.addEventListener('click', e => {
+      const chip = e.target.closest('.f-chip');
+      if (chip) { openFrame(chip.closest('[data-frame]').dataset.frame); return; }
       const g = e.target.closest('.node'); if (g) { stop(); unpin(); trace(g.dataset.node); return; }
       const ed = e.target.closest('.edge'); if (ed) pinCard(ed.dataset.edge, e.clientX, e.clientY);
     });
@@ -710,7 +757,11 @@ const JS = String.raw`
       const target = DATA.views.findIndex(v => v.key !== view().key && (v.scope === id || v.anchor === id) && (v.notation !== 'c4' || v.level === 'container' || v.level === 'component'));
       if (target >= 0) show(target);
     });
-    s.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.closest('.node')) trace(e.target.closest('.node').dataset.node); });
+    s.addEventListener('keydown', e => {
+      const chip = e.target.closest('.f-chip');
+      if (chip && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); openFrame(chip.closest('[data-frame]').dataset.frame); return; }
+      if (e.key === 'Enter' && e.target.closest('.node')) trace(e.target.closest('.node').dataset.node);
+    });
   });
 
   // ---------- hover preview (1 hop) + plain-language relation card
@@ -857,6 +908,16 @@ const JS = String.raw`
   // ---------- drawer
   const escH = t => String(t ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const questions = list => '<ul>' + list.map(q => '<li>[' + q.n + '] ' + escH(q.question) + (q.assumed ? ' <span class="chip">a prévia assume: ' + escH(q.assumed) + '</span>' : '') + (q.options && q.options.length ? ' · opções: ' + escH(q.options.join(' | ')) : '') + '</li>').join('') + '</ul>';
+  function openFrame(id) {
+    const v = view(), g = v.frames && v.frames[id]; if (!g) return;
+    let h = '<h2>' + escH(g.name) + '</h2><div class="kind">Agrupamento</div>';
+    if (g.status && g.status !== 'active') h += '<p class="warn">' + escH({ draft: 'Rascunho: em discussão.', planned: 'Planejado: ainda não existe.', deprecated: 'Em desativação.', retired: 'Desativado.' }[g.status] || g.status) + '</p>';
+    if (g.change) h += '<p class="warn">' + escH({ added: 'Novo neste delta.', changed: 'Alterado por este delta.', removed: 'Removido por este delta.', retired: 'Desativado por este delta.' }[g.change]) + '</p>';
+    if (g.description) h += '<p>' + escH(g.description) + '</p>';
+    h += '<h3>Membros nesta visão</h3><ul>' + g.members.map(m => '<li data-go="' + escH(m) + '">' + escH(v.nodes[m].name) + '</li>').join('') + '</ul>';
+    $('.drawer-body').innerHTML = h;
+    $('.drawer').classList.add('open');
+  }
   function openDrawer(id) {
     const v = view(), n = v.nodes[id]; if (!n) return;
     const name = x => escH(v.nodes[x] ? v.nodes[x].name : x);

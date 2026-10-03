@@ -9,7 +9,7 @@ import { canonicalRel } from './model.mjs';
 import { indexTree, orderDelta, attach, detach, descendantsOf } from './raw-tree.mjs';
 
 export const PLAN_VERSION = '1.0';
-const ELEMENT_FIELDS = ['type', 'name', 'description', 'technology', 'external', 'archimate', 'owner', 'url', 'status', 'statusReason'];
+const ELEMENT_FIELDS = ['type', 'name', 'description', 'technology', 'external', 'archimate', 'owner', 'url', 'status', 'statusReason', 'group'];
 const REL_FIELDS = ['description', 'technology', 'accessType', 'status', 'statusReason'];
 export const VIEW_REFS = ['scope', 'anchor'];
 export const VIEW_LISTS = ['focus', 'expand', 'include'];
@@ -189,7 +189,12 @@ function findMatch(ctx, el, parentId) {
 }
 
 function mergeElements(ctx) {
-  for (const { el, parent } of orderDelta(ctx.delta.model?.elements)) {
+  const isGrouping = el => resolveType(el.type, { tags: el.tags || [], archimate: el.archimate }).type === 'grouping';
+  // Groupings first, so a member's "group" already resolves to the base id (duplicate answered same, alias, name).
+  const list = orderDelta(ctx.delta.model?.elements);
+  const ordered = [...list.filter(x => x.el.type && isGrouping(x.el)), ...list.filter(x => !(x.el.type && isGrouping(x.el)))];
+  for (const { el: raw, parent } of ordered) {
+    const el = raw.group != null ? { ...raw, group: resolveRef(ctx, raw.group) } : raw;
     const parentId = parent == null ? null : resolveRef(ctx, parent);
     const match = findMatch(ctx, el, parentId);
     if (match.id) {
@@ -233,7 +238,8 @@ function parseValue(text, like) {
 /** [field, baseValue, deltaValue, apply] for the named fields plus every property the delta sets. */
 function fieldsOf(target, incoming, names) {
   return [
-    ...names.map(f => [f, target[f] ?? (f === 'status' ? 'active' : undefined), incoming[f], v => { target[f] = v; }]),
+    // "group": null takes the element out of its group: the key is removed, not set to null.
+    ...names.map(f => [f, target[f] ?? (f === 'status' ? 'active' : undefined), incoming[f], v => { if (f === 'group' && v === null) delete target[f]; else target[f] = v; }]),
     ...Object.entries(incoming.properties || {}).map(([k, v]) => [`properties.${k}`, target.properties?.[k], v, x => { (target.properties ??= {})[k] = x; }]),
   ];
 }
@@ -245,6 +251,7 @@ function reconcile(ctx, { fields, keyPrefix, kind, target, dry = false, when }) 
   for (const [field, bv, dv, apply] of fields) {
     if (dv === undefined || sameValue(field, bv, dv)) continue;
     if (bv === undefined || bv === '') {
+      if (field === 'group' && dv === null) continue; // no group already
       if (!dry) { apply(dv); filled = true; }
       continue;
     }
@@ -553,17 +560,18 @@ function runOps(ctx) {
   });
 }
 
-/** Saved views that stop resolving when `id` (and what is nested in it) is retired: it is their scope, anchor or focus. */
+/** Saved views that stop resolving when `id` (and what is nested in it) is retired: it is their scope, anchor, focus or a group in groups.only. */
 function viewsHiding(ctx, id) {
   const hidden = new Set([id, ...descendantsOf(ctx.tree, id)]);
   return (ctx.raw.views || [])
     .filter(v => !(Array.isArray(v.status) && v.status.includes('retired')))
-    .filter(v => [v.scope, v.anchor, ...(Array.isArray(v.focus) ? v.focus : [])].some(x => hidden.has(x)))
+    .filter(v => [v.scope, v.anchor, ...(Array.isArray(v.focus) ? v.focus : []), ...(Array.isArray(v.groups?.only) ? v.groups.only : [])].some(x => hidden.has(x)))
     .map(v => v.key);
 }
 
 /** What removing element `id` takes with it: the plan's cascade (ids) and the raw relationships to drop. */
 function removalCascade(ctx, id) {
+  if (ctx.typeOf(id) === 'grouping') return groupingCascade(ctx, id);
   const gone = new Set([id, ...descendantsOf(ctx.tree, id)]);
   const ids = relIds(ctx);
   const rels = ctx.raw.model.relationships.filter(r => gone.has(r?.from) || gone.has(r?.to));
@@ -577,7 +585,30 @@ function removalCascade(ctx, id) {
   return { cascade: { elements: [...gone], relationships: rels.map(r => ids.get(r)), views }, rels };
 }
 
+/**
+ * Removing a grouping removes only it: its direct members (by "group", or nested in it) lose the membership and stay;
+ * saved views drop it from groups.only (a view left with no group is removed; crossOnly needs two groups).
+ */
+function groupingCascade(ctx, id) {
+  const members = [...ctx.tree].filter(([x, { el, parent }]) => x !== id && (el.group === id || parent === id)).map(([x]) => x);
+  const views = [];
+  for (const v of ctx.raw.views || []) {
+    const only = v.groups?.only;
+    if (!Array.isArray(only) || !only.includes(id)) continue;
+    views.push({ key: v.key, action: only.some(g => g !== id) ? 'trim' : 'remove' });
+  }
+  return { cascade: { elements: [id], relationships: [], views, members }, rels: [] };
+}
+
 function applyRemoval(ctx, cascade, rels) {
+  for (const m of cascade.members || []) {
+    const entry = ctx.tree.get(m);
+    if (entry.el.group === cascade.elements[0]) delete entry.el.group;
+    if (entry.parent === cascade.elements[0]) { // nested in the grouping: back to the top level
+      detach(ctx.tree, m);
+      attach(ctx.raw, ctx.tree, entry.el, null);
+    }
+  }
   const gone = new Set(cascade.elements);
   // By object: parallel relationships may share from/type/to, so ids alone would not tell them apart.
   const drop = new Set(rels);
@@ -592,6 +623,10 @@ function applyRemoval(ctx, cascade, rels) {
     if (action.get(v.key) !== 'trim') return v;
     const t = { ...v };
     for (const f of VIEW_LISTS) if (Array.isArray(t[f])) t[f] = t[f].filter(x => !gone.has(x));
+    if (Array.isArray(t.groups?.only) && t.groups.only.some(x => gone.has(x))) {
+      t.groups = { ...t.groups, only: t.groups.only.filter(x => !gone.has(x)) };
+      if (t.groups.crossOnly && t.groups.only.length < 2) t.groups.crossOnly = false;
+    }
     if (Array.isArray(t.steps)) t.steps = t.steps.filter(s => !gone.has(s.from) && !gone.has(s.to));
     return t;
   });

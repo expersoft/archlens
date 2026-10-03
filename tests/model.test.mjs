@@ -162,3 +162,91 @@ test('draft is a valid status for elements and relationships', () => {
   assert.deepEqual(validateModel(r).errors, []);
   assert.equal(normalizeModel(r).elements.get('loja.api').status, 'draft');
 });
+
+const platforms = () => JSON.parse(readFileSync(new URL('./fixtures/platforms.json', import.meta.url)));
+
+test('group: direct membership, inheritance down the hierarchy, groupings have none', () => {
+  const m = normalizeModel(platforms());
+  assert.equal(m.elements.get('autorizador').group, 'plat-aut');
+  assert.equal(m.elements.get('autorizador').groupId, 'plat-aut');
+  assert.equal(m.elements.get('autorizador.api').group, null);
+  assert.equal(m.elements.get('autorizador.api').groupId, 'plat-aut', 'containers inherit');
+  assert.equal(m.elements.get('pg').groupId, null);
+  assert.equal(m.elements.get('plat-aut').groupId, null);
+  assert.deepEqual(validateModel(platforms()).errors, []);
+});
+
+test('a container may override the inherited group', () => {
+  const r = platforms();
+  r.model.elements.find(e => e.id === 'autorizador').children[1].group = 'plat-cred';
+  const m = normalizeModel(r);
+  assert.equal(m.elements.get('autorizador.regras').groupId, 'plat-cred');
+});
+
+test('group errors: unknown or non-grouping target, nested groupings, relationships with a grouping', () => {
+  const codes = r => validateModel(r).errors.map(e => e.code);
+  const a = platforms(); a.model.elements.find(e => e.id === 'pg').group = 'nada';
+  assert.ok(codes(a).includes('E_GROUP_REF'));
+  const b = platforms(); b.model.elements.find(e => e.id === 'pg').group = 'motor';
+  assert.ok(codes(b).includes('E_GROUP_REF'));
+  const c = platforms(); c.model.elements.find(e => e.id === 'plat-cred').group = 'plat-aut';
+  assert.ok(codes(c).includes('E_GROUP_NESTED'));
+  const d = platforms(); d.model.relationships.push({ from: 'motor', to: 'plat-aut', type: 'archimate:association' });
+  assert.ok(codes(d).includes('E_GROUP_REL'));
+});
+
+test('an empty grouping is a warning, and groupings are never reported as orphans', () => {
+  const r = platforms();
+  r.model.elements.push({ id: 'plat-vazia', type: 'grouping', name: 'Vazia' });
+  const { warnings } = validateModel(r);
+  assert.ok(warnings.some(w => w.code === 'W_GROUP_EMPTY' && /plat-vazia/.test(w.message)));
+  assert.ok(!warnings.some(w => w.code === 'W_ORPHAN' && /plat-(aut|cred|vazia)/.test(w.message)));
+});
+
+test('schemas accept "group" on elements', async () => {
+  const { buildSchemas } = await import('../scripts/gen-schemas.mjs');
+  const s = buildSchemas();
+  assert.deepEqual(s.model.$defs.element.properties.group, { type: ['string', 'null'] });
+});
+
+// A base where the credit systems sit inside their grouping (nested, or with "parent") instead of using "group".
+const nestedInGrouping = form => {
+  const r = platforms();
+  const cred = r.model.elements.find(e => e.id === 'plat-cred');
+  const take = id => { const i = r.model.elements.findIndex(e => e.id === id); return r.model.elements.splice(i, 1)[0]; };
+  const motor = take('motor'), limites = take('limites');
+  delete motor.group; delete limites.group;
+  if (form === 'nested') cred.children = [motor, limites];
+  else { motor.parent = 'plat-cred'; limites.parent = 'plat-cred'; r.model.elements.push(motor, limites); }
+  return r;
+};
+
+for (const form of ['nested', 'parent']) {
+  test(`elements under a grouping (${form}) are treated as its members, with W_GROUP_CHILD`, () => {
+    const r = nestedInGrouping(form);
+    const m = normalizeModel(r);
+    assert.equal(m.elements.get('motor').parent, null);
+    assert.equal(m.elements.get('motor').group, 'plat-cred');
+    assert.equal(m.elements.get('limites').groupId, 'plat-cred');
+    const { errors, warnings } = validateModel(r);
+    assert.deepEqual(errors, []);
+    assert.ok(warnings.some(w => w.code === 'W_GROUP_CHILD' && /motor/.test(w.message) && /plat-cred/.test(w.message)));
+  });
+}
+
+test('a grouping nested in another grouping is still E_GROUP_NESTED', () => {
+  const r = platforms();
+  const cred = r.model.elements.find(e => e.id === 'plat-cred');
+  r.model.elements.splice(r.model.elements.indexOf(cred), 1);
+  r.model.elements.find(e => e.id === 'plat-aut').children = [cred];
+  assert.ok(validateModel(r).errors.some(e => e.code === 'E_GROUP_NESTED'));
+});
+
+test('"group": null means no group (not a schema error)', async () => {
+  const r = platforms();
+  r.model.elements.find(e => e.id === 'pg').group = null;
+  assert.deepEqual(validateModel(r).errors, []);
+  assert.equal(normalizeModel(r).elements.get('pg').groupId, null);
+  const { buildSchemas } = await import('../scripts/gen-schemas.mjs');
+  assert.deepEqual(buildSchemas().delta.$defs.element.properties.group, { type: ['string', 'null'] });
+});

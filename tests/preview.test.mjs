@@ -213,3 +213,19 @@ test('without ghosts, the preview of a fully answered plan that removes an eleme
   assert.ok([...p.changes.values()].some(c => c.kind === 'removed'));
   assert.equal(canonicalJson(raw), canonicalJson(applied));
 });
+
+test('preview lists a group change as a changed field', () => {
+  const base = JSON.parse(readFileSync(new URL('./fixtures/platforms.json', import.meta.url)));
+  const p = previewModel(base, { delta: { 'archlens-delta': '1.0', model: { elements: [{ id: 'kafka', group: 'plat-cred' }] } } });
+  assert.ok(p.changes.get('kafka').fields.some(f => f.field === 'group' && f.before === 'plat-aut' && f.after === 'plat-cred'));
+});
+
+test('preview of removing a grouping shows its frame as removed, around its former members', () => {
+  const base = JSON.parse(readFileSync(new URL('./fixtures/platforms.json', import.meta.url)));
+  const p = previewModel(base, { delta: { 'archlens-delta': '1.0', ops: [{ op: 'remove', id: 'plat-cred' }] } });
+  assert.equal(p.changes.get('plat-cred').kind, 'removed');
+  assert.ok(p.changes.get('motor').fields.some(f => f.field === 'group' && f.before === 'plat-cred' && f.after === undefined));
+  const v = annotateView(resolveView(normalizeModel(p.raw), { key: 'l', notation: 'c4', level: 'landscape', groups: { frames: true } }), p);
+  assert.equal(v.groups.find(g => g.id === 'plat-cred')?.change, 'removed');
+  assert.equal(v.nodes.find(n => n.id === 'motor').group, 'plat-cred');
+});

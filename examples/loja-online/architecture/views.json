@@ -173,5 +173,27 @@
     },
     "derive": true,
     "title": "Venda Online — negócio × tecnologia (relações derivadas)"
+  },
+  {
+    "key": "plataformas",
+    "notation": "c4",
+    "level": "landscape",
+    "title": "Plataformas",
+    "groups": {
+      "frames": true
+    }
+  },
+  {
+    "key": "vendas-x-backoffice",
+    "notation": "archimate",
+    "viewpoint": "application",
+    "title": "Vendas × Back-office",
+    "groups": {
+      "only": [
+        "plat-vendas",
+        "plat-backoffice"
+      ],
+      "crossOnly": true
+    }
   }
 ]

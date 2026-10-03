@@ -75,6 +75,10 @@ Requer Node ≥ 18. A checagem visual (`deliver`/`build`) usa `playwright-core` 
 | aplicações e infra por trás do processo Q | `{notation:"archimate", viewpoint:"layered", anchor:"Q", traverse:{mode:"supporters"}, granularity:"container"}` |
 | matriz de dependência / impacto do componente A | `{notation:"archimate", viewpoint:"impact", anchor:"A"}` (traz a matriz, tecla M) |
 | negócio × tecnologia sem a camada do meio | `{viewpoint:"custom", layers:["business","technology"], anchor:"P", derive:true}` |
+| panorama com as plataformas / agrupamentos | `{notation:"c4", level:"landscape", groups:{frames:true}}` |
+| interações entre os sistemas de A e de B | acrescente `groups:{only:["A","B"]}` (molduras aparecem sozinhas) |
+| só o que cruza entre A e B | `groups:{only:["A","B"], crossOnly:true}` |
+| sem molduras | `groups:{frames:false}` |
 | como está hoje (as-is) | acrescente `status:["active","deprecated"]` |
 | como fica depois das mudanças (to-be) | acrescente `status:["draft","planned","active"]` (sem `draft` para só o decidido) |
 | como fica se aplicarmos este delta? | `deliver architecture/ --delta delta.json` (prévia, nada é gravado) |
@@ -121,6 +125,11 @@ recorta com scope, focus, depth, anchor, traverse, layers, granularity, collapse
   `sistema.container.componente`.
 - **Editar o `ARCHITECTURE.md`**: é gerado e será sobrescrito. Texto autoral vai em `architecture/notes/*.md`; o
   modelo muda por delta. Recomende `archlens check` no CI ou no pre-commit.
+- **Agrupador virando sistema**: "Camada de Autorização", "Plataforma de Crédito" e afins organizam sistemas;
+  modele como `grouping` e preencha `group` nos membros. Um `c4:softwareSystem` falso aparece como caixa e quebra
+  as relações entre as aplicações.
+- **Elemento dentro do `grouping`**: não aninhe membros em `children` (nem use `parent`) de um agrupamento; use
+  `"group": "<agrupamento>"`. Aninhado, ele é lido como membro com o aviso `W_GROUP_CHILD`.
 - **Base no formato antigo**: comandos de leitura, `merge --plan` e as prévias funcionam; só `merge --apply`, `doc`
   e `build` recusam. Rode `archlens migrate` (com o ok do usuário).
 - **Duplicata aceita sem perguntar**: `possible-duplicate` é sempre pergunta ao usuário. Um `same` errado funde

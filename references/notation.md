@@ -110,6 +110,33 @@ A orientação original fica guardada, e as visões C4 desenham a seta como foi 
 | triggering / flow | antes → depois | "checkout dispara faturamento" |
 | influence | motivação → motivação | "requisito influencia meta" |
 
+## Agrupamentos
+
+`grouping` organiza elementos sem virar nó: o membro aponta para ele com `group`, e as visões desenham o grupo como
+moldura.
+
+```json
+{ "id": "plat-autorizacao", "type": "grouping", "name": "Plataforma de Autorização", "description": "…" }
+{ "id": "sleipnir", "type": "c4:softwareSystem", "name": "Autorizador", "group": "plat-autorizacao" }
+{ "id": "proc-autorizar", "type": "business-process", "name": "Autorizar compra", "group": "plat-autorizacao" }
+```
+
+- `group` vale para elementos de qualquer tipo e camada.
+- **Herança:** elemento sem `group` herda o do ancestral mais próximo (`parent`) que tenha um.
+- `"group": null` vale como "sem grupo" (no delta, tira o elemento do grupo; veja `merge.md`).
+- Um grupo por elemento, sem aninhar: um `grouping` não tem `group`.
+- Relação com um agrupamento em uma das pontas é proibida: ligue os membros.
+- Não aninhe elementos dentro de um `grouping` (em `children` ou com `parent`); use `group`. Um elemento aninhado é
+  tratado como membro, com o aviso `W_GROUP_CHILD`, para que a base seja corrigida.
+
+| Código | Nível | Significado |
+|---|---|---|
+| `E_GROUP_REF` | erro | `group` aponta para id inexistente ou para elemento que não é `grouping` |
+| `E_GROUP_NESTED` | erro | um `grouping` tem `group` ou está aninhado em outro |
+| `E_GROUP_REL` | erro | relação com um `grouping` em uma das pontas |
+| `W_GROUP_EMPTY` | aviso | `grouping` sem nenhum membro (direto ou herdado) |
+| `W_GROUP_CHILD` | aviso | elemento aninhado em um `grouping`; foi tratado como membro — prefira `group` |
+
 ## Validação
 
 `archlens validate` devolve códigos estáveis. Cada código traz caminho (`path`) e dica (`hint`).

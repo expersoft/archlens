@@ -37,6 +37,12 @@ cuida do resto.
 7. **Pergunte só o que bloqueia.** Se uma resposta muda a estrutura (interno ou externo? um sistema
    ou dois?), pergunte. Se muda um rótulo, assuma e registre em `assumptions`.
 
+## Agrupamentos
+
+Quando o texto disser "a plataforma X tem os sistemas A, B", "camada de fraude: …" ou listar sistemas sob um título,
+crie um `grouping` (id `plat-…`) e preencha `group` nos membros. Um elemento pertence a no máximo um grupo. Se não
+estiver claro se é um agrupamento ou um sistema real (com deploy próprio), pergunte ao usuário.
+
 ## Sinais de alerta
 
 - Mais de ~30% dos elementos inferidos: o texto é vago. Mostre o modelo e peça confirmação antes

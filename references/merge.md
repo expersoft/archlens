@@ -74,6 +74,16 @@ perguntas novas. As respostas do plano anterior entram pré-preenchidas (o relat
 `--answers <plano.json>` lê os `resolution` preenchidos daquele plano, por `key`. Use-o com o **mesmo delta**
 (a CLI avisa se o delta mudou, porque `rel:<n>` e `op:<n>` são posições no delta).
 
+### Agrupamentos
+
+- `group` é um campo como os outros: preencher um vazio é `enrich`; mudar de grupo é `conflict` (`keep` | `take`).
+- `"group": null` tira o elemento do grupo (conflito quando ele tem um; o `take` apaga a chave). Sem grupo, é no-op.
+- `{"op": "remove", "id": "<agrupamento>"}` remove só o agrupamento: os membros diretos perdem o `group` e ficam
+  (os aninhados nele sobem para o topo), e as visões salvas tiram o id de `groups.only` (sem grupos restantes, a
+  visão sai; `crossOnly` com menos de 2 vira `false`). O item lista isso em `cascade.members` e `cascade.views`.
+- `status: retired` num agrupamento listado em `groups.only` de uma visão: o item avisa em `views`, e o plano fica
+  bloqueado (`E_VIEW_GROUP`) até o delta tirar o agrupamento da visão ou acrescentar `"retired"` ao `status` dela.
+
 ## Perguntando ao usuário
 
 - Mostre o resumo do relatório (contagens e novos).

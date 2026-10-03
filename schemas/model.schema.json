@@ -346,6 +346,12 @@
         "parent": {
           "type": "string"
         },
+        "group": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "children": {
           "type": "array",
           "items": {

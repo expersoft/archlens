@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { normalizeModel } from '../scripts/lib/model.mjs';
 import { resolveView } from '../scripts/lib/query.mjs';
+import { validateModel } from '../scripts/lib/validate.mjs';
+import { suggestViews } from '../scripts/lib/suggest.mjs';
 
 const model = () => normalizeModel(JSON.parse(readFileSync(new URL('./fixtures/shop.json', import.meta.url))));
 const ids = v => v.nodes.map(n => n.id).sort();
@@ -221,4 +223,168 @@ test('dynamic steps over parallel relationships use them in order', () => {
     { from: 'loja.api.checkout', to: 'pagamentos', description: 'Captura' },
   ] });
   assert.deepEqual(v.edges.map(e => e.technology), ['HTTPS', 'POST /captures']);
+});
+
+// ---------- groupings ----------
+
+
+const plat = () => normalizeModel(JSON.parse(readFileSync(new URL('./fixtures/platforms.json', import.meta.url))));
+const BOTH = ['plat-aut', 'plat-cred'];
+
+test('groups.only keeps the members of the listed groups and the relations among them, with frames', () => {
+  const v = resolveView(plat(), { key: 'g', notation: 'c4', level: 'landscape', groups: { only: BOTH } });
+  assert.deepEqual(ids(v), ['autorizador', 'limites', 'motor', 'tokenizacao']);
+  assert.ok(edge(v, 'autorizador', 'tokenizacao'));
+  assert.ok(edge(v, 'autorizador', 'motor'), 'container relation lifted to the systems');
+  assert.ok(edge(v, 'motor', 'limites'));
+  assert.deepEqual(v.groups.map(g => g.id).sort(), BOTH);
+  assert.equal(v.groups.find(g => g.id === 'plat-aut').name, 'Plataforma de Autorização');
+  assert.equal(v.nodes.find(n => n.id === 'motor').group, 'plat-cred');
+});
+
+test('groups.crossOnly keeps only what crosses between the listed groups', () => {
+  const v = resolveView(plat(), { key: 'g', notation: 'c4', level: 'landscape', groups: { only: BOTH, crossOnly: true } });
+  assert.deepEqual(ids(v), ['autorizador', 'motor']);
+  assert.deepEqual(v.edges.map(e => `${e.from}>${e.to}`), ['autorizador>motor']);
+});
+
+test('groups.only with depth brings the direct neighbours outside the groups', () => {
+  const v = resolveView(plat(), { key: 'g', notation: 'c4', level: 'landscape', groups: { only: ['plat-aut'] }, depth: 1 });
+  assert.deepEqual(ids(v), ['autorizador', 'bandeira', 'motor', 'portador', 'tokenizacao']);
+});
+
+test('frames: off by default, on with only, forced either way by the view', () => {
+  const m = plat();
+  const nodeKeys = v => v.nodes.filter(n => !('group' in n)).map(n => n.id).sort();
+  const plain = resolveView(m, { key: 'a', notation: 'c4', level: 'landscape' });
+  assert.equal(plain.groups, undefined);
+  assert.deepEqual(nodeKeys(plain), ['bandeira', 'portador'], 'only members carry "group"');
+  const forced = resolveView(m, { key: 'b', notation: 'c4', level: 'landscape', groups: { frames: true } });
+  assert.deepEqual(forced.groups.map(g => g.id).sort(), BOTH);
+  assert.equal(forced.nodes.length, plain.nodes.length, 'frames alone do not cut');
+  const off = resolveView(m, { key: 'c', notation: 'c4', level: 'landscape', groups: { only: BOTH, frames: false } });
+  assert.equal(off.groups, undefined);
+  assert.equal(off.nodes.length, 4);
+});
+
+test('container view: the opened boundary carries the group of its system', () => {
+  const v = resolveView(plat(), { key: 'c', notation: 'c4', level: 'container', scope: 'autorizador', groups: { frames: true } });
+  assert.equal(v.boundaries[0].group, 'plat-aut');
+  assert.equal(v.nodes.find(n => n.id === 'motor').group, 'plat-cred');
+  assert.deepEqual(v.groups.map(g => g.id).sort(), BOTH);
+});
+
+test('archimate: groupings are never nodes; groups.only cuts every layer', () => {
+  const m = plat();
+  const all = resolveView(m, { key: 'l', notation: 'archimate', viewpoint: 'layered', granularity: 'system' });
+  assert.ok(!all.nodes.some(n => n.type === 'grouping'));
+  const v = resolveView(m, { key: 'g', notation: 'archimate', viewpoint: 'layered', granularity: 'system', groups: { only: BOTH } });
+  assert.deepEqual(ids(v), ['autorizador', 'kafka', 'limites', 'motor', 'proc-autorizar', 'proc-limite', 'tokenizacao']);
+  assert.ok(edge(v, 'kafka', 'autorizador'));
+  assert.deepEqual(v.groups.map(g => g.id).sort(), BOTH);
+});
+
+test('E_VIEW_GROUP: unknown or non-grouping ids, crossOnly with one group; saved views are validated too', () => {
+  const m = plat();
+  assert.throws(() => resolveView(m, { key: 'x', notation: 'c4', level: 'landscape', groups: { only: ['motor'] } }), /E_VIEW_GROUP/);
+  assert.throws(() => resolveView(m, { key: 'x', notation: 'c4', level: 'landscape', groups: { only: ['plat-aut'], crossOnly: true } }), /E_VIEW_GROUP/);
+  const r = JSON.parse(readFileSync(new URL('./fixtures/platforms.json', import.meta.url)));
+  r.views = [{ key: 'x', notation: 'c4', level: 'landscape', groups: { only: ['nada'] } }];
+  assert.ok(validateModel(r).errors.some(e => e.code === 'E_VIEW_GROUP'));
+});
+
+test('a retired grouping draws no frame and cannot be listed in only', () => {
+  const r = JSON.parse(readFileSync(new URL('./fixtures/platforms.json', import.meta.url)));
+  r.model.elements.find(e => e.id === 'plat-cred').status = 'retired';
+  const m = normalizeModel(r);
+  const v = resolveView(m, { key: 'a', notation: 'c4', level: 'landscape', groups: { frames: true } });
+  assert.deepEqual(v.groups.map(g => g.id), ['plat-aut']);
+  assert.ok(v.nodes.some(n => n.id === 'motor'), 'members stay, loose');
+  assert.ok(!('group' in v.nodes.find(n => n.id === 'motor')), 'no dangling group reference');
+  assert.throws(() => resolveView(m, { key: 'b', notation: 'c4', level: 'landscape', groups: { only: ['plat-cred'] } }), /E_VIEW_GROUP[\s\S]*status/);
+});
+
+test('crossOnly with no relation between the groups gives an empty view, not an error', () => {
+  const r = JSON.parse(readFileSync(new URL('./fixtures/platforms.json', import.meta.url)));
+  r.model.relationships = r.model.relationships.filter(x => x.from !== 'autorizador.regras');
+  const v = resolveView(normalizeModel(r), { key: 'x', notation: 'c4', level: 'landscape', groups: { only: BOTH, crossOnly: true } });
+  assert.deepEqual(v.nodes, []);
+});
+
+test('views without groups resolve exactly as before', () => {
+  const m = model();
+  for (const spec of [{ key: 'l', notation: 'c4', level: 'landscape' }, { key: 's', notation: 'archimate', viewpoint: 'layered', anchor: 'venda', traverse: { mode: 'supporters' } }]) {
+    const v = resolveView(m, spec);
+    assert.equal(v.groups, undefined);
+    assert.ok(v.nodes.every(n => !('group' in n)));
+  }
+});
+
+test('context scope stays even when it is outside groups.only', () => {
+  const v = resolveView(plat(), { key: 'x', notation: 'c4', level: 'context', scope: 'autorizador', groups: { only: ['plat-cred'] } });
+  assert.ok(v.nodes.some(n => n.id === 'autorizador'));
+  assert.ok(v.nodes.some(n => n.id === 'motor'));
+});
+
+test('with two or more groupings, views suggests framed panoramas', () => {
+  const keys = suggestViews(plat()).map(s => s.key);
+  assert.ok(keys.includes('landscape-plataformas'));
+  assert.ok(keys.includes('aplicacao-plataformas'));
+  assert.equal(suggestViews(plat()).find(s => s.key === 'aplicacao-plataformas').granularity, 'container');
+  assert.ok(!suggestViews(model()).some(s => s.key === 'landscape-plataformas'));
+});
+
+for (const form of ['nested', 'parent']) {
+  test(`systems under a grouping (${form}) appear in the landscape as its members`, () => {
+    const r = JSON.parse(readFileSync(new URL('./fixtures/platforms.json', import.meta.url)));
+    const cred = r.model.elements.find(e => e.id === 'plat-cred');
+    const take = id => { const i = r.model.elements.findIndex(e => e.id === id); return r.model.elements.splice(i, 1)[0]; };
+    const motor = take('motor'), limites = take('limites');
+    delete motor.group; delete limites.group;
+    if (form === 'nested') cred.children = [motor, limites];
+    else { motor.parent = 'plat-cred'; limites.parent = 'plat-cred'; r.model.elements.push(motor, limites); }
+    const v = resolveView(normalizeModel(r), { key: 'l', notation: 'c4', level: 'landscape', groups: { frames: true } });
+    assert.equal(v.nodes.find(n => n.id === 'motor')?.group, 'plat-cred');
+    assert.equal(v.nodes.find(n => n.id === 'limites')?.group, 'plat-cred');
+    assert.ok(edge(v, 'motor', 'limites'));
+    assert.ok(edge(v, 'autorizador', 'motor'));
+  });
+}
+
+test('E_VIEW_GROUP tells a missing id from a non-grouping one and from one hidden by the status filter', () => {
+  const r = JSON.parse(readFileSync(new URL('./fixtures/platforms.json', import.meta.url)));
+  r.model.elements.find(e => e.id === 'plat-cred').status = 'retired';
+  const m = normalizeModel(r);
+  const spec = only => ({ key: 'x', notation: 'c4', level: 'landscape', groups: { only } });
+  assert.throws(() => resolveView(m, spec(['plat-autt'])), /E_VIEW_GROUP[\s\S]*não existe/);
+  assert.throws(() => resolveView(m, spec(['motor'])), /E_VIEW_GROUP[\s\S]*não é um agrupamento/);
+  assert.throws(() => resolveView(m, spec(['plat-cred'])), /E_VIEW_GROUP[\s\S]*oculto pelo filtro de status/);
+  assert.ok(resolveView(m, { ...spec(['plat-cred']), status: ['active', 'retired'] }).groups.some(g => g.id === 'plat-cred'));
+  r.views = [spec(['plat-autt']), { ...spec(['motor']), key: 'y' }, { ...spec(['plat-cred']), key: 'z' }, { ...spec(['plat-cred']), key: 'w', status: ['active', 'retired'] }];
+  const msgs = validateModel(r).errors.filter(e => e.code === 'E_VIEW_GROUP').map(e => e.message);
+  assert.equal(msgs.length, 3);
+  assert.match(msgs[0], /não existe/);
+  assert.match(msgs[1], /não é um agrupamento/);
+  assert.match(msgs[2], /oculto pelo filtro de status/);
+});
+
+test('archimate: a grouping is never an anchor (E_VIEW_GROUP) and is ignored in include', () => {
+  const m = plat();
+  assert.throws(() => resolveView(m, { key: 'a', notation: 'archimate', viewpoint: 'layered', anchor: 'plat-aut' }), /E_VIEW_GROUP[\s\S]*groups\.only/);
+  const v = resolveView(m, { key: 'i', notation: 'archimate', viewpoint: 'business', include: ['plat-aut'] });
+  assert.ok(!v.nodes.some(n => n.type === 'grouping'));
+});
+
+test('dynamic views ignore the group cut (steps are authored) but keep the frames', () => {
+  const v = resolveView(plat(), { key: 'd', notation: 'c4', level: 'dynamic', scope: 'autorizador', groups: { only: ['plat-cred'] }, steps: [
+    { from: 'portador', to: 'autorizador.api' }, { from: 'autorizador.api', to: 'autorizador.regras' }, { from: 'autorizador.regras', to: 'motor' },
+  ] });
+  assert.deepEqual(ids(v), ['autorizador.api', 'autorizador.regras', 'motor', 'portador']);
+  assert.equal(v.edges.length, 3);
+  assert.deepEqual(v.groups.map(g => g.id).sort(), BOTH);
+});
+
+test('container view: the opened boundary stays under groups.only', () => {
+  const v = resolveView(plat(), { key: 'c', notation: 'c4', level: 'container', scope: 'autorizador', groups: { only: ['plat-cred'] } });
+  assert.deepEqual(ids(v), ['autorizador.api', 'autorizador.regras', 'motor']);
 });

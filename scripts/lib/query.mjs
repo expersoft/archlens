@@ -41,6 +41,13 @@ export function resolveView(model, spec, { keep } = {}) {
         'acrescente o status dele em "status" da visão, ex.: ["active","deprecated","retired"]');
     }
   }
+  const only = withKey.groups?.only;
+  for (const gid of Array.isArray(only) ? only : []) {
+    if (model.elements.get(gid)?.type === 'grouping' && !visible.elements.has(gid)) {
+      throw viewError('E_VIEW_GROUP', `"${gid}" em groups.only da visão "${withKey.key}" está oculto pelo filtro de status (${status.join(', ')})`,
+        `remova-o de groups.only ou acrescente "${model.elements.get(gid).status}" em "status" da visão`);
+    }
+  }
   if (withKey.notation === 'c4') return resolveC4(visible, withKey);
   if (withKey.notation === 'archimate') return resolveArchimate(visible, withKey);
   throw viewError('E_VIEW_NOTATION', `notação "${spec.notation}" desconhecida`, 'use "c4" ou "archimate"');

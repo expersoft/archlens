@@ -242,3 +242,50 @@ test('a relationship-only change and its open question are visible on the edge, 
   assert.match(html.slice(html.indexOf('<section class="view"')), /mudanças da prévia/);
   assert.match(html, /e\.pending && e\.pending\.length/, 'the drawer lists the edge questions');
 });
+
+import { seedOf } from '../scripts/lib/sketch.mjs';
+
+const platRaw = () => JSON.parse(readFileSync(new URL('./fixtures/platforms.json', import.meta.url)));
+const renderPlat = async (spec, raw = platRaw()) => {
+  const laid = await layoutView(resolveView(normalizeModel(raw), spec));
+  return renderHtml({ title: 't', views: [laid] });
+};
+
+test('frames are drawn with a stable color per grouping, a chip and a legend entry', async () => {
+  const html = await renderPlat({ key: 'l', notation: 'c4', level: 'landscape', groups: { frames: true } });
+  const c = seedOf('plat-aut') % 8;
+  assert.match(html, new RegExp(`<g class="gframe gc-${c}" data-frame="plat-aut">`));
+  assert.match(html, /class="f-chip"[^>]*>[\s\S]*?Plataforma de Autorização[\s\S]*?AGRUPAMENTO/);
+  assert.match(html, /<b>agrupamento<\/b>/);
+  const again = await renderPlat({ key: 'l', notation: 'c4', level: 'landscape', groups: { frames: true } });
+  assert.equal(html, again, 'deterministic');
+});
+
+test('ArchiMate frames: one per group and layer, single-line chip', async () => {
+  const html = await renderPlat({ key: 'g', notation: 'archimate', viewpoint: 'layered', granularity: 'system', groups: { only: ['plat-aut', 'plat-cred'] }, layout: { style: 'bands-flow' } });
+  assert.equal((html.match(/data-frame="plat-aut"/g) || []).length, 3);
+  assert.doesNotMatch(html.slice(html.indexOf('data-frame="plat-aut"'), html.indexOf('data-frame="plat-aut"') + 800), /AGRUPAMENTO/);
+});
+
+test('no frames when the view turns them off', async () => {
+  const html = await renderPlat({ key: 'l', notation: 'c4', level: 'landscape', groups: { only: ['plat-aut', 'plat-cred'], frames: false } });
+  assert.doesNotMatch(html, /class="gframe/);
+  assert.doesNotMatch(html, /<b>agrupamento<\/b>/);
+});
+
+test('a draft grouping gets a hand-drawn frame', async () => {
+  const raw = platRaw();
+  raw.model.elements.find(e => e.id === 'plat-cred').status = 'draft';
+  const html = await renderPlat({ key: 'l', notation: 'c4', level: 'landscape', groups: { frames: true } }, raw);
+  assert.match(html, /<g class="gframe gc-\d sketchy" data-frame="plat-cred">[\s\S]*?class="ch-outline"/);
+});
+
+test('preview: a new grouping is sketched with "+" on its chip', async () => {
+  const p = previewModel(platRaw(), { delta: { 'archlens-delta': '1.0', model: { elements: [
+    { id: 'plat-fraude', type: 'grouping', name: 'Plataforma de Fraude' },
+    { id: 'antifraude', type: 'c4:softwareSystem', name: 'Antifraude', group: 'plat-fraude' },
+  ] } } });
+  const v = annotateView(resolveView(normalizeModel(p.raw), { key: 'l', notation: 'c4', level: 'landscape', groups: { frames: true } }, { keep: p.keep }), p);
+  const html = renderHtml({ title: 't', views: [await layoutView(v)] });
+  assert.match(html, /<g class="gframe gc-\d sketchy ch-added" data-frame="plat-fraude">[\s\S]*?m-added/);
+});

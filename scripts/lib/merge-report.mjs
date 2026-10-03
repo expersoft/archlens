@@ -10,7 +10,8 @@ export function describeItem(it) {
   if (it.op === 'remove') {
     const c = it.cascade;
     const views = c.views.length ? `; visões: ${c.views.map(v => `${v.key} (${v.action})`).join(', ')}` : '';
-    return `remover ${it.target}: ${c.elements.length} elemento(s), ${c.relationships.length} relação(ões)${views}  → yes | no`;
+    const members = c.members?.length ? `; membros sem agrupamento: ${c.members.join(', ')}` : '';
+    return `remover ${it.target}: ${c.elements.length} elemento(s), ${c.relationships.length} relação(ões)${members}${views}  → yes | no`;
   }
   if (it.op === 'status') {
     const views = it.views?.length ? `; visões que deixam de abrir: ${it.views.join(', ')}` : '';
