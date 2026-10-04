@@ -297,3 +297,28 @@ test('sibling-image compose services are not this repo\'s deployables: hosts, ne
   assert.ok(!el(ds, 'pedidos.pagamentos'));
   assert.equal(rel(ds, 'pedidos.pedidos-api', 'financeiro.pagamentos')?.description, 'depends_on');
 });
+
+test('module provenance prefers the build file; dependency keeps the larger count (item 9)', () => {
+  const facts = [
+    { kind: 'module', name: 'app', executable: true, at: a('graphify-out/graph.json', 1) },
+    { kind: 'module', name: 'domain', executable: false, at: a('graphify-out/graph.json', 1) },
+    { kind: 'module-dep', from: 'app', to: 'domain', count: 40, at: a('graphify-out/graph.json', 1) },
+    { kind: 'module', name: 'app', executable: true, at: a('settings.gradle.kts', 2) },
+    { kind: 'module', name: 'domain', executable: false, at: a('settings.gradle.kts', 2) },
+    { kind: 'module-dep', from: 'app', to: 'domain', count: 1, at: a('app/build.gradle.kts', 3) },
+  ];
+  const d = toDelta(inv(facts, { path: '/r/medi', name: 'medi' }), { role: 'service', system: 'saude' });
+  assert.deepEqual(el(d, 'saude.medi.domain').sources.map(s => [s.path, s.line]), [['settings.gradle.kts', 2]]);
+  const r = rel(d, 'saude.medi.app', 'saude.medi.domain');
+  assert.deepEqual(r.sources.map(s => [s.path, s.line]), [['app/build.gradle.kts', 3]]);
+  assert.equal(r.description, '40 referência(s) no código');
+  const g = toDelta(inv(facts.slice(0, 3), { path: '/r/medi', name: 'medi' }), { role: 'service', system: 'saude' });
+  assert.deepEqual(el(g, 'saude.medi.domain').sources.map(s => s.path), ['graphify-out/graph.json'], 'graphify alone still counts');
+});
+
+test('--id of an existing container: infrastructure ids take its prefix (item 7)', () => {
+  const d = toDelta(inv([{ kind: 'service', name: 'api', build: '.', ports: [], at },
+    { kind: 'infra-image', service: 'redis', engine: 'redis', category: 'cache', at }]), { role: 'service', system: 'terminus', id: 'terminus.assignment', base: terminus() });
+  assert.deepEqual([el(d, 'terminus.assignment-redis')?.parent, el(d, 'terminus.assignment-redis')?.tags], ['terminus', ['cache']]);
+  assert.ok(!d.model.elements.some(e => e.id.startsWith('terminus.terminus-assignment-api')), 'no id from the repository name');
+});

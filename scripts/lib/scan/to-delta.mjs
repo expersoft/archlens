@@ -86,13 +86,22 @@ export function toDelta(inv, { role, system, id, base = null } = {}) {
       properties: { repo: key, repoRole: 'service' } }, DEFAULT_ROOT_AT);
   }
 
-  // modules (graphify and build facts merged by name)
+  // modules and their dependencies (graphify and build facts merged by name): provenance from the build file when
+  // there is one; for a dependency, the larger count (graphify counts code references) and its description
+  const fromGraph = at => String(at?.file ?? '').startsWith('graphify-out/');
+  const preferBuild = (cur, next) => (!cur || (fromGraph(cur) && !fromGraph(next)) ? next : cur);
   const modules = new Map();
   for (const f of facts.filter(x => x.kind === 'module')) {
     const m = modules.get(f.name);
-    modules.set(f.name, { name: f.name, executable: !!(m?.executable || f.executable), at: m?.at ?? f.at });
+    modules.set(f.name, { name: f.name, executable: !!(m?.executable || f.executable), at: preferBuild(m?.at, f.at) });
   }
-  const modDeps = facts.filter(x => x.kind === 'module-dep');
+  const depsBy = new Map();
+  for (const f of facts.filter(x => x.kind === 'module-dep')) {
+    const k = `${f.from}>${f.to}`;
+    const d = depsBy.get(k);
+    depsBy.set(k, d ? { ...d, count: Math.max(d.count, f.count), at: preferBuild(d.at, f.at) } : { ...f });
+  }
+  const modDeps = [...depsBy.values()];
 
   // deployables (role system): compose services, k8s/helm workloads, executable modules — merged by name
   const deploy = new Map();
