@@ -86,6 +86,24 @@ Aplicar de novo um delta que já entrou não muda nada: o apply imprime `= nada 
 
 Veja `examples/telemedicina/delta-01.json` e `plano-01.json`, e o formato completo em `references/merge.md`.
 
+### Ler repositórios
+
+Aponte uma pasta ou URL git e o Claude lê o repositório (compose, Kubernetes/Helm, Terraform, OpenAPI/AsyncAPI e o
+`graphify-out/`, se existir). Exemplo com `terminus-assignment-api`:
+
+```bash
+$A scan terminus-assignment-api --base architecture/        # resumo: fatos, papel sugerido, sistemas prováveis
+# o Claude pergunta: serviço ou sistema? Em qual sistema? (mostrando a sugestão e os motivos; o nome nunca decide)
+$A scan terminus-assignment-api --base architecture/ --as service --system terminus --delta d.json
+$A merge architecture/ d.json --plan plano.json             # responda só os itens com "resolution": null
+$A merge architecture/ --apply plano.json
+```
+
+Cada item ganha a fonte `repo` com commit, arquivo e linha. Ler de novo atualiza a base, e o que sumiu do repositório
+vira pergunta de `retired`. Tópicos publicados e assinados em repositórios diferentes ficam ligados, e a visão de
+impacto segue esse fluxo. Veja `examples/repos` (três mini-repositórios lidos na ordem do `README.md` dele) e
+`references/repo-reading.md`.
+
 ### Vendo antes de aplicar
 
 Peça "mostre como fica" e o Claude gera a **prévia** do delta: a base oficial desenhada normalmente e, por

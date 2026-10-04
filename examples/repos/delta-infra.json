@@ -1,0 +1,103 @@
+{
+  "archlens-delta": "1.0",
+  "source": {
+    "kind": "repo",
+    "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/infra@fcfb61d"
+  },
+  "summary": "Leitura de infra@fcfb61d",
+  "model": {
+    "elements": [
+      {
+        "id": "infra-cloud",
+        "type": "c4:softwareSystem",
+        "name": "infra",
+        "properties": {
+          "repo": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/infra",
+          "repoRole": "system"
+        },
+        "sources": [
+          {
+            "kind": "repo",
+            "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/infra@fcfb61d",
+            "path": ".",
+            "line": 1
+          }
+        ]
+      },
+      {
+        "id": "infra-cloud.pedidos",
+        "type": "c4:container",
+        "parent": "infra-cloud",
+        "name": "pedidos",
+        "technology": "aws_db_instance",
+        "tags": [
+          "database"
+        ],
+        "sources": [
+          {
+            "kind": "repo",
+            "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/infra@fcfb61d",
+            "path": "main.tf",
+            "line": 1
+          }
+        ]
+      },
+      {
+        "id": "infra-cloud.eventos",
+        "type": "c4:container",
+        "parent": "infra-cloud",
+        "name": "eventos",
+        "technology": "aws_msk_cluster",
+        "tags": [
+          "queue"
+        ],
+        "sources": [
+          {
+            "kind": "repo",
+            "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/infra@fcfb61d",
+            "path": "main.tf",
+            "line": 8
+          }
+        ]
+      },
+      {
+        "id": "tech.aws-eks-cluster-principal",
+        "type": "archimate:node",
+        "name": "principal",
+        "technology": "aws_eks_cluster",
+        "sources": [
+          {
+            "kind": "repo",
+            "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/infra@fcfb61d",
+            "path": "main.tf",
+            "line": 17
+          }
+        ]
+      }
+    ],
+    "relationships": [
+      {
+        "from": "infra-cloud.eventos",
+        "to": "tech.aws-eks-cluster-principal",
+        "type": "archimate:serving",
+        "sources": [
+          {
+            "kind": "repo",
+            "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/infra@fcfb61d",
+            "path": "main.tf",
+            "line": 17
+          }
+        ]
+      }
+    ]
+  },
+  "views": [
+    {
+      "key": "impacto-infra",
+      "notation": "archimate",
+      "viewpoint": "impact",
+      "anchor": "infra-cloud",
+      "title": "Impacto da Infraestrutura"
+    }
+  ]
+}

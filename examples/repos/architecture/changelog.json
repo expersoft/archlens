@@ -1,0 +1,105 @@
+[
+  {
+    "id": "2026-10-03-01",
+    "date": "2026-10-03",
+    "source": {
+      "kind": "repo",
+      "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pedidos@fcfb61d"
+    },
+    "summary": "Leitura de pedidos@fcfb61d",
+    "added": [
+      "loja",
+      "loja.pedidos",
+      "loja.pedidos-pedidos-db",
+      "tech.postgres-16",
+      "ext.pagamentos",
+      "loja.pedidos.api-api-de-pedidos",
+      "topic.pedido-criado",
+      "tech.postgres-16-realization-loja.pedidos-pedidos-db",
+      "loja.pedidos-access-loja.pedidos-pedidos-db",
+      "ext.pagamentos-serving-loja.pedidos",
+      "loja.pedidos-realization-loja.pedidos.api-api-de-pedidos",
+      "loja.pedidos-flow-topic.pedido-criado",
+      "view:impacto-pedidos"
+    ],
+    "changed": [],
+    "status": {},
+    "removed": [],
+    "decisions": []
+  },
+  {
+    "id": "2026-10-03-02",
+    "date": "2026-10-03",
+    "source": {
+      "kind": "prompt",
+      "ref": "sistema financeiro"
+    },
+    "summary": "Sistema Financeiro, dono do serviço de pagamentos",
+    "added": [
+      "financeiro"
+    ],
+    "changed": [],
+    "status": {},
+    "removed": [],
+    "decisions": []
+  },
+  {
+    "id": "2026-10-03-03",
+    "date": "2026-10-03",
+    "source": {
+      "kind": "repo",
+      "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pagamentos@fcfb61d"
+    },
+    "summary": "Leitura de pagamentos@fcfb61d",
+    "added": [
+      "financeiro.pagamentos-redis",
+      "tech.redis",
+      "financeiro.pagamentos-pagamentos-db",
+      "tech.postgres-15",
+      "ext.antifraude-acme-com",
+      "ext.kafka",
+      "topic.pagamento-aprovado",
+      "tech.redis-serving-financeiro.pagamentos-redis",
+      "tech.postgres-15-realization-financeiro.pagamentos-pagamentos-db",
+      "ext.antifraude-acme-com-serving-ext.pagamentos",
+      "ext.kafka-serving-ext.pagamentos",
+      "loja.pedidos-serving-ext.pagamentos",
+      "topic.pedido-criado-flow-ext.pagamentos",
+      "ext.pagamentos-flow-topic.pagamento-aprovado",
+      "view:impacto-pagamentos"
+    ],
+    "changed": [
+      "ext.pagamentos",
+      "loja.pedidos"
+    ],
+    "status": {},
+    "removed": [],
+    "decisions": [
+      "duplicata: financeiro.pagamentos = ext.pagamentos",
+      "conflito ext.pagamentos.type: take \"c4:container\"",
+      "duplicata descartada: tech.postgres-15 ≠ tech.postgres-16",
+      "duplicata: ext.pedidos-api = loja.pedidos"
+    ]
+  },
+  {
+    "id": "2026-10-03-04",
+    "date": "2026-10-03",
+    "source": {
+      "kind": "repo",
+      "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/infra@fcfb61d"
+    },
+    "summary": "Leitura de infra@fcfb61d",
+    "added": [
+      "infra-cloud",
+      "infra-cloud.pedidos",
+      "infra-cloud.eventos",
+      "tech.aws-eks-cluster-principal",
+      "infra-cloud.eventos-serving-tech.aws-eks-cluster-principal",
+      "view:impacto-infra"
+    ],
+    "changed": [],
+    "status": {},
+    "removed": [],
+    "decisions": []
+  }
+]

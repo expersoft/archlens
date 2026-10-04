@@ -8,7 +8,7 @@ import { normalizeModel } from '../scripts/lib/model.mjs';
 import { resolveView } from '../scripts/lib/query.mjs';
 import { validateModel } from '../scripts/lib/validate.mjs';
 
-for (const ex of ['loja-online', 'telemedicina']) {
+for (const ex of ['loja-online', 'telemedicina', 'repos']) {
   test(`example ${ex}: the folder is valid, every view resolves and ARCHITECTURE.md is current`, () => {
     const dir = fileURLToPath(new URL(`../examples/${ex}/`, import.meta.url));
     const store = openStore(resolveBase('ARCHITECTURE.md', { cwd: dir }));

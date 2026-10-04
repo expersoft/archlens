@@ -1,0 +1,41 @@
+{
+  "archlens-plan": "1.0",
+  "base": "architecture",
+  "baseHash": "sha256:ef67ae16ccfb407846c7470bca54c9726dd668ffbe40c91451b4e6f0f4972a4f",
+  "created": "2026-10-03",
+  "delta": {
+    "archlens-delta": "1.0",
+    "source": {
+      "kind": "prompt",
+      "ref": "sistema financeiro"
+    },
+    "summary": "Sistema Financeiro, dono do serviço de pagamentos",
+    "model": {
+      "elements": [
+        {
+          "id": "financeiro",
+          "type": "c4:softwareSystem",
+          "name": "Financeiro",
+          "description": "Cobrança e conciliação de pagamentos."
+        }
+      ]
+    }
+  },
+  "items": [
+    {
+      "n": 1,
+      "key": "el:financeiro",
+      "class": "new",
+      "kind": "element",
+      "target": "financeiro",
+      "type": "c4:softwareSystem",
+      "name": "Financeiro",
+      "parent": null
+    }
+  ],
+  "summary": {
+    "new": 1
+  },
+  "blocked": false,
+  "errors": []
+}

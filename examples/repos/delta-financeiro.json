@@ -1,0 +1,10 @@
+{
+  "archlens-delta": "1.0",
+  "source": { "kind": "prompt", "ref": "sistema financeiro" },
+  "summary": "Sistema Financeiro, dono do serviço de pagamentos",
+  "model": {
+    "elements": [
+      { "id": "financeiro", "type": "c4:softwareSystem", "name": "Financeiro", "description": "Cobrança e conciliação de pagamentos." }
+    ]
+  }
+}

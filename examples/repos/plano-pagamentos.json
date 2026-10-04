@@ -1,0 +1,572 @@
+{
+  "archlens-plan": "1.0",
+  "base": "architecture",
+  "baseHash": "sha256:49e7c202ad829ec6ade8a3f6735653094a96e8c63119f13fef003a13450fa737",
+  "created": "2026-10-03",
+  "delta": {
+    "archlens-delta": "1.0",
+    "source": {
+      "kind": "repo",
+      "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pagamentos@fcfb61d"
+    },
+    "summary": "Leitura de pagamentos@fcfb61d",
+    "model": {
+      "elements": [
+        {
+          "id": "financeiro",
+          "sources": [
+            {
+              "kind": "repo",
+              "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pagamentos@fcfb61d",
+              "path": ".",
+              "line": 1
+            }
+          ]
+        },
+        {
+          "id": "financeiro.pagamentos",
+          "type": "c4:container",
+          "parent": "financeiro",
+          "name": "pagamentos",
+          "properties": {
+            "repo": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pagamentos",
+            "repoRole": "service"
+          },
+          "sources": [
+            {
+              "kind": "repo",
+              "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pagamentos@fcfb61d",
+              "path": ".",
+              "line": 1
+            }
+          ]
+        },
+        {
+          "id": "financeiro.pagamentos-redis",
+          "type": "c4:container",
+          "parent": "financeiro",
+          "name": "redis",
+          "tags": [
+            "cache"
+          ],
+          "sources": [
+            {
+              "kind": "repo",
+              "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pagamentos@fcfb61d",
+              "path": "chart/Chart.yaml",
+              "line": 5
+            }
+          ]
+        },
+        {
+          "id": "tech.redis",
+          "type": "archimate:system-software",
+          "name": "Redis",
+          "sources": [
+            {
+              "kind": "repo",
+              "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pagamentos@fcfb61d",
+              "path": "chart/Chart.yaml",
+              "line": 5
+            }
+          ]
+        },
+        {
+          "id": "financeiro.pagamentos-pagamentos-db",
+          "type": "c4:container",
+          "parent": "financeiro",
+          "name": "pagamentos-db",
+          "tags": [
+            "database"
+          ],
+          "sources": [
+            {
+              "kind": "repo",
+              "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pagamentos@fcfb61d",
+              "path": "k8s/deploy.yaml",
+              "line": 49
+            }
+          ]
+        },
+        {
+          "id": "tech.postgres-15",
+          "type": "archimate:system-software",
+          "name": "PostgreSQL 15",
+          "sources": [
+            {
+              "kind": "repo",
+              "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pagamentos@fcfb61d",
+              "path": "k8s/deploy.yaml",
+              "line": 49
+            }
+          ]
+        },
+        {
+          "id": "ext.antifraude-acme-com",
+          "type": "c4:softwareSystem",
+          "name": "antifraude.acme.com",
+          "external": true,
+          "inferred": true,
+          "confidence": "baixa",
+          "sources": [
+            {
+              "kind": "repo",
+              "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pagamentos@fcfb61d",
+              "path": "chart/values.yaml",
+              "line": 8,
+              "excerpt": "host em ANTIFRAUDE_URL"
+            }
+          ]
+        },
+        {
+          "id": "ext.kafka",
+          "type": "c4:softwareSystem",
+          "name": "kafka",
+          "external": true,
+          "inferred": true,
+          "confidence": "baixa",
+          "sources": [
+            {
+              "kind": "repo",
+              "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pagamentos@fcfb61d",
+              "path": "k8s/deploy.yaml",
+              "line": 7,
+              "excerpt": "host em KAFKA_BROKERS"
+            }
+          ]
+        },
+        {
+          "id": "ext.pedidos-api",
+          "type": "c4:softwareSystem",
+          "name": "pedidos-api",
+          "external": true,
+          "inferred": true,
+          "confidence": "baixa",
+          "sources": [
+            {
+              "kind": "repo",
+              "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pagamentos@fcfb61d",
+              "path": "k8s/deploy.yaml",
+              "line": 7,
+              "excerpt": "host em PEDIDOS_URL"
+            }
+          ]
+        },
+        {
+          "id": "topic.pedido-criado",
+          "tags": [
+            "topic"
+          ],
+          "sources": [
+            {
+              "kind": "repo",
+              "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pagamentos@fcfb61d",
+              "path": "asyncapi.json",
+              "line": 1
+            }
+          ]
+        },
+        {
+          "id": "topic.pagamento-aprovado",
+          "type": "c4:container",
+          "name": "pagamento-aprovado",
+          "tags": [
+            "topic"
+          ],
+          "sources": [
+            {
+              "kind": "repo",
+              "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pagamentos@fcfb61d",
+              "path": "asyncapi.json",
+              "line": 1
+            }
+          ]
+        }
+      ],
+      "relationships": [
+        {
+          "from": "tech.redis",
+          "to": "financeiro.pagamentos-redis",
+          "type": "archimate:serving",
+          "sources": [
+            {
+              "kind": "repo",
+              "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pagamentos@fcfb61d",
+              "path": "chart/Chart.yaml",
+              "line": 5
+            }
+          ]
+        },
+        {
+          "from": "tech.postgres-15",
+          "to": "financeiro.pagamentos-pagamentos-db",
+          "type": "archimate:realization",
+          "sources": [
+            {
+              "kind": "repo",
+              "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pagamentos@fcfb61d",
+              "path": "k8s/deploy.yaml",
+              "line": 49
+            }
+          ]
+        },
+        {
+          "from": "financeiro.pagamentos",
+          "to": "ext.antifraude-acme-com",
+          "type": "uses",
+          "description": "via ANTIFRAUDE_URL",
+          "inferred": true,
+          "sources": [
+            {
+              "kind": "repo",
+              "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pagamentos@fcfb61d",
+              "path": "chart/values.yaml",
+              "line": 8,
+              "excerpt": "ANTIFRAUDE_URL → antifraude.acme.com"
+            }
+          ]
+        },
+        {
+          "from": "financeiro.pagamentos",
+          "to": "ext.kafka",
+          "type": "uses",
+          "description": "via KAFKA_BROKERS",
+          "inferred": true,
+          "sources": [
+            {
+              "kind": "repo",
+              "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pagamentos@fcfb61d",
+              "path": "k8s/deploy.yaml",
+              "line": 7,
+              "excerpt": "KAFKA_BROKERS → kafka"
+            }
+          ]
+        },
+        {
+          "from": "financeiro.pagamentos",
+          "to": "ext.pedidos-api",
+          "type": "uses",
+          "description": "via PEDIDOS_URL",
+          "inferred": true,
+          "sources": [
+            {
+              "kind": "repo",
+              "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pagamentos@fcfb61d",
+              "path": "k8s/deploy.yaml",
+              "line": 7,
+              "excerpt": "PEDIDOS_URL → pedidos-api"
+            }
+          ]
+        },
+        {
+          "from": "topic.pedido-criado",
+          "to": "financeiro.pagamentos",
+          "type": "archimate:flow",
+          "description": "assina pedido-criado",
+          "sources": [
+            {
+              "kind": "repo",
+              "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pagamentos@fcfb61d",
+              "path": "asyncapi.json",
+              "line": 1
+            }
+          ]
+        },
+        {
+          "from": "financeiro.pagamentos",
+          "to": "topic.pagamento-aprovado",
+          "type": "archimate:flow",
+          "description": "publica pagamento-aprovado",
+          "sources": [
+            {
+              "kind": "repo",
+              "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pagamentos@fcfb61d",
+              "path": "asyncapi.json",
+              "line": 1
+            }
+          ]
+        }
+      ]
+    },
+    "views": [
+      {
+        "key": "impacto-pagamentos",
+        "notation": "archimate",
+        "viewpoint": "impact",
+        "anchor": "financeiro.pagamentos",
+        "title": "Impacto de Pagamentos"
+      }
+    ]
+  },
+  "items": [
+    {
+      "n": 1,
+      "key": "el:financeiro",
+      "class": "unchanged",
+      "kind": "element",
+      "target": "financeiro"
+    },
+    {
+      "n": 2,
+      "key": "dup:financeiro.pagamentos",
+      "class": "possible-duplicate",
+      "kind": "element",
+      "target": "financeiro.pagamentos",
+      "candidate": "ext.pagamentos",
+      "score": 1,
+      "why": "mesmo tipo; nome parecido",
+      "resolution": "same"
+    },
+    {
+      "n": 3,
+      "key": "el:financeiro.pagamentos:type",
+      "class": "conflict",
+      "kind": "element",
+      "target": "ext.pagamentos",
+      "field": "type",
+      "base": "c4:softwareSystem",
+      "delta": "c4:container",
+      "when": "dup:financeiro.pagamentos=same",
+      "resolution": "take"
+    },
+    {
+      "n": 4,
+      "key": "el:financeiro.pagamentos",
+      "class": "new",
+      "kind": "element",
+      "target": "financeiro.pagamentos",
+      "type": "c4:container",
+      "name": "pagamentos",
+      "parent": "financeiro"
+    },
+    {
+      "n": 5,
+      "key": "el:financeiro.pagamentos-redis",
+      "class": "new",
+      "kind": "element",
+      "target": "financeiro.pagamentos-redis",
+      "type": "c4:container",
+      "name": "redis",
+      "parent": "financeiro"
+    },
+    {
+      "n": 6,
+      "key": "el:tech.redis",
+      "class": "new",
+      "kind": "element",
+      "target": "tech.redis",
+      "type": "archimate:system-software",
+      "name": "Redis",
+      "parent": null
+    },
+    {
+      "n": 7,
+      "key": "el:financeiro.pagamentos-pagamentos-db",
+      "class": "new",
+      "kind": "element",
+      "target": "financeiro.pagamentos-pagamentos-db",
+      "type": "c4:container",
+      "name": "pagamentos-db",
+      "parent": "financeiro"
+    },
+    {
+      "n": 8,
+      "key": "dup:tech.postgres-15",
+      "class": "possible-duplicate",
+      "kind": "element",
+      "target": "tech.postgres-15",
+      "candidate": "tech.postgres-16",
+      "score": 0.92,
+      "why": "mesmo tipo; nome parecido",
+      "resolution": "different"
+    },
+    {
+      "n": 9,
+      "key": "el:tech.postgres-15:name",
+      "class": "conflict",
+      "kind": "element",
+      "target": "tech.postgres-16",
+      "field": "name",
+      "base": "PostgreSQL 16",
+      "delta": "PostgreSQL 15",
+      "when": "dup:tech.postgres-15=same",
+      "resolution": null
+    },
+    {
+      "n": 10,
+      "key": "el:tech.postgres-15",
+      "class": "new",
+      "kind": "element",
+      "target": "tech.postgres-15",
+      "type": "archimate:system-software",
+      "name": "PostgreSQL 15",
+      "parent": null
+    },
+    {
+      "n": 11,
+      "key": "el:ext.antifraude-acme-com",
+      "class": "new",
+      "kind": "element",
+      "target": "ext.antifraude-acme-com",
+      "type": "c4:softwareSystem",
+      "name": "antifraude.acme.com",
+      "parent": null
+    },
+    {
+      "n": 12,
+      "key": "el:ext.kafka",
+      "class": "new",
+      "kind": "element",
+      "target": "ext.kafka",
+      "type": "c4:softwareSystem",
+      "name": "kafka",
+      "parent": null
+    },
+    {
+      "n": 13,
+      "key": "dup:ext.pedidos-api",
+      "class": "possible-duplicate",
+      "kind": "element",
+      "target": "ext.pedidos-api",
+      "candidate": "loja.pedidos",
+      "score": 1,
+      "why": "mesmo tipo; nome parecido",
+      "resolution": "same"
+    },
+    {
+      "n": 14,
+      "key": "el:ext.pedidos-api:type",
+      "class": "conflict",
+      "kind": "element",
+      "target": "loja.pedidos",
+      "field": "type",
+      "base": "c4:container",
+      "delta": "c4:softwareSystem",
+      "when": "dup:ext.pedidos-api=same",
+      "resolution": "keep"
+    },
+    {
+      "n": 15,
+      "key": "el:ext.pedidos-api:name",
+      "class": "conflict",
+      "kind": "element",
+      "target": "loja.pedidos",
+      "field": "name",
+      "base": "pedidos",
+      "delta": "pedidos-api",
+      "when": "dup:ext.pedidos-api=same",
+      "resolution": "keep"
+    },
+    {
+      "n": 16,
+      "key": "el:ext.pedidos-api",
+      "class": "new",
+      "kind": "element",
+      "target": "ext.pedidos-api",
+      "type": "c4:softwareSystem",
+      "name": "pedidos-api",
+      "parent": null
+    },
+    {
+      "n": 17,
+      "key": "el:topic.pedido-criado",
+      "class": "unchanged",
+      "kind": "element",
+      "target": "topic.pedido-criado"
+    },
+    {
+      "n": 18,
+      "key": "el:topic.pagamento-aprovado",
+      "class": "new",
+      "kind": "element",
+      "target": "topic.pagamento-aprovado",
+      "type": "c4:container",
+      "name": "pagamento-aprovado",
+      "parent": null
+    },
+    {
+      "n": 19,
+      "key": "rel:0",
+      "class": "new",
+      "kind": "relationship",
+      "target": "tech.redis-serving-financeiro.pagamentos-redis",
+      "from": "tech.redis",
+      "to": "financeiro.pagamentos-redis",
+      "type": "archimate:serving"
+    },
+    {
+      "n": 20,
+      "key": "rel:1",
+      "class": "new",
+      "kind": "relationship",
+      "target": "tech.postgres-15-realization-financeiro.pagamentos-pagamentos-db",
+      "from": "tech.postgres-15",
+      "to": "financeiro.pagamentos-pagamentos-db",
+      "type": "archimate:realization"
+    },
+    {
+      "n": 21,
+      "key": "rel:2",
+      "class": "new",
+      "kind": "relationship",
+      "target": "ext.antifraude-acme-com-serving-financeiro.pagamentos",
+      "from": "financeiro.pagamentos",
+      "to": "ext.antifraude-acme-com",
+      "type": "uses"
+    },
+    {
+      "n": 22,
+      "key": "rel:3",
+      "class": "new",
+      "kind": "relationship",
+      "target": "ext.kafka-serving-financeiro.pagamentos",
+      "from": "financeiro.pagamentos",
+      "to": "ext.kafka",
+      "type": "uses"
+    },
+    {
+      "n": 23,
+      "key": "rel:4",
+      "class": "new",
+      "kind": "relationship",
+      "target": "ext.pedidos-api-serving-financeiro.pagamentos",
+      "from": "financeiro.pagamentos",
+      "to": "ext.pedidos-api",
+      "type": "uses"
+    },
+    {
+      "n": 24,
+      "key": "rel:5",
+      "class": "new",
+      "kind": "relationship",
+      "target": "topic.pedido-criado-flow-financeiro.pagamentos",
+      "from": "topic.pedido-criado",
+      "to": "financeiro.pagamentos",
+      "type": "archimate:flow"
+    },
+    {
+      "n": 25,
+      "key": "rel:6",
+      "class": "new",
+      "kind": "relationship",
+      "target": "financeiro.pagamentos-flow-topic.pagamento-aprovado",
+      "from": "financeiro.pagamentos",
+      "to": "topic.pagamento-aprovado",
+      "type": "archimate:flow"
+    },
+    {
+      "n": 26,
+      "key": "view:impacto-pagamentos",
+      "class": "new",
+      "kind": "view",
+      "target": "impacto-pagamentos"
+    }
+  ],
+  "summary": {
+    "unchanged": 2,
+    "possible-duplicate": 3,
+    "new": 17
+  },
+  "blocked": false,
+  "errors": []
+}

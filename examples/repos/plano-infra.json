@@ -1,0 +1,173 @@
+{
+  "archlens-plan": "1.0",
+  "base": "architecture",
+  "baseHash": "sha256:09bd65824886e13ae71d542aa857153e9d7f106258156f3ad544fc4a9c2a90de",
+  "created": "2026-10-03",
+  "delta": {
+    "archlens-delta": "1.0",
+    "source": {
+      "kind": "repo",
+      "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/infra@fcfb61d"
+    },
+    "summary": "Leitura de infra@fcfb61d",
+    "model": {
+      "elements": [
+        {
+          "id": "infra-cloud",
+          "type": "c4:softwareSystem",
+          "name": "infra",
+          "properties": {
+            "repo": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/infra",
+            "repoRole": "system"
+          },
+          "sources": [
+            {
+              "kind": "repo",
+              "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/infra@fcfb61d",
+              "path": ".",
+              "line": 1
+            }
+          ]
+        },
+        {
+          "id": "infra-cloud.pedidos",
+          "type": "c4:container",
+          "parent": "infra-cloud",
+          "name": "pedidos",
+          "technology": "aws_db_instance",
+          "tags": [
+            "database"
+          ],
+          "sources": [
+            {
+              "kind": "repo",
+              "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/infra@fcfb61d",
+              "path": "main.tf",
+              "line": 1
+            }
+          ]
+        },
+        {
+          "id": "infra-cloud.eventos",
+          "type": "c4:container",
+          "parent": "infra-cloud",
+          "name": "eventos",
+          "technology": "aws_msk_cluster",
+          "tags": [
+            "queue"
+          ],
+          "sources": [
+            {
+              "kind": "repo",
+              "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/infra@fcfb61d",
+              "path": "main.tf",
+              "line": 8
+            }
+          ]
+        },
+        {
+          "id": "tech.aws-eks-cluster-principal",
+          "type": "archimate:node",
+          "name": "principal",
+          "technology": "aws_eks_cluster",
+          "sources": [
+            {
+              "kind": "repo",
+              "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/infra@fcfb61d",
+              "path": "main.tf",
+              "line": 17
+            }
+          ]
+        }
+      ],
+      "relationships": [
+        {
+          "from": "infra-cloud.eventos",
+          "to": "tech.aws-eks-cluster-principal",
+          "type": "archimate:serving",
+          "sources": [
+            {
+              "kind": "repo",
+              "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/infra@fcfb61d",
+              "path": "main.tf",
+              "line": 17
+            }
+          ]
+        }
+      ]
+    },
+    "views": [
+      {
+        "key": "impacto-infra",
+        "notation": "archimate",
+        "viewpoint": "impact",
+        "anchor": "infra-cloud",
+        "title": "Impacto da Infraestrutura"
+      }
+    ]
+  },
+  "items": [
+    {
+      "n": 1,
+      "key": "el:infra-cloud",
+      "class": "new",
+      "kind": "element",
+      "target": "infra-cloud",
+      "type": "c4:softwareSystem",
+      "name": "infra",
+      "parent": null
+    },
+    {
+      "n": 2,
+      "key": "el:infra-cloud.pedidos",
+      "class": "new",
+      "kind": "element",
+      "target": "infra-cloud.pedidos",
+      "type": "c4:container",
+      "name": "pedidos",
+      "parent": "infra-cloud"
+    },
+    {
+      "n": 3,
+      "key": "el:infra-cloud.eventos",
+      "class": "new",
+      "kind": "element",
+      "target": "infra-cloud.eventos",
+      "type": "c4:container",
+      "name": "eventos",
+      "parent": "infra-cloud"
+    },
+    {
+      "n": 4,
+      "key": "el:tech.aws-eks-cluster-principal",
+      "class": "new",
+      "kind": "element",
+      "target": "tech.aws-eks-cluster-principal",
+      "type": "archimate:node",
+      "name": "principal",
+      "parent": null
+    },
+    {
+      "n": 5,
+      "key": "rel:0",
+      "class": "new",
+      "kind": "relationship",
+      "target": "infra-cloud.eventos-serving-tech.aws-eks-cluster-principal",
+      "from": "infra-cloud.eventos",
+      "to": "tech.aws-eks-cluster-principal",
+      "type": "archimate:serving"
+    },
+    {
+      "n": 6,
+      "key": "view:impacto-infra",
+      "class": "new",
+      "kind": "view",
+      "target": "impacto-infra"
+    }
+  ],
+  "summary": {
+    "new": 6
+  },
+  "blocked": false,
+  "errors": []
+}

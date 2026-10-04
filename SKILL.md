@@ -33,7 +33,12 @@ Requer Node ≥ 18. A checagem visual (`deliver`/`build`) usa `playwright-core` 
    - **texto livre**: siga `references/free-text.md` (`source` com o trecho, `inferred` + `confidence`,
      `assumptions`). Pergunte ao usuário **só** o que bloqueia;
    - **JSON DSL**: embrulhe em `{"archlens-delta":"1.0","source":…,"model":…}`;
-   - **"X foi desligado / será substituído / renomeie Y"**: `ops` (`status`, `rename`, `alias`, `remove`).
+   - **"X foi desligado / será substituído / renomeie Y"**: `ops` (`status`, `rename`, `alias`, `remove`);
+   - **repositório (pasta ou URL git)**: `archlens scan <repo> --base <base>` e mostre o resumo; pergunte o papel
+     (sistema ou serviço) e o sistema, comentando a sugestão e os motivos — **nunca assuma pelo nome**; depois
+     `archlens scan <repo> --base <base> --as system|service [--system <id>] [--id <id>] --delta d.json`; troque nomes
+     técnicos por nomes de negócio (técnicos em `aliases`) e siga para o plano. Sem graphify, sugira rodá-lo no
+     repositório. Detalhes em `references/repo-reading.md`.
 
    Sempre preencha `source` (`kind` + `ref`) e `summary`. Reutilize os ids da base.
 4. **Planeje**: `archlens merge architecture/ delta.json --plan plano.json`. Mostre o resumo ao usuário.
@@ -134,6 +139,8 @@ recorta com scope, focus, depth, anchor, traverse, layers, granularity, collapse
   e `build` recusam. Rode `archlens migrate` (com o ok do usuário).
 - **Duplicata aceita sem perguntar**: `possible-duplicate` é sempre pergunta ao usuário. Um `same` errado funde
   dois elementos diferentes.
+- **Assumir o sistema pelo nome do repositório**: `terminus-*` é só um indício; pergunte.
+- **Aplicar sem olhar os `retired` sugeridos** por uma nova leitura: confirme um a um.
 - **Visão gigante**: um diagrama com 60 nós não comunica nada. Prefira várias visões, que as setas
   ←/→ encadeiam como slides.
 
@@ -145,6 +152,7 @@ recorta com scope, focus, depth, anchor, traverse, layers, granularity, collapse
 - `references/archimate.md`: catálogo ArchiMate 3.2, regras de relacionamento, direção de suporte
 - `references/c4.md`: níveis C4, mapeamento para ArchiMate, elevação de relações
 - `references/free-text.md`: como extrair o modelo de texto livre
+- `references/repo-reading.md`: `archlens scan`, leitura de repositórios, mapeamento, nova leitura e limites
 - `references/knowledge-doc.md`: a pasta `architecture/`, o `ARCHITECTURE.md` gerado, `check` e `migrate`
 - `docs/GUIA.md`: guia do usuário (apresentação, atalhos, exemplos)
 - `examples/`: `loja-online` (DSL completa, 13 visões) e `telemedicina` (texto livre + `delta-01.json`/`plano-01.json`,
