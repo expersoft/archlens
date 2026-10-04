@@ -35,7 +35,9 @@ Requer Node ≥ 18. A checagem visual (`deliver`/`build`) usa `playwright-core` 
    - **JSON DSL**: embrulhe em `{"archlens-delta":"1.0","source":…,"model":…}`;
    - **"X foi desligado / será substituído / renomeie Y"**: `ops` (`status`, `rename`, `alias`, `remove`);
    - **repositório (pasta ou URL git)**: `archlens scan <repo> --base <base>` e mostre o resumo; pergunte o papel
-     (sistema ou serviço) e o sistema, comentando a sugestão e os motivos — **nunca assuma pelo nome**; depois
+     (sistema ou serviço) e o sistema, comentando a sugestão e os motivos — **nunca assuma pelo nome**; se o resumo
+     mostrar `já na base: … (semelhança de nome …)`, confirme com o usuário e passe `--id <id existente>` (sem isso o
+     plano traz uma possível duplicata e a infraestrutura ganha ids com o prefixo errado); depois
      `archlens scan <repo> --base <base> --as system|service [--system <id>] [--id <id>] --delta d.json`; troque nomes
      técnicos por nomes de negócio (técnicos em `aliases`) e siga para o plano. Na primeira leitura, `--base` pode
      apontar a base que o merge vai criar, e `--system` pode nomear um sistema novo (o delta o cria). Placeholders
