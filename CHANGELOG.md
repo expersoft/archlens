@@ -3,6 +3,20 @@
 Mudanças relevantes do archlens, por versão. Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/);
 versões seguem [SemVer](https://semver.org/lang/pt-BR/).
 
+## [Não lançado]
+
+### Adicionado
+
+- **Leitura de repositórios** (`archlens scan`): pasta local ou URL git vira um delta com proveniência
+  (`kind: repo`, `ref <url|caminho>@commit`, arquivo e linha). Lê docker-compose, Kubernetes, Helm (opcionalmente
+  renderizado com `--helm-render`), Terraform, OpenAPI, AsyncAPI, manifestos de build e a saída do graphify
+  (módulos, fluxos, conceitos de negócio e comunidades). O papel do repositório é sempre perguntado: serviço
+  (container / application component) ou sistema com os deployáveis como containers; a base vem de `--base`, e o
+  sistema nunca é presumido pelo nome do repositório.
+- Correlação entre repositórios: produtor e consumidor de um tópico viram fluxo; placeholders `ext.*` criados por
+  um repositório são assumidos pela leitura do repositório real; nova leitura não duplica e acompanha o commit
+  mais recente; o que sumiu vira pergunta.
+
 ## [0.2.0] — pré-release
 
 A base de conhecimento passa a evoluir por rodadas, sem ser refeita a cada prompt, e ganha uma fonte de verdade
@@ -43,5 +57,6 @@ Primeira versão: arquitetura como modelo (ArchiMate 3.2 com perfil C4), diagram
 - Relações explicadas em português, HTML animado num arquivo único, checagem visual com screenshots.
 - `\n` força quebra de linha em nomes; `expand` no schema da visão (#2). Zoom/pan na tela inteira (#3).
 
+[Não lançado]: https://github.com/expersoft/archlens/compare/v0.2.0...HEAD
 [0.2.0]: https://github.com/expersoft/archlens/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/expersoft/archlens/releases/tag/v0.1.0
