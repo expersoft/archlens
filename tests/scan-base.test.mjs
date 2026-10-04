@@ -11,6 +11,7 @@ import { infraOf, hostOf } from '../scripts/lib/scan/infra.mjs';
 import { scanDir, scanSource } from '../scripts/lib/scan/index.mjs';
 import { sourceKey } from '../scripts/lib/sources.mjs';
 import { toDelta } from '../scripts/lib/scan/to-delta.mjs';
+import { summarize, formatSummary } from '../scripts/lib/scan/summary.mjs';
 
 const fixture = name => fileURLToPath(new URL(`./fixtures/repos/${name}/`, import.meta.url));
 const git = (cwd, ...a) => spawnSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', '-c', 'init.defaultBranch=main', ...a], { cwd, encoding: 'utf8' });
@@ -121,16 +122,34 @@ test('Helm templates are not plain YAML: chart templates/ skipped, k8s docs with
   assert.ok(inv.files.ignored >= 2, 'the templates count as ignored');
 });
 
-test('test and fixture folders are skipped at any depth, the root never (item 16)', () => {
+test('test and fixture folders are skipped at any depth, the root never; spec is read (item 16, follow-up 1)', () => {
   const svc = 'services:\n  x:\n    build: .\n';
   const dir = tree({ 'compose.yml': svc, 'tests/compose.yml': svc, 'test/compose.yml': svc, 'src/__tests__/compose.yml': svc,
-    'a/fixtures/compose.yml': svc, 'b/spec/compose.yml': svc });
+    'a/fixtures/compose.yml': svc, 'b/spec/compose.yml': svc, 'tests/notes.txt': 'x' });
   const inv = scanDir(dir);
-  assert.equal(inv.files.compose, 1);
-  assert.deepEqual([...new Set(inv.facts.map(f => f.at.file))], ['compose.yml']);
-  assert.ok(inv.files.ignored >= 5, `skipped files are counted (${inv.files.ignored})`);
+  assert.equal(inv.files.compose, 2);
+  assert.deepEqual([...new Set(inv.facts.map(f => f.at.file))].sort(), ['b/spec/compose.yml', 'compose.yml']);
+  assert.deepEqual(inv.skipped.map(s => s.path), ['a/fixtures/compose.yml', 'src/__tests__/compose.yml', 'test/compose.yml', 'tests/compose.yml']);
+  assert.ok(inv.skipped.every(s => s.reason === 'pasta de teste'));
+  assert.ok(inv.files.ignored >= 1, 'unrecognised files of a test folder stay ignored');
   const nested = join(dir, 'tests');
   assert.equal(scanDir(nested).files.compose, 1, 'a test folder given as the root is read');
+});
+
+test('contracts under spec/ and manifests under a deploy path are read; a root test fixture is skipped and reported (follow-up 1)', () => {
+  const svc = 'services:\n  x:\n    build: .\n';
+  const dir = tree({
+    'api/spec/openapi.yaml': 'openapi: 3.0.0\ninfo:\n  title: Pedidos\n  version: 1.0.0\npaths: {}\n',
+    'spec/asyncapi.yaml': 'asyncapi: 2.6.0\ninfo:\n  title: Eventos\n  version: 1.0.0\nchannels:\n  pedido-criado:\n    subscribe:\n      message:\n        name: PedidoCriado\n',
+    'deploy/k8s/overlays/test/d.yaml': 'apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: pay\nspec:\n  template:\n    spec:\n      containers:\n        - image: acme/pay:1.0\n',
+    'tests/fixtures/x/compose.yml': svc,
+  });
+  const inv = scanDir(dir);
+  assert.deepEqual([inv.files.openapi, inv.files.asyncapi, inv.files.k8s, inv.files.compose], [1, 1, 1, 0]);
+  assert.ok(inv.facts.some(f => f.kind === 'workload' && f.name === 'pay' && f.at.file === 'deploy/k8s/overlays/test/d.yaml'));
+  assert.deepEqual(inv.skipped, [{ path: 'tests/fixtures/x/compose.yml', reason: 'pasta de teste' }]);
+  const text = formatSummary(summarize(inv, null));
+  assert.match(text, /arquivos reconhecidos e pulados: 1 \(pasta de teste: tests\/fixtures\/x\/compose\.yml\)/);
 });
 
 test('a gitignored graphify-out still has its graph read (item 4)', () => {

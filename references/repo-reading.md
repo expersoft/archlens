@@ -38,10 +38,20 @@ Identidade (`properties.repo` e o `ref` das fontes): a URL lida; numa pasta loca
 `origin`, a URL desse remote sem credenciais (assim a mesma base reconhece o repositório lido por pasta ou por URL);
 sem remote, ou numa subpasta de outro repositório, o caminho absoluto da pasta.
 
-Ignora `node_modules`, `vendor`, `.git`, `build`, `dist`, `target`, `.gradle`, `.venv`, pastas de teste e fixtures
-(`test`, `tests`, `__tests__`, `fixtures`, `spec`, em qualquer profundidade abaixo da raiz) e o `.gitignore` da raiz,
-exceto `graphify-out/graph.json`, lido mesmo quando `graphify-out/` está no `.gitignore`. O que fica de fora conta
-como `ignored` no resumo. Uma pasta de teste passada como raiz é lida normalmente.
+Ignora `node_modules`, `vendor`, `.git`, `build`, `dist`, `target`, `.gradle`, `.venv` e o `.gitignore` da raiz,
+exceto `graphify-out/graph.json`, lido mesmo quando `graphify-out/` está no `.gitignore`.
+
+Pastas de teste e fixtures (`test`, `tests`, `__tests__`, `fixtures`) são puladas em qualquer profundidade abaixo da
+raiz, **exceto** quando alguma pasta acima delas se chama `deploy`, `k8s`, `kustomize`, `helm`, `charts`,
+`environments`, `overlays`, `infra` ou `terraform` (ali `test` é um ambiente: `deploy/k8s/overlays/test/d.yaml` é
+lido). `spec/` é lida (costuma guardar os contratos: `api/spec/openapi.yaml`). Uma pasta de teste passada como raiz é
+lida normalmente.
+
+Arquivos reconhecidos que não foram lidos ficam em `skipped: [{ path, reason }]` no inventário e numa linha do resumo,
+`arquivos reconhecidos e pulados: N (pasta de teste: …; grande demais: …)` (até 5 caminhos por motivo; a lista
+completa está no inventário). Reconhecido sem abrir = tipo pelo nome (compose, `Chart.yaml`, `*.tf`, build, grafo) ou
+`.yaml`/`.json` com nome de openapi/swagger/asyncapi; o motivo `grande demais` também gera o fato `unreadable` (§2).
+Os demais arquivos de fora contam só em `files.ignored` no inventário.
 
 ## 2. Fontes lidas e fatos
 
@@ -172,8 +182,10 @@ graphify no repositório (skill `graphify`, na raiz dele) e repetir a leitura.
   um container `pagamentos` sem esse alias.
 - Nomes de `Service` do Kubernetes não viram aliases do container; um host igual ao nome do `Service` (e diferente
   do workload) só resolve se o alias for adicionado à mão.
-- Pastas `test`, `tests`, `__tests__`, `fixtures` e `spec` são sempre ignoradas abaixo da raiz, inclusive um contrato
-  em `api/spec/openapi.yaml`; para ler uma delas, passe a pasta como raiz.
+- Pastas `test`, `tests`, `__tests__` e `fixtures` fora de um caminho de deploy (§1) são puladas, inclusive um
+  manifesto Kubernetes ou um contrato dentro delas (`src/test/resources/openapi.yaml`); o resumo lista os
+  reconhecidos pelo nome (`arquivos reconhecidos e pulados`), mas um `.yaml` genérico pulado (um manifesto sem nome de
+  contrato) não é aberto e conta só como `ignored`. Para ler uma dessas pastas, passe-a como raiz.
 - Monorepo com vários sistemas: uma leitura por pasta.
 - Credenciais e tokens: vêm do git do usuário; o archlens não os guarda.
 - Código-fonte não é lido diretamente; vem do graphify.

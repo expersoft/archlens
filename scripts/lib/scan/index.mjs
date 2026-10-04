@@ -17,6 +17,8 @@ import { buildFacts } from './build.mjs';
 const MAX = 2 * 1024 * 1024, MAX_GRAPH = 64 * 1024 * 1024;
 // a .json/.yaml named after an API contract is reported when it cannot be read; other generic ones stay ignored
 const contractNamed = path => /openapi|swagger|asyncapi/i.test(basename(path));
+// recognised without reading: typed by name (compose, Chart.yaml, .tf, build file, graph), or a contract-named yaml/json
+const recognised = (type, path) => !!type && ((type !== 'yaml' && type !== 'json') || contractNamed(path));
 // the reader's calendar day (not UTC): a scan late in the evening is still dated today
 const isoToday = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 
@@ -82,8 +84,13 @@ export function scanDir(root, { url, today = isoToday(), helmRender = false } = 
   const ctx = { root, commit: info.commit, helmRender, chartNames: new Map() };
   const files = { compose: 0, k8s: 0, helm: 0, terraform: 0, openapi: 0, asyncapi: 0, graphify: 0, build: 0, ignored: 0 };
   const facts = [];
-  const { files: all, skipped } = listFiles(root);
-  files.ignored += skipped;
+  const { files: all, inTests } = listFiles(root);
+  // recognised files that were not read (test folder, size): listed so the summary can show them
+  const skipped = [];
+  for (const f of inTests) {
+    if (recognised(detect(f.path, new Set()), f.path)) skipped.push({ path: f.path, reason: 'pasta de teste' });
+    else files.ignored++;
+  }
   const chartDirs = new Set(all.filter(f => f.path.endsWith('Chart.yaml')).map(f => dirname(f.path)));
   // Helm templates are Go templates, not YAML: never parsed as manifests (--helm-render renders them instead)
   const inTemplates = p => [...chartDirs].some(d => p.startsWith(d === '.' ? 'templates/' : `${d}/templates/`));
@@ -105,7 +112,8 @@ export function scanDir(root, { url, today = isoToday(), helmRender = false } = 
     const type = inTemplates(f.path) ? null : detect(f.path, chartDirs);
     if (!type) { files.ignored++; continue; }
     if (f.size > (type === 'graphify' ? MAX_GRAPH : MAX)) {
-      if ((type === 'yaml' || type === 'json') && !contractNamed(f.path)) { files.ignored++; continue; }
+      if (!recognised(type, f.path)) { files.ignored++; continue; }
+      skipped.push({ path: f.path, reason: 'grande demais' });
       facts.push({ kind: 'unreadable', error: `arquivo grande demais (${(f.size / 1048576).toFixed(1)} MB)`, at: { file: f.path, line: 1 } });
       continue;
     }
@@ -133,7 +141,7 @@ export function scanDir(root, { url, today = isoToday(), helmRender = false } = 
   return {
     'archlens-inventory': '1.0',
     repo: { ...(id ? { url: normalizeRepoUrl(id) } : {}), path: root, name: repoName(id ?? root), commit: info.commit, dirty: info.dirty, scannedAt: today },
-    files, facts: filteredFacts,
+    files, skipped, facts: filteredFacts,
   };
 }
 

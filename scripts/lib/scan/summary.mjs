@@ -43,7 +43,7 @@ export function summarize(inv, base) {
     systems.push(...probableSystems(inv, base));
   }
   const communities = inv.facts.filter(f => f.kind === 'community').map(f => ({ name: f.name, size: f.size }));
-  return { repo: inv.repo, counts, files: inv.files, role, existing, systems, communities, warnings };
+  return { repo: inv.repo, counts, files: inv.files, skipped: inv.skipped ?? [], role, existing, systems, communities, warnings };
 }
 
 function probableSystems(inv, base) {
@@ -78,6 +78,11 @@ function probableSystems(inv, base) {
 export function formatSummary(s) {
   const lines = [`Repositório ${s.repo.name}${s.repo.commit ? ` @ ${s.repo.commit.slice(0, 7)}` : ''}`];
   lines.push(`  arquivos: ${Object.entries(s.files).filter(([k, n]) => n && k !== 'ignored').map(([k, n]) => `${k} ${n}`).join(', ') || 'nenhum reconhecido'}`);
+  if (s.skipped?.length) { // the full list is in the inventory (skipped)
+    const by = new Map();
+    for (const x of s.skipped) by.set(x.reason, [...(by.get(x.reason) ?? []), x.path]);
+    lines.push(`  arquivos reconhecidos e pulados: ${s.skipped.length} (${[...by].map(([r, ps]) => `${r}: ${ps.slice(0, 5).join(', ')}${ps.length > 5 ? ` e mais ${ps.length - 5}` : ''}`).join('; ')})`);
+  }
   lines.push(`  fatos: ${Object.entries(s.counts).map(([k, n]) => `${k} ${n}`).join(', ') || 'nenhum'}`);
   lines.push(`  papel sugerido: ${s.role.suggested} — ${s.role.why}`);
   if (s.existing) lines.push(`  já na base: ${s.existing.name} (${s.existing.id})${s.existing.by === 'repo' ? `, lido antes como ${s.existing.role}` : `, semelhança de nome ${s.existing.score}`}`);

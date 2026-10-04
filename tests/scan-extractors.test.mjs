@@ -282,4 +282,6 @@ test('detected but skipped files are reported: too big, or an API contract that 
   assert.deepEqual(Object.keys(bad).sort(), ['asyncapi-eventos.json', 'compose.yml', 'openapi.json']);
   assert.match(bad['compose.yml'], /^arquivo grande demais \(2\.2 MB\)$/);
   assert.equal(inv.files.ignored, 2, 'big generic json and unparsable generic json stay ignored');
+  assert.deepEqual(inv.skipped, [{ path: 'compose.yml', reason: 'grande demais' }], 'a recognised file skipped by size is listed (follow-up 1)');
+  assert.match(formatSummary(summarize(inv, null)), /arquivos reconhecidos e pulados: 1 \(grande demais: compose\.yml\)/);
 });
