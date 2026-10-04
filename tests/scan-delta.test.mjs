@@ -73,6 +73,7 @@ const pedidosFacts = [
 ];
 const el = (d, id) => d.model.elements.find(e => e.id === id);
 const rel = (d, from, to) => d.model.relationships.find(r => r.from === from && r.to === to);
+const find = (raw, id) => { let hit; const walk = l => l.forEach(e => { if (e.id === id) hit = e; walk(e.children || []); }); walk(raw.model.elements); return hit; };
 const applyNew = (delta, base = null) => {
   const plan = planMerge(base, delta);
   for (const it of plan.items) if ('resolution' in it && it.resolution == null) it.resolution = it.class === 'possible-duplicate' ? 'different' : it.class === 'conflict' ? 'take' : 'yes';
@@ -176,12 +177,85 @@ test('re-reading the producer links the host to the real container, not to a sta
   let raw = applyNew(prod);
   const cons = toDelta(inv([{ kind: 'workload', kindK8s: 'Deployment', name: 'pagamentos', at: a('k8s/deploy.yaml', 8) }], { path: '/r/pagamentos', name: 'pagamentos' }),
     { role: 'service', system: 'financeiro', base: normalizeModel(raw) });
-  raw = applyNew(cons, raw);
+  // the consumer reading claims ext.pagamentos; declining that removal leaves the placeholder for the re-read to retire
+  const plan = planMerge(raw, cons);
+  for (const it of plan.items) if ('resolution' in it && it.resolution == null) it.resolution = it.class === 'op' && it.op === 'remove' ? 'no' : it.class === 'possible-duplicate' ? 'different' : it.class === 'conflict' ? 'take' : 'yes';
+  raw = applyPlan(raw, plan).raw;
   const again = toDelta(inv(pedidosFacts, { path: '/r/pedidos', name: 'pedidos', commit: 'fffffff999' }), { role: 'service', system: 'loja', base: normalizeModel(raw) });
   const r = rel(again, 'loja.pedidos', 'financeiro.pagamentos');
   assert.deepEqual([r?.type, r?.description], ['uses', 'via PAGAMENTOS_URL']);
   assert.ok(!rel(again, 'loja.pedidos', 'ext.pagamentos'));
   assert.deepEqual((again.ops ?? []).map(o => [o.op, o.id, o.status]), [['status', 'ext.pagamentos', 'retired']]);
+});
+
+test('service role: the own container remembers its runtime names (compose service, workload, chart) as aliases', () => {
+  const d = toDelta(inv(pedidosFacts, { path: '/r/pedidos', name: 'pedidos' }), { role: 'service', system: 'loja' });
+  assert.ok(el(d, 'loja.pedidos').aliases.includes('pedidos-api'));
+  const k = toDelta(inv([{ kind: 'workload', kindK8s: 'Deployment', name: 'pagamentos', at: a('k8s/deploy.yaml', 8) },
+    { kind: 'chart', name: 'pagamentos-chart', dependencies: [], at: a('chart/Chart.yaml', 2) }], { path: '/r/pagamentos', name: 'pagamentos' }), { role: 'service', system: 'financeiro' });
+  assert.deepEqual(el(k, 'financeiro.pagamentos').aliases, ['pagamentos-chart'], 'names equal to the repo name are not aliases');
+});
+
+const consumerFacts = [
+  { kind: 'workload', kindK8s: 'Deployment', name: 'pagamentos', at: a('k8s/deploy.yaml', 8) },
+  { kind: 'env-ref', from: 'pagamentos', var: 'PEDIDOS_URL', host: 'pedidos-api', at: a('k8s/deploy.yaml', 20) },
+  { kind: 'channel', name: 'pedido-criado', action: 'subscribe', message: 'PedidoCriado', at: a('asyncapi.json', 1) },
+];
+const readCons = base => toDelta(inv(consumerFacts, { path: '/r/pagamentos', name: 'pagamentos' }), { role: 'service', system: 'financeiro', base });
+const readProd = base => toDelta(inv(pedidosFacts, { path: '/r/pedidos', name: 'pedidos' }), { role: 'service', system: 'loja', base });
+const placeholdersFor = (m, names) => [...m.elements.values()].filter(e => e.id.startsWith('ext.') && names.includes(norm(e.name)));
+
+test('consumer first, then producer: the producer reading claims ext.pedidos-api (remove + retarget with the consumer provenance)', () => {
+  let raw = applyNew(readCons(null));
+  const before = normalizeModel(raw);
+  assert.ok(before.elements.has('ext.pedidos-api'));
+  const baseRel = before.relationships.find(r => r.c4?.from === 'financeiro.pagamentos' && r.c4?.to === 'ext.pedidos-api');
+  const d = readProd(before);
+  assert.deepEqual((d.ops ?? []).map(o => [o.op, o.id]), [['remove', 'ext.pedidos-api']]);
+  assert.match(d.ops[0].reason, /substituído por loja\.pedidos \(lido em \/r\/pedidos@abcdef1\)/);
+  assert.ok(!el(d, 'ext.pedidos-api'));
+  const moved = rel(d, 'financeiro.pagamentos', 'loja.pedidos');
+  assert.deepEqual([moved?.type, moved?.description, moved?.inferred], ['uses', 'via PEDIDOS_URL', true]);
+  assert.deepEqual(moved.sources, baseRel.sources, 'the consumer fact keeps the consumer provenance');
+  assert.ok(moved.sources.every(s => s.ref.startsWith('/r/pagamentos@')));
+  const plan = planMerge(raw, d);
+  assert.ok(!plan.items.some(i => i.class === 'possible-duplicate' && [i.target, i.candidate].includes('ext.pedidos-api')), 'no duplicate question for the placeholder');
+  raw = applyNew(d, raw);
+  const m = normalizeModel(raw);
+  assert.deepEqual(validateModel(raw).errors, []);
+  assert.ok(!m.elements.has('ext.pedidos-api'));
+  const own = m.elements.get('loja.pedidos');
+  assert.ok(!own.c4.external && !own.inferred, 'the real container is neither external nor inferred');
+  assert.ok(m.relationships.some(r => r.c4?.from === 'financeiro.pagamentos' && r.c4?.to === 'loja.pedidos'));
+  assert.ok(m.relationships.some(r => r.c4?.from === 'loja.pedidos' && r.c4?.to === 'financeiro.pagamentos'));
+  assert.deepEqual(placeholdersFor(m, ['pedidos', 'pedidos-api', 'pagamentos']), []);
+  const impact = resolveView(m, { key: 'i', notation: 'archimate', viewpoint: 'impact', anchor: 'loja.pedidos' });
+  assert.ok(impact.nodes.some(n => n.id === 'financeiro.pagamentos'));
+  assert.ok(!impact.nodes.some(n => n.id.startsWith('ext.')));
+});
+
+test('producer first, then consumer: the consumer reading claims ext.pagamentos and links to loja.pedidos by its runtime name', () => {
+  let raw = applyNew(readProd(null));
+  assert.ok(normalizeModel(raw).elements.has('ext.pagamentos'));
+  const d = readCons(normalizeModel(raw));
+  assert.deepEqual((d.ops ?? []).map(o => [o.op, o.id]), [['remove', 'ext.pagamentos']]);
+  assert.ok(!el(d, 'ext.pedidos-api'), 'pedidos-api resolves to loja.pedidos by alias');
+  const moved = rel(d, 'loja.pedidos', 'financeiro.pagamentos');
+  assert.ok(moved.sources.every(s => s.ref.startsWith('/r/pedidos@')));
+  raw = applyNew(d, raw);
+  const m = normalizeModel(raw);
+  assert.deepEqual(validateModel(raw).errors, []);
+  assert.deepEqual(placeholdersFor(m, ['pedidos', 'pedidos-api', 'pagamentos']), []);
+  assert.ok(m.relationships.some(r => r.c4?.from === 'loja.pedidos' && r.c4?.to === 'financeiro.pagamentos'));
+  assert.ok(m.relationships.some(r => r.c4?.from === 'financeiro.pagamentos' && r.c4?.to === 'loja.pedidos'));
+  assert.ok(!m.elements.get('financeiro.pagamentos').c4.external);
+});
+
+test('a placeholder with provenance other than repositories is never claimed', () => {
+  const raw = applyNew(readProd(null));
+  find(raw, 'ext.pagamentos').sources.push({ kind: 'prompt', ref: 'rodada 1' });
+  const d = readCons(normalizeModel(raw));
+  assert.ok(!(d.ops ?? []).some(o => o.op === 'remove'));
 });
 
 test('a host equal to a topic id suffix does not link to the topic', () => {

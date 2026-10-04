@@ -14,6 +14,8 @@ export function repoElement(base, inv) {
 }
 
 const DEFAULT_ROOT_AT = { file: '.', line: 1 };
+const pick = (o, keys) => Object.fromEntries(keys.filter(k => o[k] !== undefined).map(k => [k, o[k]]));
+const canonical = s => JSON.stringify(Object.keys(s).sort().map(k => [k, s[k]]));
 
 export function toDelta(inv, { role, system, id, base = null } = {}) {
   const key = repoKey(inv.repo);
@@ -52,6 +54,11 @@ export function toDelta(inv, { role, system, id, base = null } = {}) {
   };
   const existing = repoElement(base, inv);
 
+  const runtimeNames = [];
+  for (const f of facts.filter(x => ['service', 'workload', 'chart'].includes(x.kind))) {
+    if (!runtimeNames.some(n => norm(n) === norm(f.name))) runtimeNames.push(f.name);
+  }
+
   // the repository: a system (role system) or one container of a system (role service)
   let sysId, ownId = null;
   if (role === 'system') {
@@ -62,7 +69,10 @@ export function toDelta(inv, { role, system, id, base = null } = {}) {
     // always part of this reading (for an existing system only the provenance goes out), so it is never "vanished"
     put({ id: sysId, type: 'c4:softwareSystem', name: sysId }, DEFAULT_ROOT_AT);
     ownId = id ?? existing?.id ?? `${sysId}.${norm(inv.repo.name)}`;
-    put({ id: ownId, type: 'c4:container', parent: sysId, name: inv.repo.name, properties: { repo: key, repoRole: 'service' } }, DEFAULT_ROOT_AT);
+    // the names it runs under (compose service, k8s workload, Helm chart), so later readings find it by host
+    const aliases = runtimeNames.filter(n => norm(n) !== norm(inv.repo.name));
+    put({ id: ownId, type: 'c4:container', parent: sysId, name: inv.repo.name, ...(aliases.length ? { aliases } : {}),
+      properties: { repo: key, repoRole: 'service' } }, DEFAULT_ROOT_AT);
   }
 
   // modules (graphify and build facts merged by name)
@@ -91,6 +101,22 @@ export function toDelta(inv, { role, system, id, base = null } = {}) {
     }
   }
   const deployables = [...deploy.values()];
+
+  // Placeholders (ext.*) that earlier readings of other repositories created for a host that is this
+  // repository: this reading claims them (removed, their relationships moved to the real element).
+  const claims = new Map(); // placeholder id → real id
+  if (base) {
+    const placeholders = [...base.elements.values()].filter(e => e.id.startsWith('ext.') && (e.c4?.external || e.external)
+      && e.inferred && e.sources.length && e.sources.every(x => x.kind === 'repo'));
+    const claim = (realId, names) => {
+      const b = base.elements.get(realId);
+      const keys = new Set([...names, realId.split('.').at(-1), ...(b ? [b.name, ...b.aliases] : [])].map(norm).filter(Boolean));
+      for (const p of placeholders) if (!claims.has(p.id) && p.id !== realId && keys.has(norm(p.name))) claims.set(p.id, realId);
+    };
+    if (role === 'service') claim(ownId, [inv.repo.name, ...runtimeNames]);
+    for (const d of deployables) claim(d.id, [d.name]);
+    if (role === 'system') claim(sysId, [inv.repo.name]);
+  }
   const ownerOf = file => {
     if (role === 'service') return ownId;
     const hit = deployables.filter(d => d.dir != null && (d.dir === '' || file === d.dir || file.startsWith(`${d.dir}/`))).sort((x, y) => y.dir.length - x.dir.length)[0];
@@ -163,7 +189,8 @@ export function toDelta(inv, { role, system, id, base = null } = {}) {
     const hits = [...base.elements.values()].filter(e => ['container', 'softwareSystem'].includes(e.c4?.kind)
       && e.status !== 'retired' && !e.tags.includes('topic') && !e.id.startsWith('topic.')
       && (e.id === norm(host) || e.id.endsWith(`.${norm(host)}`) || e.aliases.some(x => aliasKey(x) === k)));
-    return hits.sort((x, y) => rank(x) - rank(y))[0]?.id ?? null;
+    const hit = hits.sort((x, y) => rank(x) - rank(y))[0]?.id ?? null;
+    return claims.get(hit) ?? hit;
   };
   for (const f of facts.filter(x => x.kind === 'depends-on')) link(runId(f.from), runId(f.to), 'uses', f.at, { description: 'depends_on' });
   for (const f of facts.filter(x => x.kind === 'env-ref')) {
@@ -200,13 +227,38 @@ export function toDelta(inv, { role, system, id, base = null } = {}) {
     link(modEl.get(f.module) ?? ownId ?? sysId, oid, 'archimate:access', f.at);
   }
 
+  // claimed placeholders: removed, and every base relationship at either end re-emitted on the real element
+  // with its ORIGINAL provenance (it is the other repository's fact, not this reading's)
+  const ops = [];
+  for (const [pid, realId] of claims) {
+    ops.push({ op: 'remove', id: pid, reason: `substituído por ${realId} (lido em ${ref})` });
+    for (const r of base.relationships) {
+      const ends = r.c4 ?? r;
+      if (!claims.has(ends.from) && !claims.has(ends.to)) continue;
+      if (ends.from !== pid && ends.to !== pid) continue; // moved once, by the placeholder at its "from" or "to"
+      const from = claims.get(ends.from) ?? ends.from;
+      const to = claims.get(ends.to) ?? ends.to;
+      if (from === to) continue;
+      const type = r.c4 ? 'uses' : `archimate:${r.type}`;
+      const k = `${from}|${type}|${to}`;
+      const sources = r.sources.map(x => ({ ...x }));
+      const known = rels.find(x => `${x.from}|${x.type}|${x.to}` === k);
+      if (known) {
+        for (const x of sources) if (!known.sources.some(y => canonical(y) === canonical(x))) known.sources.push(x);
+        continue;
+      }
+      relSeen.add(k);
+      rels.push({ from, to, type, ...pick(r, ['description', 'technology', 'inferred', 'accessType']),
+        ...(r.status && r.status !== 'active' ? pick(r, ['status', 'statusReason']) : {}), sources });
+    }
+  }
+
   // what vanished: base elements whose only sources are this repository and that this reading did not produce
   // Elements this reading still points at (e.g. a host resolved to an existing base element) count as found.
-  const ops = [];
   if (base) {
     const touched = new Set(rels.flatMap(r => [r.from, r.to]));
     for (const e of base.elements.values()) {
-      if (elements.has(e.id) || touched.has(e.id) || e.status === 'retired' || !e.sources.length) continue;
+      if (elements.has(e.id) || touched.has(e.id) || claims.has(e.id) || e.status === 'retired' || !e.sources.length) continue;
       if (e.sources.every(s => s.kind === 'repo' && String(s.ref ?? '').startsWith(`${key}@`))) {
         ops.push({ op: 'status', id: e.id, status: 'retired', reason: `não encontrado em ${ref}` });
       }

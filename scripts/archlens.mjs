@@ -402,19 +402,22 @@ async function main() {
       const val = k => (args[k] && args[k] !== true ? args[k] : undefined);
       if (!file && !val('from')) fail(usage);
       let base = null;
+      const newBase = () => console.warn('  aviso: nenhuma base encontrada; o delta será para uma base nova. Use --base para apontar a base existente.');
       try {
-        const loaded = openStore(resolveBase(val('base'))).load();
+        // --base may name a base the first merge will create (missing or empty folder); scan only reads it
+        const loaded = openStore(resolveBase(val('base'), { create: !!val('base') })).load();
         base = loaded.raw ? normalizeModel(loaded.raw) : null;
+        if (!base) newBase();
       } catch (e) {
         if (val('base')) fail(e.message);
-        console.warn('  aviso: nenhuma base encontrada; o delta será para uma base nova. Use --base para apontar a base existente.');
+        newBase();
       }
       if (args.delta) {
         const role = val('as');
         if (!['system', 'service'].includes(role)) fail('E_SCAN_ROLE: informe o papel do repositório com --as system|service (rode sem --delta para ver a sugestão)');
         if (role === 'service' && !val('system')) fail('E_SCAN_ROLE: com --as service, informe o sistema com --system <id>');
         const kindOf = x => (base?.elements.get(x) ? c4KindOf(base, base.elements.get(x)) : null);
-        if (base && role === 'service' && !base.elements.has(val('system'))) fail(`E_SCAN_TARGET: o sistema "${val('system')}" não existe na base`);
+        if (base && role === 'service' && !base.elements.has(val('system'))) console.warn(`  nota: o sistema ${val('system')} não existe na base e será criado pelo delta`);
         if (base && val('system') && base.elements.has(val('system')) && kindOf(val('system')) !== 'softwareSystem') fail(`E_SCAN_TARGET: "${val('system')}" não é um software system`);
         if (base && val('id') && base.elements.has(val('id')) && kindOf(val('id')) !== (role === 'system' ? 'softwareSystem' : 'container')) {
           fail(`E_SCAN_TARGET: "${val('id')}" na base não é um ${role === 'system' ? 'software system' : 'container'}`);

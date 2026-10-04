@@ -465,7 +465,7 @@ test('scan without --as prints the summary (text and pure --json) and writes the
   assert.equal(JSON.parse(j.stdout).role.suggested, 'service');
 });
 
-test('scan --delta needs a role; service needs an existing system; nothing is written on error', () => {
+test('scan --delta needs a role and a system; a target of the wrong kind is refused; nothing is written on error', () => {
   const repo = repoCopy('pedidos');
   const dir = setup();
   const noRole = run(['scan', repo, '--base', 'architecture', '--delta', 'd.json'], dir);
@@ -473,10 +473,35 @@ test('scan --delta needs a role; service needs an existing system; nothing is wr
   assert.match(noRole.stderr, /E_SCAN_ROLE/);
   const noSys = run(['scan', repo, '--base', 'architecture', '--as', 'service', '--delta', 'd.json'], dir);
   assert.match(noSys.stderr, /E_SCAN_ROLE/);
-  const badSys = run(['scan', repo, '--base', 'architecture', '--as', 'service', '--system', 'nada', '--delta', 'd.json'], dir);
+  const badSys = run(['scan', repo, '--base', 'architecture', '--as', 'service', '--system', 'loja.api', '--delta', 'd.json'], dir);
   assert.equal(badSys.status, 1);
   assert.match(badSys.stderr, /E_SCAN_TARGET/);
   assert.ok(!existsSync(join(dir, 'd.json')));
+});
+
+test('scan --system naming a system not in the base: the delta creates it, with a note', () => {
+  const repo = repoCopy('pedidos');
+  const dir = setup();
+  const r = run(['scan', repo, '--base', 'architecture', '--as', 'service', '--system', 'nada', '--delta', 'd.json'], dir);
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stderr, /o sistema nada não existe na base e será criado pelo delta/);
+  const d = JSON.parse(readFileSync(join(dir, 'd.json'), 'utf8'));
+  assert.deepEqual(d.model.elements.find(e => e.id === 'nada')?.type, 'c4:softwareSystem');
+});
+
+test('scan --base pointing at a base not created yet: new-base warning, delta written, base untouched', () => {
+  const repo = repoCopy('pedidos');
+  const dir = mkdtempSync(join(tmpdir(), 'archlens-'));
+  const r = run(['scan', repo, '--base', 'architecture', '--as', 'service', '--system', 'loja', '--delta', 'd.json'], dir);
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stderr, /nenhuma base encontrada/);
+  assert.ok(existsSync(join(dir, 'd.json')));
+  assert.ok(!existsSync(join(dir, 'architecture')), 'scan never writes the base');
+  mkdirSync(join(dir, 'outra'));
+  writeFileSync(join(dir, 'outra', 'x.txt'), 'x');
+  const bad = run(['scan', repo, '--base', 'outra', '--as', 'service', '--system', 'loja', '--delta', 'd2.json'], dir);
+  assert.equal(bad.status, 1);
+  assert.match(bad.stderr, /E_STORE_NOT_BASE/);
 });
 
 test('scan → merge → apply on a base; reading the same commit again changes nothing', () => {

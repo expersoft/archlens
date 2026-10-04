@@ -127,6 +127,8 @@ function runMerge(baseRaw, delta, { mode, resolutions = new Map() }) {
   // Fuzzy pool frozen before any merge, so simulated answers in plan mode cannot change what apply sees.
   ctx.pool = [...ctx.tree].map(([, { el, parent }]) => describe(el, parent));
   for (const [id, { el }] of ctx.tree) for (const a of aliasesOf(el)) if (!ctx.aliases.has(aliasKey(a))) ctx.aliases.set(aliasKey(a), id);
+  // Ids the delta's ops remove (resolved against the base before any merge): never matched or offered as duplicates.
+  ctx.removing = new Set((delta.ops || []).filter(o => o?.op === 'remove' && o.id).map(o => (ctx.tree.has(o.id) ? o.id : ctx.aliases.get(aliasKey(o.id)) ?? o.id)));
   ctx.typeOf = id => {
     const el = ctx.tree.get(id)?.el;
     return el ? resolveType(el.type, { tags: el.tags || [], archimate: el.archimate }).type ?? null : null;
@@ -178,12 +180,14 @@ const describe = (el, parent) => ({
 
 function findMatch(ctx, el, parentId) {
   if (ctx.tree.has(el.id)) return { id: el.id };
+  // An element this delta removes (e.g. a placeholder a repository reading replaces) is never the match.
+  const removed = id => ctx.removing.has(id);
   for (const k of [el.id, el.name, ...aliasesOf(el)]) {
     const id = k == null ? null : ctx.aliases.get(aliasKey(k));
-    if (id) return { id };
+    if (id && !removed(id)) return { id };
   }
-  for (const a of aliasesOf(el)) if (ctx.tree.has(a)) return { id: a };
-  const pool = ctx.pool.filter(p => !ctx.fresh.has(p.id));
+  for (const a of aliasesOf(el)) if (ctx.tree.has(a) && !removed(a)) return { id: a };
+  const pool = ctx.pool.filter(p => !ctx.fresh.has(p.id) && !removed(p.id));
   const [best] = findCandidates(describe(el, parentId), pool);
   return best ? { candidate: best } : {};
 }
