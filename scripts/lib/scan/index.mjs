@@ -1,6 +1,6 @@
 // Repository scan: walk the files, hand each recognised one to its extractor, collect the facts (inventory).
 import { readFileSync, rmSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, join, basename } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { listFiles, detect } from './walk.mjs';
 import { readYaml } from './yaml.mjs';
@@ -15,6 +15,8 @@ import { graphifyFacts } from './graphify.mjs';
 import { buildFacts } from './build.mjs';
 
 const MAX = 2 * 1024 * 1024, MAX_GRAPH = 64 * 1024 * 1024;
+// a .json/.yaml named after an API contract is reported when it cannot be read; other generic ones stay ignored
+const contractNamed = path => /openapi|swagger|asyncapi/i.test(basename(path));
 const isoToday = () => new Date().toISOString().slice(0, 10);
 
 /** One file → { kind: inventory file counter | null, facts }. Content-typed YAML/JSON is decided here. */
@@ -34,7 +36,8 @@ function extract(type, path, text, ctx) {
     if (type === 'json') {
       try {
         docs = [{ data: JSON.parse(text), lineOf: () => 1 }];
-      } catch {
+      } catch (e) {
+        if (contractNamed(path)) throw e;
         return { kind: null, facts: [] };
       }
     } else {
@@ -97,7 +100,12 @@ export function scanDir(root, { url, today = isoToday(), helmRender = false } = 
 
   for (const f of all) {
     const type = inTemplates(f.path) ? null : detect(f.path, chartDirs);
-    if (!type || f.size > (type === 'graphify' ? MAX_GRAPH : MAX)) { files.ignored++; continue; }
+    if (!type) { files.ignored++; continue; }
+    if (f.size > (type === 'graphify' ? MAX_GRAPH : MAX)) {
+      if ((type === 'yaml' || type === 'json') && !contractNamed(f.path)) { files.ignored++; continue; }
+      facts.push({ kind: 'unreadable', error: `arquivo grande demais (${(f.size / 1048576).toFixed(1)} MB)`, at: { file: f.path, line: 1 } });
+      continue;
+    }
     try {
       const out = extract(type, f.path, readFileSync(f.abs, 'utf8'), ctx);
       if (!out.kind) { files.ignored++; continue; }

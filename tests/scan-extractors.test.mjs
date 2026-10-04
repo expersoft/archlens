@@ -260,3 +260,26 @@ test('graphify from Windows: backslashes in source_file become slashes (item 14)
   assert.deepEqual(facts.find(f => f.kind === 'domain-concept').at, { file: 'domain/src/Dose.kt', line: 7 });
   assert.deepEqual(facts.find(f => f.kind === 'flow').at.file, 'docs/spec.md');
 });
+
+test('inventory secrets: terraform credential attributes dropped, userinfo stripped from OpenAPI servers (item 11)', () => {
+  const tf = 'resource "aws_db_instance" "db" {\n  engine = "postgres"\n  password = "s3cr3t"\n  master_password = "x"\n  api_token = "t"\n  kms_key_id = "k"\n  secret_name = "n"\n  credentials = "c"\n  Passphrase = "p"\n}\n';
+  assert.deepEqual(terraformFacts('main.tf', tf)[0].attrs, { engine: 'postgres' });
+  const doc = { data: { openapi: '3.0.0', info: { title: 'A', version: '1' }, servers: [{ url: 'https://u:pw@api.acme.com/v1' }, { url: 'https://api2.acme.com' }] }, lineOf: () => 1 };
+  assert.deepEqual(openapiFacts('o.yaml', doc)[0].servers, ['https://api.acme.com/v1', 'https://api2.acme.com']);
+  const sw = { data: { swagger: '2.0', info: { title: 'B' }, host: 'u:pw@old.acme.com', basePath: '/v2' }, lineOf: () => 1 };
+  assert.deepEqual(openapiFacts('s.yaml', sw)[0].servers, ['https://old.acme.com/v2']);
+});
+
+test('detected but skipped files are reported: too big, or an API contract that does not parse (item 12)', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'archlens-big-'));
+  writeFileSync(join(dir, 'compose.yml'), `services:\n  a:\n    build: .\n# ${'x'.repeat(2.2 * 1024 * 1024)}\n`);
+  writeFileSync(join(dir, 'data.json'), JSON.stringify({ x: 'y'.repeat(2.2 * 1024 * 1024) }));
+  writeFileSync(join(dir, 'openapi.json'), '{ "openapi": "3.0.0", ');
+  writeFileSync(join(dir, 'asyncapi-eventos.json'), '{ nope');
+  writeFileSync(join(dir, 'other.json'), '{ nope');
+  const inv = scanDir(dir);
+  const bad = Object.fromEntries(inv.facts.filter(f => f.kind === 'unreadable').map(f => [f.at.file, f.error]));
+  assert.deepEqual(Object.keys(bad).sort(), ['asyncapi-eventos.json', 'compose.yml', 'openapi.json']);
+  assert.match(bad['compose.yml'], /^arquivo grande demais \(2\.2 MB\)$/);
+  assert.equal(inv.files.ignored, 2, 'big generic json and unparsable generic json stay ignored');
+});

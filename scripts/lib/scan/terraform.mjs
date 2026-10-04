@@ -13,6 +13,8 @@ const BLOCK = /^\s*resource\s+"__STR_(\d+)__"\s+"__STR_(\d+)__"\s*\{/;
 const ATTR = /^\s*([A-Za-z0-9_]+)\s*=\s*(.+?)\s*$/;
 const REF = /\b([a-z][a-z0-9]*_[a-z0-9_]+)\.([A-Za-z0-9_-]+)\b/g;
 const HEREDOC_START = /<<-?(\w+)/;
+// Attributes that may hold credentials never reach the inventory (it is written to disk and shared).
+const SECRET = /pass|secret|token|key|credential/i;
 
 // Mask quoted strings and return { masked: line with placeholders, strings: array of original strings }
 function maskStrings(raw) {
@@ -86,7 +88,7 @@ export function terraformFacts(path, text) {
       // Extract attributes at depth 1
       if (depth === 1) {
         const a = ATTR.exec(line);
-        if (a) {
+        if (a && !SECRET.test(a[1])) {
           const v = a[2];
           // Check if value is a single string placeholder
           const strMatch = v.match(/^"__STR_(\d+)__"$/);
