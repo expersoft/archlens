@@ -4,7 +4,7 @@ import { dirname, join, basename } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { listFiles, detect } from './walk.mjs';
 import { readYaml } from './yaml.mjs';
-import { repoInfo, repoName, normalizeRepoUrl, isGitUrl, cloneShallow, assertFolder } from './git.mjs';
+import { repoInfo, repoName, normalizeRepoUrl, isGitUrl, cloneShallow, assertFolder, remoteUrl } from './git.mjs';
 import { composeFacts } from './compose.mjs';
 import { k8sFacts } from './k8s.mjs';
 import { helmChartFacts, helmValuesFacts } from './helm.mjs';
@@ -76,6 +76,8 @@ function renderCharts(root, chartDirs, files) {
 
 export function scanDir(root, { url, today = isoToday(), helmRender = false } = {}) {
   const info = repoInfo(root);
+  // identity: the url given, else the "origin" remote of a local clone, else (no url) the absolute path
+  const id = url ?? (info.commit ? remoteUrl(root) : null);
   const ctx = { root, commit: info.commit, helmRender, chartNames: new Map() };
   const files = { compose: 0, k8s: 0, helm: 0, terraform: 0, openapi: 0, asyncapi: 0, graphify: 0, build: 0, ignored: 0 };
   const facts = [];
@@ -129,7 +131,7 @@ export function scanDir(root, { url, today = isoToday(), helmRender = false } = 
 
   return {
     'archlens-inventory': '1.0',
-    repo: { ...(url ? { url: normalizeRepoUrl(url) } : {}), path: root, name: repoName(url ?? root), commit: info.commit, dirty: info.dirty, scannedAt: today },
+    repo: { ...(id ? { url: normalizeRepoUrl(id) } : {}), path: root, name: repoName(id ?? root), commit: info.commit, dirty: info.dirty, scannedAt: today },
     files, facts: filteredFacts,
   };
 }

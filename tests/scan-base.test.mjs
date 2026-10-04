@@ -10,6 +10,7 @@ import { readYaml } from '../scripts/lib/scan/yaml.mjs';
 import { infraOf, hostOf } from '../scripts/lib/scan/infra.mjs';
 import { scanDir, scanSource } from '../scripts/lib/scan/index.mjs';
 import { sourceKey } from '../scripts/lib/sources.mjs';
+import { toDelta } from '../scripts/lib/scan/to-delta.mjs';
 
 const fixture = name => fileURLToPath(new URL(`./fixtures/repos/${name}/`, import.meta.url));
 const git = (cwd, ...a) => spawnSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', '-c', 'init.defaultBranch=main', ...a], { cwd, encoding: 'utf8' });
@@ -137,4 +138,29 @@ test('a gitignored graphify-out still has its graph read (item 4)', () => {
   const inv = scanDir(dir);
   assert.equal(inv.files.graphify, 1);
   assert.equal(inv.files.k8s, 0);
+});
+
+test('a local folder with a git remote is identified by the remote url, without credentials (item 6)', () => {
+  const dir = gitRepo('pedidos');
+  git(dir, 'remote', 'add', 'origin', 'https://u:t@example.com/org/x.git');
+  const inv = scanDir(dir);
+  assert.equal(inv.repo.url, 'https://example.com/org/x');
+  assert.equal(inv.repo.path, dir);
+  assert.equal(inv.repo.name, 'x');
+  const d = toDelta(inv, { role: 'service', system: 'loja' });
+  assert.equal(d.source.ref, `https://example.com/org/x@${inv.repo.commit.slice(0, 7)}`);
+  assert.equal(d.model.elements.find(e => e.id === 'loja.x').properties.repo, 'https://example.com/org/x');
+  const plain = gitRepo('pedidos');
+  assert.equal(scanDir(plain).repo.url, undefined, 'no remote: the absolute path stays the identity');
+  assert.equal(scanDir(join(dir, 'api')).repo.url, undefined, 'a subfolder is not the remote repository');
+});
+
+test('--ref with a commit sha: shallow clone, then fetch and checkout of that commit (item 13)', () => {
+  const dir = gitRepo('pedidos');
+  const first = git(dir, 'rev-parse', 'HEAD').stdout.trim();
+  writeFileSync(join(dir, 'README.md'), 'x\n');
+  git(dir, 'add', '-A'); git(dir, 'commit', '-qm', 'second');
+  const inv = scanSource(`file://${dir}`, { ref: first });
+  assert.equal(inv.repo.commit, first);
+  assert.throws(() => scanSource(`file://${dir}`, { ref: 'f'.repeat(40) }), e => /E_SCAN_SOURCE/.test(e.message) && /commit f{7}/.test(e.message));
 });
