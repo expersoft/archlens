@@ -164,6 +164,16 @@ um (`yes`/`no`). Elementos com outras fontes não são tocados. Um placeholder r
 também por `retired`; se a remoção for recusada (`no`), ele fica, e a próxima leitura do repositório que o criou o
 sugere como `retired` quando o host passar a resolver para o container real.
 
+**Migração de identidade.** Uma base feita antes da identidade pelo remote guarda em `properties.repo` (e no `ref`
+das fontes) o caminho absoluto da pasta. Numa nova leitura da mesma pasta, agora identificada pela URL do remote, o
+caminho antigo é tratado como o mesmo repositório: o elemento com `properties.repo` igual ao caminho desta leitura é
+encontrado (resumo `já na base`, sem `--id`), e as fontes `<caminho>@…` contam como deste repositório para o que
+sumiu (`retired`) e para os placeholders (§6, acima). A diferença em `properties.repo` aparece uma vez, como conflito
+normal (base = caminho, delta = URL): **migração: responda `take` para passar a identidade ao remote**. Com `keep`, a
+base fica com o caminho e a pergunta volta na próxima leitura. As fontes antigas `<caminho>@<commit>` não são
+substituídas pelas novas (o merge só troca fontes da mesma chave); elas continuam valendo como deste repositório
+enquanto a leitura for da mesma pasta.
+
 ## 8. Graphify
 
 Aproveitado: módulos (e dependências agregadas por contagem), fluxos, conceitos de negócio (até 10, de maior grau,

@@ -15,11 +15,22 @@ const imageName = image => String(image).split('@')[0].split(/:(?=[^/]*$)/)[0].s
  */
 export const ownService = (f, repo) => f.kind !== 'service' || f.build != null || f.image == null || norm(imageName(f.image)) === norm(repo.name);
 
-/** The element of the base already standing for this repository (properties.repo), or null. */
+/**
+ * Keys this repository may carry in a base: its identity, and the local path of this scan (bases built before a
+ * clone was identified by its "origin" remote recorded the absolute path).
+ */
+const repoKeys = repo => [...new Set([repoKey(repo), repo.path].filter(Boolean))];
+
+/** The element of the base already standing for this repository (properties.repo, by either key), or null. */
 export function repoElement(base, inv) {
   if (!base) return null;
-  const key = repoKey(inv.repo);
-  return [...base.elements.values()].find(e => e.properties?.repo === key) ?? null;
+  const keys = repoKeys(inv.repo);
+  const all = [...base.elements.values()];
+  for (const k of keys) {
+    const hit = all.find(e => e.properties?.repo === k);
+    if (hit) return hit;
+  }
+  return null;
 }
 
 const DEFAULT_ROOT_AT = { file: '.', line: 1 };
@@ -62,7 +73,9 @@ export function toDelta(inv, { role, system, id, base = null } = {}) {
     return hit?.id ?? `${parent}.${norm(name)}`;
   };
   const existing = repoElement(base, inv);
-  const ownSource = s => s.kind === 'repo' && String(s.ref ?? '').startsWith(`${key}@`);
+  // a source of this repository, under its identity or the old local-path key (see repoKeys)
+  const prefixes = repoKeys(inv.repo).map(k => `${k}@`);
+  const ownSource = s => s.kind === 'repo' && prefixes.some(p => String(s.ref ?? '').startsWith(p));
 
   // sibling compose services (another repository's image): hosts for depends_on/env-ref, never deployables
   const siblings = new Set(facts.filter(x => x.kind === 'service' && !ownService(x, inv.repo)).map(x => norm(x.name)));

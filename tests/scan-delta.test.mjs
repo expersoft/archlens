@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { normalizeModel } from '../scripts/lib/model.mjs';
 import { summarize, deployablesOf, formatSummary } from '../scripts/lib/scan/summary.mjs';
-import { norm, repoKey, toDelta } from '../scripts/lib/scan/to-delta.mjs';
+import { norm, repoKey, toDelta, repoElement } from '../scripts/lib/scan/to-delta.mjs';
 import { validateModel } from '../scripts/lib/validate.mjs';
 import { planMerge, applyPlan } from '../scripts/lib/merge.mjs';
 import { resolveView } from '../scripts/lib/query.mjs';
@@ -264,6 +264,24 @@ test('a placeholder this repository created refreshes its provenance on a re-rea
   find(raw, 'ext.pagamentos').sources.push({ kind: 'repo', ref: '/r/outro@1234567', path: 'x', line: 1 });
   const third = toDelta(inv(pedidosFacts, { path: '/r/pedidos', name: 'pedidos', commit: 'eeeeeee111' }), { role: 'service', system: 'loja', base: normalizeModel(raw) });
   assert.ok(!el(third, 'ext.pagamentos'));
+});
+
+test('a base built before the remote identity: the old path is the same repository; one conflict on properties.repo (follow-up 3)', () => {
+  const url = 'https://example.com/acme/pedidos';
+  const raw = applyNew(readProd(null)); // read by path: properties.repo and the refs use /r/pedidos
+  assert.equal(find(raw, 'loja.pedidos').properties.repo, '/r/pedidos');
+  const base = normalizeModel(raw);
+  const remote = inv(pedidosFacts.filter(f => f.kind !== 'api'), { url, path: '/r/pedidos', name: 'pedidos-svc', commit: 'fffffff999' });
+  assert.equal(repoElement(base, remote)?.id, 'loja.pedidos', 'repoElement matches the old path key');
+  assert.deepEqual([summarize(remote, base).existing?.id, summarize(remote, base).existing?.by], ['loja.pedidos', 'repo']);
+  assert.equal(repoElement(base, inv([], { url, path: '/outro/pedidos', name: 'pedidos' })), null, 'only the path of this scan');
+  const d = toDelta(remote, { role: 'service', system: 'loja', base });
+  assert.ok(el(d, 'loja.pedidos') && !el(d, 'loja.pedidos-svc'), 'found by the old path, not recreated under the new name');
+  const ops = (d.ops ?? []).map(o => [o.op, o.id, o.status]);
+  assert.deepEqual(ops, [['status', 'loja.pedidos.api-api-de-pedidos', 'retired']], 'old-path sources count as this repository\'s');
+  assert.deepEqual(el(d, 'ext.pagamentos')?.sources.map(s => s.ref), [`${url}@fffffff`], 'its placeholder is refreshed too');
+  const conflicts = planMerge(raw, d).items.filter(i => i.class === 'conflict' && i.field === 'properties.repo');
+  assert.deepEqual(conflicts.map(i => [i.target, i.base, i.delta, i.resolution]), [['loja.pedidos', '/r/pedidos', url, null]], 'never answered automatically');
 });
 
 test('a placeholder with provenance other than repositories is never claimed', () => {
