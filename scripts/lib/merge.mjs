@@ -75,13 +75,15 @@ function planContext(baseRaw, delta, { base = 'ARCHITECTURE.md', today, answers 
 export function applyPlan(baseRaw, plan, { today } = {}) {
   if (plan?.['archlens-plan'] !== PLAN_VERSION) throw mergeError('E_PLAN_SCHEMA', 'o arquivo não é um plano do archlens (gere com "archlens merge --plan")');
   if (hashRaw(baseRaw) !== plan.baseHash) throw mergeError('E_PLAN_STALE', 'a base mudou depois que o plano foi gerado; rode "archlens merge --plan" de novo');
-  const resolutions = new Map(plan.items.filter(i => 'resolution' in i).map(i => [i.key, i.resolution]));
+  // Only questions take answers; a resolution written on an informational item is ignored.
+  const questions = plan.items.filter(i => 'resolution' in i && isQuestion(i));
+  const resolutions = new Map(questions.map(i => [i.key, i.resolution]));
   const applies = it => {
     if (!it.when) return true;
     const at = it.when.lastIndexOf('=');
     return resolutions.get(it.when.slice(0, at)) === it.when.slice(at + 1);
   };
-  const open = plan.items.filter(i => 'resolution' in i && applies(i));
+  const open = questions.filter(applies);
   const pending = open.filter(i => i.resolution == null);
   if (pending.length) throw mergeError('E_PLAN_PENDING', `${pending.length} decisão(ões) sem resposta: item(ns) ${pending.map(i => i.n).join(', ')}`, { pending });
   const bad = open.filter(i => !RESOLUTION[resolutionKind(i)].test(String(i.resolution)));
@@ -96,6 +98,8 @@ export function applyPlan(baseRaw, plan, { today } = {}) {
   return { raw: ctx.raw, entry };
 }
 
+const isQuestion = it => it.class === 'conflict' || it.class === 'possible-duplicate'
+  || (it.class === 'op' && !it.noop && !it.error && (it.op === 'remove' || (it.op === 'status' && it.status === 'retired')));
 const resolutionKind = it => (it.class === 'conflict' && it.kind === 'view' ? 'view-conflict' : it.class);
 
 function checkDelta(delta) {
@@ -121,7 +125,7 @@ function runMerge(baseRaw, delta, { mode, resolutions = new Map() }) {
   delta = structuredClone(delta); // never mutate (or share nested objects with) the caller's delta
   const ctx = {
     raw, delta, mode, resolutions, items: [], errors: [],
-    tree: indexTree(raw), aliases: new Map(), idMap: new Map(), fresh: new Set(),
+    tree: indexTree(raw), aliases: new Map(), idMap: new Map(), fresh: new Set(), freshSources: new WeakSet(),
     log: { added: [], changed: new Set(), status: {}, removed: [], decisions: [] },
   };
   // Fuzzy pool frozen before any merge, so simulated answers in plan mode cannot change what apply sees.
@@ -336,7 +340,7 @@ function mergeElementInto(ctx, baseId, el, parentId, { dry = false, when, aliase
     delete target.confidence;
     more = true;
   }
-  addSources(target, deltaSources(el, ctx.delta.source));
+  addSources(target, deltaSources(el, ctx.delta.source), ctx.freshSources);
   if (filled || changed || more) ctx.log.changed.add(baseId);
   note(ctx, { key: `el:${el.id}`, class: filled || changed || more ? 'enrich' : 'unchanged', kind: 'element', target: baseId, ...(el.id !== baseId ? { from: el.id } : {}) });
 }
@@ -451,7 +455,7 @@ function mergeRelInto(ctx, base, id, r, i) {
   const { filled, changed } = reconcile(ctx, { fields: fieldsOf(base, r, REL_FIELDS), keyPrefix: `rel:${i}`, kind: 'relationship', target: id });
   let more = addList(base, 'tags', r.tags);
   if (r.inferred === false && base.inferred) { delete base.inferred; more = true; }
-  addSources(base, deltaSources(r, ctx.delta.source));
+  addSources(base, deltaSources(r, ctx.delta.source), ctx.freshSources);
   if (filled || changed || more) ctx.log.changed.add(id);
   note(ctx, { key: `rel:${i}`, class: filled || changed || more ? 'enrich' : 'unchanged', kind: 'relationship', target: id });
 }
@@ -544,7 +548,7 @@ function runOps(ctx) {
         } else note(ctx, item);
         target.status = op.status;
         if (op.reason) target.statusReason = op.reason;
-        addSources(target, ctx.delta.source ? [ctx.delta.source] : []);
+        addSources(target, ctx.delta.source ? [ctx.delta.source] : [], ctx.freshSources);
         ctx.log.status[id] = op.status;
         return undefined;
       }

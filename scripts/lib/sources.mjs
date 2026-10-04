@@ -20,20 +20,34 @@ export function deltaSources(item, deltaSource) {
   return deltaSource ? [{ ...deltaSource }] : [];
 }
 
-/** Appends the sources not yet present; migrates a legacy `source` string first. Returns how many were added. */
-export function addSources(target, list) {
+/** Repository of a repo source: its ref without the trailing "@<commit>" (null for other kinds). */
+export const repoOfSource = s => (s?.kind === 'repo' && typeof s.ref === 'string' && s.ref.includes('@') ? s.ref.slice(0, s.ref.lastIndexOf('@')) : null);
+
+/**
+ * Appends the sources not yet present; migrates a legacy `source` string first. Returns how many were added.
+ * Provenance follows the latest reading: incoming repo sources replace the target's sources of the same repository
+ * (unchanged ones stay in place), except those added earlier in the same merge (`fresh`, a WeakSet it fills).
+ */
+export function addSources(target, list, fresh = null) {
   if (!list.length) return 0;
   if (!Array.isArray(target.sources)) {
     const legacy = readSources(target);
     delete target.source;
     target.sources = [...legacy];
   }
+  const repos = new Set(list.map(repoOfSource).filter(Boolean));
+  if (repos.size) {
+    const incoming = new Set(list.map(sourceKey));
+    target.sources = target.sources.filter(s => fresh?.has(s) || !repos.has(repoOfSource(s)) || incoming.has(sourceKey(s)));
+  }
   const seen = new Set(target.sources.map(sourceKey));
   let added = 0;
   for (const s of list) {
     const k = sourceKey(s);
     if (seen.has(k)) continue;
-    target.sources.push({ ...s });
+    const copy = { ...s };
+    target.sources.push(copy);
+    fresh?.add(copy);
     seen.add(k);
     added++;
   }
