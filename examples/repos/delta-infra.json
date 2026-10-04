@@ -2,9 +2,9 @@
   "archlens-delta": "1.0",
   "source": {
     "kind": "repo",
-    "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/infra@766f5ce"
+    "ref": "https://example.com/acme/infra@4e77da4"
   },
-  "summary": "Leitura de infra@766f5ce",
+  "summary": "Leitura de infra@4e77da4",
   "model": {
     "elements": [
       {
@@ -12,13 +12,13 @@
         "type": "c4:softwareSystem",
         "name": "infra",
         "properties": {
-          "repo": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/infra",
+          "repo": "https://example.com/acme/infra",
           "repoRole": "system"
         },
         "sources": [
           {
             "kind": "repo",
-            "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/infra@766f5ce",
+            "ref": "https://example.com/acme/infra@4e77da4",
             "path": ".",
             "line": 1
           }
@@ -36,7 +36,7 @@
         "sources": [
           {
             "kind": "repo",
-            "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/infra@766f5ce",
+            "ref": "https://example.com/acme/infra@4e77da4",
             "path": "main.tf",
             "line": 1
           }
@@ -54,7 +54,7 @@
         "sources": [
           {
             "kind": "repo",
-            "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/infra@766f5ce",
+            "ref": "https://example.com/acme/infra@4e77da4",
             "path": "main.tf",
             "line": 8
           }
@@ -68,7 +68,7 @@
         "sources": [
           {
             "kind": "repo",
-            "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/infra@766f5ce",
+            "ref": "https://example.com/acme/infra@4e77da4",
             "path": "main.tf",
             "line": 17
           }
@@ -83,7 +83,7 @@
         "sources": [
           {
             "kind": "repo",
-            "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/infra@766f5ce",
+            "ref": "https://example.com/acme/infra@4e77da4",
             "path": "main.tf",
             "line": 17
           }

@@ -4,9 +4,9 @@
     "date": "2026-10-04",
     "source": {
       "kind": "repo",
-      "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pedidos@766f5ce"
+      "ref": "https://example.com/acme/pedidos@d28ae88"
     },
-    "summary": "Leitura de pedidos@766f5ce",
+    "summary": "Leitura de pedidos@d28ae88",
     "added": [
       "loja",
       "loja.pedidos",
@@ -31,9 +31,9 @@
     "date": "2026-10-04",
     "source": {
       "kind": "repo",
-      "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pagamentos@766f5ce"
+      "ref": "https://example.com/acme/pagamentos@ae85af0"
     },
-    "summary": "Leitura de pagamentos@766f5ce",
+    "summary": "Leitura de pagamentos@ae85af0",
     "added": [
       "financeiro",
       "financeiro.pagamentos",
@@ -67,9 +67,9 @@
     "date": "2026-10-04",
     "source": {
       "kind": "repo",
-      "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/infra@766f5ce"
+      "ref": "https://example.com/acme/infra@4e77da4"
     },
-    "summary": "Leitura de infra@766f5ce",
+    "summary": "Leitura de infra@4e77da4",
     "added": [
       "infra-cloud",
       "infra-cloud.pedidos",

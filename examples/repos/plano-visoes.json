@@ -1,7 +1,7 @@
 {
   "archlens-plan": "1.0",
   "base": "architecture",
-  "baseHash": "sha256:2a0ce5886eb24e325052886e7df1d968fd93f30f86e83900cb780537df94d4c0",
+  "baseHash": "sha256:76233315e0c870dc86417a488a2d35cd5e3273d422da9f25c85bcfec59277ccb",
   "created": "2026-10-04",
   "delta": {
     "archlens-delta": "1.0",

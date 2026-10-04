@@ -147,17 +147,17 @@ _Nenhuma premissa registrada._
 
 | Tipo | Referência | Data | Itens |
 | --- | --- | --- | --- |
-| repo | /home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pedidos@766f5ce · . | — | 2 |
-| repo | /home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pedidos@766f5ce · docker-compose.yml | — | 5 |
-| repo | /home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pedidos@766f5ce · api/openapi.yaml | — | 2 |
-| repo | /home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pedidos@766f5ce · api/asyncapi.yaml | — | 2 |
-| repo | /home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pagamentos@766f5ce · asyncapi.json | — | 4 |
-| repo | /home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pagamentos@766f5ce · . | — | 2 |
-| repo | /home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pagamentos@766f5ce · chart/Chart.yaml | — | 3 |
-| repo | /home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pagamentos@766f5ce · k8s/deploy.yaml | — | 6 |
-| repo | /home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pagamentos@766f5ce · chart/values.yaml | — | 2 |
-| repo | /home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/infra@766f5ce · . | — | 1 |
-| repo | /home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/infra@766f5ce · main.tf | — | 4 |
+| repo | https://example.com/acme/pedidos@d28ae88 · . | — | 2 |
+| repo | https://example.com/acme/pedidos@d28ae88 · docker-compose.yml | — | 5 |
+| repo | https://example.com/acme/pedidos@d28ae88 · api/openapi.yaml | — | 2 |
+| repo | https://example.com/acme/pedidos@d28ae88 · api/asyncapi.yaml | — | 2 |
+| repo | https://example.com/acme/pagamentos@ae85af0 · asyncapi.json | — | 4 |
+| repo | https://example.com/acme/pagamentos@ae85af0 · . | — | 2 |
+| repo | https://example.com/acme/pagamentos@ae85af0 · chart/Chart.yaml | — | 3 |
+| repo | https://example.com/acme/pagamentos@ae85af0 · k8s/deploy.yaml | — | 6 |
+| repo | https://example.com/acme/pagamentos@ae85af0 · chart/values.yaml | — | 2 |
+| repo | https://example.com/acme/infra@4e77da4 · . | — | 1 |
+| repo | https://example.com/acme/infra@4e77da4 · main.tf | — | 4 |
 
 ## Visões
 
@@ -172,9 +172,9 @@ _Nenhuma premissa registrada._
 | Data | Fonte | Resumo | Mudanças | Decisões |
 | --- | --- | --- | --- | --- |
 | 2026-10-04 | prompt visões de impacto do exemplo | Visões de impacto de pedidos, pagamentos e infraestrutura | +3 ~0 −0 | — |
-| 2026-10-04 | repo /home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/infra@766f5ce | Leitura de infra@766f5ce | +5 ~0 −0 | — |
-| 2026-10-04 | repo /home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pagamentos@766f5ce | Leitura de pagamentos@766f5ce | +17 ~0 −1 | duplicata descartada: tech.postgres-15 ≠ tech.postgres-16 |
-| 2026-10-04 | repo /home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pedidos@766f5ce | Leitura de pedidos@766f5ce | +12 ~0 −0 | — |
+| 2026-10-04 | repo https://example.com/acme/infra@4e77da4 | Leitura de infra@4e77da4 | +5 ~0 −0 | — |
+| 2026-10-04 | repo https://example.com/acme/pagamentos@ae85af0 | Leitura de pagamentos@ae85af0 | +17 ~0 −1 | duplicata descartada: tech.postgres-15 ≠ tech.postgres-16 |
+| 2026-10-04 | repo https://example.com/acme/pedidos@d28ae88 | Leitura de pedidos@d28ae88 | +12 ~0 −0 | — |
 
 ## Notas
 

@@ -3,6 +3,24 @@
 Três mini-repositórios (`pedidos`, `pagamentos`, `infra`) lidos pela CLI real, na ordem abaixo, até chegar em
 `architecture/` e no `ARCHITECTURE.md` gerado. Rode a partir desta pasta (`A="node ../../scripts/archlens.mjs"`).
 
+As pastas daqui não são repositórios git (estão dentro do repositório do archlens). Lidas direto, a identidade delas
+seria o caminho absoluto na máquina de quem leu. Para a base trazer refs estáveis, cada pasta é copiada para um
+repositório git temporário com remote `origin` em `https://example.com/acme/<nome>`, e o scan lê essa cópia: numa
+pasta local que é a raiz de um clone com remote, a identidade é a URL do remote. As fontes ficam
+`https://example.com/acme/<nome>@<commit>` (o commit é o da cópia; datas e autor fixos o tornam reprodutível):
+
+```sh
+T=$(mktemp -d)
+export GIT_AUTHOR_NAME=acme GIT_AUTHOR_EMAIL=dev@example.com GIT_COMMITTER_NAME=acme GIT_COMMITTER_EMAIL=dev@example.com
+export GIT_AUTHOR_DATE=2026-10-03T12:00:00Z GIT_COMMITTER_DATE=2026-10-03T12:00:00Z
+for n in pedidos pagamentos infra; do
+  cp -r $n $T/$n && git -C $T/$n init -q && git -C $T/$n add -A && git -C $T/$n commit -qm "exemplo $n"
+  git -C $T/$n remote add origin https://example.com/acme/$n
+done
+```
+
+Nos passos abaixo, `pedidos`, `pagamentos` e `infra` no `scan` são `$T/pedidos`, `$T/pagamentos` e `$T/infra`.
+
 1. `$A scan pedidos --base architecture --as service --system loja --delta delta-pedidos.json`, depois
    `$A merge architecture delta-pedidos.json --plan plano-pedidos.json` e `$A merge architecture --apply plano-pedidos.json`.
    A base ainda não existe: o scan avisa que o delta é para uma base nova, e o `--apply` a cria. O container
@@ -23,9 +41,7 @@ Três mini-repositórios (`pedidos`, `pagamentos`, `infra`) lidos pela CLI real,
 A visão `impacto-pedidos` mostra `financeiro.pagamentos` (que assina o tópico `pedido-criado`), porque o impacto segue
 `flow`. Nenhum `ext.*` sobra para pedidos ou pagamentos, e nenhum dos dois containers fica `external`.
 
-Como as pastas estão dentro do repositório do archlens, o commit registrado em `sources[].ref` é o do próprio archlens.
-Os scans usam caminhos relativos, mas o `ref` de uma pasta local é sempre o caminho absoluto dela na máquina que fez a
-leitura (comportamento do scan). Para um repositório real, o `ref` é a URL ou o caminho do repositório com o commit
-dele.
+Para um repositório real, lido por URL ou por um clone local com remote, o `ref` é a URL do repositório (sem
+credenciais) com o commit dele; sem remote, é o caminho absoluto da pasta.
 
 Arquivos gerados (`ARCHITECTURE.md`, `architecture/diagrams/*`) nunca se editam à mão: use `archlens build architecture`.
