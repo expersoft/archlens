@@ -57,6 +57,34 @@
    "label": "Fluxo de dose",
    "file_type": "document",
    "source_file": "docs/spec.md"
+  },
+  {
+   "id": "d4",
+   "label": "fromJson()",
+   "file_type": "code",
+   "source_file": "domain/src/Json.kt",
+   "source_location": "L4"
+  },
+  {
+   "id": "d5",
+   "label": ".toEntity",
+   "file_type": "code",
+   "source_file": "domain/src/Map.kt",
+   "source_location": "L2"
+  },
+  {
+   "id": "d6",
+   "label": "TreatmentId",
+   "file_type": "code",
+   "source_file": "domain/src/Ids.kt",
+   "source_location": "L1"
+  },
+  {
+   "id": "d7",
+   "label": "DoseID",
+   "file_type": "code",
+   "source_file": "domain/src/Ids.kt",
+   "source_location": "L2"
   }
  ],
  "links": [

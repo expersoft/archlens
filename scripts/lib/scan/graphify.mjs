@@ -16,9 +16,14 @@ function moduleNames(root, nodes) {
   return new Set(nodes.filter(n => n.file_type === 'code' && n.source_file?.includes('/')).map(n => n.source_file.split('/')[0]).filter(d => !NOT_MODULES.has(d)));
 }
 
+// Not a domain concept: a method or call ("fromJson()"), a member (".toEntity") or an id value type ("TreatmentId").
+const isConcept = label => typeof label === 'string' && !label.includes('(') && !label.startsWith('.') && !/(Id|ID)$/.test(label);
+
 export function graphifyFacts(path, text, ctx) {
   const g = JSON.parse(text);
-  const nodes = g.nodes ?? [], links = g.links ?? g.edges ?? [];
+  // graphs built on Windows carry backslashes in source_file
+  const slash = f => (typeof f === 'string' ? f.replace(/\\/g, '/') : f);
+  const nodes = (g.nodes ?? []).map(n => ({ ...n, source_file: slash(n.source_file) })), links = g.links ?? g.edges ?? [];
   const mods = moduleNames(ctx.root, nodes);
   const modOf = file => {
     if (!file) return null;
@@ -46,11 +51,12 @@ export function graphifyFacts(path, text, ctx) {
       .map(l => byId.get(l.source === id ? l.target : l.source))
       .filter(n => n?.file_type === 'code').map(n => modOf(n.source_file)));
     const participants = [...new Set([...own, ...viaLinks].filter(Boolean))];
-    facts.push({ kind: 'flow', label: h.label ?? h.id, participants, confidence: confidence(h.confidence_score ?? 1), at: { file: h.source_file ?? path, line: 1 } });
+    facts.push({ kind: 'flow', label: h.label ?? h.id, participants, confidence: confidence(h.confidence_score ?? 1), at: { file: slash(h.source_file) ?? path, line: 1 } });
   }
   const degree = new Map();
   for (const l of links) for (const id of [l.source, l.target]) degree.set(id, (degree.get(id) ?? 0) + 1);
-  const concepts = nodes.filter(n => n.file_type === 'code' && /domain|dominio|core|model/i.test(modOf(n.source_file) ?? '') && !/test/i.test(n.source_file ?? ''))
+  const concepts = nodes.filter(n => n.file_type === 'code' && /domain|dominio|core|model/i.test(modOf(n.source_file) ?? '') && !/test/i.test(n.source_file ?? '')
+    && isConcept(n.label))
     .sort((a, b) => (degree.get(b.id) ?? 0) - (degree.get(a.id) ?? 0)).slice(0, 10);
   for (const n of concepts) {
     facts.push({ kind: 'domain-concept', label: n.label, module: modOf(n.source_file), degree: degree.get(n.id) ?? 0,

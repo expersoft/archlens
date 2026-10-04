@@ -241,3 +241,22 @@ test('--helm-render: helm template output read as k8s; without helm a warning, n
   assert.deepEqual(pick(rendered.facts, 'workload', 'name', 'image'), [['pay', 'acme/pay:1.0']]);
   assert.deepEqual(rendered.facts.find(f => f.kind === 'workload').at, { file: 'chart/templates (helm template)', line: 1 });
 });
+
+test('domain concepts: no methods, members or id value types (item 10)', () => {
+  const facts = graphifyFacts('graphify-out/graph.json', read('app-modular/graphify-out/graph.json'), { root: fx('app-modular'), commit: null });
+  const labels = pick(facts, 'domain-concept', 'label').flat();
+  for (const bad of ['fromJson()', '.toEntity', 'TreatmentId', 'DoseID']) assert.ok(!labels.includes(bad), bad);
+  assert.deepEqual(labels, ['Treatment', 'DoseEvent']);
+});
+
+test('graphify from Windows: backslashes in source_file become slashes (item 14)', () => {
+  const g = { nodes: [
+    { id: 'a', label: 'Main', file_type: 'code', source_file: 'app\\src\\Main.kt' },
+    { id: 'b', label: 'Dose', file_type: 'code', source_file: 'domain\\src\\Dose.kt', source_location: 'L7' }],
+  links: [{ source: 'a', target: 'b', relation: 'imports' }], hyperedges: [{ id: 'h', label: 'Tomar dose', nodes: ['a', 'b'], source_file: 'docs\\spec.md' }] };
+  const facts = graphifyFacts('graphify-out/graph.json', JSON.stringify(g), { root: fx('app-modular'), commit: null });
+  assert.deepEqual(pick(facts, 'module', 'name').sort(), [['app'], ['domain']]);
+  assert.deepEqual(pick(facts, 'module-dep', 'from', 'to'), [['app', 'domain']]);
+  assert.deepEqual(facts.find(f => f.kind === 'domain-concept').at, { file: 'domain/src/Dose.kt', line: 7 });
+  assert.deepEqual(facts.find(f => f.kind === 'flow').at.file, 'docs/spec.md');
+});
