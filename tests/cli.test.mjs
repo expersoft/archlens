@@ -562,3 +562,14 @@ test('re-reading at a new commit with no fact changes: only the new commit stays
   assert.ok(refs.length > 5);
   assert.deepEqual([...new Set(refs.map(r => r.slice(r.lastIndexOf('@') + 1)))], [head]);
 });
+
+test('wording: an explicit --base not created yet says where it will be created (item 15)', () => {
+  const repo = repoCopy('pedidos');
+  const dir = mkdtempSync(join(tmpdir(), 'archlens-'));
+  const r = run(['scan', repo, '--base', 'architecture', '--as', 'service', '--system', 'loja', '--delta', 'd.json'], dir);
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stderr, /a base será criada em .*architecture/);
+  assert.doesNotMatch(r.stderr, /Use --base/);
+  const none = run(['scan', repo, '--as', 'service', '--system', 'loja', '--delta', 'd2.json'], dir);
+  assert.match(none.stderr, /Use --base/, 'without --base the hint stays');
+});

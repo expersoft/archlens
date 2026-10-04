@@ -17,7 +17,8 @@ import { buildFacts } from './build.mjs';
 const MAX = 2 * 1024 * 1024, MAX_GRAPH = 64 * 1024 * 1024;
 // a .json/.yaml named after an API contract is reported when it cannot be read; other generic ones stay ignored
 const contractNamed = path => /openapi|swagger|asyncapi/i.test(basename(path));
-const isoToday = () => new Date().toISOString().slice(0, 10);
+// the reader's calendar day (not UTC): a scan late in the evening is still dated today
+const isoToday = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 
 /** One file → { kind: inventory file counter | null, facts }. Content-typed YAML/JSON is decided here. */
 function extract(type, path, text, ctx) {

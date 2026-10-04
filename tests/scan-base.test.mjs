@@ -164,3 +164,15 @@ test('--ref with a commit sha: shallow clone, then fetch and checkout of that co
   assert.equal(inv.repo.commit, first);
   assert.throws(() => scanSource(`file://${dir}`, { ref: 'f'.repeat(40) }), e => /E_SCAN_SOURCE/.test(e.message) && /commit f{7}/.test(e.message));
 });
+
+test('scannedAt is the local date (item 15)', () => {
+  const utcHour = new Date().getUTCHours();
+  const old = process.env.TZ;
+  process.env.TZ = utcHour >= 12 ? 'Pacific/Kiritimati' : 'Etc/GMT+12'; // local date ≠ UTC date right now
+  try {
+    const d = new Date();
+    const local = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    assert.notEqual(local, d.toISOString().slice(0, 10));
+    assert.equal(scanDir(mkdtempSync(join(tmpdir(), 'archlens-date-'))).repo.scannedAt, local);
+  } finally { if (old === undefined) delete process.env.TZ; else process.env.TZ = old; }
+});

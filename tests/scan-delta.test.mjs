@@ -322,3 +322,9 @@ test('--id of an existing container: infrastructure ids take its prefix (item 7)
   assert.deepEqual([el(d, 'terminus.assignment-redis')?.parent, el(d, 'terminus.assignment-redis')?.tags], ['terminus', ['cache']]);
   assert.ok(!d.model.elements.some(e => e.id.startsWith('terminus.terminus-assignment-api')), 'no id from the repository name');
 });
+
+test('W_INFERRED does not blame free text for inferences of a repository reading (item 15)', () => {
+  const raw = applyNew(toDelta(inv(pedidosFacts, { path: '/r/pedidos', name: 'pedidos' }), { role: 'service', system: 'loja' }));
+  const w = validateModel(raw).warnings.find(x => x.code === 'W_INFERRED');
+  assert.match(w.message, /inferidos \(texto livre ou leitura de repositório\)/);
+});

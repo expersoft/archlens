@@ -402,12 +402,15 @@ async function main() {
       const val = k => (args[k] && args[k] !== true ? args[k] : undefined);
       if (!file && !val('from')) fail(usage);
       let base = null;
-      const newBase = () => console.warn('  aviso: nenhuma base encontrada; o delta será para uma base nova. Use --base para apontar a base existente.');
+      const newBase = at => console.warn(at
+        ? `  aviso: nenhuma base encontrada; o delta será para uma base nova: a base será criada em ${relPath(at)} pelo primeiro "merge --apply".`
+        : '  aviso: nenhuma base encontrada; o delta será para uma base nova. Use --base para apontar a base existente.');
       try {
         // --base may name a base the first merge will create (missing or empty folder); scan only reads it
-        const loaded = openStore(resolveBase(val('base'), { create: !!val('base') })).load();
+        const st = openStore(resolveBase(val('base'), { create: !!val('base') }));
+        const loaded = st.load();
         base = loaded.raw ? normalizeModel(loaded.raw) : null;
-        if (!base) newBase();
+        if (!base) newBase(val('base') ? st.locator.path : null);
       } catch (e) {
         if (val('base')) fail(e.message);
         newBase();
