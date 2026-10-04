@@ -154,7 +154,10 @@ Regras comuns:
 ## 7. Nova leitura
 
 O merge casa por id e alias, então ler de novo atualiza. Ler duas vezes o mesmo commit não muda a base; num commit
-novo, as fontes passam a apontar só para ele (§5). O que sumiu
+novo, as fontes passam a apontar só para ele (§5). Isso vale também para um placeholder `ext.*` que só leituras
+deste repositório criaram (todas as fontes `repo` com a chave dele): quando um host ainda resolve para ele, o delta o
+reemite só com `id` e as fontes da leitura atual (sem `name`/`type`, logo sem conflito), e o merge troca as fontes do
+commit antigo pelas novas. Um placeholder com fonte de outro repositório não é reemitido. O que sumiu
 vira pergunta: só elementos cujas fontes são **todas** este repositório, que a leitura nova não produziu nem referencia
 mais, entram no delta como `ops` `status: "retired"` (com motivo `não encontrado em <repo>@<commit7>`). Confirme um a
 um (`yes`/`no`). Elementos com outras fontes não são tocados. Um placeholder reivindicado (§6) sai por `remove`, nunca

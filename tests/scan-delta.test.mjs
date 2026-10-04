@@ -251,6 +251,21 @@ test('producer first, then consumer: the consumer reading claims ext.pagamentos 
   assert.ok(!m.elements.get('financeiro.pagamentos').c4.external);
 });
 
+test('a placeholder this repository created refreshes its provenance on a re-read (follow-up 2)', () => {
+  let raw = applyNew(readProd(null));
+  assert.ok(find(raw, 'ext.pagamentos').sources.every(s => s.ref === '/r/pedidos@abcdef1'));
+  const again = toDelta(inv(pedidosFacts, { path: '/r/pedidos', name: 'pedidos', commit: 'fffffff999' }), { role: 'service', system: 'loja', base: normalizeModel(raw) });
+  const ph = el(again, 'ext.pagamentos');
+  assert.deepEqual(Object.keys(ph).sort(), ['id', 'sources'], 'id and provenance only: no name/type to conflict');
+  assert.deepEqual(ph.sources.map(s => s.ref), ['/r/pedidos@fffffff']);
+  raw = applyNew(again, raw);
+  assert.deepEqual(find(raw, 'ext.pagamentos').sources.map(s => s.ref), ['/r/pedidos@fffffff']);
+  // a placeholder with provenance from another repository is not re-emitted
+  find(raw, 'ext.pagamentos').sources.push({ kind: 'repo', ref: '/r/outro@1234567', path: 'x', line: 1 });
+  const third = toDelta(inv(pedidosFacts, { path: '/r/pedidos', name: 'pedidos', commit: 'eeeeeee111' }), { role: 'service', system: 'loja', base: normalizeModel(raw) });
+  assert.ok(!el(third, 'ext.pagamentos'));
+});
+
 test('a placeholder with provenance other than repositories is never claimed', () => {
   const raw = applyNew(readProd(null));
   find(raw, 'ext.pagamentos').sources.push({ kind: 'prompt', ref: 'rodada 1' });

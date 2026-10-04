@@ -62,6 +62,7 @@ export function toDelta(inv, { role, system, id, base = null } = {}) {
     return hit?.id ?? `${parent}.${norm(name)}`;
   };
   const existing = repoElement(base, inv);
+  const ownSource = s => s.kind === 'repo' && String(s.ref ?? '').startsWith(`${key}@`);
 
   // sibling compose services (another repository's image): hosts for depends_on/env-ref, never deployables
   const siblings = new Set(facts.filter(x => x.kind === 'service' && !ownService(x, inv.repo)).map(x => norm(x.name)));
@@ -212,7 +213,18 @@ export function toDelta(inv, { role, system, id, base = null } = {}) {
     const hit = hits.sort((x, y) => rank(x) - rank(y))[0]?.id ?? null;
     return claims.get(hit) ?? hit;
   };
-  const hostId = (host, at, excerpt) => deployId(host) ?? infra.get(host) ?? baseHost(host)
+  // A placeholder only this repository's readings created goes out again (id + this reading's sources) so its
+  // provenance follows the latest commit instead of pointing at the commit that created it.
+  const refreshed = hid => {
+    const e = hid?.startsWith('ext.') ? base.elements.get(hid) : null;
+    return !!e?.sources.length && e.sources.every(ownSource);
+  };
+  const fromBase = (host, at, excerpt) => {
+    const hid = baseHost(host);
+    if (refreshed(hid)) put({ id: hid }, at, excerpt);
+    return hid;
+  };
+  const hostId = (host, at, excerpt) => deployId(host) ?? infra.get(host) ?? fromBase(host, at, excerpt)
     ?? put({ id: `ext.${norm(host)}`, type: 'c4:softwareSystem', name: host, external: true, inferred: true, confidence: 'baixa' }, at, excerpt);
   for (const f of facts.filter(x => x.kind === 'depends-on')) {
     // a sibling service is resolved like any host (base element or placeholder)
@@ -283,7 +295,7 @@ export function toDelta(inv, { role, system, id, base = null } = {}) {
     const touched = new Set(rels.flatMap(r => [r.from, r.to]));
     for (const e of base.elements.values()) {
       if (elements.has(e.id) || touched.has(e.id) || claims.has(e.id) || e.status === 'retired' || !e.sources.length) continue;
-      if (e.sources.every(s => s.kind === 'repo' && String(s.ref ?? '').startsWith(`${key}@`))) {
+      if (e.sources.every(ownSource)) {
         ops.push({ op: 'status', id: e.id, status: 'retired', reason: `não encontrado em ${ref}` });
       }
     }

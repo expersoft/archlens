@@ -563,6 +563,32 @@ test('re-reading at a new commit with no fact changes: only the new commit stays
   assert.deepEqual([...new Set(refs.map(r => r.slice(r.lastIndexOf('@') + 1)))], [head]);
 });
 
+test('a placeholder created by this repository follows the latest commit on a re-read (follow-up 2)', () => {
+  const repo = repoCopy('pedidos');
+  const dir = mkdtempSync(join(tmpdir(), 'archlens-'));
+  const g = (...a) => sp('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', ...a], { cwd: repo, encoding: 'utf8' });
+  const read = (n) => {
+    assert.equal(run(['scan', repo, '--base', 'architecture', '--as', 'service', '--system', 'loja', '--delta', `d${n}.json`], dir).status, 0);
+    assert.equal(run(['merge', 'architecture', `d${n}.json`, '--plan', `p${n}.json`], dir).status, 0);
+    const plan = JSON.parse(readFileSync(join(dir, `p${n}.json`), 'utf8'));
+    for (const it of plan.items) if ('resolution' in it && it.resolution == null) it.resolution = it.class === 'possible-duplicate' ? 'different' : 'take';
+    writeFileSync(join(dir, `p${n}.json`), JSON.stringify(plan));
+    const r = run(['merge', 'architecture', '--apply', `p${n}.json`], dir);
+    assert.equal(r.status, 0, r.stderr);
+  };
+  const placeholder = () => model(dir).elements.find(e => e.id === 'ext.pagamentos');
+  read(1);
+  const first = g('rev-parse', 'HEAD').stdout.trim().slice(0, 7);
+  assert.ok(placeholder(), 'the base had no pagamentos: the reading created the placeholder');
+  assert.deepEqual([...new Set(placeholder().sources.map(s => s.ref.slice(s.ref.lastIndexOf('@') + 1)))], [first]);
+  writeFileSync(join(repo, 'README.md'), 'nada de arquitetura\n');
+  g('add', '-A'); g('commit', '-qm', 'readme');
+  const head = g('rev-parse', 'HEAD').stdout.trim().slice(0, 7);
+  read(2);
+  assert.deepEqual([...new Set(placeholder().sources.map(s => s.ref.slice(s.ref.lastIndexOf('@') + 1)))], [head]);
+  assert.equal(run(['check', 'architecture'], dir).status, 0);
+});
+
 test('wording: an explicit --base not created yet says where it will be created (item 15)', () => {
   const repo = repoCopy('pedidos');
   const dir = mkdtempSync(join(tmpdir(), 'archlens-'));
