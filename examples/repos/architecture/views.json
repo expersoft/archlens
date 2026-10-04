@@ -10,7 +10,7 @@
     "key": "impacto-pagamentos",
     "notation": "archimate",
     "viewpoint": "impact",
-    "anchor": "ext.pagamentos",
+    "anchor": "financeiro.pagamentos",
     "title": "Impacto de Pagamentos"
   },
   {

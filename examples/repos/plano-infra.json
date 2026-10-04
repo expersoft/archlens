@@ -1,15 +1,15 @@
 {
   "archlens-plan": "1.0",
   "base": "architecture",
-  "baseHash": "sha256:09bd65824886e13ae71d542aa857153e9d7f106258156f3ad544fc4a9c2a90de",
-  "created": "2026-10-03",
+  "baseHash": "sha256:d7520ee6d7a6f6ede36ee60c7f4f6b7a5ea1a83fe31f586cc739484367205dda",
+  "created": "2026-10-04",
   "delta": {
     "archlens-delta": "1.0",
     "source": {
       "kind": "repo",
-      "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/infra@fcfb61d"
+      "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/infra@766f5ce"
     },
-    "summary": "Leitura de infra@fcfb61d",
+    "summary": "Leitura de infra@766f5ce",
     "model": {
       "elements": [
         {
@@ -23,7 +23,7 @@
           "sources": [
             {
               "kind": "repo",
-              "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/infra@fcfb61d",
+              "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/infra@766f5ce",
               "path": ".",
               "line": 1
             }
@@ -41,7 +41,7 @@
           "sources": [
             {
               "kind": "repo",
-              "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/infra@fcfb61d",
+              "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/infra@766f5ce",
               "path": "main.tf",
               "line": 1
             }
@@ -59,7 +59,7 @@
           "sources": [
             {
               "kind": "repo",
-              "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/infra@fcfb61d",
+              "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/infra@766f5ce",
               "path": "main.tf",
               "line": 8
             }
@@ -73,7 +73,7 @@
           "sources": [
             {
               "kind": "repo",
-              "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/infra@fcfb61d",
+              "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/infra@766f5ce",
               "path": "main.tf",
               "line": 17
             }
@@ -88,23 +88,14 @@
           "sources": [
             {
               "kind": "repo",
-              "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/infra@fcfb61d",
+              "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/infra@766f5ce",
               "path": "main.tf",
               "line": 17
             }
           ]
         }
       ]
-    },
-    "views": [
-      {
-        "key": "impacto-infra",
-        "notation": "archimate",
-        "viewpoint": "impact",
-        "anchor": "infra-cloud",
-        "title": "Impacto da Infraestrutura"
-      }
-    ]
+    }
   },
   "items": [
     {
@@ -156,17 +147,10 @@
       "from": "infra-cloud.eventos",
       "to": "tech.aws-eks-cluster-principal",
       "type": "archimate:serving"
-    },
-    {
-      "n": 6,
-      "key": "view:impacto-infra",
-      "class": "new",
-      "kind": "view",
-      "target": "impacto-infra"
     }
   ],
   "summary": {
-    "new": 6
+    "new": 5
   },
   "blocked": false,
   "errors": []

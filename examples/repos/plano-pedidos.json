@@ -2,14 +2,14 @@
   "archlens-plan": "1.0",
   "base": "architecture",
   "baseHash": "none",
-  "created": "2026-10-03",
+  "created": "2026-10-04",
   "delta": {
     "archlens-delta": "1.0",
     "source": {
       "kind": "repo",
-      "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pedidos@fcfb61d"
+      "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pedidos@766f5ce"
     },
-    "summary": "Leitura de pedidos@fcfb61d",
+    "summary": "Leitura de pedidos@766f5ce",
     "model": {
       "elements": [
         {
@@ -19,7 +19,7 @@
           "sources": [
             {
               "kind": "repo",
-              "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pedidos@fcfb61d",
+              "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pedidos@766f5ce",
               "path": ".",
               "line": 1
             }
@@ -30,6 +30,9 @@
           "type": "c4:container",
           "parent": "loja",
           "name": "pedidos",
+          "aliases": [
+            "pedidos-api"
+          ],
           "properties": {
             "repo": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pedidos",
             "repoRole": "service"
@@ -37,7 +40,7 @@
           "sources": [
             {
               "kind": "repo",
-              "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pedidos@fcfb61d",
+              "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pedidos@766f5ce",
               "path": ".",
               "line": 1
             }
@@ -54,7 +57,7 @@
           "sources": [
             {
               "kind": "repo",
-              "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pedidos@fcfb61d",
+              "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pedidos@766f5ce",
               "path": "docker-compose.yml",
               "line": 13
             }
@@ -67,7 +70,7 @@
           "sources": [
             {
               "kind": "repo",
-              "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pedidos@fcfb61d",
+              "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pedidos@766f5ce",
               "path": "docker-compose.yml",
               "line": 13
             }
@@ -83,7 +86,7 @@
           "sources": [
             {
               "kind": "repo",
-              "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pedidos@fcfb61d",
+              "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pedidos@766f5ce",
               "path": "docker-compose.yml",
               "line": 7,
               "excerpt": "host em PAGAMENTOS_URL"
@@ -101,7 +104,7 @@
           "sources": [
             {
               "kind": "repo",
-              "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pedidos@fcfb61d",
+              "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pedidos@766f5ce",
               "path": "api/openapi.yaml",
               "line": 3
             }
@@ -117,7 +120,7 @@
           "sources": [
             {
               "kind": "repo",
-              "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pedidos@fcfb61d",
+              "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pedidos@766f5ce",
               "path": "api/asyncapi.yaml",
               "line": 5
             }
@@ -132,7 +135,7 @@
           "sources": [
             {
               "kind": "repo",
-              "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pedidos@fcfb61d",
+              "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pedidos@766f5ce",
               "path": "docker-compose.yml",
               "line": 13
             }
@@ -146,7 +149,7 @@
           "sources": [
             {
               "kind": "repo",
-              "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pedidos@fcfb61d",
+              "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pedidos@766f5ce",
               "path": "docker-compose.yml",
               "line": 11
             }
@@ -161,7 +164,7 @@
           "sources": [
             {
               "kind": "repo",
-              "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pedidos@fcfb61d",
+              "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pedidos@766f5ce",
               "path": "docker-compose.yml",
               "line": 7,
               "excerpt": "PAGAMENTOS_URL → pagamentos"
@@ -175,7 +178,7 @@
           "sources": [
             {
               "kind": "repo",
-              "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pedidos@fcfb61d",
+              "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pedidos@766f5ce",
               "path": "api/openapi.yaml",
               "line": 3
             }
@@ -189,23 +192,14 @@
           "sources": [
             {
               "kind": "repo",
-              "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pedidos@fcfb61d",
+              "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pedidos@766f5ce",
               "path": "api/asyncapi.yaml",
               "line": 5
             }
           ]
         }
       ]
-    },
-    "views": [
-      {
-        "key": "impacto-pedidos",
-        "notation": "archimate",
-        "viewpoint": "impact",
-        "anchor": "loja.pedidos",
-        "title": "Impacto de Pedidos"
-      }
-    ]
+    }
   },
   "items": [
     {
@@ -327,17 +321,10 @@
       "from": "loja.pedidos",
       "to": "topic.pedido-criado",
       "type": "archimate:flow"
-    },
-    {
-      "n": 13,
-      "key": "view:impacto-pedidos",
-      "class": "new",
-      "kind": "view",
-      "target": "impacto-pedidos"
     }
   ],
   "summary": {
-    "new": 13
+    "new": 12
   },
   "blocked": false,
   "errors": []

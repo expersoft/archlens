@@ -2,9 +2,9 @@
   "archlens-delta": "1.0",
   "source": {
     "kind": "repo",
-    "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/infra@fcfb61d"
+    "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/infra@766f5ce"
   },
-  "summary": "Leitura de infra@fcfb61d",
+  "summary": "Leitura de infra@766f5ce",
   "model": {
     "elements": [
       {
@@ -18,7 +18,7 @@
         "sources": [
           {
             "kind": "repo",
-            "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/infra@fcfb61d",
+            "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/infra@766f5ce",
             "path": ".",
             "line": 1
           }
@@ -36,7 +36,7 @@
         "sources": [
           {
             "kind": "repo",
-            "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/infra@fcfb61d",
+            "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/infra@766f5ce",
             "path": "main.tf",
             "line": 1
           }
@@ -54,7 +54,7 @@
         "sources": [
           {
             "kind": "repo",
-            "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/infra@fcfb61d",
+            "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/infra@766f5ce",
             "path": "main.tf",
             "line": 8
           }
@@ -68,7 +68,7 @@
         "sources": [
           {
             "kind": "repo",
-            "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/infra@fcfb61d",
+            "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/infra@766f5ce",
             "path": "main.tf",
             "line": 17
           }
@@ -83,21 +83,12 @@
         "sources": [
           {
             "kind": "repo",
-            "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/infra@fcfb61d",
+            "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/infra@766f5ce",
             "path": "main.tf",
             "line": 17
           }
         ]
       }
     ]
-  },
-  "views": [
-    {
-      "key": "impacto-infra",
-      "notation": "archimate",
-      "viewpoint": "impact",
-      "anchor": "infra-cloud",
-      "title": "Impacto da Infraestrutura"
-    }
-  ]
+  }
 }

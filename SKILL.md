@@ -37,8 +37,10 @@ Requer Node ≥ 18. A checagem visual (`deliver`/`build`) usa `playwright-core` 
    - **repositório (pasta ou URL git)**: `archlens scan <repo> --base <base>` e mostre o resumo; pergunte o papel
      (sistema ou serviço) e o sistema, comentando a sugestão e os motivos — **nunca assuma pelo nome**; depois
      `archlens scan <repo> --base <base> --as system|service [--system <id>] [--id <id>] --delta d.json`; troque nomes
-     técnicos por nomes de negócio (técnicos em `aliases`) e siga para o plano. Sem graphify, sugira rodá-lo no
-     repositório. Detalhes em `references/repo-reading.md`.
+     técnicos por nomes de negócio (técnicos em `aliases`) e siga para o plano. Na primeira leitura, `--base` pode
+     apontar a base que o merge vai criar, e `--system` pode nomear um sistema novo (o delta o cria). Placeholders
+     `ext.*` de leituras anteriores que representam o repositório lido saem por `remove` no próprio delta (confirme
+     com `yes`). Sem graphify, sugira rodá-lo no repositório. Detalhes em `references/repo-reading.md`.
 
    Sempre preencha `source` (`kind` + `ref`) e `summary`. Reutilize os ids da base.
 4. **Planeje**: `archlens merge architecture/ delta.json --plan plano.json`. Mostre o resumo ao usuário.

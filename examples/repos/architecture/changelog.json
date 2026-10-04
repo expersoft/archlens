@@ -1,12 +1,12 @@
 [
   {
-    "id": "2026-10-03-01",
-    "date": "2026-10-03",
+    "id": "2026-10-04-01",
+    "date": "2026-10-04",
     "source": {
       "kind": "repo",
-      "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pedidos@fcfb61d"
+      "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pedidos@766f5ce"
     },
-    "summary": "Leitura de pedidos@fcfb61d",
+    "summary": "Leitura de pedidos@766f5ce",
     "added": [
       "loja",
       "loja.pedidos",
@@ -19,8 +19,7 @@
       "loja.pedidos-access-loja.pedidos-pedidos-db",
       "ext.pagamentos-serving-loja.pedidos",
       "loja.pedidos-realization-loja.pedidos.api-api-de-pedidos",
-      "loja.pedidos-flow-topic.pedido-criado",
-      "view:impacto-pedidos"
+      "loja.pedidos-flow-topic.pedido-criado"
     ],
     "changed": [],
     "status": {},
@@ -28,30 +27,16 @@
     "decisions": []
   },
   {
-    "id": "2026-10-03-02",
-    "date": "2026-10-03",
-    "source": {
-      "kind": "prompt",
-      "ref": "sistema financeiro"
-    },
-    "summary": "Sistema Financeiro, dono do serviço de pagamentos",
-    "added": [
-      "financeiro"
-    ],
-    "changed": [],
-    "status": {},
-    "removed": [],
-    "decisions": []
-  },
-  {
-    "id": "2026-10-03-03",
-    "date": "2026-10-03",
+    "id": "2026-10-04-02",
+    "date": "2026-10-04",
     "source": {
       "kind": "repo",
-      "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pagamentos@fcfb61d"
+      "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pagamentos@766f5ce"
     },
-    "summary": "Leitura de pagamentos@fcfb61d",
+    "summary": "Leitura de pagamentos@766f5ce",
     "added": [
+      "financeiro",
+      "financeiro.pagamentos",
       "financeiro.pagamentos-redis",
       "tech.redis",
       "financeiro.pagamentos-pagamentos-db",
@@ -61,40 +46,53 @@
       "topic.pagamento-aprovado",
       "tech.redis-serving-financeiro.pagamentos-redis",
       "tech.postgres-15-realization-financeiro.pagamentos-pagamentos-db",
-      "ext.antifraude-acme-com-serving-ext.pagamentos",
-      "ext.kafka-serving-ext.pagamentos",
-      "loja.pedidos-serving-ext.pagamentos",
-      "topic.pedido-criado-flow-ext.pagamentos",
-      "ext.pagamentos-flow-topic.pagamento-aprovado",
-      "view:impacto-pagamentos"
+      "ext.antifraude-acme-com-serving-financeiro.pagamentos",
+      "ext.kafka-serving-financeiro.pagamentos",
+      "loja.pedidos-serving-financeiro.pagamentos",
+      "topic.pedido-criado-flow-financeiro.pagamentos",
+      "financeiro.pagamentos-flow-topic.pagamento-aprovado",
+      "financeiro.pagamentos-serving-loja.pedidos"
     ],
-    "changed": [
-      "ext.pagamentos",
-      "loja.pedidos"
-    ],
+    "changed": [],
     "status": {},
-    "removed": [],
+    "removed": [
+      "ext.pagamentos"
+    ],
     "decisions": [
-      "duplicata: financeiro.pagamentos = ext.pagamentos",
-      "conflito ext.pagamentos.type: take \"c4:container\"",
-      "duplicata descartada: tech.postgres-15 ≠ tech.postgres-16",
-      "duplicata: ext.pedidos-api = loja.pedidos"
+      "duplicata descartada: tech.postgres-15 ≠ tech.postgres-16"
     ]
   },
   {
-    "id": "2026-10-03-04",
-    "date": "2026-10-03",
+    "id": "2026-10-04-03",
+    "date": "2026-10-04",
     "source": {
       "kind": "repo",
-      "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/infra@fcfb61d"
+      "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/infra@766f5ce"
     },
-    "summary": "Leitura de infra@fcfb61d",
+    "summary": "Leitura de infra@766f5ce",
     "added": [
       "infra-cloud",
       "infra-cloud.pedidos",
       "infra-cloud.eventos",
       "tech.aws-eks-cluster-principal",
-      "infra-cloud.eventos-serving-tech.aws-eks-cluster-principal",
+      "infra-cloud.eventos-serving-tech.aws-eks-cluster-principal"
+    ],
+    "changed": [],
+    "status": {},
+    "removed": [],
+    "decisions": []
+  },
+  {
+    "id": "2026-10-04-04",
+    "date": "2026-10-04",
+    "source": {
+      "kind": "prompt",
+      "ref": "visões de impacto do exemplo"
+    },
+    "summary": "Visões de impacto de pedidos, pagamentos e infraestrutura",
+    "added": [
+      "view:impacto-pedidos",
+      "view:impacto-pagamentos",
       "view:impacto-infra"
     ],
     "changed": [],

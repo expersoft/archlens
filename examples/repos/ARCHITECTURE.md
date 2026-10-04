@@ -3,7 +3,7 @@ archlens: "1.0"
 name: "Arquitetura"
 source: architecture/
 revision: 4
-updated: 2026-10-03
+updated: 2026-10-04
 notations: [c4, archimate]
 elements: 19
 relationships: 13
@@ -42,13 +42,11 @@ _Nenhum._
 | pedidos | — | — | R | `loja.pedidos` |
 | pedidos-db 🛢 | — | — | R | `loja.pedidos-pedidos-db` |
 
-### Financeiro — Software System
-
-Cobrança e conciliação de pagamentos.
+### financeiro — Software System
 
 | Container | Tecnologia | Descrição | Fontes | id |
 | --- | --- | --- | --- | --- |
-| pagamentos | — | — | R | `ext.pagamentos` |
+| pagamentos | — | — | R | `financeiro.pagamentos` |
 | redis | — | — | R | `financeiro.pagamentos-redis` |
 | pagamentos-db 🛢 | — | — | R | `financeiro.pagamentos-pagamentos-db` |
 
@@ -72,8 +70,8 @@ Cobrança e conciliação de pagamentos.
 | pedidos-db | Data Object (C4 Container) | — | R | `loja.pedidos-pedidos-db` |
 | API de Pedidos | Application Interface | — | R | `loja.pedidos.api-api-de-pedidos` |
 | pedido-criado | Application Component (C4 Container) | — | R | `topic.pedido-criado` |
-| Financeiro | Application Component (C4 Software System) | Cobrança e conciliação de pagamentos. | P R | `financeiro` |
-| pagamentos ⚠︎ | Application Component (C4 Container) | — | R | `ext.pagamentos` |
+| financeiro | Application Component (C4 Software System) | — | R | `financeiro` |
+| pagamentos | Application Component (C4 Container) | — | R | `financeiro.pagamentos` |
 | redis | Application Component (C4 Container) | — | R | `financeiro.pagamentos-redis` |
 | pagamentos-db | Data Object (C4 Container) | — | R | `financeiro.pagamentos-pagamentos-db` |
 | antifraude.acme.com ⚠︎ | Application Component (C4 Software System) | — | R | `ext.antifraude-acme-com` |
@@ -98,7 +96,6 @@ Cobrança e conciliação de pagamentos.
 | --- | --- | --- | --- | --- |
 | PostgreSQL 16 | realization | pedidos-db | — | — |
 | pedidos | usa | pedidos-db | depends_on | — |
-| pedidos | usa | pagamentos | via PAGAMENTOS_URL | — |
 | pedidos | realization | API de Pedidos | — | — |
 | pedidos | flow | pedido-criado | publica PedidoCriado | — |
 | Redis | serving | redis | — | — |
@@ -108,6 +105,7 @@ Cobrança e conciliação de pagamentos.
 | pagamentos | usa | pedidos | via PEDIDOS_URL | — |
 | pedido-criado | flow | pagamentos | assina pedido-criado | — |
 | pagamentos | flow | pagamento-aprovado | publica pagamento-aprovado | — |
+| pedidos | usa | pagamentos | via PAGAMENTOS_URL | — |
 | eventos | serving | principal | — | — |
 
 ## Rastreabilidade
@@ -119,8 +117,10 @@ Cadeias de suporte calculadas a partir do modelo (o que sustenta cada oferta, e 
 | Aplicação | Negócio que depende dela | Tecnologia que a sustenta |
 | --- | --- | --- |
 | loja | — | PostgreSQL 16 |
+| pedidos | — | PostgreSQL 16 |
 | pedido-criado | — | — |
-| Financeiro | — | PostgreSQL 16, Redis, PostgreSQL 15 |
+| financeiro | — | PostgreSQL 16, Redis, PostgreSQL 15 |
+| pagamentos | — | PostgreSQL 16 |
 | redis | — | Redis |
 | pagamento-aprovado | — | — |
 | infra | — | — |
@@ -136,30 +136,28 @@ _Nenhuma premissa registrada._
 
 | Item | Tipo | Confiança | Origem no texto |
 | --- | --- | --- | --- |
-| pagamentos | Application Component | baixa | host em PAGAMENTOS_URL |
 | antifraude.acme.com | Application Component | baixa | host em ANTIFRAUDE_URL |
 | kafka | Application Component | baixa | host em KAFKA_BROKERS |
-| pedidos → pagamentos | usa | — | — |
 | pagamentos → antifraude.acme.com | usa | — | — |
 | pagamentos → kafka | usa | — | — |
 | pagamentos → pedidos | usa | — | — |
+| pedidos → pagamentos | usa | — | — |
 
 ## Fontes
 
 | Tipo | Referência | Data | Itens |
 | --- | --- | --- | --- |
-| repo | /home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pedidos@fcfb61d · . | — | 2 |
-| repo | /home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pagamentos@fcfb61d · k8s/deploy.yaml | — | 7 |
-| repo | /home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pedidos@fcfb61d · docker-compose.yml | — | 6 |
-| repo | /home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pedidos@fcfb61d · api/openapi.yaml | — | 2 |
-| repo | /home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pedidos@fcfb61d · api/asyncapi.yaml | — | 2 |
-| repo | /home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pagamentos@fcfb61d · asyncapi.json | — | 4 |
-| prompt | sistema financeiro | — | 1 |
-| repo | /home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pagamentos@fcfb61d · . | — | 2 |
-| repo | /home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pagamentos@fcfb61d · chart/Chart.yaml | — | 3 |
-| repo | /home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pagamentos@fcfb61d · chart/values.yaml | — | 2 |
-| repo | /home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/infra@fcfb61d · . | — | 1 |
-| repo | /home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/infra@fcfb61d · main.tf | — | 4 |
+| repo | /home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pedidos@766f5ce · . | — | 2 |
+| repo | /home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pedidos@766f5ce · docker-compose.yml | — | 5 |
+| repo | /home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pedidos@766f5ce · api/openapi.yaml | — | 2 |
+| repo | /home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pedidos@766f5ce · api/asyncapi.yaml | — | 2 |
+| repo | /home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pagamentos@766f5ce · asyncapi.json | — | 4 |
+| repo | /home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pagamentos@766f5ce · . | — | 2 |
+| repo | /home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pagamentos@766f5ce · chart/Chart.yaml | — | 3 |
+| repo | /home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pagamentos@766f5ce · k8s/deploy.yaml | — | 6 |
+| repo | /home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pagamentos@766f5ce · chart/values.yaml | — | 2 |
+| repo | /home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/infra@766f5ce · . | — | 1 |
+| repo | /home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/infra@766f5ce · main.tf | — | 4 |
 
 ## Visões
 
@@ -173,10 +171,10 @@ _Nenhuma premissa registrada._
 
 | Data | Fonte | Resumo | Mudanças | Decisões |
 | --- | --- | --- | --- | --- |
-| 2026-10-03 | repo /home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/infra@fcfb61d | Leitura de infra@fcfb61d | +6 ~0 −0 | — |
-| 2026-10-03 | repo /home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pagamentos@fcfb61d | Leitura de pagamentos@fcfb61d | +15 ~2 −0 | duplicata: financeiro.pagamentos = ext.pagamentos; conflito ext.pagamentos.type: take "c4:container"; duplicata descartada: tech.postgres-15 ≠ tech.postgres-16; duplicata: ext.pedidos-api = loja.pedidos |
-| 2026-10-03 | prompt sistema financeiro | Sistema Financeiro, dono do serviço de pagamentos | +1 ~0 −0 | — |
-| 2026-10-03 | repo /home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pedidos@fcfb61d | Leitura de pedidos@fcfb61d | +13 ~0 −0 | — |
+| 2026-10-04 | prompt visões de impacto do exemplo | Visões de impacto de pedidos, pagamentos e infraestrutura | +3 ~0 −0 | — |
+| 2026-10-04 | repo /home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/infra@766f5ce | Leitura de infra@766f5ce | +5 ~0 −0 | — |
+| 2026-10-04 | repo /home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pagamentos@766f5ce | Leitura de pagamentos@766f5ce | +17 ~0 −1 | duplicata descartada: tech.postgres-15 ≠ tech.postgres-16 |
+| 2026-10-04 | repo /home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pedidos@766f5ce | Leitura de pedidos@766f5ce | +12 ~0 −0 | — |
 
 ## Notas
 

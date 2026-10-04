@@ -2,9 +2,9 @@
   "archlens-delta": "1.0",
   "source": {
     "kind": "repo",
-    "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pedidos@fcfb61d"
+    "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pedidos@766f5ce"
   },
-  "summary": "Leitura de pedidos@fcfb61d",
+  "summary": "Leitura de pedidos@766f5ce",
   "model": {
     "elements": [
       {
@@ -14,7 +14,7 @@
         "sources": [
           {
             "kind": "repo",
-            "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pedidos@fcfb61d",
+            "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pedidos@766f5ce",
             "path": ".",
             "line": 1
           }
@@ -25,6 +25,9 @@
         "type": "c4:container",
         "parent": "loja",
         "name": "pedidos",
+        "aliases": [
+          "pedidos-api"
+        ],
         "properties": {
           "repo": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pedidos",
           "repoRole": "service"
@@ -32,7 +35,7 @@
         "sources": [
           {
             "kind": "repo",
-            "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pedidos@fcfb61d",
+            "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pedidos@766f5ce",
             "path": ".",
             "line": 1
           }
@@ -49,7 +52,7 @@
         "sources": [
           {
             "kind": "repo",
-            "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pedidos@fcfb61d",
+            "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pedidos@766f5ce",
             "path": "docker-compose.yml",
             "line": 13
           }
@@ -62,7 +65,7 @@
         "sources": [
           {
             "kind": "repo",
-            "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pedidos@fcfb61d",
+            "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pedidos@766f5ce",
             "path": "docker-compose.yml",
             "line": 13
           }
@@ -78,7 +81,7 @@
         "sources": [
           {
             "kind": "repo",
-            "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pedidos@fcfb61d",
+            "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pedidos@766f5ce",
             "path": "docker-compose.yml",
             "line": 7,
             "excerpt": "host em PAGAMENTOS_URL"
@@ -96,7 +99,7 @@
         "sources": [
           {
             "kind": "repo",
-            "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pedidos@fcfb61d",
+            "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pedidos@766f5ce",
             "path": "api/openapi.yaml",
             "line": 3
           }
@@ -112,7 +115,7 @@
         "sources": [
           {
             "kind": "repo",
-            "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pedidos@fcfb61d",
+            "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pedidos@766f5ce",
             "path": "api/asyncapi.yaml",
             "line": 5
           }
@@ -127,7 +130,7 @@
         "sources": [
           {
             "kind": "repo",
-            "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pedidos@fcfb61d",
+            "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pedidos@766f5ce",
             "path": "docker-compose.yml",
             "line": 13
           }
@@ -141,7 +144,7 @@
         "sources": [
           {
             "kind": "repo",
-            "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pedidos@fcfb61d",
+            "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pedidos@766f5ce",
             "path": "docker-compose.yml",
             "line": 11
           }
@@ -156,7 +159,7 @@
         "sources": [
           {
             "kind": "repo",
-            "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pedidos@fcfb61d",
+            "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pedidos@766f5ce",
             "path": "docker-compose.yml",
             "line": 7,
             "excerpt": "PAGAMENTOS_URL → pagamentos"
@@ -170,7 +173,7 @@
         "sources": [
           {
             "kind": "repo",
-            "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pedidos@fcfb61d",
+            "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pedidos@766f5ce",
             "path": "api/openapi.yaml",
             "line": 3
           }
@@ -184,21 +187,12 @@
         "sources": [
           {
             "kind": "repo",
-            "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pedidos@fcfb61d",
+            "ref": "/home/rodrigo/repos/github.com/expersoft/archlens/examples/repos/pedidos@766f5ce",
             "path": "api/asyncapi.yaml",
             "line": 5
           }
         ]
       }
     ]
-  },
-  "views": [
-    {
-      "key": "impacto-pedidos",
-      "notation": "archimate",
-      "viewpoint": "impact",
-      "anchor": "loja.pedidos",
-      "title": "Impacto de Pedidos"
-    }
-  ]
+  }
 }

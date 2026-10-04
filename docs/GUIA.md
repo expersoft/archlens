@@ -101,7 +101,8 @@ $A merge architecture/ --apply plano.json
 
 Cada item ganha a fonte `repo` com commit, arquivo e linha. Ler de novo atualiza a base, e o que sumiu do repositório
 vira pergunta de `retired`. Tópicos publicados e assinados em repositórios diferentes ficam ligados, e a visão de
-impacto segue esse fluxo. Veja `examples/repos` (três mini-repositórios lidos na ordem do `README.md` dele) e
+impacto segue esse fluxo. Um host que ainda não está na base vira um placeholder `ext.*`, que a leitura do
+repositório dele substitui (remove o placeholder e leva as relações para o container real). Veja `examples/repos` (três mini-repositórios lidos na ordem do `README.md` dele) e
 `references/repo-reading.md`.
 
 ### Vendo antes de aplicar
