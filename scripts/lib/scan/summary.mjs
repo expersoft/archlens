@@ -2,12 +2,12 @@
 // element that may already stand for the repository, and probable systems with their reasons. It never decides.
 import { similarity, aliasKey } from '../match.mjs';
 import { c4KindOf, ancestors } from '../model.mjs';
-import { norm, repoElement } from './to-delta.mjs';
+import { norm, repoElement, ownService } from './to-delta.mjs';
 
 export function deployablesOf(inv) {
   const names = new Map();
   for (const f of inv.facts) {
-    if (f.kind === 'service' || f.kind === 'workload' || (f.kind === 'module' && f.executable)) if (!names.has(norm(f.name))) names.set(norm(f.name), f.name);
+    if ((f.kind === 'service' && ownService(f, inv.repo)) || f.kind === 'workload' || (f.kind === 'module' && f.executable)) if (!names.has(norm(f.name))) names.set(norm(f.name), f.name);
   }
   return [...names.values()];
 }

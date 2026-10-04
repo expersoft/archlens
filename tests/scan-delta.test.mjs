@@ -271,3 +271,29 @@ test('without a commit the reference keeps "sem-commit" whole', () => {
   assert.equal(d.source.ref, '/r/vazio@sem-commit');
   assert.equal(el(d, 'loja.vazio').sources[0].ref, '/r/vazio@sem-commit');
 });
+
+test('sibling-image compose services are not this repo\'s deployables: hosts, never aliases (item 1)', () => {
+  const facts = [
+    { kind: 'service', name: 'pedidos-api', build: 'api', ports: [], at: a('docker-compose.yml', 2) },
+    { kind: 'service', name: 'pagamentos', image: 'ghcr.io/acme/pagamentos:2.1', ports: [], at: a('docker-compose.yml', 8) },
+    { kind: 'depends-on', from: 'pedidos-api', to: 'pagamentos', at: a('docker-compose.yml', 5) },
+    { kind: 'env-ref', from: 'pagamentos', var: 'X_URL', host: 'antifraude', at: a('docker-compose.yml', 9) },
+  ];
+  const i = inv(facts, { path: '/r/pedidos', name: 'pedidos' });
+  assert.deepEqual(deployablesOf(i), ['pedidos-api']);
+  assert.equal(summarize(i, null).role.suggested, 'service');
+  const d = toDelta(i, { role: 'service', system: 'loja' });
+  assert.deepEqual(el(d, 'loja.pedidos').aliases, ['pedidos-api'], 'no alias pagamentos');
+  assert.equal(rel(d, 'loja.pedidos', 'ext.pagamentos')?.description, 'depends_on');
+  assert.equal(el(d, 'ext.pagamentos').external, true);
+  assert.ok(!d.model.relationships.some(r => r.to === 'ext.antifraude'), 'facts of a sibling service are not this repo\'s');
+  assert.equal(planMerge(null, d).blocked, false);
+  // same image name as the repository: it is this repo's own image
+  assert.deepEqual(deployablesOf(inv([{ kind: 'service', name: 'web', image: 'acme/pedidos:1', ports: [], at }], { name: 'pedidos' })), ['web']);
+  // system role: the sibling is not a container of the system; a known base element is reused
+  const base = normalizeModel({ archlens: '1.0', name: 'T', model: { elements: [{ id: 'financeiro', type: 'c4:softwareSystem', name: 'Financeiro',
+    children: [{ id: 'financeiro.pagamentos', type: 'c4:container', name: 'Pagamentos' }] }], relationships: [] } });
+  const ds = toDelta(inv([...facts, { kind: 'service', name: 'worker', build: 'worker', ports: [], at }], { path: '/r/pedidos', name: 'pedidos' }), { role: 'system', base });
+  assert.ok(!el(ds, 'pedidos.pagamentos'));
+  assert.equal(rel(ds, 'pedidos.pedidos-api', 'financeiro.pagamentos')?.description, 'depends_on');
+});

@@ -6,6 +6,15 @@ import { aliasKey } from '../match.mjs';
 export const norm = s => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 export const repoKey = repo => (repo.url ? normalizeRepoUrl(repo.url) : repo.path);
 
+/** Image name without registry, path and tag ("ghcr.io/acme/pagamentos:2.1" → "pagamentos"). */
+const imageName = image => String(image).split('@')[0].split(/:(?=[^/]*$)/)[0].split('/').at(-1);
+
+/**
+ * A compose service this repository builds (build:) or whose image carries the repository's name; any other
+ * service is a sibling (another repository's image) that only runs alongside, so it is a host, not a deployable.
+ */
+export const ownService = (f, repo) => f.kind !== 'service' || f.build != null || f.image == null || norm(imageName(f.image)) === norm(repo.name);
+
 /** The element of the base already standing for this repository (properties.repo), or null. */
 export function repoElement(base, inv) {
   if (!base) return null;
@@ -54,8 +63,10 @@ export function toDelta(inv, { role, system, id, base = null } = {}) {
   };
   const existing = repoElement(base, inv);
 
+  // sibling compose services (another repository's image): hosts for depends_on/env-ref, never deployables
+  const siblings = new Set(facts.filter(x => x.kind === 'service' && !ownService(x, inv.repo)).map(x => norm(x.name)));
   const runtimeNames = [];
-  for (const f of facts.filter(x => ['service', 'workload', 'chart'].includes(x.kind))) {
+  for (const f of facts.filter(x => ['service', 'workload', 'chart'].includes(x.kind) && ownService(x, inv.repo))) {
     if (!runtimeNames.some(n => norm(n) === norm(f.name))) runtimeNames.push(f.name);
   }
 
@@ -86,7 +97,7 @@ export function toDelta(inv, { role, system, id, base = null } = {}) {
   // deployables (role system): compose services, k8s/helm workloads, executable modules — merged by name
   const deploy = new Map();
   if (role === 'system') {
-    for (const f of facts.filter(x => x.kind === 'service' || x.kind === 'workload')) {
+    for (const f of facts.filter(x => (x.kind === 'service' || x.kind === 'workload') && ownService(x, inv.repo))) {
       const k = norm(f.name);
       if (!deploy.has(k)) deploy.set(k, { name: f.name, dir: f.build ?? null, at: f.at, technology: f.image });
     }
@@ -179,7 +190,7 @@ export function toDelta(inv, { role, system, id, base = null } = {}) {
   }
 
   // relations between what runs: depends_on and hosts in configuration
-  const runId = name => deployId(name) ?? infra.get(name) ?? (role === 'service' ? ownId : null);
+  const runId = name => (siblings.has(norm(name)) ? null : deployId(name) ?? infra.get(name) ?? (role === 'service' ? ownId : null));
   const baseHost = host => {
     if (!base) return null;
     const k = aliasKey(host);
@@ -192,13 +203,17 @@ export function toDelta(inv, { role, system, id, base = null } = {}) {
     const hit = hits.sort((x, y) => rank(x) - rank(y))[0]?.id ?? null;
     return claims.get(hit) ?? hit;
   };
-  for (const f of facts.filter(x => x.kind === 'depends-on')) link(runId(f.from), runId(f.to), 'uses', f.at, { description: 'depends_on' });
+  const hostId = (host, at, excerpt) => deployId(host) ?? infra.get(host) ?? baseHost(host)
+    ?? put({ id: `ext.${norm(host)}`, type: 'c4:softwareSystem', name: host, external: true, inferred: true, confidence: 'baixa' }, at, excerpt);
+  for (const f of facts.filter(x => x.kind === 'depends-on')) {
+    // a sibling service is resolved like any host (base element or placeholder)
+    const to = siblings.has(norm(f.to)) ? hostId(f.to, f.at, `depends_on ${f.to}`) : runId(f.to);
+    link(runId(f.from), to, 'uses', f.at, { description: 'depends_on' });
+  }
   for (const f of facts.filter(x => x.kind === 'env-ref')) {
     const from = runId(f.from);
     if (!from) continue;
-    let to = deployId(f.host) ?? infra.get(f.host) ?? baseHost(f.host);
-    if (!to) to = put({ id: `ext.${norm(f.host)}`, type: 'c4:softwareSystem', name: f.host, external: true, inferred: true, confidence: 'baixa' }, f.at, `host em ${f.var}`);
-    link(from, to, 'uses', f.at, { description: `via ${f.var}`, inferred: true, excerpt: `${f.var} → ${f.host}` });
+    link(from, hostId(f.host, f.at, `host em ${f.var}`), 'uses', f.at, { description: `via ${f.var}`, inferred: true, excerpt: `${f.var} → ${f.host}` });
   }
 
   // contracts: APIs (interfaces) and channels (topics)
