@@ -14,21 +14,34 @@ function gitignore(root) {
 const ignored = (rel, patterns) => patterns.some(p => (p.startsWith('*.') ? rel.endsWith(p.slice(1))
   : rel === p || rel.startsWith(`${p}/`) || rel.split('/').includes(p)));
 
+// Test code and its fixtures describe other (often fake) systems: skipped at any depth below the root.
+const TEST_DIRS = new Set(['test', 'tests', '__tests__', 'fixtures', 'spec']);
+// graphify-out/ is usually gitignored, but its graph is exactly what the scan wants.
+const GRAPH = 'graphify-out/graph.json';
+
+/** Files of the scan, plus how many were skipped inside test/fixture folders (reported as ignored). */
 export function listFiles(root) {
   const patterns = gitignore(root);
   const out = [];
+  let skipped = 0;
+  const count = dir => {
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      if (e.isDirectory()) { if (!IGNORE_DIRS.has(e.name)) count(join(dir, e.name)); } else if (e.isFile()) skipped++;
+    }
+  };
   const walk = dir => {
     for (const e of readdirSync(dir, { withFileTypes: true })) {
       const abs = join(dir, e.name);
       const rel = relative(root, abs).split(sep).join('/');
       if (e.isDirectory()) {
-        if (IGNORE_DIRS.has(e.name) || rel === 'graphify-out/cache' || ignored(rel, patterns)) continue;
+        if (IGNORE_DIRS.has(e.name) || rel === 'graphify-out/cache' || (rel !== 'graphify-out' && ignored(rel, patterns))) continue;
+        if (TEST_DIRS.has(e.name)) { count(abs); continue; }
         walk(abs);
-      } else if (e.isFile() && !ignored(rel, patterns)) out.push({ path: rel, abs, size: statSync(abs).size });
+      } else if (e.isFile() && (rel === GRAPH || !ignored(rel, patterns))) out.push({ path: rel, abs, size: statSync(abs).size });
     }
   };
   walk(root);
-  return out.sort((a, b) => a.path.localeCompare(b.path));
+  return { files: out.sort((a, b) => a.path.localeCompare(b.path)), skipped };
 }
 
 /** Type of a file by its name (content-based types — k8s, OpenAPI, AsyncAPI — are decided after parsing). */

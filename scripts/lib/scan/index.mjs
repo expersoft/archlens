@@ -53,8 +53,11 @@ export function scanDir(root, { url, today = isoToday(), helmRender = false } = 
   const ctx = { root, commit: info.commit, helmRender, chartNames: new Map() };
   const files = { compose: 0, k8s: 0, helm: 0, terraform: 0, openapi: 0, asyncapi: 0, graphify: 0, build: 0, ignored: 0 };
   const facts = [];
-  const all = listFiles(root);
+  const { files: all, skipped } = listFiles(root);
+  files.ignored += skipped;
   const chartDirs = new Set(all.filter(f => f.path.endsWith('Chart.yaml')).map(f => dirname(f.path)));
+  // Helm templates are Go templates, not YAML: never parsed as manifests (--helm-render renders them instead)
+  const inTemplates = p => [...chartDirs].some(d => p.startsWith(d === '.' ? 'templates/' : `${d}/templates/`));
 
   // Pre-read Chart.yaml files to populate ctx.chartNames before processing values files
   for (const f of all) {
@@ -70,7 +73,7 @@ export function scanDir(root, { url, today = isoToday(), helmRender = false } = 
   }
 
   for (const f of all) {
-    const type = detect(f.path, chartDirs);
+    const type = inTemplates(f.path) ? null : detect(f.path, chartDirs);
     if (!type || f.size > (type === 'graphify' ? MAX_GRAPH : MAX)) { files.ignored++; continue; }
     try {
       const out = extract(type, f.path, readFileSync(f.abs, 'utf8'), ctx);

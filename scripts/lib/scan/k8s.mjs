@@ -3,15 +3,19 @@ import { infraOf, hostOf } from './infra.mjs';
 
 const WORKLOADS = new Set(['Deployment', 'StatefulSet', 'DaemonSet', 'Job', 'CronJob']);
 
+const podOf = o => (o.kind === 'CronJob' ? o.spec?.jobTemplate?.spec?.template?.spec : o.spec?.template?.spec);
+const isTemplated = o => [o.metadata?.name, ...(podOf(o)?.containers ?? []).map(c => c?.image)].some(v => String(v ?? '').includes('{{'));
+
 export function k8sFacts(path, docs) {
   const facts = [];
   for (const d of docs) {
     const o = d.data;
     if (!o || typeof o !== 'object' || !o.kind || !o.apiVersion) continue;
+    if (isTemplated(o)) continue; // an unrendered Helm/Go template: its names and images are not real
     const name = o.metadata?.name ?? '?';
     const at = { file: path, line: d.lineOf('metadata', 'name') };
     if (WORKLOADS.has(o.kind)) {
-      const pod = o.kind === 'CronJob' ? o.spec?.jobTemplate?.spec?.template?.spec : o.spec?.template?.spec;
+      const pod = podOf(o);
       const image = pod?.containers?.[0]?.image;
       const infra = image ? infraOf(image) : null;
       facts.push(infra ? { kind: 'infra-image', service: name, ...infra, at } : { kind: 'workload', kindK8s: o.kind, name, ...(image ? { image } : {}), at });

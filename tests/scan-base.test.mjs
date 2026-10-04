@@ -100,3 +100,41 @@ test('sourceKey keeps two lines of the same file apart', () => {
   assert.notEqual(sourceKey({ kind: 'repo', ref: 'r', path: 'a', line: 1 }), sourceKey({ kind: 'repo', ref: 'r', path: 'a', line: 2 }));
   assert.equal(sourceKey({ kind: 'prompt', ref: 'r' }), 'prompt|r|');
 });
+
+const tree = (files) => {
+  const dir = mkdtempSync(join(tmpdir(), 'archlens-tree-'));
+  for (const [p, text] of Object.entries(files)) { mkdirSync(join(dir, p, '..'), { recursive: true }); writeFileSync(join(dir, p), text); }
+  return dir;
+};
+
+test('Helm templates are not plain YAML: chart templates/ skipped, k8s docs with {{ }} dropped (item 2)', () => {
+  const dir = tree({
+    'chart/Chart.yaml': 'apiVersion: v2\nname: pay\nversion: 0.1.0\n',
+    'chart/templates/deployment.yaml': 'apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: "{{ include \\"pay.fullname\\" . }}"\nspec:\n  template:\n    spec:\n      containers:\n        - image: "{{ .Values.image.repository }}"\n',
+    'chart/templates/broken.yaml': 'metadata:\n  name: {{ .Release.Name }}\n  labels: {{- toYaml . | nindent 4 }}\n',
+    'k8s/tpl.yaml': 'apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: "{{ .Values.name }}"\n---\napiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: real\nspec:\n  template:\n    spec:\n      containers:\n        - image: "acme/x:{{ .Values.tag }}"\n',
+  });
+  const inv = scanDir(dir);
+  assert.deepEqual(inv.facts.filter(f => f.kind === 'unreadable'), []);
+  assert.ok(!inv.facts.some(f => /\{\{/.test(f.name ?? '') || /\{\{/.test(f.image ?? '')), JSON.stringify(inv.facts));
+  assert.ok(inv.files.ignored >= 2, 'the templates count as ignored');
+});
+
+test('test and fixture folders are skipped at any depth, the root never (item 16)', () => {
+  const svc = 'services:\n  x:\n    build: .\n';
+  const dir = tree({ 'compose.yml': svc, 'tests/compose.yml': svc, 'test/compose.yml': svc, 'src/__tests__/compose.yml': svc,
+    'a/fixtures/compose.yml': svc, 'b/spec/compose.yml': svc });
+  const inv = scanDir(dir);
+  assert.equal(inv.files.compose, 1);
+  assert.deepEqual([...new Set(inv.facts.map(f => f.at.file))], ['compose.yml']);
+  assert.ok(inv.files.ignored >= 5, `skipped files are counted (${inv.files.ignored})`);
+  const nested = join(dir, 'tests');
+  assert.equal(scanDir(nested).files.compose, 1, 'a test folder given as the root is read');
+});
+
+test('a gitignored graphify-out still has its graph read (item 4)', () => {
+  const dir = tree({ '.gitignore': 'graphify-out/\n', 'graphify-out/graph.json': '{"nodes":[],"links":[]}', 'graphify-out/other.yaml': 'kind: X\napiVersion: v1\n' });
+  const inv = scanDir(dir);
+  assert.equal(inv.files.graphify, 1);
+  assert.equal(inv.files.k8s, 0);
+});
