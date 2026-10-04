@@ -1,6 +1,6 @@
 {
   "name": "archlens",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Skill: arquitetura como modelo (ArchiMate + perfil C4), diagramas como consultas, HTML animado para apresentação",
   "license": "MIT",
   "private": true,
