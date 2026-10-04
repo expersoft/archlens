@@ -397,7 +397,7 @@ async function main() {
       break;
     }
     case 'scan': {
-      const usage = 'uso: archlens scan <pasta|url-git> [--ref r] [--base b] [--out inventario.json] [--json]\n'
+      const usage = 'uso: archlens scan <pasta|url-git> [--ref r] [--base b] [--out inventario.json] [--json] [--helm-render]\n'
         + '      archlens scan <pasta|url-git> --as system|service [--system <id>] [--id <id>] --delta d.json [--from inventario.json]';
       const val = k => (args[k] && args[k] !== true ? args[k] : undefined);
       if (!file && !val('from')) fail(usage);

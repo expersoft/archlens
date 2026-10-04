@@ -1,6 +1,7 @@
 // Repository scan: walk the files, hand each recognised one to its extractor, collect the facts (inventory).
 import { readFileSync, rmSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { dirname, join } from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { listFiles, detect } from './walk.mjs';
 import { readYaml } from './yaml.mjs';
 import { repoInfo, repoName, normalizeRepoUrl, isGitUrl, cloneShallow, assertFolder } from './git.mjs';
@@ -48,6 +49,28 @@ function extract(type, path, text, ctx) {
   return { kind: null, facts: [] };
 }
 
+/** --helm-render: `helm template <chart>` for each chart, read as k8s manifests; without helm, one warning fact. */
+function renderCharts(root, chartDirs, files) {
+  const facts = [];
+  for (const d of chartDirs) {
+    const file = `${d === '.' ? '' : `${d}/`}templates (helm template)`;
+    const r = spawnSync('helm', ['template', join(root, d)], { encoding: 'utf8', timeout: 60000, maxBuffer: MAX_GRAPH });
+    if (r.error?.code === 'ENOENT') return [{ kind: 'warning', message: 'helm não encontrado: --helm-render ignorado', at: { file: '.', line: 1 } }];
+    if (r.error || r.status !== 0) {
+      const why = r.error ? r.error.message : (r.stderr || '').trim().split('\n').at(-1);
+      facts.push({ kind: 'unreadable', error: `helm template falhou: ${why}`, at: { file, line: 1 } });
+      continue;
+    }
+    try {
+      facts.push(...k8sFacts(file, readYaml(r.stdout)).map(f => ({ ...f, at: { file, line: 1 } })));
+      files.helm++;
+    } catch (e) {
+      facts.push({ kind: 'unreadable', error: String(e.message).split('\n')[0], at: { file, line: 1 } });
+    }
+  }
+  return facts;
+}
+
 export function scanDir(root, { url, today = isoToday(), helmRender = false } = {}) {
   const info = repoInfo(root);
   const ctx = { root, commit: info.commit, helmRender, chartNames: new Map() };
@@ -84,6 +107,8 @@ export function scanDir(root, { url, today = isoToday(), helmRender = false } = 
       facts.push({ kind: 'unreadable', error: String(e.message).split('\n')[0], at: { file: f.path, line: 1 } });
     }
   }
+
+  if (helmRender) facts.push(...renderCharts(root, [...chartDirs].sort(), files));
 
   // Post-pass: filter tf-refs to only those between emitted resources
   const emittedResources = new Set(facts.filter(f => f.kind === 'cloud-resource').map(f => `${f.type}.${f.name}`));

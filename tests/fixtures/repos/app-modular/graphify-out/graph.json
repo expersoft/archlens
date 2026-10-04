@@ -9,42 +9,48 @@
    "label": "MainActivity",
    "file_type": "code",
    "source_file": "app/src/Main.kt",
-   "source_location": "L3"
+   "source_location": "L3",
+   "community_name": "Tela de hoje"
   },
   {
    "id": "a2",
    "label": "TodayViewModel",
    "file_type": "code",
    "source_file": "app/src/Today.kt",
-   "source_location": "L5"
+   "source_location": "L5",
+   "community_name": "Tela de hoje"
   },
   {
    "id": "d1",
    "label": "Treatment",
    "file_type": "code",
    "source_file": "domain/src/Treatment.kt",
-   "source_location": "L10"
+   "source_location": "L10",
+   "community_name": "Tratamentos"
   },
   {
    "id": "d2",
    "label": "DoseEvent",
    "file_type": "code",
    "source_file": "domain/src/DoseEvent.kt",
-   "source_location": "L7"
+   "source_location": "L7",
+   "community_name": "Tratamentos"
   },
   {
    "id": "d3",
    "label": "TreatmentTest",
    "file_type": "code",
    "source_file": "domain/src/test/TreatmentTest.kt",
-   "source_location": "L1"
+   "source_location": "L1",
+   "community_name": "Testes de tratamento"
   },
   {
    "id": "r1",
    "label": "RoomDoseRepository",
    "file_type": "code",
    "source_file": "data/src/Repo.kt",
-   "source_location": "L2"
+   "source_location": "L2",
+   "community_name": "Persistência"
   },
   {
    "id": "k1",

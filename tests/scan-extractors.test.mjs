@@ -13,6 +13,8 @@ import { asyncapiFacts } from '../scripts/lib/scan/asyncapi.mjs';
 import { gradleModules, buildFacts } from '../scripts/lib/scan/build.mjs';
 import { graphifyFacts } from '../scripts/lib/scan/graphify.mjs';
 import { scanDir } from '../scripts/lib/scan/index.mjs';
+import { summarize, formatSummary } from '../scripts/lib/scan/summary.mjs';
+import { toDelta } from '../scripts/lib/scan/to-delta.mjs';
 
 const fx = p => fileURLToPath(new URL(`./fixtures/repos/${p}`, import.meta.url));
 const read = p => readFileSync(fx(p), 'utf8');
@@ -210,4 +212,32 @@ test('gradle: duplicate project() dependencies aggregate into one fact', () => {
     const deps = buildFacts('settings.gradle.kts', 'include(":a", ":b")', { root: dir }).filter(f => f.kind === 'module-dep');
     assert.deepEqual(deps.map(d => [d.from, d.to, d.count, d.at.line]), [['a', 'b', 2, 2]]);
   } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('graphify communities: the largest named ones as component suggestions, test-ish names left out (item 3)', () => {
+  const facts = graphifyFacts('graphify-out/graph.json', read('app-modular/graphify-out/graph.json'), { root: fx('app-modular'), commit: null });
+  assert.deepEqual(pick(facts, 'community', 'name', 'size'), [['Tela de hoje', 2], ['Tratamentos', 2], ['Persistência', 1]]);
+  const s = summarize(scanDir(fx('app-modular')), null);
+  assert.deepEqual(s.communities.map(c => c.name), ['Tela de hoje', 'Tratamentos', 'Persistência']);
+  assert.match(formatSummary(s), /comunidades \(sugestões de componentes\): Tela de hoje \(2\), Tratamentos \(2\), Persistência \(1\)/);
+  assert.ok(!toDelta(scanDir(fx('app-modular')), { role: 'system' }).model.elements.some(e => /Tela de hoje/.test(e.name ?? '')), 'to-delta ignores communities');
+});
+
+const withPath = (path, fn) => { const old = process.env.PATH; process.env.PATH = path; try { return fn(); } finally { process.env.PATH = old; } };
+
+test('--helm-render: helm template output read as k8s; without helm a warning, never a silent skip (item 3)', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'archlens-helm-'));
+  mkdirSync(join(dir, 'chart/templates'), { recursive: true });
+  writeFileSync(join(dir, 'chart/Chart.yaml'), 'apiVersion: v2\nname: pay\nversion: 0.1.0\n');
+  writeFileSync(join(dir, 'chart/templates/d.yaml'), 'kind: Deployment\nmetadata:\n  name: "{{ .Release.Name }}"\n');
+  const empty = mkdtempSync(join(tmpdir(), 'archlens-nohelm-'));
+  const missing = withPath(empty, () => scanDir(dir, { helmRender: true }));
+  assert.deepEqual(pick(missing.facts, 'warning', 'message'), [['helm não encontrado: --helm-render ignorado']]);
+  assert.ok(summarize(missing, null).warnings.includes('helm não encontrado: --helm-render ignorado'));
+  assert.deepEqual(pick(scanDir(dir).facts, 'warning', 'message'), [], 'no warning without --helm-render');
+  const bin = mkdtempSync(join(tmpdir(), 'archlens-helmbin-'));
+  writeFileSync(join(bin, 'helm'), '#!/bin/sh\n[ "$1" = template ] || exit 2\ncat <<EOT\n---\napiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: pay\nspec:\n  template:\n    spec:\n      containers:\n        - image: acme/pay:1.0\nEOT\n', { mode: 0o755 });
+  const rendered = withPath(`${bin}:${process.env.PATH}`, () => scanDir(dir, { helmRender: true }));
+  assert.deepEqual(pick(rendered.facts, 'workload', 'name', 'image'), [['pay', 'acme/pay:1.0']]);
+  assert.deepEqual(rendered.facts.find(f => f.kind === 'workload').at, { file: 'chart/templates (helm template)', line: 1 });
 });

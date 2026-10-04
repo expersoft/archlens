@@ -24,6 +24,7 @@ export function summarize(inv, base) {
   if (counts['graph-stale']) warnings.push('graphify desatualizado: o grafo foi gerado em outro commit; rode o graphify de novo');
   if (inv.repo.dirty) warnings.push('o repositório tem alterações não commitadas; a proveniência aponta para o commit atual');
   if (!inv.repo.commit) warnings.push('pasta fora de git: a proveniência fica sem commit');
+  for (const f of inv.facts.filter(x => x.kind === 'warning')) warnings.push(f.message);
   if (counts.unreadable) warnings.push(`${counts.unreadable} arquivo(s) não puderam ser lidos (fatos "unreadable" no inventário)`);
   let existing = null;
   const systems = [];
@@ -41,7 +42,8 @@ export function summarize(inv, base) {
     }
     systems.push(...probableSystems(inv, base));
   }
-  return { repo: inv.repo, counts, files: inv.files, role, existing, systems, warnings };
+  const communities = inv.facts.filter(f => f.kind === 'community').map(f => ({ name: f.name, size: f.size }));
+  return { repo: inv.repo, counts, files: inv.files, role, existing, systems, communities, warnings };
 }
 
 function probableSystems(inv, base) {
@@ -80,6 +82,7 @@ export function formatSummary(s) {
   lines.push(`  papel sugerido: ${s.role.suggested} — ${s.role.why}`);
   if (s.existing) lines.push(`  já na base: ${s.existing.name} (${s.existing.id})${s.existing.by === 'repo' ? `, lido antes como ${s.existing.role}` : `, semelhança de nome ${s.existing.score}`}`);
   for (const x of s.systems) lines.push(`  sistema provável: ${x.name} (${x.id}) — ${x.why.join('; ')}`);
+  if (s.communities?.length) lines.push(`  comunidades (sugestões de componentes): ${s.communities.map(c => `${c.name} (${c.size})`).join(', ')}`);
   for (const w of s.warnings) lines.push(`  aviso: ${w}`);
   lines.push('  próximo passo: confirme o papel e rode "archlens scan … --as system|service [--system <id>] [--id <id>] --delta d.json"');
   return lines.join('\n');

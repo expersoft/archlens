@@ -56,6 +56,13 @@ export function graphifyFacts(path, text, ctx) {
     facts.push({ kind: 'domain-concept', label: n.label, module: modOf(n.source_file), degree: degree.get(n.id) ?? 0,
       at: { file: n.source_file, line: Number(/L(\d+)/.exec(n.source_location ?? '')?.[1] ?? 1) } });
   }
+  // communities: suggestions of components for the summary only (to-delta ignores them)
+  const communities = new Map();
+  for (const n of nodes) {
+    const c = n.community_name;
+    if (typeof c === 'string' && c.trim() && !/test|teste/i.test(c)) communities.set(c, (communities.get(c) ?? 0) + 1);
+  }
+  for (const [name, size] of [...communities].sort((x, y) => y[1] - x[1]).slice(0, 10)) facts.push({ kind: 'community', name, size, at });
   if (g.built_at_commit && ctx.commit && !ctx.commit.startsWith(g.built_at_commit) && !g.built_at_commit.startsWith(ctx.commit)) {
     facts.push({ kind: 'graph-stale', builtAt: g.built_at_commit, commit: ctx.commit, at });
   }
