@@ -9,6 +9,7 @@ Skill para Claude Code: **arquitetura como modelo, diagramas como consultas.**
   extraem visões novas a qualquer momento.
 - **Base que evolui:** cada informação nova vira um delta; `archlens merge` casa entidades (id, alias, nome parecido),
   pergunta conflitos e duplicatas, e registra proveniência, ciclo de vida (as-is/to-be) e histórico.
+- **Lê repositórios** (compose, k8s/Helm, Terraform, OpenAPI/AsyncAPI, graphify) e gera deltas com proveniência (`archlens scan`).
 - **Prévia de mudanças:** `--delta` / `--plan` desenham a base com um delta ainda não aplicado (esboço à mão no estilo do draw.io, com hachura, `+ ~ − ?`,
   removidos riscados); o status `draft` marca o que ainda está em discussão.
 - **C4:** landscape, context, container, component, dynamic, com `focus`/`depth` e elevação de relações.
@@ -59,4 +60,4 @@ architecture/**/*.png binary
 
 ## Licença
 
-[MIT](LICENSE) © 2026 Expersoft. O [ELK](https://eclipse.dev/elk/), usado no layout e incluído em `scripts/vendor/`, mantém a própria licença (EPL-2.0, ver `scripts/vendor/ELK-LICENSE.md`). O [rough.js](https://roughjs.com/) 4.6.6, usado no traço à mão dos rascunhos, também está em `scripts/vendor/` (MIT, ver `scripts/vendor/ROUGH-LICENSE.md`).
+[MIT](LICENSE) © 2026 Expersoft. O [ELK](https://eclipse.dev/elk/), usado no layout e incluído em `scripts/vendor/`, mantém a própria licença (EPL-2.0, ver `scripts/vendor/ELK-LICENSE.md`). O [rough.js](https://roughjs.com/) 4.6.6, usado no traço à mão dos rascunhos, também está em `scripts/vendor/` (MIT, ver `scripts/vendor/ROUGH-LICENSE.md`). O [yaml](https://eemeli.org/yaml/) 2.9.1, usado na leitura de manifestos YAML com número de linha (`archlens scan`), também está em `scripts/vendor/yaml/` (ISC, ver `scripts/vendor/YAML-LICENSE`).

@@ -1,0 +1,198 @@
+{
+  "archlens-delta": "1.0",
+  "source": {
+    "kind": "repo",
+    "ref": "https://example.com/acme/pedidos@d28ae88"
+  },
+  "summary": "Leitura de pedidos@d28ae88",
+  "model": {
+    "elements": [
+      {
+        "id": "loja",
+        "type": "c4:softwareSystem",
+        "name": "loja",
+        "sources": [
+          {
+            "kind": "repo",
+            "ref": "https://example.com/acme/pedidos@d28ae88",
+            "path": ".",
+            "line": 1
+          }
+        ]
+      },
+      {
+        "id": "loja.pedidos",
+        "type": "c4:container",
+        "parent": "loja",
+        "name": "pedidos",
+        "aliases": [
+          "pedidos-api"
+        ],
+        "properties": {
+          "repo": "https://example.com/acme/pedidos",
+          "repoRole": "service"
+        },
+        "sources": [
+          {
+            "kind": "repo",
+            "ref": "https://example.com/acme/pedidos@d28ae88",
+            "path": ".",
+            "line": 1
+          }
+        ]
+      },
+      {
+        "id": "loja.pedidos-pedidos-db",
+        "type": "c4:container",
+        "parent": "loja",
+        "name": "pedidos-db",
+        "tags": [
+          "database"
+        ],
+        "sources": [
+          {
+            "kind": "repo",
+            "ref": "https://example.com/acme/pedidos@d28ae88",
+            "path": "docker-compose.yml",
+            "line": 13
+          }
+        ]
+      },
+      {
+        "id": "tech.postgres-16",
+        "type": "archimate:system-software",
+        "name": "PostgreSQL 16",
+        "sources": [
+          {
+            "kind": "repo",
+            "ref": "https://example.com/acme/pedidos@d28ae88",
+            "path": "docker-compose.yml",
+            "line": 13
+          }
+        ]
+      },
+      {
+        "id": "ext.pagamentos",
+        "type": "c4:softwareSystem",
+        "name": "pagamentos",
+        "external": true,
+        "inferred": true,
+        "confidence": "baixa",
+        "sources": [
+          {
+            "kind": "repo",
+            "ref": "https://example.com/acme/pedidos@d28ae88",
+            "path": "docker-compose.yml",
+            "line": 7,
+            "excerpt": "host em PAGAMENTOS_URL"
+          }
+        ]
+      },
+      {
+        "id": "loja.pedidos.api-api-de-pedidos",
+        "type": "archimate:application-interface",
+        "name": "API de Pedidos",
+        "properties": {
+          "version": "1.4.0",
+          "operations": 3
+        },
+        "sources": [
+          {
+            "kind": "repo",
+            "ref": "https://example.com/acme/pedidos@d28ae88",
+            "path": "api/openapi.yaml",
+            "line": 3
+          }
+        ]
+      },
+      {
+        "id": "topic.pedido-criado",
+        "type": "c4:container",
+        "name": "pedido-criado",
+        "tags": [
+          "topic"
+        ],
+        "sources": [
+          {
+            "kind": "repo",
+            "ref": "https://example.com/acme/pedidos@d28ae88",
+            "path": "api/asyncapi.yaml",
+            "line": 5
+          }
+        ]
+      }
+    ],
+    "relationships": [
+      {
+        "from": "tech.postgres-16",
+        "to": "loja.pedidos-pedidos-db",
+        "type": "archimate:realization",
+        "sources": [
+          {
+            "kind": "repo",
+            "ref": "https://example.com/acme/pedidos@d28ae88",
+            "path": "docker-compose.yml",
+            "line": 13
+          }
+        ]
+      },
+      {
+        "from": "loja.pedidos",
+        "to": "loja.pedidos-pedidos-db",
+        "type": "uses",
+        "description": "depends_on",
+        "sources": [
+          {
+            "kind": "repo",
+            "ref": "https://example.com/acme/pedidos@d28ae88",
+            "path": "docker-compose.yml",
+            "line": 11
+          }
+        ]
+      },
+      {
+        "from": "loja.pedidos",
+        "to": "ext.pagamentos",
+        "type": "uses",
+        "description": "via PAGAMENTOS_URL",
+        "inferred": true,
+        "sources": [
+          {
+            "kind": "repo",
+            "ref": "https://example.com/acme/pedidos@d28ae88",
+            "path": "docker-compose.yml",
+            "line": 7,
+            "excerpt": "PAGAMENTOS_URL → pagamentos"
+          }
+        ]
+      },
+      {
+        "from": "loja.pedidos",
+        "to": "loja.pedidos.api-api-de-pedidos",
+        "type": "archimate:realization",
+        "sources": [
+          {
+            "kind": "repo",
+            "ref": "https://example.com/acme/pedidos@d28ae88",
+            "path": "api/openapi.yaml",
+            "line": 3
+          }
+        ]
+      },
+      {
+        "from": "loja.pedidos",
+        "to": "topic.pedido-criado",
+        "type": "archimate:flow",
+        "description": "publica PedidoCriado",
+        "sources": [
+          {
+            "kind": "repo",
+            "ref": "https://example.com/acme/pedidos@d28ae88",
+            "path": "api/asyncapi.yaml",
+            "line": 5
+          }
+        ]
+      }
+    ]
+  }
+}

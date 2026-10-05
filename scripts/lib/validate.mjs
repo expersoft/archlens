@@ -37,7 +37,7 @@ export function validateModel(raw) {
   }
   const inferred = [...model.elements.values()].filter(e => e.inferred);
   if (inferred.length) {
-    warnings.push({ code: 'W_INFERRED', message: `${inferred.length} elemento(s) inferidos de texto livre`, path: 'model.elements', hint: 'revise a seção "Premissas e inferências" do ARCHITECTURE.md' });
+    warnings.push({ code: 'W_INFERRED', message: `${inferred.length} elemento(s) inferidos (texto livre ou leitura de repositório)`, path: 'model.elements', hint: 'revise a seção "Premissas e inferências" do ARCHITECTURE.md' });
   }
   const seenViews = new Set();
   (model.views || []).forEach((v, i) => {

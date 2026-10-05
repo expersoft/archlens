@@ -616,6 +616,10 @@
         "path": {
           "type": "string"
         },
+        "line": {
+          "type": "integer",
+          "minimum": 1
+        },
         "excerpt": {
           "type": "string"
         },

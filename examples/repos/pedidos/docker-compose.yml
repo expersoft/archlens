@@ -1,0 +1,13 @@
+services:
+  pedidos-api:
+    build: ./api
+    ports:
+      - "8080:8080"
+    environment:
+      DB_URL: postgres://app:segredo@pedidos-db:5432/pedidos
+      PAGAMENTOS_URL: http://pagamentos:8080/v1
+      LOG_LEVEL: info
+    depends_on:
+      - pedidos-db
+  pedidos-db:
+    image: postgres:16-alpine

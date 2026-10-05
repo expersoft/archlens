@@ -92,6 +92,19 @@ test('a similar name of the same type is only a possible duplicate', () => {
   assert.ok(find(diff.raw, 'gateway-pag'));
 });
 
+test('an element the same delta removes is never offered as a possible duplicate; relationships move to the new one', () => {
+  const d = delta({ elements: [{ id: 'gateway-pag', type: 'c4:softwareSystem', name: 'Gateway Pagamentos', external: true }],
+    relationships: [{ from: 'loja.api', to: 'gateway-pag', type: 'uses', description: 'cobra' }] },
+  { ops: [{ op: 'remove', id: 'pagamentos', reason: 'substituído por gateway-pag' }] });
+  const plan = planMerge(shop(), d, TODAY);
+  assert.ok(!plan.items.some(i => i.class === 'possible-duplicate'), 'no duplicate question against what is removed');
+  const { raw } = applyPlan(shop(), answer(plan, { 'op:0': 'yes' }), TODAY);
+  assert.equal(find(raw, 'pagamentos'), undefined);
+  assert.ok(find(raw, 'gateway-pag'));
+  assert.ok(raw.model.relationships.some(r => r.from === 'loja.api' && r.to === 'gateway-pag'), 'the new relationship survives the cascade');
+  assert.ok(!raw.model.relationships.some(r => r.from === 'pagamentos' || r.to === 'pagamentos'));
+});
+
 test('fields that differ from a possible duplicate become conditional conflicts', () => {
   const plan = planMerge(shop(), delta({ elements: [{ id: 'gateway-pag', type: 'c4:softwareSystem', name: 'Gateway Pagamentos', external: false }] }), TODAY);
   const cond = plan.items.find(i => i.class === 'conflict' && i.field === 'external');
@@ -662,4 +675,31 @@ test('retiring a grouping listed in a view\'s groups.only warns in the plan, and
   assert.ok(e, 'the result does not build: blocked');
   assert.match(e.message, /oculto pelo filtro de status/);
   assert.match(e.hint, /retired/);
+});
+
+test('apply ignores a resolution written on an informational item (item 8)', () => {
+  const d = delta({ elements: [{ id: 'loja.api', type: 'c4:container', description: 'Pedidos' }, { id: 'loja.novo', type: 'c4:container', name: 'Novo', parent: 'loja' }] },
+    { ops: [{ op: 'alias', id: 'loja.api', add: ['api'] }, { op: 'status', id: 'loja.api', status: 'deprecated' }] });
+  const plan = planMerge(shop(), d, TODAY);
+  assert.ok(plan.items.every(it => !('resolution' in it)), 'no questions in this plan');
+  for (const it of plan.items) it.resolution = 'qualquer coisa';
+  const { raw } = applyPlan(shop(), plan, TODAY);
+  assert.ok(find(raw, 'loja.novo'));
+  assert.equal(find(raw, 'loja.api').status, 'deprecated');
+});
+
+test('repo provenance follows the latest reading of that repository; other sources are kept (item 5)', () => {
+  const old = { kind: 'repo', ref: 'https://g.com/o/x@aaaaaaa' };
+  const base = shop();
+  const api = find(base, 'loja.api');
+  api.sources = [{ ...old, path: 'a.yml', line: 1 }, { ...old, path: 'b.yml', line: 2 }, { kind: 'prompt', ref: 'rodada 1' },
+    { kind: 'repo', ref: 'https://g.com/o/y@aaaaaaa', path: 'c.yml', line: 1 }, { kind: 'repo', ref: 'git@g.com:o/x@ccccccc', path: 'z', line: 1 }];
+  const now = { kind: 'repo', ref: 'https://g.com/o/x@bbbbbbb' };
+  const d = { 'archlens-delta': '1.0', source: now, model: { elements: [{ id: 'loja.api', sources: [{ ...now, path: 'a.yml', line: 1 }, { ...now, path: 'a.yml', line: 9 }] }], relationships: [] } };
+  const { raw } = applyPlan(base, planMerge(base, d, TODAY), TODAY);
+  assert.deepEqual(find(raw, 'loja.api').sources.map(s => `${s.ref}|${s.path ?? ''}|${s.line ?? ''}`), [
+    'rodada 1||', 'https://g.com/o/y@aaaaaaa|c.yml|1', 'git@g.com:o/x@ccccccc|z|1', 'https://g.com/o/x@bbbbbbb|a.yml|1', 'https://g.com/o/x@bbbbbbb|a.yml|9']);
+  // the same reading again changes nothing (no reordering)
+  const again = applyPlan(raw, planMerge(raw, d, TODAY), TODAY);
+  assert.equal(again.entry, null);
 });

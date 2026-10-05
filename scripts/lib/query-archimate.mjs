@@ -48,7 +48,7 @@ export function resolveArchimate(model, spec) {
     if (anchor.type === 'grouping') throw viewError('E_VIEW_GROUP', `anchor "${spec.anchor}" é um agrupamento, que não é nó`, 'use groups.only para recortar por agrupamento');
     const mode = spec.traverse?.mode ?? DEFAULT_MODE[viewpoint] ?? 'supporters';
     if (!['supporters', 'dependents', 'both'].includes(mode)) throw viewError('E_VIEW_TRAVERSE', `modo "${mode}" inválido`, 'use supporters | dependents | both');
-    const via = new Set(spec.traverse?.via ?? DEFAULT_VIA);
+    const via = new Set(spec.traverse?.via ?? (viewpoint === 'impact' ? [...DEFAULT_VIA, 'flow'] : DEFAULT_VIA));
     const maxDepth = spec.traverse?.maxDepth ?? 12;
     const hierarchy = spec.traverse?.hierarchy ?? true;
     info.set(anchor.id, { distance: 0, role: 'anchor' });

@@ -1,0 +1,7 @@
+apiVersion: v2
+name: pagamentos
+version: 0.1.0
+dependencies:
+  - name: redis
+    version: 18.x
+    repository: https://charts.bitnami.com/bitnami

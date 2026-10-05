@@ -1,0 +1,514 @@
+{
+  "elements": [
+    {
+      "id": "loja",
+      "type": "c4:softwareSystem",
+      "name": "loja",
+      "sources": [
+        {
+          "kind": "repo",
+          "ref": "https://example.com/acme/pedidos@d28ae88",
+          "path": ".",
+          "line": 1
+        }
+      ],
+      "children": [
+        {
+          "id": "loja.pedidos",
+          "type": "c4:container",
+          "name": "pedidos",
+          "aliases": [
+            "pedidos-api"
+          ],
+          "properties": {
+            "repo": "https://example.com/acme/pedidos",
+            "repoRole": "service"
+          },
+          "sources": [
+            {
+              "kind": "repo",
+              "ref": "https://example.com/acme/pedidos@d28ae88",
+              "path": ".",
+              "line": 1
+            }
+          ]
+        },
+        {
+          "id": "loja.pedidos-pedidos-db",
+          "type": "c4:container",
+          "name": "pedidos-db",
+          "tags": [
+            "database"
+          ],
+          "sources": [
+            {
+              "kind": "repo",
+              "ref": "https://example.com/acme/pedidos@d28ae88",
+              "path": "docker-compose.yml",
+              "line": 13
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "tech.postgres-16",
+      "type": "archimate:system-software",
+      "name": "PostgreSQL 16",
+      "sources": [
+        {
+          "kind": "repo",
+          "ref": "https://example.com/acme/pedidos@d28ae88",
+          "path": "docker-compose.yml",
+          "line": 13
+        }
+      ]
+    },
+    {
+      "id": "loja.pedidos.api-api-de-pedidos",
+      "type": "archimate:application-interface",
+      "name": "API de Pedidos",
+      "properties": {
+        "version": "1.4.0",
+        "operations": 3
+      },
+      "sources": [
+        {
+          "kind": "repo",
+          "ref": "https://example.com/acme/pedidos@d28ae88",
+          "path": "api/openapi.yaml",
+          "line": 3
+        }
+      ]
+    },
+    {
+      "id": "topic.pedido-criado",
+      "type": "c4:container",
+      "name": "pedido-criado",
+      "tags": [
+        "topic"
+      ],
+      "sources": [
+        {
+          "kind": "repo",
+          "ref": "https://example.com/acme/pedidos@d28ae88",
+          "path": "api/asyncapi.yaml",
+          "line": 5
+        },
+        {
+          "kind": "repo",
+          "ref": "https://example.com/acme/pagamentos@ae85af0",
+          "path": "asyncapi.json",
+          "line": 1
+        }
+      ]
+    },
+    {
+      "id": "financeiro",
+      "type": "c4:softwareSystem",
+      "name": "financeiro",
+      "sources": [
+        {
+          "kind": "repo",
+          "ref": "https://example.com/acme/pagamentos@ae85af0",
+          "path": ".",
+          "line": 1
+        }
+      ],
+      "children": [
+        {
+          "id": "financeiro.pagamentos",
+          "type": "c4:container",
+          "name": "pagamentos",
+          "properties": {
+            "repo": "https://example.com/acme/pagamentos",
+            "repoRole": "service"
+          },
+          "sources": [
+            {
+              "kind": "repo",
+              "ref": "https://example.com/acme/pagamentos@ae85af0",
+              "path": ".",
+              "line": 1
+            }
+          ]
+        },
+        {
+          "id": "financeiro.pagamentos-redis",
+          "type": "c4:container",
+          "name": "redis",
+          "tags": [
+            "cache"
+          ],
+          "sources": [
+            {
+              "kind": "repo",
+              "ref": "https://example.com/acme/pagamentos@ae85af0",
+              "path": "chart/Chart.yaml",
+              "line": 5
+            }
+          ]
+        },
+        {
+          "id": "financeiro.pagamentos-pagamentos-db",
+          "type": "c4:container",
+          "name": "pagamentos-db",
+          "tags": [
+            "database"
+          ],
+          "sources": [
+            {
+              "kind": "repo",
+              "ref": "https://example.com/acme/pagamentos@ae85af0",
+              "path": "k8s/deploy.yaml",
+              "line": 49
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "tech.redis",
+      "type": "archimate:system-software",
+      "name": "Redis",
+      "sources": [
+        {
+          "kind": "repo",
+          "ref": "https://example.com/acme/pagamentos@ae85af0",
+          "path": "chart/Chart.yaml",
+          "line": 5
+        }
+      ]
+    },
+    {
+      "id": "tech.postgres-15",
+      "type": "archimate:system-software",
+      "name": "PostgreSQL 15",
+      "sources": [
+        {
+          "kind": "repo",
+          "ref": "https://example.com/acme/pagamentos@ae85af0",
+          "path": "k8s/deploy.yaml",
+          "line": 49
+        }
+      ]
+    },
+    {
+      "id": "ext.antifraude-acme-com",
+      "type": "c4:softwareSystem",
+      "name": "antifraude.acme.com",
+      "external": true,
+      "inferred": true,
+      "confidence": "baixa",
+      "sources": [
+        {
+          "kind": "repo",
+          "ref": "https://example.com/acme/pagamentos@ae85af0",
+          "path": "chart/values.yaml",
+          "line": 8,
+          "excerpt": "host em ANTIFRAUDE_URL"
+        }
+      ]
+    },
+    {
+      "id": "ext.kafka",
+      "type": "c4:softwareSystem",
+      "name": "kafka",
+      "external": true,
+      "inferred": true,
+      "confidence": "baixa",
+      "sources": [
+        {
+          "kind": "repo",
+          "ref": "https://example.com/acme/pagamentos@ae85af0",
+          "path": "k8s/deploy.yaml",
+          "line": 7,
+          "excerpt": "host em KAFKA_BROKERS"
+        }
+      ]
+    },
+    {
+      "id": "topic.pagamento-aprovado",
+      "type": "c4:container",
+      "name": "pagamento-aprovado",
+      "tags": [
+        "topic"
+      ],
+      "sources": [
+        {
+          "kind": "repo",
+          "ref": "https://example.com/acme/pagamentos@ae85af0",
+          "path": "asyncapi.json",
+          "line": 1
+        }
+      ]
+    },
+    {
+      "id": "infra-cloud",
+      "type": "c4:softwareSystem",
+      "name": "infra",
+      "properties": {
+        "repo": "https://example.com/acme/infra",
+        "repoRole": "system"
+      },
+      "sources": [
+        {
+          "kind": "repo",
+          "ref": "https://example.com/acme/infra@4e77da4",
+          "path": ".",
+          "line": 1
+        }
+      ],
+      "children": [
+        {
+          "id": "infra-cloud.pedidos",
+          "type": "c4:container",
+          "name": "pedidos",
+          "technology": "aws_db_instance",
+          "tags": [
+            "database"
+          ],
+          "sources": [
+            {
+              "kind": "repo",
+              "ref": "https://example.com/acme/infra@4e77da4",
+              "path": "main.tf",
+              "line": 1
+            }
+          ]
+        },
+        {
+          "id": "infra-cloud.eventos",
+          "type": "c4:container",
+          "name": "eventos",
+          "technology": "aws_msk_cluster",
+          "tags": [
+            "queue"
+          ],
+          "sources": [
+            {
+              "kind": "repo",
+              "ref": "https://example.com/acme/infra@4e77da4",
+              "path": "main.tf",
+              "line": 8
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "tech.aws-eks-cluster-principal",
+      "type": "archimate:node",
+      "name": "principal",
+      "technology": "aws_eks_cluster",
+      "sources": [
+        {
+          "kind": "repo",
+          "ref": "https://example.com/acme/infra@4e77da4",
+          "path": "main.tf",
+          "line": 17
+        }
+      ]
+    }
+  ],
+  "relationships": [
+    {
+      "from": "tech.postgres-16",
+      "to": "loja.pedidos-pedidos-db",
+      "type": "archimate:realization",
+      "id": "tech.postgres-16-realization-loja.pedidos-pedidos-db",
+      "sources": [
+        {
+          "kind": "repo",
+          "ref": "https://example.com/acme/pedidos@d28ae88",
+          "path": "docker-compose.yml",
+          "line": 13
+        }
+      ]
+    },
+    {
+      "from": "loja.pedidos",
+      "to": "loja.pedidos-pedidos-db",
+      "type": "uses",
+      "description": "depends_on",
+      "id": "loja.pedidos-access-loja.pedidos-pedidos-db",
+      "sources": [
+        {
+          "kind": "repo",
+          "ref": "https://example.com/acme/pedidos@d28ae88",
+          "path": "docker-compose.yml",
+          "line": 11
+        }
+      ]
+    },
+    {
+      "from": "loja.pedidos",
+      "to": "loja.pedidos.api-api-de-pedidos",
+      "type": "archimate:realization",
+      "id": "loja.pedidos-realization-loja.pedidos.api-api-de-pedidos",
+      "sources": [
+        {
+          "kind": "repo",
+          "ref": "https://example.com/acme/pedidos@d28ae88",
+          "path": "api/openapi.yaml",
+          "line": 3
+        }
+      ]
+    },
+    {
+      "from": "loja.pedidos",
+      "to": "topic.pedido-criado",
+      "type": "archimate:flow",
+      "description": "publica PedidoCriado",
+      "id": "loja.pedidos-flow-topic.pedido-criado",
+      "sources": [
+        {
+          "kind": "repo",
+          "ref": "https://example.com/acme/pedidos@d28ae88",
+          "path": "api/asyncapi.yaml",
+          "line": 5
+        }
+      ]
+    },
+    {
+      "from": "tech.redis",
+      "to": "financeiro.pagamentos-redis",
+      "type": "archimate:serving",
+      "id": "tech.redis-serving-financeiro.pagamentos-redis",
+      "sources": [
+        {
+          "kind": "repo",
+          "ref": "https://example.com/acme/pagamentos@ae85af0",
+          "path": "chart/Chart.yaml",
+          "line": 5
+        }
+      ]
+    },
+    {
+      "from": "tech.postgres-15",
+      "to": "financeiro.pagamentos-pagamentos-db",
+      "type": "archimate:realization",
+      "id": "tech.postgres-15-realization-financeiro.pagamentos-pagamentos-db",
+      "sources": [
+        {
+          "kind": "repo",
+          "ref": "https://example.com/acme/pagamentos@ae85af0",
+          "path": "k8s/deploy.yaml",
+          "line": 49
+        }
+      ]
+    },
+    {
+      "from": "financeiro.pagamentos",
+      "to": "ext.antifraude-acme-com",
+      "type": "uses",
+      "description": "via ANTIFRAUDE_URL",
+      "inferred": true,
+      "id": "ext.antifraude-acme-com-serving-financeiro.pagamentos",
+      "sources": [
+        {
+          "kind": "repo",
+          "ref": "https://example.com/acme/pagamentos@ae85af0",
+          "path": "chart/values.yaml",
+          "line": 8,
+          "excerpt": "ANTIFRAUDE_URL → antifraude.acme.com"
+        }
+      ]
+    },
+    {
+      "from": "financeiro.pagamentos",
+      "to": "ext.kafka",
+      "type": "uses",
+      "description": "via KAFKA_BROKERS",
+      "inferred": true,
+      "id": "ext.kafka-serving-financeiro.pagamentos",
+      "sources": [
+        {
+          "kind": "repo",
+          "ref": "https://example.com/acme/pagamentos@ae85af0",
+          "path": "k8s/deploy.yaml",
+          "line": 7,
+          "excerpt": "KAFKA_BROKERS → kafka"
+        }
+      ]
+    },
+    {
+      "from": "financeiro.pagamentos",
+      "to": "loja.pedidos",
+      "type": "uses",
+      "description": "via PEDIDOS_URL",
+      "inferred": true,
+      "id": "loja.pedidos-serving-financeiro.pagamentos",
+      "sources": [
+        {
+          "kind": "repo",
+          "ref": "https://example.com/acme/pagamentos@ae85af0",
+          "path": "k8s/deploy.yaml",
+          "line": 7,
+          "excerpt": "PEDIDOS_URL → pedidos-api"
+        }
+      ]
+    },
+    {
+      "from": "topic.pedido-criado",
+      "to": "financeiro.pagamentos",
+      "type": "archimate:flow",
+      "description": "assina pedido-criado",
+      "id": "topic.pedido-criado-flow-financeiro.pagamentos",
+      "sources": [
+        {
+          "kind": "repo",
+          "ref": "https://example.com/acme/pagamentos@ae85af0",
+          "path": "asyncapi.json",
+          "line": 1
+        }
+      ]
+    },
+    {
+      "from": "financeiro.pagamentos",
+      "to": "topic.pagamento-aprovado",
+      "type": "archimate:flow",
+      "description": "publica pagamento-aprovado",
+      "id": "financeiro.pagamentos-flow-topic.pagamento-aprovado",
+      "sources": [
+        {
+          "kind": "repo",
+          "ref": "https://example.com/acme/pagamentos@ae85af0",
+          "path": "asyncapi.json",
+          "line": 1
+        }
+      ]
+    },
+    {
+      "from": "loja.pedidos",
+      "to": "financeiro.pagamentos",
+      "type": "uses",
+      "description": "via PAGAMENTOS_URL",
+      "inferred": true,
+      "id": "financeiro.pagamentos-serving-loja.pedidos",
+      "sources": [
+        {
+          "kind": "repo",
+          "ref": "https://example.com/acme/pedidos@d28ae88",
+          "path": "docker-compose.yml",
+          "line": 7,
+          "excerpt": "PAGAMENTOS_URL → pagamentos"
+        }
+      ]
+    },
+    {
+      "from": "infra-cloud.eventos",
+      "to": "tech.aws-eks-cluster-principal",
+      "type": "archimate:serving",
+      "id": "infra-cloud.eventos-serving-tech.aws-eks-cluster-principal",
+      "sources": [
+        {
+          "kind": "repo",
+          "ref": "https://example.com/acme/infra@4e77da4",
+          "path": "main.tf",
+          "line": 17
+        }
+      ]
+    }
+  ]
+}
