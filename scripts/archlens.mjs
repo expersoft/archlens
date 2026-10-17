@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // archlens CLI — model → knowledge base (ARCHITECTURE.md) → C4 / ArchiMate views → animated HTML.
-import { readFileSync, writeFileSync, existsSync, renameSync, mkdirSync, rmSync, readdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, renameSync, mkdirSync, rmSync, readdirSync, cpSync } from 'node:fs';
 import { dirname, basename, extname, join, resolve, relative, sep } from 'node:path';
 import { spawn } from 'node:child_process';
 import { normalizeModel, c4KindOf } from './lib/model.mjs';
@@ -11,7 +11,7 @@ import { layoutView, legibility } from './lib/layout.mjs';
 import { renderHtml } from './lib/render.mjs';
 import { suggestViews } from './lib/suggest.mjs';
 import { inspectHtml } from './lib/deliver.mjs';
-import { planMerge, applyPlan, mergeError, canonicalJson, hashRaw, PLAN_VERSION } from './lib/merge.mjs';
+import { planMerge, applyPlan, mergeError, canonicalJson, hashRaw, relationshipIds, PLAN_VERSION } from './lib/merge.mjs';
 import { formatPlanReport } from './lib/merge-report.mjs';
 import { previewModel, previewSummary, annotateView } from './lib/preview.mjs';
 import { resolveBase, openStore, frontmatterSource, MANIFEST } from './lib/store/index.mjs';
@@ -380,25 +380,34 @@ async function main() {
       }
       let dest, docPath, replacing;
       if (loc.kind === 'folder') {
-        // In place: write a sibling folder, read it back, then swap; the old folder is removed only after the swap.
+        dest = openStore({ ...loc, exists: true });
+        docPath = loc.docPath;
+        assertDocOwned(dest, docPath); // before anything is written: a foreign document would stop us after the swap
+        // In place: copy the folder, save the 2.0 base over the copy (files of the user and split files that end up
+        // empty stay), read it back, then swap; the old folder is removed only after the swap.
         const tmp = `${loc.path}.migrate-${process.pid}`;
         const old = `${loc.path}.old-${process.pid}`;
+        // Relationship ids change (uses → serving); toCanonical keeps order and count, so origins follow the index.
+        const oldIds = relationshipIds(raw), newIds = relationshipIds(res.raw);
+        const relOrigins = new Map();
+        (raw.model?.relationships ?? []).forEach((r, i) => {
+          const from = loaded.origins?.relationships.get(oldIds.get(r));
+          if (from) relOrigins.set(newIds.get(res.raw.model.relationships[i]), from);
+        });
+        const origins = { elements: loaded.origins?.elements ?? new Map(), relationships: relOrigins };
         try {
-          saveFolder(tmp, res.raw, { notes, origins: loaded.origins, layout: loaded.layout });
+          cpSync(loc.path, tmp, { recursive: true });
+          saveFolder(tmp, res.raw, { notes, origins, layout: loaded.layout });
           const back = loadFolder(tmp);
           if (canonicalJson(back.raw) !== canonicalJson(res.raw)) throw new Error('E_STORE_MIGRATE: a pasta gravada não reproduz o modelo convertido; nada foi trocado');
           renameSync(loc.path, old);
           renameSync(tmp, loc.path);
-          // What is not the base (diagrams/, files of the user) moves over to the new folder.
-          for (const n of readdirSync(old)) if (!existsSync(join(loc.path, n))) renameSync(join(old, n), join(loc.path, n));
           rmSync(old, { recursive: true, force: true });
         } catch (e) {
           rmSync(tmp, { recursive: true, force: true });
           if (existsSync(old) && !existsSync(loc.path)) renameSync(old, loc.path);
           fail(e.message);
         }
-        dest = openStore({ ...loc, exists: true });
-        docPath = loc.docPath;
       } else {
         const to = resolve(args.to && args.to !== true ? args.to : join(dirname(loc.path), 'architecture'));
         let target;

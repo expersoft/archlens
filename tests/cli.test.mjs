@@ -329,6 +329,41 @@ test('migrate of a split folder keeps every element in its file; a nested child 
   assert.equal(file('archlens.json').archlens, '2.0');
 });
 
+test('migrate in place keeps every file of the user and each relationship in the model file that held it', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'archlens-'));
+  const base = join(dir, 'architecture');
+  mkdirSync(join(base, 'model'), { recursive: true });
+  mkdirSync(join(base, 'notes'), { recursive: true });
+  writeFileSync(join(base, 'archlens.json'), JSON.stringify({ archlens: '1.0', name: 'Split', layout: { model: 'model/' } }));
+  writeFileSync(join(base, 'model/a-loja.json'), JSON.stringify({ elements: [{ id: 'loja', type: 'c4:softwareSystem', name: 'Loja' }], relationships: [] }));
+  writeFileSync(join(base, 'model/b-pag.json'), JSON.stringify({ elements: [{ id: 'pag', type: 'c4:softwareSystem', name: 'Pag', children: [{ id: 'pag.api', type: 'c4:container', name: 'API' }] }], relationships: [] }));
+  writeFileSync(join(base, 'model/c-rels.json'), JSON.stringify({ elements: [], relationships: [{ from: 'loja', to: 'pag.api', type: 'uses' }] }));
+  writeFileSync(join(base, 'model/README.md'), '# modelo\n');
+  writeFileSync(join(base, 'notes/extra.md'), 'Extra.\n');
+  writeFileSync(join(base, 'notes/diagram.png'), 'png');
+  const r = run(['migrate', 'architecture'], dir);
+  assert.equal(r.status, 0, r.stderr);
+  const file = f => JSON.parse(readFileSync(join(base, f), 'utf8'));
+  assert.deepEqual(file('model/c-rels.json').relationships.map(x => [x.from, x.type, x.to]), [['pag.api', 'serving', 'loja']]);
+  assert.deepEqual(file('model/a-loja.json').relationships, []);
+  assert.equal(readFileSync(join(base, 'model/README.md'), 'utf8'), '# modelo\n');
+  assert.equal(readFileSync(join(base, 'notes/extra.md'), 'utf8'), 'Extra.\n');
+  assert.equal(readFileSync(join(base, 'notes/diagram.png'), 'utf8'), 'png');
+  assert.equal(file('archlens.json').archlens, '2.0');
+});
+
+test('migrate in place refuses a hand-written ARCHITECTURE.md before touching the base', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'archlens-'));
+  saveFolder(join(dir, 'architecture'), shop());
+  writeFileSync(join(dir, 'ARCHITECTURE.md'), '# Nossa arquitetura\n\nTexto escrito à mão.\n');
+  const before = snapshot(dir);
+  const r = run(['migrate', 'architecture'], dir);
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /E_STORE_DOC_FOREIGN/);
+  assert.deepEqual(snapshot(dir), before);
+  assert.ok(!readdirSync(dir).some(n => /\.(migrate|old)-/.test(n)));
+});
+
 test('migrate writes nothing when the 1.x base is invalid', () => {
   const dir = mkdtempSync(join(tmpdir(), 'archlens-'));
   const bad = shop();
