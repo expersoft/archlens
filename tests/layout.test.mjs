@@ -120,3 +120,51 @@ test('a frame in a preview is wide enough for its chip with the change mark', as
   const fr = laid.frames.find(f => f.id === 'plat-cred');
   assert.ok(fr.w >= frameChipWidth(fr.name, false, true) + 28, `width ${fr.w}`);
 });
+
+const odinNested = () => normalizeModel({ archlens: '2.0', name: 'Odin', model: {
+  elements: [
+    { id: 'plat', type: 'grouping', name: 'Mensageria' },
+    { id: 'odin', type: 'application-component', name: 'Odin', c4: { kind: 'softwareSystem' }, group: 'plat' },
+    { id: 'odin.api', type: 'application-component', name: 'odin-api', parent: 'odin', c4: { kind: 'container' } },
+    { id: 'odin.worker', type: 'application-component', name: 'odin-message-worker', parent: 'odin', c4: { kind: 'container' } },
+    { id: 'odin.api.rest', type: 'application-component', name: 'REST', parent: 'odin.api', c4: { kind: 'component' } },
+    { id: 'svc', type: 'application-service', name: 'Envio de Notificações' },
+    { id: 'crm', type: 'application-component', name: 'CRM', c4: { kind: 'softwareSystem' } },
+    { id: 'kafka', type: 'system-software', name: 'Kafka' },
+  ],
+  relationships: [
+    { from: 'odin.api', to: 'svc', type: 'realization' },
+    { from: 'svc', to: 'crm', type: 'serving' },
+    { from: 'kafka', to: 'odin.worker', type: 'serving' },
+    { from: 'odin.api', to: 'odin.worker', type: 'flow' },
+  ],
+} });
+const box = (laid, id) => laid.nodes.find(n => n.id === id);
+const onBorder = (p, b) => Math.abs(p.x - b.x) < 2 || Math.abs(p.x - b.x - b.w) < 2 || Math.abs(p.y - b.y) < 2 || Math.abs(p.y - b.y - b.h) < 2;
+
+for (const style of ['flow', 'bands-flow']) {
+  test(`nested ArchiMate (${style}): children inside their parent, parents marked, edges start on the right boxes`, async () => {
+    const view = resolveView(odinNested(), { key: 'n', notation: 'archimate', viewpoint: 'implementation-deployment', nesting: 'nested', groups: { frames: true }, layout: { style } });
+    const laid = await layoutView(view);
+    assert.ok(inside(box(laid, 'odin.api'), box(laid, 'odin')));
+    assert.ok(inside(box(laid, 'odin.api.rest'), box(laid, 'odin.api')));
+    assert.ok(inside(box(laid, 'odin.worker'), box(laid, 'odin')));
+    assert.ok(box(laid, 'odin').isParent && box(laid, 'odin.api').isParent && !box(laid, 'odin.worker').isParent);
+    assert.ok(!overlaps(box(laid, 'odin.api'), box(laid, 'odin.worker')));
+    const frame = laid.frames.find(f => f.id === 'plat');
+    assert.ok(inside(box(laid, 'odin'), frame), 'the parent sits in its grouping frame');
+    for (const e of laid.edges) {
+      assert.ok(e.points.length >= 2, e.id);
+      assert.ok(onBorder(e.points[0], box(laid, e.from)) && onBorder(e.points.at(-1), box(laid, e.to)), `${style} ${e.id}`);
+    }
+  });
+}
+
+test('nested ArchiMate: "bands" falls back to bands-flow with a note; auto never picks bands', async () => {
+  const spec = { key: 'n', notation: 'archimate', viewpoint: 'implementation-deployment', nesting: 'nested' };
+  const laid = await layoutView(resolveView(odinNested(), { ...spec, layout: { style: 'bands' } }));
+  assert.equal(laid.layoutStyle, 'bands-flow');
+  assert.match(laid.layoutNote, /aninhamento/);
+  const auto = await layoutView(resolveView(odinNested(), spec));
+  assert.ok(!('bands' in auto.layoutScores));
+});

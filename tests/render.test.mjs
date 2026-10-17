@@ -290,3 +290,19 @@ test('preview: a new grouping is sketched with "+" on its chip', async () => {
   const html = renderHtml({ title: 't', views: [await layoutView(v)] });
   assert.match(html, /<g class="gframe gc-\d sketchy ch-added" data-frame="plat-fraude">[\s\S]*?m-added/);
 });
+
+test('a nesting parent is drawn before its children, with its name at the top and the tooltip of the child', async () => {
+  const m = normalizeModel({ archlens: '2.0', name: 'N', model: {
+    elements: [
+      { id: 'bus', type: 'application-component', name: 'Barramento' },
+      { id: 'bus.a', type: 'application-component', name: 'Adapter' },
+    ],
+    relationships: [{ from: 'bus', to: 'bus.a', type: 'aggregation', description: 'reúne adaptadores' }],
+  } });
+  const laid = await layoutView(resolveView(m, { key: 'n', notation: 'archimate', viewpoint: 'application', nesting: 'nested' }));
+  const html = renderHtml({ title: 'N', views: [laid] });
+  const parentAt = html.indexOf('data-node="bus"'), childAt = html.indexOf('data-node="bus.a"');
+  assert.ok(parentAt > 0 && parentAt < childAt, 'parent first');
+  assert.match(html, /class="node am parent[^"]*" data-node="bus"/);
+  assert.match(html, /aria-label="Adapter[^"]*reúne adaptadores/);
+});
