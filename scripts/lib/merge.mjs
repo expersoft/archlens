@@ -1,15 +1,15 @@
 // Incremental merge of a delta into the knowledge base. planMerge classifies and never decides;
 // applyPlan replays the same merge with the user's answers. Pure: no file I/O.
 import { createHash } from 'node:crypto';
-import { resolveType, STATUSES } from './registry.mjs';
+import { STATUSES, RELATIONSHIP_TYPES } from './registry.mjs';
 import { validateModel } from './validate.mjs';
 import { aliasKey, findCandidates } from './match.mjs';
 import { addSources, deltaSources } from './sources.mjs';
-import { canonicalRel } from './model.mjs';
 import { indexTree, orderDelta, attach, detach, descendantsOf } from './raw-tree.mjs';
+import { FORMAT, canonicalElements, canonicalRelationship, sortParentsFirst } from './canonical.mjs';
 
 export const PLAN_VERSION = '1.0';
-const ELEMENT_FIELDS = ['type', 'name', 'description', 'technology', 'external', 'archimate', 'owner', 'url', 'status', 'statusReason', 'group'];
+const ELEMENT_FIELDS = ['type', 'name', 'description', 'technology', 'external', 'c4', 'owner', 'url', 'status', 'statusReason', 'group'];
 const REL_FIELDS = ['description', 'technology', 'accessType', 'status', 'statusReason'];
 export const VIEW_REFS = ['scope', 'anchor'];
 export const VIEW_LISTS = ['focus', 'expand', 'include'];
@@ -113,7 +113,7 @@ function checkDelta(delta) {
 
 function emptyBase(delta) {
   return {
-    archlens: '1.0', name: delta.name ?? 'Arquitetura', ...(delta.description ? { description: delta.description } : {}),
+    archlens: FORMAT, name: delta.name ?? 'Arquitetura', ...(delta.description ? { description: delta.description } : {}),
     model: { elements: [], relationships: [] }, views: [],
   };
 }
@@ -133,15 +133,22 @@ function runMerge(baseRaw, delta, { mode, resolutions = new Map() }) {
   for (const [id, { el }] of ctx.tree) for (const a of aliasesOf(el)) if (!ctx.aliases.has(aliasKey(a))) ctx.aliases.set(aliasKey(a), id);
   // Ids the delta's ops remove (resolved against the base before any merge): never matched or offered as duplicates.
   ctx.removing = new Set((delta.ops || []).filter(o => o?.op === 'remove' && o.id).map(o => (ctx.tree.has(o.id) ? o.id : ctx.aliases.get(aliasKey(o.id)) ?? o.id)));
-  ctx.typeOf = id => {
-    const el = ctx.tree.get(id)?.el;
-    return el ? resolveType(el.type, { tags: el.tags || [], archimate: el.archimate }).type ?? null : null;
+  ctx.typeOf = id => ctx.tree.get(id)?.el.type ?? null;
+  // The delta in the 2.0 vocabulary: elements here (kinds inferred only for elements new to the base),
+  // relationships once their ends resolve (mergeRelationships). The caller's delta is kept as written.
+  const lookup = id => {
+    const el = ctx.tree.get(resolveRef(ctx, id))?.el;
+    return el ? { type: el.type, kind: el.c4?.kind ?? null } : null;
   };
+  const canon = canonicalElements(delta.model?.elements, { lookup });
+  ctx.inferredKinds = canon.inferred;
+  if (delta.model) delta.model.elements = canon.elements;
   mergeElements(ctx);
   mergeRelationships(ctx);
   mergeViews(ctx);
   mergeAssumptions(ctx);
   runOps(ctx);
+  raw.model.elements = sortParentsFirst(raw.model.elements);
   return ctx;
 }
 
@@ -179,7 +186,7 @@ function resolveRef(ctx, ref) {
 
 const describe = (el, parent) => ({
   id: el.id, names: [el.name ?? el.id, ...aliasesOf(el)], parent: parent ?? null, technology: el.technology,
-  type: resolveType(el.type, { tags: el.tags || [], archimate: el.archimate }).type ?? null,
+  type: el.type ?? null,
 });
 
 function findMatch(ctx, el, parentId) {
@@ -197,7 +204,7 @@ function findMatch(ctx, el, parentId) {
 }
 
 function mergeElements(ctx) {
-  const isGrouping = el => resolveType(el.type, { tags: el.tags || [], archimate: el.archimate }).type === 'grouping';
+  const isGrouping = el => el.type === 'grouping';
   // Groupings first, so a member's "group" already resolves to the base id (duplicate answered same, alias, name).
   const list = orderDelta(ctx.delta.model?.elements);
   const ordered = [...list.filter(x => x.el.type && isGrouping(x.el)), ...list.filter(x => !(x.el.type && isGrouping(x.el)))];
@@ -229,11 +236,8 @@ function mergeElements(ctx) {
   }
 }
 
-const normType = t => String(t).replace(/^archimate:/, '');
-
 function sameValue(field, a, b) {
   if (field === 'name') return aliasKey(a) === aliasKey(b);
-  if (field === 'type') return normType(a) === normType(b);
   return canonicalJson(a) === canonicalJson(b);
 }
 
@@ -327,7 +331,9 @@ function mergeElementInto(ctx, baseId, el, parentId, { dry = false, when, aliase
   const target = entry.el;
   // A delta name that is already an alias of the element is not a conflict (the user answered it before).
   const knownName = el.name != null && aliasesOf(target).some(a => aliasKey(a) === aliasKey(el.name));
-  const fields = fieldsOf(target, el, ELEMENT_FIELDS).filter(([f]) => !(f === 'name' && knownName));
+  // A kind the entrance inferred (the delta did not say it) never contradicts the stored one.
+  const inferredKind = ctx.inferredKinds?.has(el.id) && target.c4 != null;
+  const fields = fieldsOf(target, el, ELEMENT_FIELDS).filter(([f]) => !(f === 'name' && knownName) && !(f === 'c4' && inferredKind));
   if (parentId != null && parentId !== entry.parent) {
     fields.push(['parent', entry.parent ?? undefined, parentId, v => moveElement(ctx, baseId, resolveRef(ctx, v))]);
   }
@@ -359,15 +365,12 @@ function insertElement(ctx, el, parentId) {
 }
 
 function relKey(ctx, r) {
-  const c = canonicalRel(r, ctx.typeOf);
-  return c.error ? null : `${c.from}|${c.type}|${c.to}`;
+  return RELATIONSHIP_TYPES[r.type] ? `${r.from}|${r.type}|${r.to}` : null;
 }
 
-/** Generated id of a raw relationship (before de-duplication): explicit id, or from-type-to after reading `uses`. */
+/** Generated id of a raw relationship (before de-duplication): explicit id, or from-type-to. */
 export function relId(ctx, r) {
-  if (r.id) return r.id;
-  const c = canonicalRel(r, ctx.typeOf);
-  return c.error ? `${r.from}-${r.type}-${r.to}` : `${c.from}-${c.type}-${c.to}`;
+  return r.id ?? `${r.from}-${r.type}-${r.to}`;
 }
 
 /**
@@ -379,7 +382,7 @@ export function relIds(ctx) {
   const seen = new Map();
   for (const r of ctx.raw.model.relationships) {
     if (!r || typeof r !== 'object') continue;
-    const valid = r.from && r.to && ctx.tree.has(r.from) && ctx.tree.has(r.to) && !canonicalRel(r, ctx.typeOf).error;
+    const valid = r.from && r.to && ctx.tree.has(r.from) && ctx.tree.has(r.to) && !!RELATIONSHIP_TYPES[r.type];
     let id = relId(ctx, r);
     if (valid) {
       if (seen.has(id)) { seen.set(id, seen.get(id) + 1); id = `${id}#${seen.get(id)}`; } else seen.set(id, 1);
@@ -392,10 +395,7 @@ export function relIds(ctx) {
 function relContext(raw) {
   const model = { elements: raw?.model?.elements ?? [], relationships: raw?.model?.relationships ?? [] };
   const tree = indexTree({ model });
-  const typeOf = id => {
-    const el = tree.get(id)?.el;
-    return el ? resolveType(el.type, { tags: el.tags || [], archimate: el.archimate }).type ?? null : null;
-  };
+  const typeOf = id => tree.get(id)?.el.type ?? null;
   return { raw: { model }, tree, typeOf };
 }
 
@@ -421,7 +421,8 @@ function mergeRelationships(ctx) {
   };
   for (const [r, id] of ids) index(r, id, relKey(ctx, r));
   (ctx.delta.model?.relationships || []).forEach((dr, i) => {
-    const r = { ...dr, from: resolveRef(ctx, dr.from), to: resolveRef(ctx, dr.to) };
+    const ends = { ...dr, from: resolveRef(ctx, dr.from), to: resolveRef(ctx, dr.to) };
+    const r = canonicalRelationship(ends, ctx.typeOf) ?? ends; // an unknown type stays, so validation reports it
     const k = relKey(ctx, r);
     const base = (r.id && byId.get(r.id)) || (k && sameRelationship(byKey.get(k) ?? [], r, fresh));
     if (base) { mergeRelInto(ctx, base, ids.get(base), r, i); return; }
@@ -437,7 +438,7 @@ function mergeRelationships(ctx) {
     fresh.add(node);
     index(node, id, k);
     ctx.log.added.push(id);
-    note(ctx, { key: `rel:${i}`, class: 'new', kind: 'relationship', target: id, from: r.from, to: r.to, type: r.type ?? 'uses' });
+    note(ctx, { key: `rel:${i}`, class: 'new', kind: 'relationship', target: id, from: r.from, to: r.to, type: r.type });
   });
 }
 

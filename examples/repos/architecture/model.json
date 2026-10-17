@@ -2,7 +2,7 @@
   "elements": [
     {
       "id": "loja",
-      "type": "c4:softwareSystem",
+      "type": "application-component",
       "name": "loja",
       "sources": [
         {
@@ -12,48 +12,57 @@
           "line": 1
         }
       ],
-      "children": [
+      "c4": {
+        "kind": "softwareSystem"
+      }
+    },
+    {
+      "id": "loja.pedidos",
+      "type": "application-component",
+      "name": "pedidos",
+      "aliases": [
+        "pedidos-api"
+      ],
+      "properties": {
+        "repo": "https://example.com/acme/pedidos",
+        "repoRole": "service"
+      },
+      "sources": [
         {
-          "id": "loja.pedidos",
-          "type": "c4:container",
-          "name": "pedidos",
-          "aliases": [
-            "pedidos-api"
-          ],
-          "properties": {
-            "repo": "https://example.com/acme/pedidos",
-            "repoRole": "service"
-          },
-          "sources": [
-            {
-              "kind": "repo",
-              "ref": "https://example.com/acme/pedidos@d28ae88",
-              "path": ".",
-              "line": 1
-            }
-          ]
-        },
-        {
-          "id": "loja.pedidos-pedidos-db",
-          "type": "c4:container",
-          "name": "pedidos-db",
-          "tags": [
-            "database"
-          ],
-          "sources": [
-            {
-              "kind": "repo",
-              "ref": "https://example.com/acme/pedidos@d28ae88",
-              "path": "docker-compose.yml",
-              "line": 13
-            }
-          ]
+          "kind": "repo",
+          "ref": "https://example.com/acme/pedidos@d28ae88",
+          "path": ".",
+          "line": 1
         }
-      ]
+      ],
+      "parent": "loja",
+      "c4": {
+        "kind": "container"
+      }
+    },
+    {
+      "id": "loja.pedidos-pedidos-db",
+      "type": "application-component",
+      "name": "pedidos-db",
+      "tags": [
+        "database"
+      ],
+      "sources": [
+        {
+          "kind": "repo",
+          "ref": "https://example.com/acme/pedidos@d28ae88",
+          "path": "docker-compose.yml",
+          "line": 13
+        }
+      ],
+      "parent": "loja",
+      "c4": {
+        "kind": "container"
+      }
     },
     {
       "id": "tech.postgres-16",
-      "type": "archimate:system-software",
+      "type": "system-software",
       "name": "PostgreSQL 16",
       "sources": [
         {
@@ -66,7 +75,7 @@
     },
     {
       "id": "loja.pedidos.api-api-de-pedidos",
-      "type": "archimate:application-interface",
+      "type": "application-interface",
       "name": "API de Pedidos",
       "properties": {
         "version": "1.4.0",
@@ -83,7 +92,7 @@
     },
     {
       "id": "topic.pedido-criado",
-      "type": "c4:container",
+      "type": "application-component",
       "name": "pedido-criado",
       "tags": [
         "topic"
@@ -101,11 +110,14 @@
           "path": "asyncapi.json",
           "line": 1
         }
-      ]
+      ],
+      "c4": {
+        "kind": "container"
+      }
     },
     {
       "id": "financeiro",
-      "type": "c4:softwareSystem",
+      "type": "application-component",
       "name": "financeiro",
       "sources": [
         {
@@ -115,61 +127,74 @@
           "line": 1
         }
       ],
-      "children": [
+      "c4": {
+        "kind": "softwareSystem"
+      }
+    },
+    {
+      "id": "financeiro.pagamentos",
+      "type": "application-component",
+      "name": "pagamentos",
+      "properties": {
+        "repo": "https://example.com/acme/pagamentos",
+        "repoRole": "service"
+      },
+      "sources": [
         {
-          "id": "financeiro.pagamentos",
-          "type": "c4:container",
-          "name": "pagamentos",
-          "properties": {
-            "repo": "https://example.com/acme/pagamentos",
-            "repoRole": "service"
-          },
-          "sources": [
-            {
-              "kind": "repo",
-              "ref": "https://example.com/acme/pagamentos@ae85af0",
-              "path": ".",
-              "line": 1
-            }
-          ]
-        },
-        {
-          "id": "financeiro.pagamentos-redis",
-          "type": "c4:container",
-          "name": "redis",
-          "tags": [
-            "cache"
-          ],
-          "sources": [
-            {
-              "kind": "repo",
-              "ref": "https://example.com/acme/pagamentos@ae85af0",
-              "path": "chart/Chart.yaml",
-              "line": 5
-            }
-          ]
-        },
-        {
-          "id": "financeiro.pagamentos-pagamentos-db",
-          "type": "c4:container",
-          "name": "pagamentos-db",
-          "tags": [
-            "database"
-          ],
-          "sources": [
-            {
-              "kind": "repo",
-              "ref": "https://example.com/acme/pagamentos@ae85af0",
-              "path": "k8s/deploy.yaml",
-              "line": 49
-            }
-          ]
+          "kind": "repo",
+          "ref": "https://example.com/acme/pagamentos@ae85af0",
+          "path": ".",
+          "line": 1
         }
-      ]
+      ],
+      "parent": "financeiro",
+      "c4": {
+        "kind": "container"
+      }
+    },
+    {
+      "id": "financeiro.pagamentos-redis",
+      "type": "application-component",
+      "name": "redis",
+      "tags": [
+        "cache"
+      ],
+      "sources": [
+        {
+          "kind": "repo",
+          "ref": "https://example.com/acme/pagamentos@ae85af0",
+          "path": "chart/Chart.yaml",
+          "line": 5
+        }
+      ],
+      "parent": "financeiro",
+      "c4": {
+        "kind": "container"
+      }
+    },
+    {
+      "id": "financeiro.pagamentos-pagamentos-db",
+      "type": "application-component",
+      "name": "pagamentos-db",
+      "tags": [
+        "database"
+      ],
+      "sources": [
+        {
+          "kind": "repo",
+          "ref": "https://example.com/acme/pagamentos@ae85af0",
+          "path": "k8s/deploy.yaml",
+          "line": 49
+        }
+      ],
+      "parent": "financeiro",
+      "c4": {
+        "kind": "container"
+      }
     },
     {
       "id": "tech.redis",
-      "type": "archimate:system-software",
+      "type": "system-software",
       "name": "Redis",
       "sources": [
         {
@@ -182,7 +207,7 @@
     },
     {
       "id": "tech.postgres-15",
-      "type": "archimate:system-software",
+      "type": "system-software",
       "name": "PostgreSQL 15",
       "sources": [
         {
@@ -195,7 +220,7 @@
     },
     {
       "id": "ext.antifraude-acme-com",
-      "type": "c4:softwareSystem",
+      "type": "application-component",
       "name": "antifraude.acme.com",
       "external": true,
       "inferred": true,
@@ -208,11 +233,14 @@
           "line": 8,
           "excerpt": "host em ANTIFRAUDE_URL"
         }
-      ]
+      ],
+      "c4": {
+        "kind": "softwareSystem"
+      }
     },
     {
       "id": "ext.kafka",
-      "type": "c4:softwareSystem",
+      "type": "application-component",
       "name": "kafka",
       "external": true,
       "inferred": true,
@@ -225,11 +253,14 @@
           "line": 7,
           "excerpt": "host em KAFKA_BROKERS"
         }
-      ]
+      ],
+      "c4": {
+        "kind": "softwareSystem"
+      }
     },
     {
       "id": "topic.pagamento-aprovado",
-      "type": "c4:container",
+      "type": "application-component",
       "name": "pagamento-aprovado",
       "tags": [
         "topic"
@@ -241,11 +272,14 @@
           "path": "asyncapi.json",
           "line": 1
         }
-      ]
+      ],
+      "c4": {
+        "kind": "container"
+      }
     },
     {
       "id": "infra-cloud",
-      "type": "c4:softwareSystem",
+      "type": "application-component",
       "name": "infra",
       "properties": {
         "repo": "https://example.com/acme/infra",
@@ -259,46 +293,55 @@
           "line": 1
         }
       ],
-      "children": [
+      "c4": {
+        "kind": "softwareSystem"
+      }
+    },
+    {
+      "id": "infra-cloud.pedidos",
+      "type": "application-component",
+      "name": "pedidos",
+      "technology": "aws_db_instance",
+      "tags": [
+        "database"
+      ],
+      "sources": [
         {
-          "id": "infra-cloud.pedidos",
-          "type": "c4:container",
-          "name": "pedidos",
-          "technology": "aws_db_instance",
-          "tags": [
-            "database"
-          ],
-          "sources": [
-            {
-              "kind": "repo",
-              "ref": "https://example.com/acme/infra@4e77da4",
-              "path": "main.tf",
-              "line": 1
-            }
-          ]
-        },
-        {
-          "id": "infra-cloud.eventos",
-          "type": "c4:container",
-          "name": "eventos",
-          "technology": "aws_msk_cluster",
-          "tags": [
-            "queue"
-          ],
-          "sources": [
-            {
-              "kind": "repo",
-              "ref": "https://example.com/acme/infra@4e77da4",
-              "path": "main.tf",
-              "line": 8
-            }
-          ]
+          "kind": "repo",
+          "ref": "https://example.com/acme/infra@4e77da4",
+          "path": "main.tf",
+          "line": 1
         }
-      ]
+      ],
+      "parent": "infra-cloud",
+      "c4": {
+        "kind": "container"
+      }
+    },
+    {
+      "id": "infra-cloud.eventos",
+      "type": "application-component",
+      "name": "eventos",
+      "technology": "aws_msk_cluster",
+      "tags": [
+        "queue"
+      ],
+      "sources": [
+        {
+          "kind": "repo",
+          "ref": "https://example.com/acme/infra@4e77da4",
+          "path": "main.tf",
+          "line": 8
+        }
+      ],
+      "parent": "infra-cloud",
+      "c4": {
+        "kind": "container"
+      }
     },
     {
       "id": "tech.aws-eks-cluster-principal",
-      "type": "archimate:node",
+      "type": "node",
       "name": "principal",
       "technology": "aws_eks_cluster",
       "sources": [
@@ -315,7 +358,7 @@
     {
       "from": "tech.postgres-16",
       "to": "loja.pedidos-pedidos-db",
-      "type": "archimate:realization",
+      "type": "realization",
       "id": "tech.postgres-16-realization-loja.pedidos-pedidos-db",
       "sources": [
         {
@@ -327,9 +370,9 @@
       ]
     },
     {
-      "from": "loja.pedidos",
-      "to": "loja.pedidos-pedidos-db",
-      "type": "uses",
+      "from": "loja.pedidos-pedidos-db",
+      "to": "loja.pedidos",
+      "type": "serving",
       "description": "depends_on",
       "id": "loja.pedidos-access-loja.pedidos-pedidos-db",
       "sources": [
@@ -344,7 +387,7 @@
     {
       "from": "loja.pedidos",
       "to": "loja.pedidos.api-api-de-pedidos",
-      "type": "archimate:realization",
+      "type": "realization",
       "id": "loja.pedidos-realization-loja.pedidos.api-api-de-pedidos",
       "sources": [
         {
@@ -358,7 +401,7 @@
     {
       "from": "loja.pedidos",
       "to": "topic.pedido-criado",
-      "type": "archimate:flow",
+      "type": "flow",
       "description": "publica PedidoCriado",
       "id": "loja.pedidos-flow-topic.pedido-criado",
       "sources": [
@@ -373,7 +416,7 @@
     {
       "from": "tech.redis",
       "to": "financeiro.pagamentos-redis",
-      "type": "archimate:serving",
+      "type": "serving",
       "id": "tech.redis-serving-financeiro.pagamentos-redis",
       "sources": [
         {
@@ -387,7 +430,7 @@
     {
       "from": "tech.postgres-15",
       "to": "financeiro.pagamentos-pagamentos-db",
-      "type": "archimate:realization",
+      "type": "realization",
       "id": "tech.postgres-15-realization-financeiro.pagamentos-pagamentos-db",
       "sources": [
         {
@@ -399,9 +442,9 @@
       ]
     },
     {
-      "from": "financeiro.pagamentos",
-      "to": "ext.antifraude-acme-com",
-      "type": "uses",
+      "from": "ext.antifraude-acme-com",
+      "to": "financeiro.pagamentos",
+      "type": "serving",
       "description": "via ANTIFRAUDE_URL",
       "inferred": true,
       "id": "ext.antifraude-acme-com-serving-financeiro.pagamentos",
@@ -416,9 +459,9 @@
       ]
     },
     {
-      "from": "financeiro.pagamentos",
-      "to": "ext.kafka",
-      "type": "uses",
+      "from": "ext.kafka",
+      "to": "financeiro.pagamentos",
+      "type": "serving",
       "description": "via KAFKA_BROKERS",
       "inferred": true,
       "id": "ext.kafka-serving-financeiro.pagamentos",
@@ -433,9 +476,9 @@
       ]
     },
     {
-      "from": "financeiro.pagamentos",
-      "to": "loja.pedidos",
-      "type": "uses",
+      "from": "loja.pedidos",
+      "to": "financeiro.pagamentos",
+      "type": "serving",
       "description": "via PEDIDOS_URL",
       "inferred": true,
       "id": "loja.pedidos-serving-financeiro.pagamentos",
@@ -452,7 +495,7 @@
     {
       "from": "topic.pedido-criado",
       "to": "financeiro.pagamentos",
-      "type": "archimate:flow",
+      "type": "flow",
       "description": "assina pedido-criado",
       "id": "topic.pedido-criado-flow-financeiro.pagamentos",
       "sources": [
@@ -467,7 +510,7 @@
     {
       "from": "financeiro.pagamentos",
       "to": "topic.pagamento-aprovado",
-      "type": "archimate:flow",
+      "type": "flow",
       "description": "publica pagamento-aprovado",
       "id": "financeiro.pagamentos-flow-topic.pagamento-aprovado",
       "sources": [
@@ -480,9 +523,9 @@
       ]
     },
     {
-      "from": "loja.pedidos",
-      "to": "financeiro.pagamentos",
-      "type": "uses",
+      "from": "financeiro.pagamentos",
+      "to": "loja.pedidos",
+      "type": "serving",
       "description": "via PAGAMENTOS_URL",
       "inferred": true,
       "id": "financeiro.pagamentos-serving-loja.pedidos",
@@ -499,7 +542,7 @@
     {
       "from": "infra-cloud.eventos",
       "to": "tech.aws-eks-cluster-principal",
-      "type": "archimate:serving",
+      "type": "serving",
       "id": "infra-cloud.eventos-serving-tech.aws-eks-cluster-principal",
       "sources": [
         {

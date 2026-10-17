@@ -1,5 +1,5 @@
 ---
-archlens: "1.0"
+archlens: "2.0"
 name: "Loja Online"
 source: architecture/
 revision: 1
@@ -134,7 +134,7 @@ Coleta e rastreio
 | Pagamento seguro | Business Service | — | — | `bs-pagamento` |
 | Entrega do pedido | Business Service | — | — | `bs-entrega` |
 | Atendimento pós-venda | Business Service | — | — | `bs-atendimento` |
-| Comprador | Business Role | — | — | `br-comprador` |
+| Comprador | Business Role (C4 Person) | — | — | `br-comprador` |
 | Checkout | Business Process | Do carrinho ao pedido pago | — | `bp-checkout` |
 | Faturamento | Business Process | — | — | `bp-faturamento` |
 | Expedição | Business Process | — | — | `bp-expedicao` |
@@ -157,10 +157,10 @@ Coleta e rastreio
 | Pedido Repository | Application Component (C4 Component) | Persistência de pedidos | — | `loja.pedidos.repo` |
 | Publicador de Eventos | Application Component (C4 Component) | Publica eventos de domínio | — | `loja.pedidos.eventos` |
 | API de Catálogo | Application Component (C4 Container) | Produtos, preços e estoque | — | `loja.catalogo` |
-| Índice de Busca | Data Object (C4 Container) | Busca textual de produtos | — | `loja.busca` |
-| Cache de Carrinho | Data Object (C4 Container) | Carrinhos ativos | — | `loja.cache` |
-| DB Pedidos | Data Object (C4 Container) | Pedidos e pagamentos | — | `loja.db-pedidos` |
-| DB Catálogo | Data Object (C4 Container) | Produtos e atributos | — | `loja.db-catalogo` |
+| Índice de Busca | Application Component (C4 Container) | Busca textual de produtos | — | `loja.busca` |
+| Cache de Carrinho | Application Component (C4 Container) | Carrinhos ativos | — | `loja.cache` |
+| DB Pedidos | Application Component (C4 Container) | Pedidos e pagamentos | — | `loja.db-pedidos` |
+| DB Catálogo | Application Component (C4 Container) | Produtos e atributos | — | `loja.db-catalogo` |
 | Barramento de Eventos | Application Component (C4 Container) | Tópicos de pedidos e estoque | — | `loja.eventos` |
 | ERP | Application Component (C4 Software System) | Faturamento, fiscal e expedição (legado on-premises) | P | `erp` |
 | CRM | Application Component (C4 Software System) | Atendimento (SaaS) | P | `crm` |
@@ -302,6 +302,10 @@ Cadeias de suporte calculadas a partir do modelo (o que sustenta cada oferta, e 
 | BFF | Cliente, Comprador | Cluster Kubernetes (EKS), Hospedagem de contêineres, Mensageria, PostgreSQL 16 (RDS), MongoDB Atlas, Redis (ElastiCache), Apache Kafka (MSK), Elasticsearch, pedidos-api.jar |
 | API de Pedidos | Cliente, Atendente SAC, Venda Online, Compra online, Pagamento seguro, Atendimento pós-venda, Comprador, Checkout, Tratar solicitação | Cluster Kubernetes (EKS), Hospedagem de contêineres, Mensageria, PostgreSQL 16 (RDS), Redis (ElastiCache), Apache Kafka (MSK), pedidos-api.jar |
 | API de Catálogo | Cliente, Venda Online, Compra online, Pagamento seguro, Comprador, Checkout | Cluster Kubernetes (EKS), Hospedagem de contêineres, MongoDB Atlas, Elasticsearch |
+| Índice de Busca | Cliente, Venda Online, Compra online, Pagamento seguro, Comprador, Checkout | — |
+| Cache de Carrinho | Cliente, Atendente SAC, Venda Online, Compra online, Pagamento seguro, Atendimento pós-venda, Comprador, Checkout, Tratar solicitação | — |
+| DB Pedidos | Cliente, Atendente SAC, Venda Online, Compra online, Pagamento seguro, Atendimento pós-venda, Comprador, Checkout, Tratar solicitação | — |
+| DB Catálogo | Cliente, Venda Online, Compra online, Pagamento seguro, Comprador, Checkout | — |
 | Barramento de Eventos | Cliente, Atendente SAC, Operador de Logística, Venda Online, Entrega Expressa, Compra online, Pagamento seguro, Entrega do pedido, Atendimento pós-venda, Comprador, Checkout, Faturamento, Expedição, Tratar solicitação | — |
 | ERP | Operador de Logística, Venda Online, Entrega Expressa, Entrega do pedido, Faturamento, Expedição | Mensageria, Apache Kafka (MSK), Servidor SAP (on-premises), VPN site-to-site |
 

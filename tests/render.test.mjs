@@ -6,10 +6,11 @@ import { resolveView } from '../scripts/lib/query.mjs';
 import { layoutView, legibility, layoutQuality, AM_STYLES } from '../scripts/lib/layout.mjs';
 import { renderHtml } from '../scripts/lib/render.mjs';
 import { previewModel, annotateView } from '../scripts/lib/preview.mjs';
+import { asBase } from './helpers.mjs';
 
 const raw = () => JSON.parse(readFileSync(new URL('./fixtures/shop.json', import.meta.url)));
 test('layout assigns absolute coordinates to every node and edge', async () => {
-  const m = normalizeModel(raw());
+  const m = normalizeModel(asBase(raw()));
   for (const spec of [
     { key: 'k', notation: 'c4', level: 'container', scope: 'loja' },
     { key: 's', notation: 'archimate', viewpoint: 'layered', anchor: 'venda', traverse: { mode: 'supporters' } },
@@ -31,7 +32,7 @@ test('layout assigns absolute coordinates to every node and edge', async () => {
 });
 
 test('renderHtml produces a self-contained page with every view', async () => {
-  const m = normalizeModel(raw());
+  const m = normalizeModel(asBase(raw()));
   const views = [];
   for (const spec of m.views) views.push(await layoutView(resolveView(m, spec)));
   const html = renderHtml({ title: 'Loja Mini', views });
@@ -43,13 +44,13 @@ test('renderHtml produces a self-contained page with every view', async () => {
 });
 
 test('view spec layout overrides direction', async () => {
-  const m = normalizeModel(raw());
+  const m = normalizeModel(asBase(raw()));
   const laid = await layoutView(resolveView(m, { key: 'k', notation: 'c4', level: 'container', scope: 'loja', layout: { direction: 'DOWN' } }));
   assert.equal(laid.direction, 'DOWN');
 });
 
 test('legibility reports on-screen font size and suggests splitting', async () => {
-  const m = normalizeModel(raw());
+  const m = normalizeModel(asBase(raw()));
   const laid = await layoutView(resolveView(m, { key: 'k', notation: 'c4', level: 'container', scope: 'loja' }));
   const big = legibility(laid, 1920, 1080);
   assert.ok(big.scale > 0 && big.minFontPx > 0);
@@ -59,7 +60,7 @@ test('legibility reports on-screen font size and suggests splitting', async () =
 });
 
 test('rendered svg is fluid: viewBox, meet, no fixed size; presentation + navigation wired', async () => {
-  const m = normalizeModel(raw());
+  const m = normalizeModel(asBase(raw()));
   const views = [];
   for (const spec of m.views) views.push(await layoutView(resolveView(m, spec)));
   const html = renderHtml({ title: 'Loja Mini', views });
@@ -80,7 +81,7 @@ test('rendered svg is fluid: viewBox, meet, no fixed size; presentation + naviga
 });
 
 test('edges carry plain-language help; page has hover card, marker legend and glossary', async () => {
-  const m = normalizeModel(raw());
+  const m = normalizeModel(asBase(raw()));
   const views = [];
   for (const spec of m.views) views.push(await layoutView(resolveView(m, spec)));
   const html = renderHtml({ title: 'Loja Mini', views });
@@ -101,7 +102,7 @@ const amSpec = { key: 's', notation: 'archimate', viewpoint: 'layered', anchor: 
 const isOrthogonal = pts => pts.every((p, i) => !i || Math.abs(p.x - pts[i - 1].x) < 0.5 || Math.abs(p.y - pts[i - 1].y) < 0.5);
 
 test('archimate: every layout.style is honoured, keeps layer order and routes edges orthogonally', async () => {
-  const m = normalizeModel(raw());
+  const m = normalizeModel(asBase(raw()));
   for (const style of AM_STYLES) {
     const laid = await layoutView(resolveView(m, { ...amSpec, layout: { style } }));
     assert.equal(laid.layoutStyle, style);
@@ -118,7 +119,7 @@ test('archimate: every layout.style is honoured, keeps layer order and routes ed
 });
 
 test('archimate: layout.style auto keeps the best-scoring style', async () => {
-  const m = normalizeModel(raw());
+  const m = normalizeModel(asBase(raw()));
   const laid = await layoutView(resolveView(m, amSpec));
   assert.equal(laid.layoutAuto, true);
   assert.deepEqual(Object.keys(laid.layoutScores).sort(), [...AM_STYLES].sort());
@@ -142,7 +143,7 @@ test('render marks deprecated and planned nodes', async () => {
   const r = raw();
   r.model.elements.find(e => e.id === 'pagamentos').status = 'deprecated';
   r.model.elements.find(e => e.id === 'k8s').status = 'planned';
-  const m = normalizeModel(r);
+  const m = normalizeModel(asBase(r));
   const views = [
     await layoutView(resolveView(m, { key: 'c', notation: 'c4', level: 'context', scope: 'loja' })),
     await layoutView(resolveView(m, { key: 's', notation: 'archimate', viewpoint: 'layered', anchor: 'venda', traverse: { mode: 'supporters' } })),
@@ -160,7 +161,7 @@ test('draft nodes and relationships are hand-drawn with rough.js (hachure + doub
   r.model.elements.find(e => e.id === 'loja').children.find(c => c.id === 'loja.web').status = 'draft';
   r.model.elements.find(e => e.id === 'venda').status = 'draft';
   r.model.relationships.find(x => x.from === 'k8s').status = 'draft';
-  const m = normalizeModel(r);
+  const m = normalizeModel(asBase(r));
   const views = [
     await layoutView(resolveView(m, { key: 'c', notation: 'c4', level: 'container', scope: 'loja' })),
     await layoutView(resolveView(m, { key: 's', notation: 'archimate', viewpoint: 'layered', anchor: 'venda', traverse: { mode: 'supporters' } })),
@@ -187,7 +188,7 @@ test('every C4 shape can be hand-drawn: person, database (with rim) and queue', 
   loja.children.find(c => c.id === 'loja.db').status = 'draft';
   loja.children.push({ id: 'loja.fila', type: 'c4:container', name: 'Fila', tags: ['queue'], status: 'draft' });
   r.model.relationships.push({ from: 'loja.web', to: 'loja.fila' });
-  const m = normalizeModel(r);
+  const m = normalizeModel(asBase(r));
   const html = renderHtml({ title: 't', views: [await layoutView(resolveView(m, { key: 'c', notation: 'c4', level: 'container', scope: 'loja' }))] });
   for (const id of ['cliente', 'loja.db', 'loja.fila']) assert.match(nodeG(html, id), /<path class="sk-fill" d="M/, id);
   assert.ok((nodeG(html, 'loja.db').match(/class="sk-line"/g) || []).length >= 2, 'body and rim outlines');
@@ -196,7 +197,7 @@ test('every C4 shape can be hand-drawn: person, database (with rim) and queue', 
 });
 
 test('a render without drafts or preview has no hand-drawn strokes', async () => {
-  const html = renderHtml({ title: 't', views: [await layoutView(resolveView(normalizeModel(raw()), { key: 'c', notation: 'c4', level: 'container', scope: 'loja' }))] });
+  const html = renderHtml({ title: 't', views: [await layoutView(resolveView(normalizeModel(asBase(raw())), { key: 'c', notation: 'c4', level: 'container', scope: 'loja' }))] });
   assert.doesNotMatch(html, /class="sk-(fill|line|edge)"/);
 });
 
@@ -204,7 +205,7 @@ test('preview marks, banner and drawer data are rendered; a normal render has no
   const d = { 'archlens-delta': '1.0', source: { kind: 'prompt', ref: 'r' },
     model: { elements: [{ id: 'loja.worker', type: 'c4:container', name: 'Worker', parent: 'loja' }, { id: 'loja.web', type: 'c4:container', technology: 'Remix' }] },
     ops: [{ op: 'remove', id: 'loja.db' }] };
-  const p = previewModel(raw(), { delta: d });
+  const p = previewModel(asBase(raw()), { delta: d });
   const v = annotateView(resolveView(normalizeModel(p.raw), { key: 'c', notation: 'c4', level: 'container', scope: 'loja' }, { keep: p.keep }), p);
   const html = renderHtml({ title: 't', views: [await layoutView(v)], preview: { label: 'delta de teste' } });
   assert.match(html, /<div class="preview-banner" role="status">PRÉVIA · não é a base oficial — delta de teste<\/div>/);
@@ -223,14 +224,14 @@ test('preview marks, banner and drawer data are rendered; a normal render has no
   assert.match(html, /sai: 'sai'|removed: 'sai'/);
   assert.match(html, /opções: /);
   assert.match(html, /\.node\.c4 \.mark text/);
-  const plain = renderHtml({ title: 't', views: [await layoutView(resolveView(normalizeModel(raw()), { key: 'c', notation: 'c4', level: 'container', scope: 'loja' }))] });
+  const plain = renderHtml({ title: 't', views: [await layoutView(resolveView(normalizeModel(asBase(raw())), { key: 'c', notation: 'c4', level: 'container', scope: 'loja' }))] });
   assert.doesNotMatch(plain, /<div class="preview-banner"|<body class="preview"|<g class="mark /);
 });
 
 test('a relationship-only change and its open question are visible on the edge, in the legend and in the drawer', async () => {
   const d = { 'archlens-delta': '1.0', source: { kind: 'prompt', ref: 'r' },
     model: { relationships: [{ from: 'cliente', to: 'loja.web', type: 'uses', description: 'Compra online' }] } };
-  const p = previewModel(raw(), { delta: d });
+  const p = previewModel(asBase(raw()), { delta: d });
   const v = annotateView(resolveView(normalizeModel(p.raw), { key: 'c', notation: 'c4', level: 'container', scope: 'loja' }, { keep: p.keep }), p);
   assert.ok(v.nodes.every(n => !n.change && !n.pending), 'no node changes');
   const html = renderHtml({ title: 't', views: [await layoutView(v)], preview: { label: 'x' } });
@@ -247,7 +248,7 @@ import { seedOf } from '../scripts/lib/sketch.mjs';
 
 const platRaw = () => JSON.parse(readFileSync(new URL('./fixtures/platforms.json', import.meta.url)));
 const renderPlat = async (spec, raw = platRaw()) => {
-  const laid = await layoutView(resolveView(normalizeModel(raw), spec));
+  const laid = await layoutView(resolveView(normalizeModel(asBase(raw)), spec));
   return renderHtml({ title: 't', views: [laid] });
 };
 
@@ -281,7 +282,7 @@ test('a draft grouping gets a hand-drawn frame', async () => {
 });
 
 test('preview: a new grouping is sketched with "+" on its chip', async () => {
-  const p = previewModel(platRaw(), { delta: { 'archlens-delta': '1.0', model: { elements: [
+  const p = previewModel(asBase(platRaw()), { delta: { 'archlens-delta': '1.0', model: { elements: [
     { id: 'plat-fraude', type: 'grouping', name: 'Plataforma de Fraude' },
     { id: 'antifraude', type: 'c4:softwareSystem', name: 'Antifraude', group: 'plat-fraude' },
   ] } } });

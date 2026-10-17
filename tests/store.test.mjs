@@ -5,8 +5,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { loadFolder, saveFolder } from '../scripts/lib/store/folder.mjs';
 import { resolveBase, openStore } from '../scripts/lib/store/index.mjs';
+import { asBase } from './helpers.mjs';
 
-const shop = () => JSON.parse(readFileSync(new URL('./fixtures/shop.json', import.meta.url)));
+const shop = () => asBase(JSON.parse(readFileSync(new URL('./fixtures/shop.json', import.meta.url))));
 const tmp = () => mkdtempSync(join(tmpdir(), 'archlens-store-'));
 const read = (dir, f) => readFileSync(join(dir, f), 'utf8');
 
@@ -45,21 +46,24 @@ test('saving the same raw twice writes the same bytes, in the stable format', ()
 const splitBase = () => {
   const dir = tmp();
   mkdirSync(join(dir, 'model'));
-  writeFileSync(join(dir, 'archlens.json'), JSON.stringify({ archlens: '1.0', name: 'Split', layout: { model: 'model/' } }));
+  writeFileSync(join(dir, 'archlens.json'), JSON.stringify({ archlens: '2.0', name: 'Split', layout: { model: 'model/' } }));
   writeFileSync(join(dir, 'model/b-pag.json'), JSON.stringify({
-    elements: [{ id: 'pag', type: 'c4:softwareSystem', name: 'Pagamentos', children: [{ id: 'pag.api', type: 'c4:container', name: 'API Pag' }] }],
+    elements: [
+      { id: 'pag', type: 'application-component', name: 'Pagamentos', c4: { kind: 'softwareSystem' } },
+      { id: 'pag.api', type: 'application-component', name: 'API Pag', parent: 'pag', c4: { kind: 'container' } },
+    ],
     relationships: [],
   }));
   writeFileSync(join(dir, 'model/a-loja.json'), JSON.stringify({
-    elements: [{ id: 'loja', type: 'c4:softwareSystem', name: 'Loja' }],
-    relationships: [{ from: 'loja', to: 'pag', type: 'uses' }],
+    elements: [{ id: 'loja', type: 'application-component', name: 'Loja', c4: { kind: 'softwareSystem' } }],
+    relationships: [{ from: 'pag', to: 'loja', type: 'serving' }],
   }));
   return dir;
 };
 
 test('model/*.json files are joined in name order and remember where each item came from', () => {
   const { raw, origins, layout } = loadFolder(splitBase());
-  assert.deepEqual(raw.model.elements.map(e => e.id), ['loja', 'pag']);
+  assert.deepEqual(raw.model.elements.map(e => e.id), ['loja', 'pag', 'pag.api']);
   assert.equal(raw.model.relationships.length, 1);
   assert.equal(origins.elements.get('pag'), 'model/b-pag.json');
   assert.equal([...origins.relationships.values()][0], 'model/a-loja.json');
@@ -70,17 +74,16 @@ test('model/*.json files are joined in name order and remember where each item c
 test('saving a split model: new items next to their parent, relations with their source, the rest in the default file', () => {
   const dir = splitBase();
   const { raw, origins, notes, layout } = loadFolder(dir);
-  raw.model.elements.push({ id: 'pag.worker', type: 'c4:container', name: 'Worker', parent: 'pag' });
-  raw.model.elements.find(e => e.id === 'pag').children[0].children = [{ id: 'pag.api.auth', type: 'c4:component', name: 'Auth' }];
-  raw.model.elements.push({ id: 'erp', type: 'c4:softwareSystem', name: 'ERP' });
-  raw.model.relationships.push({ from: 'pag.api', to: 'erp', type: 'uses' });
+  raw.model.elements.push({ id: 'pag.worker', type: 'application-component', name: 'Worker', parent: 'pag', c4: { kind: 'container' } });
+  raw.model.elements.push({ id: 'pag.api.auth', type: 'application-component', name: 'Auth', parent: 'pag.api', c4: { kind: 'component' } });
+  raw.model.elements.push({ id: 'erp', type: 'application-component', name: 'ERP', c4: { kind: 'softwareSystem' } });
+  raw.model.relationships.push({ from: 'erp', to: 'pag.api', type: 'serving' });
   raw.model.elements = raw.model.elements.filter(e => e.id !== 'loja');
-  raw.model.relationships = raw.model.relationships.filter(r => r.from !== 'loja');
+  raw.model.relationships = raw.model.relationships.filter(r => r.to !== 'loja' && r.from !== 'loja');
   saveFolder(dir, raw, { notes, origins, layout });
   const file = f => JSON.parse(read(dir, f));
-  assert.deepEqual(file('model/b-pag.json').elements.map(e => e.id), ['pag', 'pag.worker']);
-  assert.equal(file('model/b-pag.json').elements[0].children[0].children[0].id, 'pag.api.auth');
-  assert.deepEqual(file('model/b-pag.json').relationships, [{ from: 'pag.api', to: 'erp', type: 'uses' }]);
+  assert.deepEqual(file('model/b-pag.json').elements.map(e => e.id), ['pag', 'pag.api', 'pag.worker', 'pag.api.auth']);
+  assert.deepEqual(file('model/b-pag.json').relationships, [{ from: 'erp', to: 'pag.api', type: 'serving' }]);
   assert.deepEqual(file('model/geral.json').elements.map(e => e.id), ['erp']);
   assert.deepEqual(file('model/a-loja.json'), { elements: [], relationships: [] });
   assert.deepEqual(file('archlens.json').layout, { model: 'model/' });
@@ -88,7 +91,7 @@ test('saving a split model: new items next to their parent, relations with their
 
 test('the same element id in two model files is refused', () => {
   const dir = splitBase();
-  writeFileSync(join(dir, 'model/c-dup.json'), JSON.stringify({ elements: [{ id: 'pag.api', type: 'c4:container' }], relationships: [] }));
+  writeFileSync(join(dir, 'model/c-dup.json'), JSON.stringify({ elements: [{ id: 'pag.api', type: 'application-component' }], relationships: [] }));
   assert.throws(() => loadFolder(dir), e => e.code === 'E_STORE_DUP_ID' && /model\/b-pag\.json/.test(e.message) && /model\/c-dup\.json/.test(e.message));
 });
 

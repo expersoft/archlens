@@ -282,13 +282,15 @@ export function toDelta(inv, { role, system, id, base = null } = {}) {
   for (const [pid, realId] of claims) {
     ops.push({ op: 'remove', id: pid, reason: `substituído por ${realId} (lido em ${ref})` });
     for (const r of base.relationships) {
-      const ends = r.c4 ?? r;
+      // A serving between two C4 elements is re-emitted as the "uses" the readings write (consumer → provider).
+      const uses = r.type === 'serving' && !!base.elements.get(r.from)?.c4 && !!base.elements.get(r.to)?.c4;
+      const ends = uses ? { from: r.to, to: r.from } : r;
       if (!claims.has(ends.from) && !claims.has(ends.to)) continue;
       if (ends.from !== pid && ends.to !== pid) continue; // moved once, by the placeholder at its "from" or "to"
       const from = claims.get(ends.from) ?? ends.from;
       const to = claims.get(ends.to) ?? ends.to;
       if (from === to) continue;
-      const type = r.c4 ? 'uses' : `archimate:${r.type}`;
+      const type = uses ? 'uses' : `archimate:${r.type}`;
       const k = `${from}|${type}|${to}`;
       const sources = r.sources.map(x => ({ ...x }));
       const known = rels.find(x => `${x.from}|${x.type}|${x.to}` === k);

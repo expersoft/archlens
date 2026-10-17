@@ -3,6 +3,7 @@
 import { readFileSync, writeFileSync, existsSync, renameSync, mkdirSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { relationshipIds } from '../merge.mjs';
+import { c4Orientation } from '../model.mjs';
 import { NOTE_NAMES } from '../doc.mjs';
 import { storeError } from './errors.mjs';
 
@@ -141,7 +142,9 @@ export function saveFolder(dir, raw, { notes = {}, origins, layout } = {}) {
   const ids = relationshipIds(raw);
   for (const r of model?.relationships ?? []) {
     let rel = L.split ? origins?.relationships.get(ids.get(r)) : L.model;
-    if (!rel) rel = rootOf.has(r?.from) ? fileFor(rootOf.get(r.from)) : L.defaultFile;
+    // A new relationship goes with the side that depends on it (the consumer of a serving), like a C4 "uses".
+    const owner = r && typeof r === 'object' ? (c4Orientation(r)?.from ?? r.from) : undefined;
+    if (!rel) rel = rootOf.has(owner) ? fileFor(rootOf.get(owner)) : L.defaultFile;
     part(rel).relationships.push(r);
   }
 

@@ -1,5 +1,5 @@
 ---
-archlens: "1.0"
+archlens: "2.0"
 name: "Teleconsulta — Clínica Vida"
 source: architecture/
 revision: 1
@@ -94,7 +94,7 @@ Prontuário eletrônico SaaS que substitui o Tasy
 | Site do Paciente | Application Component (C4 Container) | — | active | P | `tele.site` |
 | Portal Médico | Application Component (C4 Container) | — | active | P | `tele.portal-medico` |
 | API de Agendamento | Application Component (C4 Container) | Agenda, cobrança e confirmação de consultas | active | P | `tele.api` |
-| Banco de Agendamentos | Data Object (C4 Container) | — | active | P | `tele.db` |
+| Banco de Agendamentos | Application Component (C4 Container) | — | active | P | `tele.db` |
 | Worker de Notificações ⚠︎ | Application Component (C4 Container) | — | active | P | `tele.notificador` |
 | PEP (Tasy) | Application Component (C4 Software System) | Prontuário eletrônico legado | deprecated | P | `pep` |
 | Twilio Video | Application Component (C4 Software System) | — | active | P | `twilio` |
@@ -187,6 +187,7 @@ Cadeias de suporte calculadas a partir do modelo (o que sustenta cada oferta, e 
 | Site do Paciente | Paciente, Teleconsulta, Agendamento de consulta, Agendar teleconsulta | AWS ECS, Execução de contêineres, PostgreSQL (RDS) |
 | Portal Médico | Médico, Teleconsulta, Consulta por vídeo, Receita digital, Realizar teleconsulta, Emitir receita | AWS ECS, Execução de contêineres, PostgreSQL (RDS), Datacenter da clínica, VPN AWS ↔ datacenter |
 | API de Agendamento | Paciente, Médico, Teleconsulta, Agendamento de consulta, Consulta por vídeo, Receita digital, Agendar teleconsulta, Realizar teleconsulta, Emitir receita | AWS ECS, Execução de contêineres, PostgreSQL (RDS) |
+| Banco de Agendamentos | Paciente, Médico, Teleconsulta, Agendamento de consulta, Consulta por vídeo, Receita digital, Agendar teleconsulta, Realizar teleconsulta, Emitir receita | — |
 | Worker de Notificações | — | AWS ECS, Execução de contêineres |
 | PEP (Tasy) | Médico, Teleconsulta, Consulta por vídeo, Receita digital, Realizar teleconsulta, Emitir receita | Datacenter da clínica, VPN AWS ↔ datacenter |
 

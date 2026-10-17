@@ -5,8 +5,9 @@ import { normalizeModel } from '../scripts/lib/model.mjs';
 import { resolveView } from '../scripts/lib/query.mjs';
 import { validateModel } from '../scripts/lib/validate.mjs';
 import { suggestViews } from '../scripts/lib/suggest.mjs';
+import { asBase } from './helpers.mjs';
 
-const model = () => normalizeModel(JSON.parse(readFileSync(new URL('./fixtures/shop.json', import.meta.url))));
+const model = () => normalizeModel(asBase(JSON.parse(readFileSync(new URL('./fixtures/shop.json', import.meta.url)))));
 const ids = v => v.nodes.map(n => n.id).sort();
 const edge = (v, a, b) => v.edges.find(e => e.from === a && e.to === b);
 
@@ -163,7 +164,7 @@ const findRaw = (r, id) => {
 const modelWith = mut => {
   const r = JSON.parse(readFileSync(new URL('./fixtures/shop.json', import.meta.url)));
   mut(r);
-  return normalizeModel(r);
+  return normalizeModel(asBase(r));
 };
 
 test('views hide retired elements by default and show them on request', () => {
@@ -228,7 +229,7 @@ test('dynamic steps over parallel relationships use them in order', () => {
 // ---------- groupings ----------
 
 
-const plat = () => normalizeModel(JSON.parse(readFileSync(new URL('./fixtures/platforms.json', import.meta.url))));
+const plat = () => normalizeModel(asBase(JSON.parse(readFileSync(new URL('./fixtures/platforms.json', import.meta.url)))));
 const BOTH = ['plat-aut', 'plat-cred'];
 
 test('groups.only keeps the members of the listed groups and the relations among them, with frames', () => {
@@ -288,13 +289,13 @@ test('E_VIEW_GROUP: unknown or non-grouping ids, crossOnly with one group; saved
   const m = plat();
   assert.throws(() => resolveView(m, { key: 'x', notation: 'c4', level: 'landscape', groups: { only: ['motor'] } }), /E_VIEW_GROUP/);
   assert.throws(() => resolveView(m, { key: 'x', notation: 'c4', level: 'landscape', groups: { only: ['plat-aut'], crossOnly: true } }), /E_VIEW_GROUP/);
-  const r = JSON.parse(readFileSync(new URL('./fixtures/platforms.json', import.meta.url)));
+  const r = asBase(JSON.parse(readFileSync(new URL('./fixtures/platforms.json', import.meta.url))));
   r.views = [{ key: 'x', notation: 'c4', level: 'landscape', groups: { only: ['nada'] } }];
   assert.ok(validateModel(r).errors.some(e => e.code === 'E_VIEW_GROUP'));
 });
 
 test('a retired grouping draws no frame and cannot be listed in only', () => {
-  const r = JSON.parse(readFileSync(new URL('./fixtures/platforms.json', import.meta.url)));
+  const r = asBase(JSON.parse(readFileSync(new URL('./fixtures/platforms.json', import.meta.url))));
   r.model.elements.find(e => e.id === 'plat-cred').status = 'retired';
   const m = normalizeModel(r);
   const v = resolveView(m, { key: 'a', notation: 'c4', level: 'landscape', groups: { frames: true } });
@@ -305,8 +306,8 @@ test('a retired grouping draws no frame and cannot be listed in only', () => {
 });
 
 test('crossOnly with no relation between the groups gives an empty view, not an error', () => {
-  const r = JSON.parse(readFileSync(new URL('./fixtures/platforms.json', import.meta.url)));
-  r.model.relationships = r.model.relationships.filter(x => x.from !== 'autorizador.regras');
+  const r = asBase(JSON.parse(readFileSync(new URL('./fixtures/platforms.json', import.meta.url))));
+  r.model.relationships = r.model.relationships.filter(x => !(x.from === 'motor' && x.to === 'autorizador.regras'));
   const v = resolveView(normalizeModel(r), { key: 'x', notation: 'c4', level: 'landscape', groups: { only: BOTH, crossOnly: true } });
   assert.deepEqual(v.nodes, []);
 });
@@ -343,7 +344,7 @@ for (const form of ['nested', 'parent']) {
     delete motor.group; delete limites.group;
     if (form === 'nested') cred.children = [motor, limites];
     else { motor.parent = 'plat-cred'; limites.parent = 'plat-cred'; r.model.elements.push(motor, limites); }
-    const v = resolveView(normalizeModel(r), { key: 'l', notation: 'c4', level: 'landscape', groups: { frames: true } });
+    const v = resolveView(normalizeModel(asBase(r)), { key: 'l', notation: 'c4', level: 'landscape', groups: { frames: true } });
     assert.equal(v.nodes.find(n => n.id === 'motor')?.group, 'plat-cred');
     assert.equal(v.nodes.find(n => n.id === 'limites')?.group, 'plat-cred');
     assert.ok(edge(v, 'motor', 'limites'));
@@ -352,7 +353,7 @@ for (const form of ['nested', 'parent']) {
 }
 
 test('E_VIEW_GROUP tells a missing id from a non-grouping one and from one hidden by the status filter', () => {
-  const r = JSON.parse(readFileSync(new URL('./fixtures/platforms.json', import.meta.url)));
+  const r = asBase(JSON.parse(readFileSync(new URL('./fixtures/platforms.json', import.meta.url))));
   r.model.elements.find(e => e.id === 'plat-cred').status = 'retired';
   const m = normalizeModel(r);
   const spec = only => ({ key: 'x', notation: 'c4', level: 'landscape', groups: { only } });
@@ -393,7 +394,7 @@ test('the impact viewpoint follows flow by default; other viewpoints do not', ()
   const r = JSON.parse(readFileSync(new URL('./fixtures/shop.json', import.meta.url)));
   r.model.elements.push({ id: 'topic.x', type: 'c4:container', name: 'x', tags: ['topic'] }, { id: 'consumidor', type: 'c4:softwareSystem', name: 'Consumidor' });
   r.model.relationships.push({ from: 'loja.api', to: 'topic.x', type: 'archimate:flow' }, { from: 'topic.x', to: 'consumidor', type: 'archimate:flow' });
-  const m = normalizeModel(r);
+  const m = normalizeModel(asBase(r));
   assert.ok(resolveView(m, { key: 'i', notation: 'archimate', viewpoint: 'impact', anchor: 'loja.api' }).nodes.some(n => n.id === 'consumidor'));
   assert.ok(!resolveView(m, { key: 'l', notation: 'archimate', viewpoint: 'layered', anchor: 'loja.api', traverse: { mode: 'dependents' } }).nodes.some(n => n.id === 'consumidor'));
 });

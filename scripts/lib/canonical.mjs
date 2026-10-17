@@ -134,9 +134,12 @@ export function toCanonical(raw) {
     if (/^(c4:)?uses$/.test(String(r.type ?? 'uses'))) report.uses++;
     return c.type === 'access' && els.databases.has(c.to) ? toServing(c, true) : c;
   });
-  const { model, archlens, ...top } = raw ?? {};
+  // Same key order as the input (only "archlens" goes first), so a saved and reloaded base hashes the same.
+  const out = { archlens: FORMAT };
+  for (const [k, v] of Object.entries(raw ?? {})) if (k !== 'archlens') out[k] = v;
+  out.model = { ...raw?.model, elements: sortParentsFirst(els.elements), relationships };
   return {
-    raw: { archlens: FORMAT, ...top, model: { ...model, elements: sortParentsFirst(els.elements), relationships } },
+    raw: out,
     report, issues: els.issues, databases: els.databases,
   };
 }
