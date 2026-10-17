@@ -30,5 +30,9 @@ export function suggestViews(model) {
   for (const a of els.filter(e => e.type === 'application-component' && ['softwareSystem', 'container'].includes(kind(e)) && !e.c4?.external)) {
     out.push({ key: `impact-${a.id}`, notation: 'archimate', viewpoint: 'impact', anchor: a.id, traverse: { mode: 'both' }, output: ['diagram', 'matrix'], why: `matriz de dependência de ${a.name}` });
   }
+  if (els.filter(e => e.type === 'grouping').length > 1) {
+    out.push({ key: 'landscape-plataformas', notation: 'c4', level: 'landscape', groups: { frames: true }, why: 'sistemas nas molduras dos agrupamentos' });
+    out.push({ key: 'aplicacao-plataformas', notation: 'archimate', viewpoint: 'application', granularity: 'container', groups: { frames: true }, why: 'aplicações nas molduras dos agrupamentos' });
+  }
   return out;
 }

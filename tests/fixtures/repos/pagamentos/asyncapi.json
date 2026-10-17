@@ -1,0 +1,5 @@
+{ "asyncapi": "3.0.0", "info": { "title": "Pagamentos", "version": "1.0.0" },
+  "channels": { "pedidoCriado": { "address": "pedido-criado" }, "pagamentoAprovado": { "address": "pagamento-aprovado" } },
+  "operations": {
+    "consumirPedido": { "action": "receive", "channel": { "$ref": "#/channels/pedidoCriado" } },
+    "publicarPagamento": { "action": "send", "channel": { "$ref": "#/channels/pagamentoAprovado" } } } }

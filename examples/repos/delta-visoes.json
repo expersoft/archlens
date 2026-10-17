@@ -1,0 +1,10 @@
+{
+  "archlens-delta": "1.0",
+  "source": { "kind": "prompt", "ref": "visões de impacto do exemplo" },
+  "summary": "Visões de impacto de pedidos, pagamentos e infraestrutura",
+  "views": [
+    { "key": "impacto-pedidos", "notation": "archimate", "viewpoint": "impact", "anchor": "loja.pedidos", "title": "Impacto de Pedidos" },
+    { "key": "impacto-pagamentos", "notation": "archimate", "viewpoint": "impact", "anchor": "financeiro.pagamentos", "title": "Impacto de Pagamentos" },
+    { "key": "impacto-infra", "notation": "archimate", "viewpoint": "impact", "anchor": "infra-cloud", "title": "Impacto da Infraestrutura" }
+  ]
+}

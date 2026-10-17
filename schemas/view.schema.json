@@ -86,6 +86,26 @@
     "scope": {
       "type": "string"
     },
+    "groups": {
+      "description": "groupings: cut the view to their members (only, crossOnly) and draw frames",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "only": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        },
+        "crossOnly": {
+          "type": "boolean"
+        },
+        "frames": {
+          "type": "boolean"
+        }
+      }
+    },
     "expand": {
       "description": "C4 container/dynamic: other software systems whose containers are also shown, each inside its own boundary",
       "type": "array",
@@ -215,6 +235,19 @@
       "type": "array",
       "items": {
         "type": "string"
+      }
+    },
+    "status": {
+      "description": "lifecycle statuses shown (default: all but retired)",
+      "type": "array",
+      "items": {
+        "enum": [
+          "draft",
+          "planned",
+          "active",
+          "deprecated",
+          "retired"
+        ]
       }
     },
     "derive": {

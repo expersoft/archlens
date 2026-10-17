@@ -3,3 +3,4 @@ node_modules/
 *.candidate-*.html
 *.rejected.html
 *.tmp-*
+.superpowers/

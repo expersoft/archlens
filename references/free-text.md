@@ -1,7 +1,9 @@
 # Do texto livre ao modelo
 
-Objetivo: um modelo **fiel ao que foi dito**, com as lacunas visíveis. Não invente arquitetura para
-deixar o diagrama bonito.
+Objetivo: um **delta** (`references/merge.md`) **fiel ao que foi dito**, com as lacunas visíveis. Não invente
+arquitetura para deixar o diagrama bonito. Se já existe uma base (`architecture/`), leia-a antes (o
+`ARCHITECTURE.md` gerado é o resumo legível): reutilize os ids e acrescente só o que é novo ou diferente — o merge
+cuida do resto.
 
 ## Procedimento
 
@@ -24,7 +26,8 @@ deixar o diagrama bonito.
    - "roda em", "hospedado em" → tecnologia `serving` o container (ou technology-service realizado pelo nó)
    - "grava/lê X" → `access` com `accessType`
    - "depois de A vem B" → `triggering`
-3. **Registre a evidência:** `source` com o trecho literal que justificou o elemento.
+3. **Registre a evidência:** `source` com o trecho literal que justificou o item. O merge o guarda como `excerpt`
+   junto da fonte do delta (`sources`).
 4. **Marque inferências:** tudo que você deduziu e não leu leva `inferred: true` e `confidence`:
    - `alta`: implicação quase certa ("agenda pelo app" ⇒ existe um app)
    - `média`: comum, mas pode ser diferente ("paga com cartão" ⇒ gateway externo)
@@ -34,6 +37,12 @@ deixar o diagrama bonito.
 7. **Pergunte só o que bloqueia.** Se uma resposta muda a estrutura (interno ou externo? um sistema
    ou dois?), pergunte. Se muda um rótulo, assuma e registre em `assumptions`.
 
+## Agrupamentos
+
+Quando o texto disser "a plataforma X tem os sistemas A, B", "camada de fraude: …" ou listar sistemas sob um título,
+crie um `grouping` (id `plat-…`) e preencha `group` nos membros. Um elemento pertence a no máximo um grupo. Se não
+estiver claro se é um agrupamento ou um sistema real (com deploy próprio), pergunte ao usuário.
+
 ## Sinais de alerta
 
 - Mais de ~30% dos elementos inferidos: o texto é vago. Mostre o modelo e peça confirmação antes
@@ -42,5 +51,5 @@ deixar o diagrama bonito.
 - Um processo sem application service: a visão de suporte vai parar no negócio. Verifique se o
   texto indica qual sistema o apoia.
 
-O exemplo completo está em `examples/telemedicina/`: `entrada.md`, o `model.json` gerado e o
-`ARCHITECTURE.md` com a seção de premissas.
+O exemplo completo está em `examples/telemedicina/`: `entrada.md` (texto original), a base em `architecture/` e o `ARCHITECTURE.md` gerado,
+com a seção de premissas, e `delta-01.json`/`plano-01.json`, uma rodada seguinte de enriquecimento.

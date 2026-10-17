@@ -1,0 +1,36 @@
+{
+  "archlens": "1.0",
+  "name": "Cartões",
+  "model": {
+    "elements": [
+      { "id": "plat-aut", "type": "grouping", "name": "Plataforma de Autorização", "description": "Autoriza e tokeniza transações" },
+      { "id": "plat-cred", "type": "grouping", "name": "Plataforma de Crédito" },
+      { "id": "portador", "type": "c4:person", "name": "Portador" },
+      { "id": "bandeira", "type": "c4:softwareSystem", "name": "Bandeira", "external": true },
+      { "id": "autorizador", "type": "c4:softwareSystem", "name": "Autorizador", "group": "plat-aut", "children": [
+        { "id": "autorizador.api", "type": "c4:container", "name": "API de Autorização", "technology": "Java" },
+        { "id": "autorizador.regras", "type": "c4:container", "name": "Motor de Regras", "technology": "Kotlin" }
+      ]},
+      { "id": "tokenizacao", "type": "c4:softwareSystem", "name": "Tokenização", "group": "plat-aut" },
+      { "id": "motor", "type": "c4:softwareSystem", "name": "Motor de Crédito", "group": "plat-cred" },
+      { "id": "limites", "type": "c4:softwareSystem", "name": "Gestão de Limites", "group": "plat-cred" },
+      { "id": "proc-autorizar", "type": "archimate:business-process", "name": "Autorizar compra", "group": "plat-aut" },
+      { "id": "proc-limite", "type": "archimate:business-process", "name": "Conceder limite", "group": "plat-cred" },
+      { "id": "kafka", "type": "archimate:node", "name": "Cluster Kafka", "group": "plat-aut" },
+      { "id": "pg", "type": "archimate:system-software", "name": "PostgreSQL" }
+    ],
+    "relationships": [
+      { "from": "portador", "to": "autorizador.api", "type": "uses", "description": "Compra com cartão" },
+      { "from": "bandeira", "to": "autorizador.api", "type": "uses", "description": "Pede autorização", "technology": "ISO 8583" },
+      { "from": "autorizador.api", "to": "autorizador.regras", "type": "uses", "description": "Avalia" },
+      { "from": "autorizador.api", "to": "tokenizacao", "type": "uses", "description": "Destokeniza o cartão" },
+      { "from": "autorizador.regras", "to": "motor", "type": "uses", "description": "Consulta limite" },
+      { "from": "motor", "to": "limites", "type": "uses", "description": "Reserva limite" },
+      { "from": "autorizador", "to": "proc-autorizar", "type": "archimate:serving" },
+      { "from": "motor", "to": "proc-limite", "type": "archimate:serving" },
+      { "from": "kafka", "to": "autorizador", "type": "archimate:serving" },
+      { "from": "pg", "to": "motor", "type": "archimate:serving" }
+    ]
+  },
+  "views": []
+}

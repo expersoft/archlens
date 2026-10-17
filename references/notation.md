@@ -38,7 +38,11 @@ Schemas: `schemas/model.schema.json` (arquivo inteiro) e `schemas/view.schema.js
 | `owner`, `url` | não | metadados |
 | `inferred` | não | `true` quando veio de interpretação, não do texto explícito |
 | `confidence` | não | `"alta"`, `"média"` ou `"baixa"` (para itens inferidos) |
-| `source` | não | trecho do texto livre que originou o elemento (evidência) |
+| `aliases` | não | outros nomes/ids do mesmo elemento (o merge casa por eles). Únicos no modelo (`E_ALIAS_CONFLICT`) |
+| `status` | não | `draft` (em discussão), `planned`, `active` (padrão), `deprecated`, `retired` |
+| `statusReason` | não | motivo do status |
+| `sources` | não | proveniência: `[{ "kind": "prompt"\|"repo"\|"doc"\|"manual", "ref", "path", "excerpt", "date" }]` |
+| `source` | não | forma antiga: trecho do texto livre; lido como `sources: [{kind:"prompt", excerpt}]` |
 
 ### Tipos C4 → ArchiMate
 
@@ -80,7 +84,7 @@ Schemas: `schemas/model.schema.json` (arquivo inteiro) e `schemas/view.schema.js
 | `technology` | protocolo ("HTTPS", "Kafka", "JDBC") |
 | `accessType` | só em `access`: `read`, `write`, `readwrite` (padrão) ou `access` |
 | `id` | opcional; gerado como `from-tipo-to` |
-| `tags`, `properties`, `inferred` | como nos elementos |
+| `tags`, `properties`, `inferred`, `status`, `statusReason`, `sources` | como nos elementos |
 
 ### `uses` (C4)
 
@@ -106,6 +110,33 @@ A orientação original fica guardada, e as visões C4 desenham a seta como foi 
 | triggering / flow | antes → depois | "checkout dispara faturamento" |
 | influence | motivação → motivação | "requisito influencia meta" |
 
+## Agrupamentos
+
+`grouping` organiza elementos sem virar nó: o membro aponta para ele com `group`, e as visões desenham o grupo como
+moldura.
+
+```json
+{ "id": "plat-autorizacao", "type": "grouping", "name": "Plataforma de Autorização", "description": "…" }
+{ "id": "sleipnir", "type": "c4:softwareSystem", "name": "Autorizador", "group": "plat-autorizacao" }
+{ "id": "proc-autorizar", "type": "business-process", "name": "Autorizar compra", "group": "plat-autorizacao" }
+```
+
+- `group` vale para elementos de qualquer tipo e camada.
+- **Herança:** elemento sem `group` herda o do ancestral mais próximo (`parent`) que tenha um.
+- `"group": null` vale como "sem grupo" (no delta, tira o elemento do grupo; veja `merge.md`).
+- Um grupo por elemento, sem aninhar: um `grouping` não tem `group`.
+- Relação com um agrupamento em uma das pontas é proibida: ligue os membros.
+- Não aninhe elementos dentro de um `grouping` (em `children` ou com `parent`); use `group`. Um elemento aninhado é
+  tratado como membro, com o aviso `W_GROUP_CHILD`, para que a base seja corrigida.
+
+| Código | Nível | Significado |
+|---|---|---|
+| `E_GROUP_REF` | erro | `group` aponta para id inexistente ou para elemento que não é `grouping` |
+| `E_GROUP_NESTED` | erro | um `grouping` tem `group` ou está aninhado em outro |
+| `E_GROUP_REL` | erro | relação com um `grouping` em uma das pontas |
+| `W_GROUP_EMPTY` | aviso | `grouping` sem nenhum membro (direto ou herdado) |
+| `W_GROUP_CHILD` | aviso | elemento aninhado em um `grouping`; foi tratado como membro — prefira `group` |
+
 ## Validação
 
 `archlens validate` devolve códigos estáveis. Cada código traz caminho (`path`) e dica (`hint`).
@@ -119,6 +150,10 @@ A orientação original fica guardada, e as visões C4 desenham a seta como foi 
 | `E_C4_HIERARCHY` | erro | component fora de container, container fora de sistema… |
 | `E_REL_INVALID` | erro | relação proibida (access para não passivo, serving com dado…) |
 | `E_VIEW_KEY` | erro | visão sem key ou key repetida |
+| `E_STATUS` | erro | `status` fora de draft/planned/active/deprecated/retired |
+| `E_SOURCE` | erro | fonte sem `kind` válido ou sem `ref`/`excerpt` |
+| `E_ALIAS_CONFLICT` | erro | alias repetido em dois elementos ou igual ao id de outro |
+| `W_RETIRED_DEPENDENCY` | aviso | algo não-retired depende de um elemento retired |
 | `W_REL_DIRECTION` | aviso | serving/realization parece invertido entre camadas |
 | `W_REL_SUSPECT` | aviso | combinação incomum (ex.: influence fora de motivação) |
 | `W_C4_ORPHAN`, `W_ORPHAN` | aviso | elemento sem pai C4 / sem relações |

@@ -50,6 +50,12 @@
       "items": {
         "$ref": "view.schema.json"
       }
+    },
+    "changelog": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/changelogEntry"
+      }
     }
   },
   "$defs": {
@@ -340,6 +346,12 @@
         "parent": {
           "type": "string"
         },
+        "group": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "children": {
           "type": "array",
           "items": {
@@ -377,6 +389,30 @@
         },
         "source": {
           "type": "string"
+        },
+        "aliases": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "status": {
+          "enum": [
+            "draft",
+            "planned",
+            "active",
+            "deprecated",
+            "retired"
+          ]
+        },
+        "statusReason": {
+          "type": "string"
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/source"
+          }
         }
       }
     },
@@ -450,6 +486,114 @@
         },
         "inferred": {
           "type": "boolean"
+        },
+        "status": {
+          "enum": [
+            "draft",
+            "planned",
+            "active",
+            "deprecated",
+            "retired"
+          ]
+        },
+        "statusReason": {
+          "type": "string"
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/source"
+          }
+        }
+      }
+    },
+    "source": {
+      "type": "object",
+      "required": [
+        "kind"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "prompt",
+            "repo",
+            "doc",
+            "manual"
+          ]
+        },
+        "ref": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "line": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "excerpt": {
+          "type": "string"
+        },
+        "date": {
+          "type": "string"
+        }
+      }
+    },
+    "changelogEntry": {
+      "type": "object",
+      "required": [
+        "id",
+        "date"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "date": {
+          "type": "string"
+        },
+        "source": {
+          "$ref": "#/$defs/source"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "added": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "changed": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "status": {
+          "type": "object",
+          "additionalProperties": {
+            "enum": [
+              "draft",
+              "planned",
+              "active",
+              "deprecated",
+              "retired"
+            ]
+          }
+        },
+        "removed": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "decisions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       }
     }

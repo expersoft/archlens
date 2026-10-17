@@ -1,6 +1,6 @@
 # View specs
 
-Uma visão é uma **consulta** sobre o modelo. O mesmo `ARCHITECTURE.md` responde a qualquer número
+Uma visão é uma **consulta** sobre o modelo. O mesmo modelo (`architecture/`) responde a qualquer número
 de visões novas sem remodelar. Campos comuns:
 
 | Campo | Descrição |
@@ -10,6 +10,7 @@ de visões novas sem remodelar. Campos comuns:
 | `title`, `description` | textos da visão |
 | `include` | ids forçados na visão |
 | `exclude` | padrões: `"<id>"`, `"tag:<tag>"`, `"type:<tipo ArchiMate ou kind C4>"`, `"layer:<camada>"`, `"external"` |
+| `status` | status mostrados (padrão: todos menos `retired`). Esconder um elemento esconde o que está aninhado nele. As-is: `["active","deprecated"]`; to-be: `["draft","planned","active"]`. `draft` aparece em esboço. |
 | `layout` | `{ "direction": "RIGHT" \| "DOWN" \| "auto", "aspectRatio": 1.78, "style": "auto" \| "flow" \| "bands" \| "bands-flow" }` (`style` só vale para ArchiMate) |
 | `animation` | `trace` (padrão C4), `story` (dinâmica), `impact` (ArchiMate com âncora), `layers` |
 | `edgeLabels` | mostra rótulos das relações sempre (padrão: C4 sim, ArchiMate só ao destacar/tecla R) |
@@ -125,6 +126,38 @@ Camada de aplicação sem ruído de componentes:
 ```json
 { "key": "aplicacao", "notation": "archimate", "viewpoint": "application", "granularity": "container" }
 ```
+
+## Agrupamentos e molduras
+
+`groups` recorta e desenha por agrupamento (`grouping`, veja `notation.md`):
+
+```json
+{ "key": "aut-x-cred", "notation": "c4", "level": "landscape",
+  "groups": { "only": ["plat-autorizacao", "plat-credito"], "crossOnly": false, "frames": true } }
+```
+
+- **`only`**: restringe a visão aos membros desses grupos e às relações entre eles. Compõe com notação, nível,
+  viewpoint, camadas e `status`.
+- **`depth` com `only`**: acrescenta vizinhos externos aos grupos até a distância pedida.
+- **`crossOnly`** (padrão `false`): só elementos com relação de um grupo listado para outro, e só essas relações.
+  Exige `only` com 2+ grupos.
+- **`frames`**: explícito vem do pedido; omitido vale `true` com `only` e `false` sem. Com `frames` e sem `only`,
+  cada membro visível fica na moldura do seu grupo.
+- **O que fica sempre:** o `scope` da visão de contexto e o interior da fronteira aberta (containers da visão
+  container, componentes da visão component) ficam mesmo fora de `only`.
+- **Dinâmica** (`level: "dynamic"`): `only`/`crossOnly` não recortam, porque os passos são autorais; as molduras
+  valem.
+- **ArchiMate:** um agrupamento nunca é nó: como `anchor` dá `E_VIEW_GROUP` (use `only`), e em `include` é ignorado.
+- **Matriz de impacto:** lista a travessia inteira a partir da âncora, não só o que o recorte por grupo mostra
+  (o que o recorte esconde aparece marcado como "oculto na visão").
+- `E_VIEW_GROUP`: id em `only` que não existe, que não é `grouping` ou que está oculto pelo filtro de `status` da
+  visão (ex.: agrupamento `retired`: tire-o de `only` ou acrescente `"retired"` em `status`); ou `crossOnly` com
+  menos de 2 grupos.
+
+Desenho. **C4:** moldura → fronteira do sistema → containers; a fronteira do sistema aberto fica dentro da moldura
+do grupo dele, e as setas ligam elementos, nunca a moldura. **ArchiMate:** uma moldura por grupo × camada (nenhuma
+atravessa faixas). `bands` não agrupa: com molduras, `auto` escolhe entre `flow` e `bands-flow`, e `bands` pedido
+vira `bands-flow` com aviso no build.
 
 ## Layout
 

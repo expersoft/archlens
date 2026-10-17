@@ -1,0 +1,199 @@
+{
+  "archlens-plan": "1.0",
+  "base": "ARCHITECTURE.md",
+  "baseHash": "sha256:4b447f8ec9b839e132e803e33cb40e3b1a1a462fa99ccf5dad782048492ec76f",
+  "created": "2026-09-30",
+  "delta": {
+    "archlens-delta": "1.0",
+    "source": {
+      "kind": "prompt",
+      "ref": "rodada 2026-10-01: substituição do PEP",
+      "date": "2026-10-01"
+    },
+    "summary": "PEP Tasy será substituído por um PEP em nuvem; API de agendamento confirmada",
+    "assumptions": [
+      "O PEP em nuvem entra em produção antes do desligamento do Tasy."
+    ],
+    "model": {
+      "elements": [
+        {
+          "id": "pep-nuvem",
+          "type": "c4:softwareSystem",
+          "name": "PEP em nuvem",
+          "description": "Prontuário eletrônico SaaS que substitui o Tasy",
+          "external": true,
+          "status": "planned",
+          "source": "o PEP Tasy será substituído por um PEP em nuvem"
+        },
+        {
+          "id": "api-agendamento",
+          "type": "c4:container",
+          "name": "API Agendamento",
+          "parent": "tele",
+          "technology": "Node.js",
+          "description": "Agenda, cobrança e confirmação de consultas"
+        },
+        {
+          "id": "tele.app",
+          "inferred": false
+        }
+      ],
+      "relationships": [
+        {
+          "from": "tele.portal-medico",
+          "to": "pep-nuvem",
+          "type": "uses",
+          "description": "Registra prontuário",
+          "technology": "HTTPS/FHIR",
+          "status": "planned"
+        },
+        {
+          "from": "pep-nuvem",
+          "to": "as-registro",
+          "type": "archimate:realization",
+          "status": "planned"
+        }
+      ]
+    },
+    "views": [
+      {
+        "key": "containers-to-be",
+        "notation": "c4",
+        "level": "container",
+        "scope": "tele",
+        "status": [
+          "planned",
+          "active"
+        ],
+        "title": "Containers — to-be (sem o que está em desativação)"
+      }
+    ],
+    "ops": [
+      {
+        "op": "status",
+        "id": "pep",
+        "status": "deprecated",
+        "reason": "substituição pelo PEP em nuvem"
+      }
+    ]
+  },
+  "items": [
+    {
+      "n": 1,
+      "key": "el:pep-nuvem",
+      "class": "new",
+      "kind": "element",
+      "target": "pep-nuvem",
+      "type": "c4:softwareSystem",
+      "name": "PEP em nuvem",
+      "parent": null
+    },
+    {
+      "n": 2,
+      "key": "dup:api-agendamento",
+      "class": "possible-duplicate",
+      "kind": "element",
+      "target": "api-agendamento",
+      "candidate": "tele.api",
+      "score": 1,
+      "why": "mesmo tipo; nome parecido; mesmo pai e mesma tecnologia",
+      "resolution": "same"
+    },
+    {
+      "n": 3,
+      "key": "el:api-agendamento:name",
+      "class": "conflict",
+      "kind": "element",
+      "target": "tele.api",
+      "field": "name",
+      "base": "API de Agendamento",
+      "delta": "API Agendamento",
+      "when": "dup:api-agendamento=same",
+      "resolution": "keep"
+    },
+    {
+      "n": 4,
+      "key": "el:api-agendamento:description",
+      "class": "conflict",
+      "kind": "element",
+      "target": "tele.api",
+      "field": "description",
+      "base": "Agenda, cobrança e criação de salas",
+      "delta": "Agenda, cobrança e confirmação de consultas",
+      "when": "dup:api-agendamento=same",
+      "resolution": "take"
+    },
+    {
+      "n": 5,
+      "key": "el:api-agendamento",
+      "class": "new",
+      "kind": "element",
+      "target": "api-agendamento",
+      "type": "c4:container",
+      "name": "API Agendamento",
+      "parent": "tele"
+    },
+    {
+      "n": 6,
+      "key": "el:tele.app",
+      "class": "enrich",
+      "kind": "element",
+      "target": "tele.app"
+    },
+    {
+      "n": 7,
+      "key": "rel:0",
+      "class": "new",
+      "kind": "relationship",
+      "target": "pep-nuvem-serving-tele.portal-medico",
+      "from": "tele.portal-medico",
+      "to": "pep-nuvem",
+      "type": "uses"
+    },
+    {
+      "n": 8,
+      "key": "rel:1",
+      "class": "new",
+      "kind": "relationship",
+      "target": "pep-nuvem-realization-as-registro",
+      "from": "pep-nuvem",
+      "to": "as-registro",
+      "type": "archimate:realization"
+    },
+    {
+      "n": 9,
+      "key": "view:containers-to-be",
+      "class": "new",
+      "kind": "view",
+      "target": "containers-to-be"
+    },
+    {
+      "n": 10,
+      "key": "assumptions",
+      "class": "new",
+      "kind": "assumption",
+      "target": "1 premissa(s)",
+      "added": [
+        "O PEP em nuvem entra em produção antes do desligamento do Tasy."
+      ]
+    },
+    {
+      "n": 11,
+      "key": "op:0",
+      "class": "op",
+      "op": "status",
+      "target": "pep",
+      "from": "active",
+      "status": "deprecated",
+      "reason": "substituição pelo PEP em nuvem"
+    }
+  ],
+  "summary": {
+    "new": 6,
+    "possible-duplicate": 1,
+    "enrich": 1,
+    "op": 1
+  },
+  "blocked": false,
+  "errors": []
+}

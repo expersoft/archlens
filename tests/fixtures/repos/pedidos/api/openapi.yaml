@@ -1,0 +1,12 @@
+openapi: 3.0.3
+info:
+  title: API de Pedidos
+  version: 1.4.0
+servers:
+  - url: https://pedidos.acme.com
+paths:
+  /pedidos:
+    get: { tags: [pedidos] }
+    post: { tags: [pedidos] }
+  /pedidos/{id}:
+    get: { tags: [pedidos] }

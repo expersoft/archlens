@@ -1,0 +1,103 @@
+[
+  {
+    "id": "2026-10-04-01",
+    "date": "2026-10-04",
+    "source": {
+      "kind": "repo",
+      "ref": "https://example.com/acme/pedidos@d28ae88"
+    },
+    "summary": "Leitura de pedidos@d28ae88",
+    "added": [
+      "loja",
+      "loja.pedidos",
+      "loja.pedidos-pedidos-db",
+      "tech.postgres-16",
+      "ext.pagamentos",
+      "loja.pedidos.api-api-de-pedidos",
+      "topic.pedido-criado",
+      "tech.postgres-16-realization-loja.pedidos-pedidos-db",
+      "loja.pedidos-access-loja.pedidos-pedidos-db",
+      "ext.pagamentos-serving-loja.pedidos",
+      "loja.pedidos-realization-loja.pedidos.api-api-de-pedidos",
+      "loja.pedidos-flow-topic.pedido-criado"
+    ],
+    "changed": [],
+    "status": {},
+    "removed": [],
+    "decisions": []
+  },
+  {
+    "id": "2026-10-04-02",
+    "date": "2026-10-04",
+    "source": {
+      "kind": "repo",
+      "ref": "https://example.com/acme/pagamentos@ae85af0"
+    },
+    "summary": "Leitura de pagamentos@ae85af0",
+    "added": [
+      "financeiro",
+      "financeiro.pagamentos",
+      "financeiro.pagamentos-redis",
+      "tech.redis",
+      "financeiro.pagamentos-pagamentos-db",
+      "tech.postgres-15",
+      "ext.antifraude-acme-com",
+      "ext.kafka",
+      "topic.pagamento-aprovado",
+      "tech.redis-serving-financeiro.pagamentos-redis",
+      "tech.postgres-15-realization-financeiro.pagamentos-pagamentos-db",
+      "ext.antifraude-acme-com-serving-financeiro.pagamentos",
+      "ext.kafka-serving-financeiro.pagamentos",
+      "loja.pedidos-serving-financeiro.pagamentos",
+      "topic.pedido-criado-flow-financeiro.pagamentos",
+      "financeiro.pagamentos-flow-topic.pagamento-aprovado",
+      "financeiro.pagamentos-serving-loja.pedidos"
+    ],
+    "changed": [],
+    "status": {},
+    "removed": [
+      "ext.pagamentos"
+    ],
+    "decisions": [
+      "duplicata descartada: tech.postgres-15 ≠ tech.postgres-16"
+    ]
+  },
+  {
+    "id": "2026-10-04-03",
+    "date": "2026-10-04",
+    "source": {
+      "kind": "repo",
+      "ref": "https://example.com/acme/infra@4e77da4"
+    },
+    "summary": "Leitura de infra@4e77da4",
+    "added": [
+      "infra-cloud",
+      "infra-cloud.pedidos",
+      "infra-cloud.eventos",
+      "tech.aws-eks-cluster-principal",
+      "infra-cloud.eventos-serving-tech.aws-eks-cluster-principal"
+    ],
+    "changed": [],
+    "status": {},
+    "removed": [],
+    "decisions": []
+  },
+  {
+    "id": "2026-10-04-04",
+    "date": "2026-10-04",
+    "source": {
+      "kind": "prompt",
+      "ref": "visões de impacto do exemplo"
+    },
+    "summary": "Visões de impacto de pedidos, pagamentos e infraestrutura",
+    "added": [
+      "view:impacto-pedidos",
+      "view:impacto-pagamentos",
+      "view:impacto-infra"
+    ],
+    "changed": [],
+    "status": {},
+    "removed": [],
+    "decisions": []
+  }
+]

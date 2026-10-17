@@ -1,0 +1,30 @@
+[
+  {
+    "id": "2026-09-30-01",
+    "date": "2026-09-30",
+    "source": {
+      "kind": "prompt",
+      "ref": "rodada 2026-10-01: substituição do PEP",
+      "date": "2026-10-01"
+    },
+    "summary": "PEP Tasy será substituído por um PEP em nuvem; API de agendamento confirmada",
+    "added": [
+      "pep-nuvem",
+      "pep-nuvem-serving-tele.portal-medico",
+      "pep-nuvem-realization-as-registro",
+      "view:containers-to-be"
+    ],
+    "changed": [
+      "tele.api",
+      "tele.app"
+    ],
+    "status": {
+      "pep": "deprecated"
+    },
+    "removed": [],
+    "decisions": [
+      "duplicata: api-agendamento = tele.api",
+      "conflito tele.api.description: take \"Agenda, cobrança e confirmação de consultas\""
+    ]
+  }
+]

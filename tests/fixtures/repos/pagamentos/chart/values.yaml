@@ -1,0 +1,8 @@
+image:
+  repository: ghcr.io/acme/pagamentos
+  tag: 2.1.0
+ingress:
+  hosts:
+    - host: pay.acme.com
+env:
+  ANTIFRAUDE_URL: https://antifraude.acme.com/api

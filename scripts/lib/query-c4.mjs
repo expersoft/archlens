@@ -2,6 +2,7 @@
 import { c4KindOf, c4Orientation, childrenOf, ancestors } from './model.mjs';
 import { C4_LABELS } from './registry.mjs';
 import { viewError, matchesPattern } from './query-util.mjs';
+import { groupSpec, groupOf, cutByGroups, cutEdges, frameGroups } from './query-groups.mjs';
 
 // Tags that draw a C4 element as a message queue/topic (horizontal cylinder, like C4-PlantUML ContainerQueue).
 const QUEUE_TAGS = ['queue', 'topic', 'messaging'];
@@ -20,6 +21,8 @@ export function resolveC4(model, spec) {
     scope = model.elements.get(spec.scope);
     if (!scope) throw viewError('E_UNKNOWN_REF', `scope "${spec.scope}" não existe`, 'use o id de um elemento do modelo');
   }
+
+  const gs = groupSpec(model, spec);
 
   // Which elements may appear, and which of them sit inside the opened boundary.
   const visible = new Set();
@@ -74,6 +77,7 @@ export function resolveC4(model, spec) {
     e.count++;
     if (rel) {
       e.relIds.push(rel.id);
+      (e.statuses ??= []).push(rel.status ?? 'active');
       if (rel.description && !e.descriptions.includes(rel.description)) e.descriptions.push(rel.description);
       if (rel.technology && !e.technologies.includes(rel.technology)) e.technologies.push(rel.technology);
     }
@@ -81,10 +85,17 @@ export function resolveC4(model, spec) {
   };
 
   if (level === 'dynamic') {
+    // The nth step over the same pair uses the nth parallel relationship (e.g. POST /balances, then /operations).
+    const seenPairs = new Map();
     (spec.steps || []).forEach((s, i) => {
-      const rel = s.rel ? model.relationships.find(r => r.id === s.rel) : model.relationships.find(r => {
-        const o = c4Orientation(r); return o && o.from === s.from && o.to === s.to;
-      });
+      let rel = null;
+      if (s.rel) rel = model.relationships.find(r => r.id === s.rel);
+      else {
+        const pair = model.relationships.filter(r => { const o = c4Orientation(r); return o && o.from === s.from && o.to === s.to; });
+        const nth = seenPairs.get(`${s.from}>${s.to}`) ?? 0;
+        seenPairs.set(`${s.from}>${s.to}`, nth + 1);
+        rel = pair[nth] ?? pair[0];
+      }
       const from = s.from ?? (rel && c4Orientation(rel).from), to = s.to ?? (rel && c4Orientation(rel).to);
       for (const x of [from, to]) if (!model.elements.has(x)) throw viewError('E_UNKNOWN_REF', `passo ${i + 1} referencia "${x}", que não existe`, 'use ids de elementos ou "rel" com o id de um relacionamento');
       const a = rep(from), b = rep(to);
@@ -128,6 +139,13 @@ export function resolveC4(model, spec) {
     if (r) nodes.add(r);
   }
 
+  // Dynamic steps are authored, so the group cut does not apply there (frames still do). The context scope and the
+  // inside of the opened boundary always stay.
+  if (level !== 'dynamic') {
+    const keepIds = level === 'context' ? [scope.id] : [...internal];
+    nodes = cutByGroups(model, gs, nodes, edges, { depth: spec.focus?.length ? 0 : (spec.depth ?? 0), keepIds });
+  }
+
   // Focus: keep the neighbourhood (undirected) of the focused elements up to `depth`.
   const focus = new Set();
   if (spec.focus?.length) {
@@ -151,10 +169,11 @@ export function resolveC4(model, spec) {
     nodes = new Set([...nodes].filter(n => keep.has(n)));
   }
 
-  edges = edges.filter(e => nodes.has(e.from) && nodes.has(e.to)).map(e => ({
+  edges = cutEdges(model, gs, edges.filter(e => nodes.has(e.from) && nodes.has(e.to))).map(e => ({
     id: e.id, from: e.from, to: e.to, type: 'uses',
     label: e.descriptions.length > 2 ? `${e.descriptions.length} interações: ${e.descriptions.join('; ')}` : e.descriptions.join('; '),
     technology: e.technologies.join(', '),
+    status: e.statuses?.length && e.statuses.every(s => s === 'draft') ? 'draft' : 'active',
     count: e.count, relIds: e.relIds, ...(e.step ? { step: e.step } : {}),
   }));
 
@@ -174,12 +193,14 @@ export function resolveC4(model, spec) {
       parentName: !internal.has(id) && !boundaryOf.has(id) && parent && k !== 'person' && k !== 'softwareSystem' ? parent.name : null,
       isScope: scope?.id === id,
       isFocus: focus.has(id),
-      inferred: !!el.inferred,
+      inferred: !!el.inferred, status: el.status ?? 'active', statusReason: el.statusReason,
+      ...(groupOf(model, id) ? { group: groupOf(model, id) } : {}),
     };
   });
 
   const boundaries = [boundary, ...expanded].filter(b => b && outNodes.some(n => n.boundary === b.id))
-    .map(b => ({ id: b.id, name: b.name, c4Kind: kind(b), c4Label: C4_LABELS[kind(b)] }));
+    .map(b => ({ id: b.id, name: b.name, c4Kind: kind(b), c4Label: C4_LABELS[kind(b)], ...(groupOf(model, b.id) ? { group: groupOf(model, b.id) } : {}) }));
+  const groups = frameGroups(model, gs, [...outNodes, ...boundaries]);
 
   return {
     key: spec.key, notation: 'c4', level,
@@ -190,5 +211,6 @@ export function resolveC4(model, spec) {
     direction: spec.layout?.direction ?? spec.direction ?? 'RIGHT',
     layout: spec.layout ?? null,
     nodes: outNodes, edges, boundaries,
+    ...(groups ? { groups } : {}),
   };
 }
