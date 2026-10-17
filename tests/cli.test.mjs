@@ -274,61 +274,71 @@ test('a view the delta drops still renders in the preview, with the ghost, and i
   assert.match(v.stderr, /visões afetadas/);
 });
 
-test('migrate turns an old base into architecture/ with the same raw, notes from keep blocks, and a generated .md', () => {
+test('migrate turns an old .md base into a 2.0 architecture/ folder with notes and a generated .md', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'archlens-'));
+  writeFileSync(join(dir, 'ARCHITECTURE.md'), legacyMd(shop()));
+  const r = run(['migrate', 'ARCHITECTURE.md'], dir);
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /formato 2\.0/);
+  const back = loadFolder(join(dir, 'architecture'));
+  const { changelog, ...rest } = back.raw;
+  assert.deepEqual(rest, asBase(shop()));
+  assert.equal(back.notes.notes, 'Nota antiga.');
+  assert.match(readFileSync(join(dir, 'ARCHITECTURE.md'), 'utf8'), /^---\n[\s\S]*source: architecture\//);
+  const again = run(['migrate', 'ARCHITECTURE.md'], dir);
+  assert.notEqual(again.status, 0);
+  assert.match(again.stderr, /formato 2\.0/);
+});
+
+test('migrate converts a 1.x folder in place, keeping notes and the files that are not the base', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'archlens-'));
+  saveFolder(join(dir, 'architecture'), shop(), { notes: { notes: 'Nota.' } });
+  mkdirSync(join(dir, 'architecture', 'diagrams'));
+  writeFileSync(join(dir, 'architecture', 'diagrams', 'architecture.html'), '<html></html>');
+  const r = run(['migrate', 'architecture'], dir);
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /1 banco\(s\)/);
+  assert.match(r.stdout, /planos gerados antes/);
+  assert.equal(loadFolder(join(dir, 'architecture')).raw.archlens, '2.0');
+  assert.equal(loadFolder(join(dir, 'architecture')).notes.notes, 'Nota.');
+  assert.ok(existsSync(join(dir, 'architecture', 'diagrams', 'architecture.html')), 'diagrams/ survives');
+  assert.ok(!readdirSync(dir).some(n => /\.(migrate|old)-/.test(n)), 'no temporary folder left behind');
+  assert.equal(run(['validate', 'architecture'], dir).status, 0);
+});
+
+test('an old .md that already holds a 2.0 base is moved to a folder without conversion', () => {
   const dir = mkdtempSync(join(tmpdir(), 'archlens-'));
   writeFileSync(join(dir, 'ARCHITECTURE.md'), legacyMd(asBase(shop())));
   const r = run(['migrate', 'ARCHITECTURE.md'], dir);
   assert.equal(r.status, 0, r.stderr);
-  assert.match(r.stdout, /git add architecture ARCHITECTURE\.md/);
-  const back = loadFolder(join(dir, 'architecture'));
-  assert.deepEqual(back.raw, asBase(shop()));
-  assert.equal(hashRaw(back.raw), hashRaw(asBase(shop())), 'plans made before the migration still apply');
-  assert.deepEqual(back.notes, { notes: 'Nota antiga.' });
-  const md = readFileSync(join(dir, 'ARCHITECTURE.md'), 'utf8');
-  assert.doesNotMatch(md, /archlens-json/);
-  assert.match(md, /Nota antiga\./);
-  assert.equal(run(['check'], dir).status, 0);
-  const again = run(['migrate', 'ARCHITECTURE.md'], dir);
-  assert.equal(again.status, 1);
-  assert.match(again.stderr, /já está no formato novo/);
+  assert.deepEqual(loadFolder(join(dir, 'architecture')).raw, asBase(shop()));
 });
 
-test('a plan made before migrate applies after it', () => {
+test('migrate of a split folder keeps every element in its file; a nested child goes with its parent', () => {
   const dir = mkdtempSync(join(tmpdir(), 'archlens-'));
-  writeFileSync(join(dir, 'ARCHITECTURE.md'), legacyMd(asBase(shop())));
-  writeFileSync(join(dir, 'd.json'), JSON.stringify({ 'archlens-delta': '1.0', source: { kind: 'prompt', ref: 'r' },
-    model: { elements: [{ id: 'loja.worker', type: 'c4:container', name: 'Worker', parent: 'loja' }] } }));
-  assert.equal(run(['merge', 'ARCHITECTURE.md', 'd.json', '--plan', 'p.json'], dir).status, 0);
-  assert.equal(run(['migrate', 'ARCHITECTURE.md'], dir).status, 0);
-  const a = run(['merge', 'ARCHITECTURE.md', '--apply', 'p.json'], dir);
-  assert.equal(a.status, 0, a.stderr);
+  const base = join(dir, 'architecture');
+  mkdirSync(join(base, 'model'), { recursive: true });
+  writeFileSync(join(base, 'archlens.json'), JSON.stringify({ archlens: '1.0', name: 'Split', layout: { model: 'model/' } }));
+  writeFileSync(join(base, 'model/b-pag.json'), JSON.stringify({ elements: [{ id: 'pag', type: 'c4:softwareSystem', name: 'Pag', children: [{ id: 'pag.api', type: 'c4:container', name: 'API' }] }], relationships: [] }));
+  writeFileSync(join(base, 'model/a-loja.json'), JSON.stringify({ elements: [{ id: 'loja', type: 'c4:softwareSystem', name: 'Loja' }], relationships: [{ from: 'loja', to: 'pag.api', type: 'uses' }] }));
+  const r = run(['migrate', 'architecture'], dir);
+  assert.equal(r.status, 0, r.stderr);
+  const file = f => JSON.parse(readFileSync(join(base, f), 'utf8'));
+  assert.deepEqual(file('model/b-pag.json').elements.map(e => [e.id, e.parent ?? null]), [['pag', null], ['pag.api', 'pag']]);
+  assert.deepEqual(file('model/a-loja.json').elements.map(e => e.id), ['loja']);
+  assert.equal(file('archlens.json').archlens, '2.0');
 });
 
-test('migrate refuses a destination that already holds a base and an invalid model, writing nothing', () => {
+test('migrate writes nothing when the 1.x base is invalid', () => {
   const dir = mkdtempSync(join(tmpdir(), 'archlens-'));
-  writeFileSync(join(dir, 'ARCHITECTURE.md'), legacyMd(asBase(shop())));
-  saveFolder(join(dir, 'outra'), asBase(shop()));
-  const manifestOf = () => readFileSync(join(dir, 'outra', 'archlens.json'), 'utf8');
-  const before = manifestOf();
-  const r = run(['migrate', 'ARCHITECTURE.md', '--to', 'outra'], dir);
-  assert.equal(r.status, 1);
-  assert.match(r.stderr, /E_STORE_EXISTS/);
-  assert.equal(manifestOf(), before, 'the existing base is untouched');
-  mkdirSync(join(dir, 'solta'));
-  writeFileSync(join(dir, 'solta', 'leia-me.txt'), 'x');
-  const old = readFileSync(join(dir, 'ARCHITECTURE.md'), 'utf8');
-  const n = run(['migrate', 'ARCHITECTURE.md', '--to', 'solta'], dir);
-  assert.equal(n.status, 1);
-  assert.match(n.stderr, /E_STORE_NOT_BASE/);
-  assert.equal(readFileSync(join(dir, 'solta', 'leia-me.txt'), 'utf8'), 'x');
-  assert.equal(readFileSync(join(dir, 'ARCHITECTURE.md'), 'utf8'), old);
-  const bad = asBase(shop());
-  bad.model.relationships.push({ from: 'loja.api', to: 'nada', type: 'serving' });
-  writeFileSync(join(dir, 'ARCHITECTURE.md'), legacyMd(bad));
-  const v = run(['migrate', 'ARCHITECTURE.md'], dir);
-  assert.equal(v.status, 2);
-  assert.ok(!existsSync(join(dir, 'architecture')));
-  assert.match(readFileSync(join(dir, 'ARCHITECTURE.md'), 'utf8'), /archlens-json/, 'the old document stays');
+  const bad = shop();
+  bad.model.relationships.push({ from: 'loja.api', to: 'nada', type: 'uses' });
+  saveFolder(join(dir, 'architecture'), bad);
+  const before = snapshot(dir);
+  const r = run(['migrate', 'architecture'], dir);
+  assert.equal(r.status, 2);
+  assert.match(r.stdout + r.stderr, /E_UNKNOWN_REF/);
+  assert.deepEqual(snapshot(dir), before);
 });
 
 test('check: 0 when the document is current, 1 when it was edited by hand or the model is invalid', () => {
