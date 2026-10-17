@@ -398,3 +398,66 @@ test('the impact viewpoint follows flow by default; other viewpoints do not', ()
   assert.ok(resolveView(m, { key: 'i', notation: 'archimate', viewpoint: 'impact', anchor: 'loja.api' }).nodes.some(n => n.id === 'consumidor'));
   assert.ok(!resolveView(m, { key: 'l', notation: 'archimate', viewpoint: 'layered', anchor: 'loja.api', traverse: { mode: 'dependents' } }).nodes.some(n => n.id === 'consumidor'));
 });
+
+// ---------- C4 derived through intermediaries ----------
+
+// A 2.0 base written only with ArchiMate types and relationships: no "uses" at all.
+const pure = () => normalizeModel({ archlens: '2.0', name: 'Puro', model: {
+  elements: [
+    { id: 'loja', type: 'application-component', name: 'Loja', c4: { kind: 'softwareSystem' } },
+    { id: 'loja.web', type: 'application-component', name: 'Web', parent: 'loja', c4: { kind: 'container' } },
+    { id: 'loja.api', type: 'application-component', name: 'API', parent: 'loja', c4: { kind: 'container' } },
+    { id: 'loja.db', type: 'application-component', name: 'Banco', parent: 'loja', c4: { kind: 'container' }, tags: ['database'] },
+    { id: 'pedidos', type: 'data-object', name: 'Pedidos', parent: 'loja.db' },
+    { id: 'pag', type: 'application-component', name: 'Pagamentos', c4: { kind: 'softwareSystem' }, external: true },
+    { id: 'svc-pag', type: 'application-service', name: 'Autorização' },
+    { id: 'if-api', type: 'application-interface', name: 'REST' },
+    { id: 'fn-preco', type: 'application-function', name: 'Precificar' },
+    { id: 'svc-preco', type: 'application-service', name: 'Preço' },
+    { id: 'orfao', type: 'application-service', name: 'Sem dono' },
+  ],
+  relationships: [
+    { from: 'pag', to: 'svc-pag', type: 'realization' },
+    { from: 'svc-pag', to: 'loja.api', type: 'serving', description: 'autoriza' },
+    { from: 'loja.api', to: 'if-api', type: 'composition' },
+    { from: 'if-api', to: 'loja.web', type: 'serving' },
+    { from: 'loja.api', to: 'fn-preco', type: 'assignment' },
+    { from: 'fn-preco', to: 'svc-preco', type: 'realization' },
+    { from: 'svc-preco', to: 'loja.web', type: 'serving' },
+    { from: 'orfao', to: 'loja.web', type: 'serving' },
+    { from: 'loja.api', to: 'pedidos', type: 'access', accessType: 'write' },
+  ],
+} });
+const pureEdge = (v, a, b) => v.edges.find(e => e.from === a && e.to === b);
+
+test('C4 from pure ArchiMate: services, interfaces and assigned functions lead to their owners', () => {
+  const v = resolveView(pure(), { key: 'k', notation: 'c4', level: 'container', scope: 'loja' });
+  const pagamento = pureEdge(v, 'loja.api', 'pag');
+  assert.ok(pagamento, JSON.stringify(v.edges));
+  assert.equal(pagamento.derived, true);
+  assert.deepEqual(pagamento.via, ['Autorização']);
+  assert.equal(pagamento.label, 'autoriza');
+  const web = pureEdge(v, 'loja.web', 'loja.api');
+  assert.ok(web, 'via the interface and via the function chain');
+  assert.equal(web.count, 2);
+  assert.match(web.label, /Preço/, 'no description: the intermediary name');
+  assert.ok(pureEdge(v, 'loja.api', 'loja.db'), 'a data-object inside a container lifts to it');
+  assert.ok(!v.edges.some(e => e.from === 'loja.web' && e.to !== 'loja.api'), 'an intermediary without owner is dropped');
+  assert.equal(v.nodes.find(n => n.id === 'loja.db').database, true);
+});
+
+test('a derived edge joins a direct one between the same pair, which keeps its plain style', () => {
+  const m = pure();
+  m.relationships.push({ id: 'direta', from: 'pag', to: 'loja.api', type: 'serving', description: 'webhook', tags: [], properties: {}, status: 'active', sources: [] });
+  const e = pureEdge(resolveView(m, { key: 'k', notation: 'c4', level: 'container', scope: 'loja' }), 'loja.api', 'pag');
+  assert.equal(e.count, 2);
+  assert.equal(e.derived, undefined);
+  assert.match(e.label, /webhook/);
+  assert.match(e.label, /autoriza/);
+});
+
+test('"derive": false turns derivation off', () => {
+  const v = resolveView(pure(), { key: 'k', notation: 'c4', level: 'container', scope: 'loja', derive: false });
+  assert.equal(pureEdge(v, 'loja.api', 'pag'), undefined);
+  assert.ok(pureEdge(v, 'loja.api', 'loja.db'), 'hierarchy lifting is not derivation');
+});

@@ -9,6 +9,30 @@ const QUEUE_TAGS = ['queue', 'topic', 'messaging'];
 
 const LEVEL_TITLES = { landscape: 'System Landscape', context: 'System Context', container: 'Container', component: 'Component', dynamic: 'Dynamic' };
 
+// Behaviour and interfaces of an application: a C4 arrow to or from one of them is an arrow to or from its owner.
+const INTERMEDIARY = new Set(['application-service', 'application-interface', 'application-function', 'application-process']);
+const OWNING = new Set(['realization', 'assignment', 'composition']);
+
+/** intermediary id → the C4 elements that own it (realize, are assigned to or compose it), through chains of intermediaries. */
+export function intermediaryOwners(model) {
+  const direct = new Map();
+  const add = (x, o) => { if (!direct.has(x)) direct.set(x, []); if (!direct.get(x).includes(o)) direct.get(x).push(o); };
+  for (const r of model.relationships) if (OWNING.has(r.type) && INTERMEDIARY.has(model.elements.get(r.to)?.type)) add(r.to, r.from);
+  for (const e of model.elements.values()) if (INTERMEDIARY.has(e.type) && e.parent) add(e.id, e.parent);
+  const resolve = (x, seen) => {
+    const out = [];
+    for (const o of direct.get(x) ?? []) {
+      const el = model.elements.get(o);
+      if (el?.c4) { if (!out.includes(o)) out.push(o); continue; }
+      if (INTERMEDIARY.has(el?.type) && !seen.has(o)) for (const y of resolve(o, new Set([...seen, o]))) if (!out.includes(y)) out.push(y);
+    }
+    return out;
+  };
+  const owners = new Map();
+  for (const x of direct.keys()) { const o = resolve(x, new Set([x])); if (o.length) owners.set(x, o); }
+  return owners;
+}
+
 export function resolveC4(model, spec) {
   const level = spec.level ?? 'context';
   if (!LEVEL_TITLES[level]) throw viewError('E_VIEW_LEVEL', `nível C4 desconhecido "${level}"`, 'use landscape | context | container | component | dynamic');
@@ -105,12 +129,20 @@ export function resolveC4(model, spec) {
       if (s.technology) e.technologies = [s.technology];
     });
   } else {
+    const owners = spec.derive === false ? new Map() : intermediaryOwners(model);
+    const ends = id => (INTERMEDIARY.has(model.elements.get(id)?.type) ? owners.get(id) ?? [] : [id]);
     for (const r of model.relationships) {
       const o = c4Orientation(r);
       if (!o) continue;
-      const a = rep(o.from), b = rep(o.to);
-      if (!a || !b || a === b) continue;
-      addEdge(a, b, r);
+      const via = [o.from, o.to].filter(id => INTERMEDIARY.has(model.elements.get(id)?.type)).map(id => model.elements.get(id).name);
+      for (const f of ends(o.from)) for (const t of ends(o.to)) {
+        const a = rep(f), b = rep(t);
+        if (!a || !b || a === b) continue;
+        const e = addEdge(a, b, r);
+        if (!via.length) { e.direct = true; continue; }
+        e.via = [...new Set([...(e.via ?? []), ...via])];
+        if (!r.description && !e.descriptions.includes(via[0])) e.descriptions.push(via[0]);
+      }
     }
   }
   let edges = [...edgeMap.values()];
@@ -174,7 +206,8 @@ export function resolveC4(model, spec) {
     label: e.descriptions.length > 2 ? `${e.descriptions.length} interações: ${e.descriptions.join('; ')}` : e.descriptions.join('; '),
     technology: e.technologies.join(', '),
     status: e.statuses?.length && e.statuses.every(s => s === 'draft') ? 'draft' : 'active',
-    count: e.count, relIds: e.relIds, ...(e.step ? { step: e.step } : {}),
+    count: e.count, relIds: e.relIds,
+    ...(e.via && !e.direct ? { derived: true, via: e.via } : {}), ...(e.step ? { step: e.step } : {}),
   }));
 
   const order = [...model.elements.keys()];
