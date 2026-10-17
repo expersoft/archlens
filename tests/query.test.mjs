@@ -497,3 +497,56 @@ test('a cycle between intermediaries terminates and reaches the owner once', () 
   assert.equal(arrows[0].derived, true);
   assert.equal(new Set(v.edges.map(e => e.id)).size, v.edges.length);
 });
+
+const odin = () => normalizeModel({ archlens: '2.0', name: 'Odin', model: {
+  elements: [
+    { id: 'odin', type: 'application-component', name: 'Odin', c4: { kind: 'softwareSystem' } },
+    { id: 'odin.api', type: 'application-component', name: 'odin-api', parent: 'odin', c4: { kind: 'container' } },
+    { id: 'odin.worker', type: 'application-component', name: 'odin-message-worker', parent: 'odin', c4: { kind: 'container' } },
+    { id: 'odin.api.rest', type: 'application-component', name: 'REST', parent: 'odin.api', c4: { kind: 'component' } },
+    { id: 'crm', type: 'application-component', name: 'CRM', c4: { kind: 'softwareSystem' } },
+    { id: 'bus', type: 'application-component', name: 'Barramento' },
+    { id: 'bus.adapter', type: 'application-component', name: 'Adapter' },
+  ],
+  relationships: [
+    { from: 'odin.api', to: 'odin.worker', type: 'flow', description: 'mensagem' },
+    { from: 'odin.worker', to: 'crm', type: 'serving' },
+    { from: 'bus', to: 'bus.adapter', type: 'aggregation', description: 'reúne adaptadores' },
+    { from: 'crm', to: 'bus.adapter', type: 'composition' },
+  ],
+} });
+const appView = extra => resolveView(odin(), { key: 'a', notation: 'archimate', viewpoint: 'application', ...extra });
+const node = (v, id) => v.nodes.find(n => n.id === id);
+
+test('nesting "edges" (default) keeps today\'s view', () => {
+  const v = appView();
+  assert.deepEqual(v.nesting, { mode: 'edges', depth: null });
+  assert.ok(v.edges.some(e => e.implicit && e.from === 'odin' && e.to === 'odin.api'));
+  assert.ok(v.nodes.every(n => n.nestedIn === undefined));
+});
+
+test('nesting "nested": parent and composition/aggregation nest, and the edges that made them disappear', () => {
+  const v = appView({ nesting: 'nested' });
+  assert.equal(node(v, 'odin.api').nestedIn, 'odin');
+  assert.equal(node(v, 'odin.api.rest').nestedIn, 'odin.api');
+  assert.equal(node(v, 'bus.adapter').nestedIn, 'bus', 'aggregation nests; the later composition from crm stays an edge');
+  assert.equal(node(v, 'bus.adapter').nestTip, 'reúne adaptadores');
+  assert.ok(!v.edges.some(e => e.type === 'composition' && e.implicit));
+  assert.ok(!v.edges.some(e => e.from === 'bus' && e.to === 'bus.adapter'));
+  assert.ok(v.edges.some(e => e.from === 'crm' && e.to === 'bus.adapter' && e.type === 'composition'));
+  assert.ok(v.edges.some(e => e.from === 'odin.api' && e.to === 'odin.worker'), 'other edges stay');
+});
+
+test('nesting depth 1: deeper elements sit in the box of the nearest nested ancestor, linked by the diamond', () => {
+  const v = appView({ nesting: { mode: 'nested', depth: 1 } });
+  assert.equal(node(v, 'odin.api').nestedIn, 'odin');
+  assert.equal(node(v, 'odin.api.rest').nestedIn, 'odin', 'next to odin-api, inside Odin');
+  assert.ok(v.edges.some(e => e.implicit && e.from === 'odin.api' && e.to === 'odin.api.rest'));
+  assert.deepEqual(v.nesting, { mode: 'nested', depth: 1 });
+});
+
+test('an invalid nesting is E_VIEW_NESTING', () => {
+  for (const bad of ['dentro', { mode: 'nested', depth: 0 }, { mode: 'x' }]) {
+    assert.throws(() => appView({ nesting: bad }), e => e.code === 'E_VIEW_NESTING', JSON.stringify(bad));
+  }
+});
