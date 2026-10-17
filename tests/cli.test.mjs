@@ -600,3 +600,17 @@ test('wording: an explicit --base not created yet says where it will be created 
   const none = run(['scan', repo, '--as', 'service', '--system', 'loja', '--delta', 'd2.json'], dir);
   assert.match(none.stderr, /Use --base/, 'without --base the hint stays');
 });
+
+test('every command that reads a 1.x folder fails with E_STORE_FORMAT; scan does not take it for a new base', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'archlens-'));
+  saveFolder(join(dir, 'architecture'), shop());
+  for (const args of [['validate'], ['views'], ['build'], ['merge', 'architecture', 'd.json', '--plan', 'p.json']]) {
+    const r = run(args, dir);
+    assert.notEqual(r.status, 0, args.join(' '));
+    assert.match(r.stderr, /E_STORE_FORMAT[\s\S]*archlens migrate/, args.join(' '));
+  }
+  const repo = fileURLToPath(new URL('./fixtures/repos/pedidos', import.meta.url));
+  const s = run(['scan', repo], dir);
+  assert.notEqual(s.status, 0);
+  assert.match(s.stderr, /E_STORE_FORMAT/);
+});

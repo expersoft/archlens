@@ -193,7 +193,7 @@ export function toDelta(inv, { role, system, id, base = null } = {}) {
   for (const f of facts.filter(x => x.kind === 'infra-image')) {
     const iid = put({ id: infraIdOf(f.service), type: 'c4:container', parent: sysId, name: f.service, tags: [tagOf(f.category)] }, f.at);
     infra.set(f.service, iid);
-    link(engine(f.engine, f.version, f.at), iid, f.category === 'database' ? 'archimate:realization' : 'archimate:serving', f.at);
+    link(engine(f.engine, f.version, f.at), iid, 'archimate:serving', f.at);
   }
   for (const f of facts.filter(x => x.kind === 'cloud-resource')) {
     const rk = `${f.type}.${f.name}`;
@@ -206,9 +206,7 @@ export function toDelta(inv, { role, system, id, base = null } = {}) {
     }
     infra.set(rk, put({ id: infraIdOf(f.name), type: 'c4:container', parent: sysId, name: f.name, technology: f.type, tags: [tagOf(f.category)] }, f.at));
   }
-  const cloud = new Map(facts.filter(x => x.kind === 'cloud-resource').map(f => [`${f.type}.${f.name}`, f]));
   for (const f of facts.filter(x => x.kind === 'tf-ref')) {
-    if (cloud.get(f.from)?.category === 'database') continue; // serving cannot target a data object
     link(infra.get(f.to), infra.get(f.from), 'archimate:serving', f.at);
   }
 

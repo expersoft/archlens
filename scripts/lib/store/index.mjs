@@ -76,9 +76,9 @@ export function openStore(locator) {
       kind: 'folder', writable: true, locator,
       describe: () => `${rel(locator.path)}/`,
       assertWritable() {},
-      load() {
+      load({ anyFormat } = {}) {
         if (!existsSync(join(locator.path, MANIFEST))) return { raw: null, notes: {}, origins: null, layout: undefined };
-        last = loadFolder(locator.path);
+        last = loadFolder(locator.path, { anyFormat });
         return last;
       },
       save(raw, { notes, origins = last?.origins, layout = last?.layout } = {}) {
@@ -92,8 +92,8 @@ export function openStore(locator) {
     kind: 'legacy', writable: false, locator,
     describe: () => `${rel(locator.path)} (formato antigo)`,
     assertWritable() { throw legacyError(); },
-    load() {
-      const { raw, keeps } = loadLegacy(locator.path);
+    load({ anyFormat } = {}) {
+      const { raw, keeps } = loadLegacy(locator.path, { anyFormat });
       return { raw, notes: legacyNotes(raw, keeps), origins: null, layout: undefined };
     },
     save() { throw legacyError(); },

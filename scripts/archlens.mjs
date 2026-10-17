@@ -412,7 +412,7 @@ async function main() {
         base = loaded.raw ? normalizeModel(loaded.raw) : null;
         if (!base) newBase(val('base') ? st.locator.path : null);
       } catch (e) {
-        if (val('base')) fail(e.message);
+        if (val('base') || e.code === 'E_STORE_FORMAT') fail(e.message);
         newBase();
       }
       if (args.delta) {

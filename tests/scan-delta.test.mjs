@@ -89,7 +89,7 @@ test('service role: the repo is one container in the given system; infra, api an
   assert.deepEqual([own.type, own.parent, own.properties], ['c4:container', 'loja', { repo: '/r/pedidos', repoRole: 'service' }]);
   assert.deepEqual(el(d, 'loja.pedidos-pedidos-db').tags, ['database']);
   assert.deepEqual([el(d, 'tech.postgres-16').type, el(d, 'tech.postgres-16').name], ['archimate:system-software', 'PostgreSQL 16']);
-  assert.equal(rel(d, 'tech.postgres-16', 'loja.pedidos-pedidos-db').type, 'archimate:realization');
+  assert.equal(rel(d, 'tech.postgres-16', 'loja.pedidos-pedidos-db').type, 'archimate:serving');
   assert.equal(rel(d, 'loja.pedidos', 'loja.pedidos-pedidos-db').type, 'uses');
   assert.equal(rel(d, 'loja.pedidos', 'loja.pedidos.api-api-de-pedidos').type, 'archimate:realization');
   assert.equal(rel(d, 'loja.pedidos', 'topic.pedido-criado').type, 'archimate:flow', 'publishing is a flow to the topic');
@@ -361,4 +361,17 @@ test('W_INFERRED does not blame free text for inferences of a repository reading
   const raw = applyNew(toDelta(inv(pedidosFacts, { path: '/r/pedidos', name: 'pedidos' }), { role: 'service', system: 'loja' }));
   const w = validateModel(raw).warnings.find(x => x.code === 'W_INFERRED');
   assert.match(w.message, /inferidos \(texto livre ou leitura de repositório\)/);
+});
+
+test('a database engine serves its database, and a database that references a resource is served by it', () => {
+  const d = toDelta(inv([
+    { kind: 'infra-image', service: 'db', engine: 'postgres', version: '16', category: 'database', at },
+    { kind: 'cloud-resource', type: 'aws_db_instance', name: 'orders', category: 'database', attrs: {}, at },
+    { kind: 'cloud-resource', type: 'aws_s3_bucket', name: 'bkp', category: 'storage', attrs: {}, at },
+    { kind: 'tf-ref', from: 'aws_db_instance.orders', to: 'aws_s3_bucket.bkp', at },
+  ]), { role: 'system' });
+  const rels = d.model.relationships;
+  assert.ok(rels.some(r => r.type === 'archimate:serving' && /postgres/.test(r.from) && /db$/.test(r.to)), JSON.stringify(rels));
+  assert.ok(!rels.some(r => r.type === 'archimate:realization'));
+  assert.ok(rels.some(r => r.type === 'archimate:serving' && /bkp/.test(r.from) && /orders/.test(r.to)), 'a tf-ref from a database is no longer dropped');
 });

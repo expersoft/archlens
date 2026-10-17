@@ -6,6 +6,7 @@ import { relationshipIds } from '../merge.mjs';
 import { c4Orientation } from '../model.mjs';
 import { NOTE_NAMES } from '../doc.mjs';
 import { storeError } from './errors.mjs';
+import { isCanonicalFormat, FORMAT } from '../canonical.mjs';
 
 export const MANIFEST = 'archlens.json';
 const json = v => JSON.stringify(v, null, 2) + '\n';
@@ -70,12 +71,16 @@ function rootIndex(elements) {
   return root;
 }
 
-export function loadFolder(dir) {
+export function loadFolder(dir, { anyFormat = false } = {}) {
   const manifestPath = join(dir, MANIFEST);
   if (!existsSync(manifestPath)) throw storeError('E_STORE_NOT_BASE', `${dir} não é uma base archlens (falta ${MANIFEST})`);
   const { layout, store, ...top } = readJson(manifestPath);
   if (store !== undefined) {
     throw storeError('E_STORE_UNSUPPORTED', `"store" em ${MANIFEST} (fonte externa) ainda não é suportado; remova o campo para usar a pasta`);
+  }
+  if (!anyFormat && !isCanonicalFormat(top.archlens)) {
+    throw storeError('E_STORE_FORMAT', `${dir} está no formato ${top.archlens ?? '1.x'}; o archlens lê só o formato ${FORMAT}. `
+      + `Rode "archlens migrate ${dir}" para converter (a skill pergunta antes de gravar)`);
   }
   const elements = [];
   const relationships = [];

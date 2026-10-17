@@ -8,6 +8,7 @@ import { resolveBase, openStore } from '../scripts/lib/store/index.mjs';
 import { asBase } from './helpers.mjs';
 
 const shop = () => asBase(JSON.parse(readFileSync(new URL('./fixtures/shop.json', import.meta.url))));
+const shopRaw = () => JSON.parse(readFileSync(new URL('./fixtures/shop.json', import.meta.url)));
 const tmp = () => mkdtempSync(join(tmpdir(), 'archlens-store-'));
 const read = (dir, f) => readFileSync(join(dir, f), 'utf8');
 
@@ -201,7 +202,7 @@ test('a layout that would write model files the folder never reads is refused (E
   }
   const up = tmp();
   saveFolder(up, shop());
-  writeFileSync(join(up, 'archlens.json'), JSON.stringify({ archlens: '1.0', name: 'x', layout: { model: '../x/' } }));
+  writeFileSync(join(up, 'archlens.json'), JSON.stringify({ archlens: '2.0', name: 'x', layout: { model: '../x/' } }));
   assert.throws(() => loadFolder(up), e => e.code === 'E_STORE_LAYOUT');
 });
 
@@ -213,4 +214,14 @@ test('a note file without a trailing newline is left untouched by save', () => {
   const { raw, notes, origins, layout } = loadFolder(dir);
   saveFolder(dir, raw, { notes, origins, layout });
   assert.equal(read(dir, 'notes/notes.md'), 'Sem quebra no fim.');
+});
+
+test('a 1.x folder is refused with E_STORE_FORMAT unless the caller asks for any format', () => {
+  const dir = tmp();
+  saveFolder(dir, shopRaw()); // 1.x, free vocabulary
+  assert.throws(() => loadFolder(dir), e => e.code === 'E_STORE_FORMAT' && /archlens migrate/.test(e.message));
+  assert.equal(loadFolder(dir, { anyFormat: true }).raw.archlens, '1.0');
+  const store = openStore(resolveBase(dir));
+  assert.throws(() => store.load(), e => e.code === 'E_STORE_FORMAT');
+  assert.equal(store.load({ anyFormat: true }).raw.archlens, '1.0');
 });
