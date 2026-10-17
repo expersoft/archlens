@@ -751,3 +751,24 @@ test('moving an element under a parent listed after it keeps parents first', () 
   assert.equal(find(raw, 'loja.web').parent, 'novo');
   assert.ok(at('novo') < at('loja.web'));
 });
+
+test('a kind inferred for a duplicate answered same is never asked about nor written (container in the base)', () => {
+  const base = shop();
+  const d = delta({ elements: [{ id: 'api-loja', type: 'application-component', name: 'API' }] });
+  const plan = planMerge(base, d, TODAY);
+  assert.equal(plan.items.find(i => i.key === 'dup:api-loja')?.candidate, 'loja.api');
+  const plan2 = planMerge(base, d, { ...TODAY, answers: { 'dup:api-loja': 'same' } });
+  assert.ok(!plan2.items.some(i => i.field === 'c4'), JSON.stringify(plan2.items));
+  const { raw } = applyPlan(base, plan2, TODAY);
+  assert.deepEqual(find(raw, 'loja.api').c4, { kind: 'container' });
+});
+
+test('a kind inferred for a duplicate answered same is never written onto a base element without c4', () => {
+  const base = shop();
+  base.model.elements.push({ id: 'erp', type: 'application-component', name: 'ERP' });
+  const d = delta({ elements: [{ id: 'erp-novo', type: 'application-component', name: 'ERP' }] });
+  const plan = planMerge(base, d, { ...TODAY, answers: { 'dup:erp-novo': 'same' } });
+  assert.ok(!plan.items.some(i => i.field === 'c4'), JSON.stringify(plan.items));
+  const { raw } = applyPlan(base, plan, TODAY);
+  assert.equal(find(raw, 'erp').c4, undefined);
+});

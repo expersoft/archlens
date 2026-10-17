@@ -331,8 +331,8 @@ function mergeElementInto(ctx, baseId, el, parentId, { dry = false, when, aliase
   const target = entry.el;
   // A delta name that is already an alias of the element is not a conflict (the user answered it before).
   const knownName = el.name != null && aliasesOf(target).some(a => aliasKey(a) === aliasKey(el.name));
-  // A kind the entrance inferred (the delta did not say it) never contradicts the stored one.
-  const inferredKind = ctx.inferredKinds?.has(el.id) && target.c4 != null;
+  // A kind the entrance inferred (the delta did not say it) is never written onto an element the base already has.
+  const inferredKind = ctx.inferredKinds?.has(el.id);
   const fields = fieldsOf(target, el, ELEMENT_FIELDS).filter(([f]) => !(f === 'name' && knownName) && !(f === 'c4' && inferredKind));
   if (parentId != null && parentId !== entry.parent) {
     fields.push(['parent', entry.parent ?? undefined, parentId, v => moveElement(ctx, baseId, resolveRef(ctx, v))]);
