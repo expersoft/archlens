@@ -306,3 +306,41 @@ test('a nesting parent is drawn before its children, with its name at the top an
   assert.match(html, /class="node am parent[^"]*" data-node="bus"/);
   assert.match(html, /aria-label="Adapter[^"]*reúne adaptadores/);
 });
+
+const busNested = () => normalizeModel({ archlens: '2.0', name: 'N', model: {
+  elements: [
+    { id: 'bus', type: 'application-component', name: 'Barramento' },
+    { id: 'bus.a', type: 'application-component', name: 'Adapter' },
+    { id: 'bus.b', type: 'application-component', name: 'Bridge' },
+  ],
+  relationships: [
+    { from: 'bus', to: 'bus.a', type: 'aggregation' }, { from: 'bus', to: 'bus.b', type: 'aggregation' },
+    { from: 'bus.a', to: 'bus.b', type: 'flow' },
+  ],
+} });
+
+test('nesting boxes are drawn below the edges, leaves above them (edges inside a box are not under its fill)', async () => {
+  const laid = await layoutView(resolveView(busNested(), { key: 'n', notation: 'archimate', viewpoint: 'application', nesting: 'nested' }));
+  const html = renderHtml({ title: 'N', views: [laid] });
+  const edgesAt = html.indexOf('<g class="edges">');
+  assert.ok(edgesAt > 0);
+  assert.ok(html.indexOf('data-node="bus"') < edgesAt, 'parent before the edges');
+  assert.ok(html.indexOf('data-node="bus.a"') > edgesAt && html.indexOf('data-node="bus.b"') > edgesAt, 'leaves after the edges');
+  const order = [...html.matchAll(/class="node am[^"]*" data-node="([^"]+)"[^>]*style="--i:(\d+)"/g)].map(m => [m[1], +m[2]]);
+  assert.deepEqual(order.map(o => o[1]).sort((a, b) => a - b), [0, 1, 2], 'one --i sequence across both node groups');
+});
+
+test('layer steps reveal a nested child with its outermost box\'s layer', async () => {
+  const m = normalizeModel({ archlens: '2.0', name: 'X', model: { elements: [
+    { id: 'srv', type: 'node', name: 'Servidor' },
+    { id: 'app', type: 'application-component', name: 'App', parent: 'srv' },
+    { id: 'proc', type: 'business-process', name: 'Vender' },
+  ], relationships: [{ from: 'app', to: 'proc', type: 'serving' }] } });
+  const laid = await layoutView(resolveView(m, { key: 'x', notation: 'archimate', viewpoint: 'layered', nesting: 'nested' }));
+  assert.equal(laid.nodes.find(n => n.id === 'app').nestedIn, 'srv');
+  const html = renderHtml({ title: 'X', views: [laid] });
+  const data = JSON.parse(html.match(/<script id="archlens-data" type="application\/json">([\s\S]*?)<\/script>/)[1]);
+  assert.equal(data.views[0].nodes.app.band, 'technology');
+  assert.equal(data.views[0].nodes.proc.band, 'business');
+  assert.match(html, /n\.band === layer/);
+});

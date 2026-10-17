@@ -168,3 +168,17 @@ test('nested ArchiMate: "bands" falls back to bands-flow with a note; auto never
   const auto = await layoutView(resolveView(odinNested(), spec));
   assert.ok(!('bands' in auto.layoutScores));
 });
+
+test('a nesting box is at least as wide as its title (plus the icon)', async () => {
+  const name = 'Plataforma de Crédito Digital do Banco';
+  const m = normalizeModel({ archlens: '2.0', name: 'L', model: { elements: [
+    { id: 'p', type: 'application-component', name },
+    { id: 'p.a', type: 'application-component', name: 'A', parent: 'p' },
+  ], relationships: [] } });
+  for (const style of ['flow', 'bands-flow']) {
+    const laid = await layoutView(resolveView(m, { key: 'l', notation: 'archimate', viewpoint: 'application', nesting: 'nested', layout: { style } }));
+    const p = laid.nodes.find(n => n.id === 'p');
+    assert.ok(p.isParent);
+    assert.ok(p.w >= 14 + name.length * 17 * 0.56 + 44, `${style}: ${p.w}`);
+  }
+});

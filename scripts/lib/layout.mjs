@@ -233,7 +233,11 @@ function amGroup(n) {
 
 function amNodeBox(n) {
   const name = wrap(n.name, FONT.amName, AM_W - 44, 3);
-  return { w: AM_W, h: Math.max(76, 30 + name.length * 22 + 18), lines: { title: name } };
+  // as a nesting box the name is one bold line at the top: 14px margin, room for the change/pending marks, the
+  // icon (44px); bold glyphs measured as in frameChipWidth (0.58 × size)
+  const marks = (n.change ? 26 : 0) + (n.pending?.length ? 26 : 0);
+  const nestW = Math.ceil(14 + marks + String(n.name).length * FONT.amName * 0.58 + 44);
+  return { w: AM_W, h: Math.max(76, 30 + name.length * 22 + 18), lines: { title: name }, nestW };
 }
 
 // ---------------------------------------------------------------- ArchiMate — style "flow" (ELK)
@@ -285,7 +289,7 @@ function amElkNode(id, boxes, kids, layoutOptions = {}) {
   if (!kids.has(id)) return { id, width: b.w, height: b.h, layoutOptions };
   return {
     id, children: kids.get(id).map(c => amElkNode(c, boxes, kids)),
-    layoutOptions: { 'elk.padding': AM_NEST_PAD, 'elk.nodeSize.constraints': 'MINIMUM_SIZE', 'elk.nodeSize.minimum': `(${b.w}, ${b.h})`, ...layoutOptions },
+    layoutOptions: { 'elk.padding': AM_NEST_PAD, 'elk.nodeSize.constraints': 'MINIMUM_SIZE', 'elk.nodeSize.minimum': `(${Math.max(b.w, b.nestW)}, ${b.h})`, ...layoutOptions },
   };
 }
 
