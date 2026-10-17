@@ -458,6 +458,42 @@ test('a derived edge joins a direct one between the same pair, which keeps its p
 
 test('"derive": false turns derivation off', () => {
   const v = resolveView(pure(), { key: 'k', notation: 'c4', level: 'container', scope: 'loja', derive: false });
+  assert.ok(pureEdge(resolveView(pure(), { key: 'k', notation: 'c4', level: 'container', scope: 'loja' }), 'loja.api', 'pag'), 'derived by default');
   assert.equal(pureEdge(v, 'loja.api', 'pag'), undefined);
   assert.ok(pureEdge(v, 'loja.api', 'loja.db'), 'hierarchy lifting is not derivation');
+});
+
+const small = (elements, relationships) => normalizeModel({ archlens: '2.0', name: 'S', model: {
+  elements: [
+    { id: 's', type: 'application-component', name: 'S', c4: { kind: 'softwareSystem' } },
+    ...['a', 'b', 'c'].map(x => ({ id: `s.${x}`, type: 'application-component', name: x.toUpperCase(), parent: 's', c4: { kind: 'container' } })),
+    ...elements,
+  ], relationships } });
+const box = m => resolveView(m, { key: 'k', notation: 'c4', level: 'container', scope: 's' });
+
+test('an intermediary with two C4 owners yields one arrow per owner', () => {
+  const v = box(small([{ id: 'svc', type: 'application-service', name: 'Compartilhado' }], [
+    { from: 's.a', to: 'svc', type: 'realization' },
+    { from: 's.b', to: 'svc', type: 'realization' },
+    { from: 'svc', to: 's.c', type: 'serving' },
+  ]));
+  assert.ok(pureEdge(v, 's.c', 's.a'));
+  assert.ok(pureEdge(v, 's.c', 's.b'));
+  assert.equal(v.edges.filter(e => e.derived).length, 2);
+});
+
+test('a cycle between intermediaries terminates and reaches the owner once', () => {
+  const v = box(small([
+    { id: 'f1', type: 'application-function', name: 'F1' },
+    { id: 'f2', type: 'application-function', name: 'F2' },
+  ], [
+    { from: 'f1', to: 'f2', type: 'realization' },
+    { from: 'f2', to: 'f1', type: 'realization' },
+    { from: 's.a', to: 'f1', type: 'assignment' },
+    { from: 'f2', to: 's.c', type: 'serving' },
+  ]));
+  const arrows = v.edges.filter(e => e.from === 's.c' && e.to === 's.a');
+  assert.equal(arrows.length, 1);
+  assert.equal(arrows[0].derived, true);
+  assert.equal(new Set(v.edges.map(e => e.id)).size, v.edges.length);
 });
