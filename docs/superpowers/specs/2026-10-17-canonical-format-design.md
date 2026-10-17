@@ -65,6 +65,7 @@ comparação. Neste subprojeto, isso implica: o vocabulário livre é traduzido 
 | Informações do usuário | `properties` (escalares e listas de texto) com catálogo opcional no manifesto |
 | Bases existentes | **abordagem A**: store estrito em 2.0; base 1.x recusada com orientação; `archlens migrate` converte |
 | Escopo extra | derivação do C4 através de serviços/interfaces; `data-object` com pai num container sobe até ele |
+| Aninhamento visual no ArchiMate | `"nesting": "edges"` (padrão, como hoje) ou `"nested"` / `{ "mode": "nested", "depth": N }`; abaixo do `depth`, o elemento fica na caixa do ancestral aninhado, ligado pelo losango (validado em protótipo) |
 
 ### Critérios de sucesso
 
@@ -76,13 +77,16 @@ comparação. Neste subprojeto, isso implica: o vocabulário livre é traduzido 
    com as setas esperadas.
 4. O scan não descarta mais relações com bancos de dados, e todo motor de banco liga-se ao banco por `serving`.
 5. Abrir uma base 1.x com qualquer comando produz `E_STORE_FORMAT` com a instrução de `migrate`; nada é gravado.
+6. Uma visão ArchiMate com `"nesting": "nested"` desenha os filhos dentro da caixa do pai (estilos `flow` e
+   `bands-flow`), sem as composições implícitas; sem `nesting`, os diagramas existentes não mudam.
 
 ### Fora do escopo
 
 Contrato novo do store e conectores (subprojetos 2 e 4); divisão em skills (3); nível deployment do C4 (item c,
 este spec só deixa os kinds `deploymentNode`/`infrastructureNode` válidos nos tipos de tecnologia); promoção
 automática de propriedade a elemento (só sugerida pela skill); ArchiMate rigoroso de deployment (container =
-componente + artifact + node).
+componente + artifact + node); aninhamento por `assignment`, `realization` ou `specialization`; aninhamento no C4
+(que já desenha boundaries).
 
 ## 1. Formato 2.0
 
@@ -283,11 +287,68 @@ fora do C4. Ele não ganha `c4.kind`.
 O cilindro passa a vir só da tag (`database`, `datastore`), não mais de `type === 'data-object'`
 (`query-c4.mjs:191`).
 
-## 4. Skill, referências, exemplos e documentação
+## 4. Aninhamento visual nas visões ArchiMate
+
+Hoje cada `parent` vira uma aresta de composição implícita (`query-archimate.mjs:104`), e o ArchiMate só mostra
+"sistema composto por containers" com o losango. A notação ArchiMate também permite desenhar os filhos **dentro**
+da caixa do pai. Protótipo validado com o caso Odin (sistema `odin` com `odin-api` e `odin-message-worker`).
+
+### View spec
+
+```json
+{ "notation": "archimate", "viewpoint": "application", "focus": "odin", "nesting": "nested" }
+```
+
+- `"nesting": "edges"` (padrão): como hoje. Diagramas existentes não mudam.
+- `"nesting": "nested"`: aninha todos os níveis.
+- `"nesting": { "mode": "nested", "depth": N }`: aninha só até o nível N a partir do topo (1 = só os filhos diretos
+  do elemento de topo).
+- Entra em `view.schema.json`. Na skill: "dentro de", "aninhado", "caixas dentro de caixas" → `nested`; "com o
+  losango", "com setas de composição" → `edges`.
+
+### Regras (`query-archimate.mjs`)
+
+- **O que aninha:** o `parent` e as relações explícitas `composition` e `aggregation` entre elementos visíveis
+  (o todo contém a parte).
+- **Um pai visual só:** o `parent` tem prioridade; sem `parent`, a primeira relação `composition`/`aggregation`
+  na ordem do modelo. As demais continuam como arestas.
+- **Nível:** o nível de um elemento é o número de ancestrais visuais visíveis. Um elemento com nível ≤ `depth`
+  fica dentro do pai. **Acima do `depth`, fica na caixa do ancestral visual mais próximo que está aninhado** (ao
+  lado do pai, não dentro dele), ligado ao pai pelo losango. Assim nada que pertence ao sistema escapa da caixa do
+  sistema.
+- **Arestas:** no modo aninhado, a composição implícita e a relação que deu origem ao aninhamento não viram
+  aresta. Se essa relação tem descrição, ela vai para o tooltip do filho.
+- **IR:** cada nó ganha `nestedIn` (id do pai visual, ou ausente). A visão ganha `nesting` com o modo e o depth
+  efetivos.
+- Um filho de outra camada (por exemplo, um `data-object` filho de um container) fica dentro do pai e, no
+  layout em faixas, na faixa do pai.
+
+### Layout (`layout.mjs`)
+
+- `flow` e `bands-flow`: o elemento-pai vira nó composto do ELK (`INCLUDE_CHILDREN`, já usado nas molduras), com
+  espaço no topo para nome e ícone (padding de topo de 46, laterais e base de 22) e tamanho mínimo de uma caixa
+  comum. Elementos aninhados podem estar dentro de uma moldura de agrupamento.
+- As seções das arestas são lidas relativas ao contêiner que o ELK informa para cada aresta (`edge.container`);
+  o protótipo mostrou que somar o deslocamento do nó onde a aresta foi declarada desenha errado.
+- `bands`: não tem nós compostos. Com aninhamento, recua para `bands-flow` com aviso, como já faz com molduras
+  (`layout.mjs:785`).
+- `auto`: com aninhamento, compara só `flow` e `bands-flow`.
+
+### Renderização (`render.mjs`)
+
+- O pai é desenhado como uma caixa grande no estilo do seu tipo (cor da camada, cantos do aspecto), com
+  preenchimento mais leve, nome em negrito no topo à esquerda e ícone no canto superior direito. Os filhos são
+  desenhados por cima.
+- Hover, foco, destaque de vizinhança, prévia (`+ ~ − ?`), esboço, removidos (fantasmas) e animação por camadas
+  funcionam nos dois níveis. A animação revela o pai antes dos filhos.
+
+## 5. Skill, referências, exemplos e documentação
 
 - `SKILL.md`: formato 2.0, vocabulário livre aceito só na entrada, `migrate` para bases 1.x, propriedades e catálogo,
   a regra "propriedade para filtrar, elemento para atravessar" (sugerir promoção quando o usuário pedir travessia
-  por um valor de propriedade).
+  por um valor de propriedade); `nesting` e como o usuário pede uma ou outra notação.
+- `references/views.md` e `references/archimate.md`: `nesting`, regras de aninhamento e exemplo.
+- Um exemplo com o caso Odin (ou uma visão aninhada em `loja-online`) com `nesting: nested` e `depth: 1`.
 - `references/c4.md`: tabela C4 ↔ ArchiMate atualizada (banco como `application-component`, kinds de tecnologia,
   derivação via serviços). `references/archimate.md`: padrões de modelagem com intermediários e donos.
   `references/merge.md`: tradução na entrada. `references/knowledge-doc.md`: formato 2.0 e catálogo.
@@ -300,7 +361,7 @@ O cilindro passa a vir só da tag (`database`, `datastore`), não mais de `type 
 - `CHANGELOG.md` em `[Não lançado]` (mudança incompatível de formato, com o `migrate`); `docs/GUIA.md` e `README.md`
   onde mostram o formato; `docs/superpowers/roadmap.md` com os subprojetos 1–4.
 
-## 5. Testes (TDD, `node:test`)
+## 6. Testes (TDD, `node:test`)
 
 - **`canonical.test.mjs`:** cada linha da tabela de tradução; idempotência sobre 2.0; `uses` com alvo só na base;
   override `archimate` válido e inválido (`E_C4_TYPE`); `children` → `parent` em ordem; inferência de kind por
@@ -314,6 +375,11 @@ O cilindro passa a vir só da tag (`database`, `datastore`), não mais de `type 
 - **`query.test.mjs`:** derivação via serviço, via interface (composição), via função atribuída, cadeia de
   intermediários, ciclo, dois donos, sem dono, agregação com seta direta, `derive: false`, `data-object` com e sem
   pai num container, cilindro só pela tag.
+- **Aninhamento (`query.test.mjs`, `layout.test.mjs`, `render.test.mjs`):** `edges` igual ao IR de hoje; `nested`
+  por `parent`, por `composition` e por `aggregation`; conflito de pais visuais; `depth` 1 e 2 com o elemento acima
+  do limite na caixa do ancestral aninhado e ligado pelo losango; descrição da relação no tooltip; filho de outra
+  camada; no layout, todo filho dentro do retângulo do pai e toda aresta com pontas na borda das caixas certas
+  (`flow`, `bands-flow`, dentro de moldura); recuo do `bands` com aviso; o pai é renderizado antes dos filhos.
 - **`merge.test.mjs` / `preview.test.mjs`:** delta em vocabulário livre gera plano 2.0; `apply` grava 2.0; casamento
   de entidades entre delta `c4:container` e base `application-component` + kind.
 - **Scan:** banco ligado por `serving` ao motor e às APIs, sem relações descartadas.

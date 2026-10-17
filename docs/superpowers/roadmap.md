@@ -17,7 +17,7 @@ Cada item tem o próprio spec e o próprio plano (`docs/superpowers/specs/`, `do
 | c | Lacunas de visões: nível deployment do C4, mapa de capacidades, foco de negócio projetado no C4, fluxos de eventos entre sistemas | depois | — | — |
 | d | Exportações: Structurizr DSL, PlantUML/Mermaid, ArchiMate Open Exchange | depois | — | — |
 | e | Fonte plugável do modelo canônico: outras pastas, buckets, um gbrain via MCP (novo adaptador do store; campo `store` reservado no manifesto pelo a.3) | detalhado em e.1–e.4 | — | — |
-| e.1 | Formato canônico unificado (2.0): tipos ArchiMate + perfil C4 gravado, hierarquia plana por `parent`, relações só ArchiMate, banco como `application-component`, propriedades com catálogo, `migrate` 1.x → 2.0, C4 derivado através de serviços | spec | [spec](specs/2026-10-17-canonical-format-design.md) | — |
+| e.1 | Formato canônico unificado (2.0): tipos ArchiMate + perfil C4 gravado, hierarquia plana por `parent`, relações só ArchiMate, banco como `application-component`, propriedades com catálogo, `migrate` 1.x → 2.0, C4 derivado através de serviços, aninhamento visual no ArchiMate (`nesting`) | spec | [spec](specs/2026-10-17-canonical-format-design.md) | — |
 | e.2 | Contrato de conector (store v2): subgrafos, gravação por operações atômicas, versão otimista, histórico no store; conectores `model.json` (padrão) e pasta com um markdown por nó | depois de e.1 | — | — |
 | e.3 | Três skills sobre uma biblioteca comum: comparar (→ delta resolvido contra o canônico, renderizável), merge (aplica o delta resolvido) e consulta (→ diagramas ou markdown) | depois de e.1 e do contrato do e.2 | — | — |
 | e.4 | Conectores remotos: neo4j, gbrain (MCP), bucket S3, banco relacional | depois de e.2 | — | — |
