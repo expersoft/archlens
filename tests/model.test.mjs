@@ -242,6 +242,22 @@ test('schemas accept "group" on elements', async () => {
   const { buildSchemas } = await import('../scripts/gen-schemas.mjs');
   const s = buildSchemas();
   assert.deepEqual(s.model.$defs.element.properties.group, { type: ['string', 'null'] });
+  assert.deepEqual(s.delta.$defs.element.properties.group, { type: ['string', 'null'] });
+});
+
+test('schemas: the model is strict 2.0, the delta keeps the free vocabulary, views take nesting', async () => {
+  const { buildSchemas } = await import('../scripts/gen-schemas.mjs');
+  const s = buildSchemas();
+  const el = s.model.$defs.element.properties;
+  assert.ok(!el.type.enum.some(t => t.includes(':')));
+  assert.ok(!('children' in el) && !('archimate' in el));
+  assert.deepEqual(Object.keys(el.c4.properties), ['kind']);
+  assert.ok(!s.model.$defs.relationship.properties.type.enum.includes('uses'));
+  assert.equal(s.model.properties.archlens.pattern, '^2\\.\\d+$');
+  assert.ok(s.model.properties.properties, 'property catalog');
+  assert.ok(s.delta.$defs.element.properties.type.enum.includes('c4:container'));
+  assert.ok(s.delta.$defs.relationship.properties.type.enum.includes('uses'));
+  assert.ok(s.view.properties.nesting);
 });
 
 // A base where the credit systems sit inside their grouping (nested, or with "parent") instead of using "group".

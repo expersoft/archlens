@@ -4,8 +4,8 @@ A base é uma **pasta** (padrão `architecture/`, ao lado do `ARCHITECTURE.md`):
 
 | Arquivo | Conteúdo | Quem escreve |
 |---|---|---|
-| `archlens.json` | manifesto: `archlens`, `name`, `description`, `assumptions`, `layout` | merge |
-| `model.json` (ou `model/*.json`) | `{ elements, relationships }` | merge |
+| `archlens.json` | manifesto: `archlens` (`"2.0"`), `name`, `description`, `assumptions`, `layout`, `properties` (catálogo, opcional) | merge |
+| `model.json` (ou `model/*.json`) | `{ elements, relationships }` no formato 2.0 | merge |
 | `views.json` | visões salvas | merge (delta com `views`) |
 | `changelog.json` | rodadas de merge | merge |
 | `notes/overview.md` | visão geral: propósito, decisões, riscos | pessoas / agente |
@@ -16,6 +16,39 @@ A base é uma **pasta** (padrão `architecture/`, ao lado do `ARCHITECTURE.md`):
 O **`ARCHITECTURE.md` é 100% gerado** (por `merge --apply`, `doc` e `build`): resumo, contexto, modelo C4, camadas
 ArchiMate, relacionamentos, rastreabilidade, ciclo de vida, premissas, fontes, visões, histórico e notas. O
 frontmatter traz `source:` (a pasta), e a CLI aceita o `.md` como atalho para ela. Não edite o `.md`.
+
+## Formato 2.0
+
+A base guarda tipos ArchiMate sem prefixo, o perfil C4 em `c4.kind`, uma lista plana com `parent` (pai antes de filho)
+e só as 11 relações ArchiMate. Exemplo:
+
+```json
+{ "id": "loja.pedidos", "type": "application-component", "name": "API de Pedidos", "parent": "loja",
+  "c4": { "kind": "container" }, "technology": "Java / Spring Boot",
+  "properties": { "squad": "Checkout", "canais": ["web", "app"] } }
+```
+
+```json
+{ "from": "loja.db", "to": "loja.pedidos", "type": "serving", "description": "lê e grava pedidos", "technology": "JDBC" }
+```
+
+Banco de dados é `application-component` com `c4.kind: container` e tag `database`. `properties` aceita texto, número,
+booleano ou lista de textos. O vocabulário livre (`c4:*`, `uses`, `children`) só é aceito na entrada (delta, `scan`).
+
+### Catálogo de propriedades
+
+Opcional, em `properties` do `archlens.json`; sem ele, qualquer chave vale. Com ele, `validate` avisa `W_PROPERTY`
+para chave desconhecida, tipo errado, valor fora de `values` ou tipo de elemento fora de `appliesTo`:
+
+```json
+"properties": {
+  "squad":  { "label": "Squad", "type": "string", "appliesTo": ["application-component"] },
+  "unidade": { "label": "Unidade", "type": "string", "values": ["Varejo", "Atacado"] },
+  "canais": { "label": "Canais", "type": "string[]" }
+}
+```
+
+`type`: `string` (padrão), `number`, `boolean` ou `string[]`. `appliesTo`: tipos ArchiMate, ou `relationship`.
 
 ## Dividir por domínio
 
@@ -30,12 +63,21 @@ arquivo de onde veio; elementos novos vão para o arquivo do pai ou, sem pai, pa
   ou no pre-commit.
 - `archlens doc architecture/` regenera o documento depois de editar as notas.
 
-## Formato antigo
+## Formato antigo (1.x)
 
-Bases com o modelo num bloco `archlens-json` dentro do `.md` são lidas por todos os comandos de leitura (e pela
-prévia). Para gravar, converta: `archlens migrate ARCHITECTURE.md` cria a pasta (os blocos `keep` viram
-`notes/*.md`), confere que o modelo é idêntico e só então regenera o `.md`. Planos gerados antes continuam válidos,
-desde que o migrate não avise que a ordem das chaves mudou.
+Uma base 1.x (manifesto com `archlens` diferente de `2.x`, ou o modelo num bloco `archlens-json` dentro do `.md`) é
+recusada por **todos** os comandos com `E_STORE_FORMAT`; nada é gravado. `archlens migrate <base>` converte:
+
+- **pasta 1.x**: no mesmo lugar. Copia a pasta, grava a base 2.0 sobre a cópia (arquivos do usuário ficam; cada
+  elemento e relação continua no seu arquivo de `model/*.json`), relê e só então troca. Confere antes a equivalência
+  do modelo (`E_MIGRATE_EQUIV` se a tradução mudaria o sentido; nada é trocado) e confere que o `ARCHITECTURE.md` é
+  do archlens antes de regenerá-lo;
+- **`.md` antigo ou `.json`**: cria a pasta 2.0 (os blocos `keep` viram `notes/*.md`), com `--to <pasta>` para
+  escolher o destino.
+
+A migração reescreve tipos para ArchiMate, converte `uses` em `serving`/`access`, transforma os bancos
+(`data-object` → `application-component` com a tag `database`; os `access` para eles viram `serving`) e registra uma
+rodada no histórico. **Planos gerados antes da migração deixam de valer**: gere-os de novo.
 
 ## Uso como base de conhecimento
 

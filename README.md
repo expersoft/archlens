@@ -6,14 +6,16 @@ Skill para Claude Code: **arquitetura como modelo, diagramas como consultas.**
 - Um metamodelo só: **ArchiMate 3.2** com **perfil C4** por cima. O mesmo container é caixa azul no
   C4 e application component no ArchiMate.
 - Mantém a base em **`architecture/`** e gera dela o **`ARCHITECTURE.md`**, de onde se
-  extraem visões novas a qualquer momento.
+  extraem visões novas a qualquer momento. A base grava um **formato único (2.0)**: tipos ArchiMate, perfil C4 em
+  `c4.kind`, hierarquia por `parent`; `c4:*`, `uses` e `children` valem só na entrada. Base 1.x: `archlens migrate`.
 - **Base que evolui:** cada informação nova vira um delta; `archlens merge` casa entidades (id, alias, nome parecido),
   pergunta conflitos e duplicatas, e registra proveniência, ciclo de vida (as-is/to-be) e histórico.
 - **Lê repositórios** (compose, k8s/Helm, Terraform, OpenAPI/AsyncAPI, graphify) e gera deltas com proveniência (`archlens scan`).
 - **Prévia de mudanças:** `--delta` / `--plan` desenham a base com um delta ainda não aplicado (esboço à mão no estilo do draw.io, com hachura, `+ ~ − ?`,
   removidos riscados); o status `draft` marca o que ainda está em discussão.
-- **C4:** landscape, context, container, component, dynamic, com `focus`/`depth` e elevação de relações.
-- **ArchiMate:** camadas de negócio, aplicação e tecnologia; visões entre camadas por travessia de
+- **C4:** landscape, context, container, component, dynamic, com `focus`/`depth` e elevação de relações; um modelo
+  ArchiMate (serviços, interfaces) também gera as setas C4, derivadas e tracejadas.
+- **ArchiMate:** camadas de negócio, aplicação e tecnologia, com aninhamento visual (`"nesting": "nested"`); visões entre camadas por travessia de
   suporte (o que sustenta uma oferta ou processo), matriz de impacto de um componente, derivação de
   relações através do que foi ocultado, granularidade C4.
 - **Relações explicadas:** cada seta vira uma frase em português ("A serve B: B usa A; se A falhar, há impacto em B"), com cartão de hover, legenda com as setas reais e glossário das confusões comuns do ArchiMate.

@@ -342,6 +342,7 @@ _Nenhuma premissa registrada._
 | `negocio-x-tecnologia` | archimate | custom (supporters) | Venda Online | Venda Online — negócio × tecnologia (relações derivadas) |
 | `plataformas` | c4 | landscape | — | Plataformas |
 | `vendas-x-backoffice` | archimate | application | — | Vendas × Back-office |
+| `aplicacao-aninhada` | archimate | application | — | Plataforma de E-commerce — containers dentro do sistema |
 
 ## Histórico
 

@@ -103,8 +103,9 @@ Regras comuns:
 
 - **Tópico** (`channel`): container com tag `topic` e id global `topic.<nome>`. **Publicar** = `archimate:flow` do
   produtor para o tópico; **assinar** = `flow` do tópico para o consumidor.
-- **Motor de banco** (`infra-image`, `cloud-resource`): `archimate:system-software` que **realiza** o container do
-  banco. Fila, cache e storage são **servidos** (`serving`) pelo componente de tecnologia.
+- **Motor de banco** (`infra-image`, `cloud-resource`): `archimate:system-software` que **serve** (`serving`) o container
+  do banco, assim como serve fila, cache e storage. O banco é `application-component` com `c4.kind: container` e tag
+  `database` na base (o delta continua escrevendo `c4:container`), então a relação não é descartada.
 - **`tf-ref`** só liga recursos achados nos arquivos lidos (também entre arquivos).
 - **Fluxo do graphify** = `archimate:business-process` `inferred`, servido pelos containers dos participantes. Como o
   graphify costuma ligar fluxos só a documentos, um fluxo pode não ter módulos como participantes; nesse caso ele se

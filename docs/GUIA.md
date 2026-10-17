@@ -31,7 +31,10 @@ Sem o Chromium, tudo funciona, exceto os screenshots e a medição de largura e 
 **Onde a base mora.** O modelo fica na pasta `architecture/` (manifesto, `model.json`, `views.json`,
 `changelog.json`, notas em `notes/`). O `ARCHITECTURE.md` é o documento legível gerado dela: não se edita; o texto
 autoral vai em `architecture/notes/*.md`. `archlens check` confere se o documento está em dia (útil no CI) e
-`archlens migrate` converte uma base antiga, com o modelo dentro do `.md`.
+`archlens migrate` converte uma base antiga (formato 1.x): a pasta no mesmo lugar, ou o modelo que vivia dentro do `.md`.
+A base guarda o **formato 2.0** (tipos ArchiMate, perfil C4 em `c4.kind`, hierarquia por `parent`, só relações
+ArchiMate); uma base 1.x é recusada por todos os comandos com `E_STORE_FORMAT` até ser migrada. Deltas e prompts
+continuam usando `c4:*`, `uses` e `children`: a entrada é traduzida.
 
 A skill é acionada por pedidos como:
 
@@ -123,7 +126,8 @@ $A views    examples/loja-online/architecture               # visões definidas 
 $A doc      examples/loja-online/architecture               # regenera o ARCHITECTURE.md
 $A build    examples/loja-online/architecture
 $A check    examples/loja-online/architecture               # modelo válido e ARCHITECTURE.md em dia (CI)
-$A migrate  ARCHITECTURE.md                                 # formato antigo → architecture/
+$A migrate  examples/loja-online/architecture               # base 1.x → 2.0, no mesmo lugar
+$A migrate  ARCHITECTURE.md                                 # modelo dentro do .md → architecture/ (formato 2.0)
 $A deliver  examples/loja-online/architecture --view impacto-api-pedidos --out out/impacto.html --open
 $A deliver  examples/loja-online/architecture --spec '{"key":"erp","notation":"archimate","viewpoint":"impact","anchor":"erp"}' --out out/erp.html
 $A resolve  architecture/ --view containers --json        # IR da visão (nós e arestas), para depuração
@@ -133,7 +137,7 @@ $A resolve  architecture/ --view containers --json        # IR da visão (nós e
 |---|---|
 | `validate` | erros (`E_*`) e avisos (`W_*`) com caminho e dica |
 | `doc` | regenera o `ARCHITECTURE.md` a partir da pasta |
-| `migrate` | converte uma base antiga (modelo dentro do `.md`) para `architecture/` e confere que o modelo é idêntico |
+| `migrate` | converte uma base 1.x para o formato 2.0 (pasta no mesmo lugar, após copiá-la; ou o `.md`/`.json` antigo para uma pasta nova) e confere que o modelo não muda de sentido (`E_MIGRATE_EQUIV`). Planos feitos antes deixam de valer |
 | `check` | valida o modelo e confere se o `ARCHITECTURE.md` está em dia; código 1 se não (CI, pre-commit) |
 | `extract` | imprime o modelo canônico (JSON) da base |
 | `views` | lista as visões definidas e sugere outras (contexto por sistema, suporte por produto, impacto por aplicação…) |
@@ -143,8 +147,9 @@ $A resolve  architecture/ --view containers --json        # IR da visão (nós e
 | `merge … --plan p.json [--answers antigo.json]` | compara um delta com a base e grava o plano com as perguntas; `--answers` reaproveita as respostas de um plano anterior |
 | `merge … --apply p.json` | aplica o plano respondido: valida, grava `architecture/`, regenera o `ARCHITECTURE.md` e registra o histórico |
 
-Todos aceitam a pasta, o `ARCHITECTURE.md` gerado ou nada (procura a partir do diretório atual); bases antigas
-são só lidas até o `migrate`. O `migrate` é a exceção: recebe o `.md` antigo ou um `model.json`.
+Todos aceitam a pasta, o `ARCHITECTURE.md` gerado ou nada (procura a partir do diretório atual); bases 1.x são
+recusadas (`E_STORE_FORMAT`) até o `migrate`. O `migrate` é a exceção: recebe a pasta 1.x, o `.md` antigo ou um
+`model.json`.
 
 ## Apresentando
 
@@ -223,6 +228,13 @@ A partir de texto livre (itens inferidos aparecem tracejados):
 
 ![Texto livre](img/texto-livre-suporte.png)
 
+### Aninhamento e C4 derivado
+
+Nas visões ArchiMate, peça "containers dentro do sistema" (`"nesting": "nested"`, com `depth` para limitar os níveis):
+o pai vira uma caixa grande com os filhos dentro. A visão `aplicacao-aninhada` do exemplo mostra o caso. Nas visões C4,
+um modelo escrito em ArchiMate (componente realiza serviço, serviço serve outro componente) gera setas tracejadas
+"via serviço"; `"derive": false` as desliga.
+
 ### Plataformas e agrupamentos
 
 Quando os sistemas formam plataformas, modele cada uma como `grouping` e preencha `group` nos membros. Peça, por
@@ -235,7 +247,8 @@ uma numa moldura. A visão `plataformas` traz o panorama C4 com as molduras.
 | Sintoma | Causa provável |
 |---|---|
 | visão de suporte para no negócio | faltam `realization`/`serving` ligando containers a application services e estes a processos |
-| visão C4 vazia ou só com o sistema | relações declaradas com `archimate:*` em vez de `uses` entre elementos C4 |
+| visão C4 vazia ou só com o sistema | os elementos não têm `c4.kind`, ou as relações ligam só intermediários (serviços, interfaces) sem dono com `c4.kind` (o dono realiza, compõe ou recebe a atribuição do intermediário) |
+| `E_STORE_FORMAT` | base no formato 1.x: rode `archlens migrate <base>` |
 | `W_REL_DIRECTION` | serving/realization invertido (quem serve é a origem) |
 | texto pequeno no telão | visão grande demais: use `focus`, `granularity:"container"`, `collapse` ou divida em várias visões |
 | checagem visual pulada | faltam `npm install` e `npx playwright install chromium` |
