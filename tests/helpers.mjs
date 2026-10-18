@@ -1,3 +1,5 @@
+import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import assert from 'node:assert/strict';
 import { toCanonical } from '../scripts/lib/canonical.mjs';
 import { applyOps, contentVersion } from '../scripts/lib/store/ops.mjs';
 import { subgraphOf, conflictError } from '../scripts/lib/store/contract.mjs';
@@ -24,4 +26,12 @@ export function memStore(base) {
     history: track('history', () => cur?.raw.changelog ?? []),
     readSubgraph: track('readSubgraph', opts => subgraphOf(cur.raw, opts)),
   };
+}
+
+/** Compares `actual` with the fixture at tests/<fixturePath>; the file is written only with UPDATE_SNAPSHOTS=1. */
+export function matchSnapshot(actual, fixturePath) {
+  const file = new URL(`./fixtures/${fixturePath}`, import.meta.url);
+  if (process.env.UPDATE_SNAPSHOTS === '1') { writeFileSync(file, actual); return; }
+  assert.ok(existsSync(file), `snapshot ausente: tests/fixtures/${fixturePath} (gere com UPDATE_SNAPSHOTS=1 e revise o arquivo)`);
+  assert.equal(actual, readFileSync(file, 'utf8'));
 }

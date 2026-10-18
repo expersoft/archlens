@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, writeFileSync, mkdtempSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { plan, answersOf, show } from '../scripts/lib/api.mjs';
 import { resolveBase, openStore } from '../scripts/lib/store/index.mjs';
 import { saveFolder } from '../scripts/lib/store/folder.mjs';
-import { asBase, memStore } from './helpers.mjs';
+import { asBase, memStore, matchSnapshot } from './helpers.mjs';
 
 const TODAY = { today: '2026-10-01' };
 const CLI = fileURLToPath(new URL('../scripts/archlens.mjs', import.meta.url));
@@ -16,13 +16,6 @@ const dir = fileURLToPath(new URL('../examples/telemedicina/', import.meta.url))
 const tele = () => openStore(resolveBase('ARCHITECTURE.md', { cwd: dir })).read().raw;
 const delta02 = () => JSON.parse(readFileSync(new URL('../examples/telemedicina/delta-02.json', import.meta.url)));
 const shop = () => asBase(JSON.parse(readFileSync(new URL('./fixtures/shop.json', import.meta.url))));
-
-/** Compares `text` with tests/fixtures/<name>; UPDATE_SNAPSHOTS=1 (or a missing file) writes it instead. */
-function snapshot(name, text) {
-  const file = new URL(`./fixtures/${name}`, import.meta.url);
-  if (process.env.UPDATE_SNAPSHOTS === '1' || !existsSync(file)) { writeFileSync(file, text); return; }
-  assert.equal(text, readFileSync(file, 'utf8'));
-}
 
 const fill = (p, byN) => { for (const it of p.items) if (it.n in byN && 'resolution' in it) it.resolution = byN[it.n]; return p; };
 /** Telemedicina delta-02, answered in rounds like the skill does: 3 take, 5 same → re-plan → 6 keep, 12 yes. */
@@ -48,7 +41,7 @@ const removalPlan = () => {
 
 test('the final telemedicina delta-02 report matches the snapshot', () => {
   const { mem, final } = telePlans();
-  snapshot('show-telemedicina-final.md', show(mem, final));
+  matchSnapshot(show(mem, final), 'show-telemedicina-final.md');
 });
 
 test('the open telemedicina delta-02 report lists pending decisions with their options', () => {
@@ -57,7 +50,7 @@ test('the open telemedicina delta-02 report lists pending decisions with their o
   assert.match(md, /## Decisões pendentes/);
   assert.match(md, /→ keep \| take/);
   assert.match(md, /\*\*aberto\*\*/);
-  snapshot('show-telemedicina-open.md', md);
+  matchSnapshot(md, 'show-telemedicina-open.md');
   const { open } = telePlans();
   assert.match(show(mem, open), /→ same \| different/);
 });
@@ -67,7 +60,7 @@ test('a report with removals and relationships matches the snapshot', () => {
   const md = show(mem, p);
   assert.match(md, /## Removidos/);
   assert.match(md, /## Relações/);
-  snapshot('show-removal.md', md);
+  matchSnapshot(md, 'show-removal.md');
 });
 
 test('header and totals', () => {

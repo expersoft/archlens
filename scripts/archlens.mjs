@@ -12,7 +12,7 @@ import { renderHtml } from './lib/render.mjs';
 import { suggestViews } from './lib/suggest.mjs';
 import { inspectHtml } from './lib/deliver.mjs';
 import { mergeError, canonicalJson, hashRaw, relationshipIds } from './lib/merge.mjs';
-import { plan as planOf, finalize, apply as applyPlanTo, answersOf, isFinal, preview as previewOf, show as showPlan } from './lib/api.mjs';
+import { plan as planOf, finalize, apply as applyPlanTo, answersOf, isFinal, preview as previewOf, show as showPlan, query as queryBase } from './lib/api.mjs';
 import { formatPlanReport } from './lib/merge-report.mjs';
 import { previewSummary, annotateView } from './lib/preview.mjs';
 import { resolveBase, openStore, frontmatterSource, MANIFEST, assertWritable as storeWritable } from './lib/store/index.mjs';
@@ -49,6 +49,7 @@ Aplicar (grava a base)
 
 Consultar (nunca grava a base)
   views     <base>                           lista as visões definidas e sugere novas
+  query     <base> --view k | --spec J [--format md|json] [--out f]   responde em markdown (padrão) ou JSON: elementos por camada/nível, relações, matriz de impacto
   resolve   <base> --view k | --spec J       imprime o view IR (nós/arestas) de uma visão
   render    <base> --out f.html [seleção]    gera o HTML animado
   deliver   <base> --out f.html [seleção]    render + screenshots 1920×1080/1280×720 + checagens
@@ -334,7 +335,7 @@ async function main() {
   if (!cmd || args.help || cmd === 'help') { console.log(HELP); return; }
   const previewing = ['render', 'deliver', 'build', 'resolve', 'views'].includes(cmd) && (args.delta || args.plan);
   const create = ['merge', 'plan', 'apply'].includes(cmd) || (previewing && file != null);
-  const BASE_CMDS = ['validate', 'doc', 'extract', 'views', 'resolve', 'render', 'deliver', 'build', 'merge', 'plan', 'apply', 'show', 'check'];
+  const BASE_CMDS = ['validate', 'doc', 'extract', 'views', 'resolve', 'query', 'render', 'deliver', 'build', 'merge', 'plan', 'apply', 'show', 'check'];
   const store = BASE_CMDS.includes(cmd) ? openBase(file, { create }) : null; // migrate opens its own; unknown → default
   const preview = previewing ? loadPreview(store, args) : null;
   if (preview && cmd !== 'resolve' && !args.json) console.log(`prévia de ${preview.label}`);
@@ -388,6 +389,17 @@ async function main() {
       const specs = specsOf(model);
       const out = specs.map(s => { const v = resolveView(model, s, preview ? { keep: preview.keep } : {}); return preview ? annotateView(v, preview) : v; });
       console.log(JSON.stringify(out.length === 1 ? out[0] : out, null, 2));
+      break;
+    }
+    case 'query': {
+      const format = args.format === 'json' ? 'json' : args.format && args.format !== 'md' ? fail('--format aceita md ou json') : 'md';
+      let text;
+      try {
+        const spec = loadSpecs(args.spec);
+        const res = queryBase(store, { view: args.view === true ? undefined : args.view, spec: spec.length ? spec : undefined, format });
+        text = format === 'json' ? JSON.stringify(res, null, 2) + '\n' : res;
+      } catch (e) { fail(e.message, e.code === 'E_QUERY_VIEW' ? 1 : 2); }
+      if (args.out && args.out !== true) { atomicWrite(args.out, text); console.log(`✓ ${args.out}`); } else process.stdout.write(text);
       break;
     }
     case 'render': {

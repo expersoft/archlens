@@ -7,6 +7,9 @@ import { storeError } from './store/errors.mjs';
 import { previewModel, diffModels } from './preview.mjs';
 import { validateModel } from './validate.mjs';
 import { reportData, formatReport } from './plan-report.mjs';
+import { viewAnswer, formatViewAnswer } from './query-md.mjs';
+import { normalizeModel } from './model.mjs';
+import { suggestViews } from './suggest.mjs';
 
 const EMPTY = { raw: null, notes: {} };
 
@@ -119,4 +122,27 @@ export function show(store, plan, { format = 'md' } = {}) {
   const loaded = store.read() ?? EMPTY;
   const data = reportData(loaded.raw, plan, preview(store, { plan }).preview, { currentVersion: contentVersion(loaded) });
   return format === 'json' ? data : formatReport(data);
+}
+
+/**
+ * Answers a question about the base without writing it. Views (`view` keys, comma-separated, and/or `spec` objects):
+ * markdown, or the structures for `json` (one view → the object, several → a list). `element` comes with the card.
+ */
+export function query(store, { view, spec, format = 'md' } = {}) {
+  const keys = view ? String(view).split(',') : [];
+  const specs = spec == null ? [] : Array.isArray(spec) ? spec : [spec];
+  if (!keys.length && !specs.length) {
+    throw mergeError('E_QUERY_INPUT', 'informe --view <key>, --spec <json> ou --element <id>');
+  }
+  const loaded = store.read() ?? EMPTY;
+  if (!loaded.raw) throw mergeError('E_QUERY_INPUT', 'a base está vazia ou não existe');
+  const model = normalizeModel(loaded.raw);
+  const picked = keys.map(k => {
+    const found = model.views.find(v => v.key === k) ?? suggestViews(model).find(v => v.key === k);
+    if (!found) throw Object.assign(new Error(`visão "${k}" não existe (veja "archlens views")`), { code: 'E_QUERY_VIEW' });
+    return found;
+  });
+  const answers = [...picked, ...specs].map(sp => viewAnswer(model, sp));
+  if (format === 'json') return answers.length === 1 ? answers[0] : answers;
+  return answers.map(formatViewAnswer).join('\n');
 }
