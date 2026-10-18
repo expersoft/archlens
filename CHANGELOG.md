@@ -7,6 +7,9 @@ versões seguem [SemVer](https://semver.org/lang/pt-BR/).
 
 ### Mudado (incompatível)
 
+- **O `SKILL.md` da raiz saiu**: a skill única virou três (`skills/archlens-plan`, `archlens-apply`, `archlens-query`).
+  Quem tem `~/.claude/skills/archlens → <repo>` troca o link: instale o plugin ou use
+  `ln -s <repo>/skills/archlens-* ~/.claude/skills/`.
 - **Formato canônico 2.0**: a base guarda tipos ArchiMate, o perfil C4 em `c4.kind`, uma lista plana com `parent` e só
   relações ArchiMate. `c4:*`, `uses` e `children` continuam aceitos na entrada (prompt, delta, scan) e são traduzidos.
   Bases 1.x são recusadas com `E_STORE_FORMAT`; `archlens migrate <base>` converte, conferindo que o modelo não muda
@@ -14,6 +17,14 @@ versões seguem [SemVer](https://semver.org/lang/pt-BR/).
 
 ### Adicionado
 
+- **`archlens plan` / `apply` / `show`**: `plan` compara o delta com a base e grava um plano (aberto, com perguntas, ou
+  final); `plan --answers` reaproveita as respostas; `apply` grava um plano final; `show` imprime o relatório. O **plano
+  final carrega as operações do store** e a versão da base, e o `apply` recusa se a base mudou. `merge` segue como atalho.
+- **`archlens query`**: responde em markdown (padrão) ou JSON (`--format`) a uma visão ou spec, e `--element <id>` dá o
+  cartão do elemento (pai, filhos, relações, fontes, rodadas; `--depth` inclui o que está em volta).
+- **Prévia de plano final**: `render`/`deliver`/`build`/`resolve`/`views` com `--plan <plano.json>` desenham a base com o plano, aberto ou final, já aplicado (sem gravar).
+- **Plugin com três skills** (`archlens-plan`, `archlens-apply`, `archlens-query`) em `.claude-plugin/`; exemplo em
+  `examples/telemedicina/plano-02*.json`.
 - **Conector `markdown`**: a base vira um vault (uma pasta por tipo ArchiMate, um `.md` por elemento) que abre no Obsidian;
   escolhido por `store.kind` no `archlens.json`. Exemplo em `examples/loja-online-vault/`.
 - **Contrato de conector** com gravação por operações atômicas e versão do conteúdo (`E_STORE_CONFLICT` quando a base muda

@@ -19,9 +19,18 @@ git clone <repo> ~/repos/github.com/expersoft/archlens
 cd ~/repos/github.com/expersoft/archlens
 npm install                    # playwright-core (opcional, para as checagens visuais)
 npx playwright install chromium
-ln -s "$PWD" ~/.claude/skills/archlens   # disponibiliza a skill no Claude Code
 npm test
 ```
+
+Para usar com o Claude Code, instale as três skills (`archlens-plan`, `archlens-apply`, `archlens-query`) como plugin:
+
+```bash
+claude plugin marketplace add <repo>
+claude plugin install archlens
+```
+
+ou ligue-as à mão: `ln -s <repo>/skills/archlens-* ~/.claude/skills/`. Quem tinha `~/.claude/skills/archlens → <repo>`
+precisa remover esse link: o `SKILL.md` da raiz não existe mais.
 
 Requisitos: Node ≥ 18. O layout usa o ELK, já incluído em `scripts/vendor/` (licença EPL-2.0).
 Sem o Chromium, tudo funciona, exceto os screenshots e a medição de largura e fonte do `deliver`.
@@ -36,7 +45,14 @@ A base guarda o **formato 2.0** (tipos ArchiMate, perfil C4 em `c4.kind`, hierar
 ArchiMate); uma base 1.x é recusada por todos os comandos com `E_STORE_FORMAT` até ser migrada. Deltas e prompts
 continuam usando `c4:*`, `uses` e `children`: a entrada é traduzida.
 
-A skill é acionada por pedidos como:
+Há **três skills**, cada uma com um papel:
+
+- **`archlens-plan`** recebe informação nova e monta o plano, sem gravar nada;
+- **`archlens-apply`** grava um plano final e regenera documento e diagramas;
+- **`archlens-query`** consulta a base e responde com diagramas ou markdown, sem gravar.
+
+O fluxo é `plan` → `plan --answers` → `apply` → `build`, com `show` para ler o plano e `query` para consultar
+(veja "Evoluindo a base" e "Consultando"). As skills são acionadas por pedidos como:
 
 > Tenho esta arquitetura: *(texto)*. Gere o C4 de contexto e containers, e um ArchiMate com tudo que
 > sustenta a oferta "Teleconsulta".
@@ -75,7 +91,22 @@ a mesma 'API de Agendamento'?"), remoções e desativações. Depois aplica, e o
 - a seção **Ciclo de vida** (`planned`, `deprecated`, `retired`) e visões as-is/to-be;
 - a seção **Histórico** com a rodada, e um commit sugerido.
 
-Pela linha de comando:
+Pela linha de comando, o fluxo é `plan` → `plan --answers` → `apply` → `build`:
+
+```bash
+$A plan architecture/ delta.json --out plano.json             # plano aberto, com as perguntas
+# edite "resolution" nos itens pendentes: keep | take | value:<x> | same | different | yes | no
+$A plan architecture/ --answers plano.json --out plano-2.json # replaneja com as respostas (repita até sair "final")
+$A show architecture/ plano-2.json --out plano-2.md           # relatório: decisões, mudanças, relações e visões
+$A apply architecture/ plano-2.json                           # grava; o plano final leva as operações da base
+$A build architecture/                                        # ARCHITECTURE.md + HTML
+```
+
+O plano final carrega as operações no store e a versão da base: se a base mudou depois do plano, o `apply` recusa e
+você refaz o plano com `--answers`. Exemplo pronto: `examples/telemedicina/plano-02.json` (aberto),
+`plano-02-final.json` e `plano-02-final.md`.
+
+O mesmo fluxo com o comando antigo, que continua valendo (`merge` é o mesmo que `plan` e `apply`):
 
 ```bash
 $A merge architecture/ delta.json --plan plano.json   # relatório + plano com as perguntas
@@ -88,6 +119,16 @@ $A merge architecture/ --apply plano2.json           # grava, regenera e registr
 Aplicar de novo um delta que já entrou não muda nada: o apply imprime `= nada mudou; a base não foi regravada`.
 
 Veja `examples/telemedicina/delta-01.json` e `plano-01.json`, e o formato completo em `references/merge.md`.
+
+### Consultando
+
+```bash
+$A query architecture/ --view containers                       # markdown (padrão): elementos por camada, relações
+$A query architecture/ --spec '{"notation":"c4","level":"context","scope":"tele"}' --format json
+$A query architecture/ --element tele.api --depth 1            # cartão do elemento: pai, filhos, relações, fontes
+```
+
+`query` nunca grava a base. Para o diagrama animado use `render`/`deliver`.
 
 ### Ler repositórios
 
