@@ -17,7 +17,7 @@ const elementsById = raw => new Map((raw?.model?.elements ?? []).filter(e => e &
 const viewsByKey = raw => new Map((raw?.views ?? []).filter(v => v && v.key != null).map(v => [v.key, v]));
 
 /** id → relationship, generated ids filled in (as normalizeModel names them). */
-function relationshipsById(raw) {
+export function relationshipsById(raw) {
   const ids = relationshipIds(raw ?? {});
   const out = new Map();
   for (const r of raw?.model?.relationships ?? []) {

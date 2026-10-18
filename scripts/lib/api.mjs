@@ -2,6 +2,7 @@
 import { basename } from 'node:path';
 import { planMerge, applyPlan, hashRaw, openQuestions, canonicalJson, mergeError, PLAN_VERSION } from './merge.mjs';
 import { diffRaw, contentVersion, applyOps } from './store/ops.mjs';
+import { writeSetOf, objectVersionsOf } from './store/versions.mjs';
 import { conflictError, short } from './store/contract.mjs';
 import { storeError } from './store/errors.mjs';
 import { previewModel, diffModels } from './preview.mjs';
@@ -20,11 +21,16 @@ export const isFinal = doc => doc?.['archlens-plan'] === PLAN_VERSION && doc.sta
 /**
  * `plan` with its store operations: applies the (fully answered) plan to the loaded base and adds `entry` and `ops`
  * (the last op is appendHistory; a plan that changes nothing has no ops and no entry). applyPlan's errors surface as they are.
+ * Also `objects`, the version in `loaded` of each object the merge read or the ops write (what apply checks), and
+ * `knownCandidates`, the possible duplicates each new element already had.
  */
-function finish(loaded, plan, today) {
+function finish(store, loaded, plan, today) {
   const res = applyPlan(loaded.raw, plan, { today });
   const ops = res.entry ? diffRaw(loaded.raw ? loaded : null, { raw: res.raw, notes: loaded.notes }) : [];
-  return { ...plan, state: 'final', entry: res.entry, ops };
+  const refs = [...new Set([...res.read, ...writeSetOf(ops, loaded)])].sort();
+  const versions = store.objectVersions?.(refs, loaded) ?? objectVersionsOf(loaded, refs);
+  const sorted = obj => Object.fromEntries(Object.entries(obj).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
+  return { ...plan, state: 'final', entry: res.entry, ops, objects: sorted(Object.fromEntries(versions)), knownCandidates: sorted(res.candidates) };
 }
 
 /**
@@ -36,7 +42,7 @@ export function plan(store, delta, { answers, today } = {}) {
   const storeVersion = contentVersion(loaded); // same read as the content, so the plan's version matches it
   const planned = planMerge(loaded.raw, delta, { base: basename(store.locator.path), answers, storeVersion, today });
   if (planned.blocked || openQuestions(planned).length) return { plan: { ...planned, state: 'open' } };
-  return { plan: finish(loaded, planned, today) };
+  return { plan: finish(store, loaded, planned, today) };
 }
 
 /**
@@ -47,7 +53,7 @@ export function finalize(store, plan, { today } = {}) {
   const loaded = store.read() ?? EMPTY;
   const version = contentVersion(loaded);
   if ('storeVersion' in plan && plan.storeVersion !== version) throw conflictError(plan.storeVersion, version);
-  return { plan: finish(loaded, plan, today) };
+  return { plan: finish(store, loaded, plan, today) };
 }
 
 /** key → resolution of the answered items of a plan (open or final) and the delta they were given for. */
