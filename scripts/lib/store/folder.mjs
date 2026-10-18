@@ -28,17 +28,17 @@ export function readJson(path) {
 }
 
 /**
- * The connector the manifest's `store` names: "json" when it is absent or has no kind, "markdown", or
+ * The connector the manifest's `store` names: "json" when it is absent or has no kind, "markdown", "gbrain", or
  * E_STORE_UNSUPPORTED for anything else (a non-object `store`, another kind).
  */
 export function storeKind(manifest, file = MANIFEST) {
   const { store } = manifest ?? {};
   if (store === undefined) return 'json';
   const kind = store && typeof store === 'object' && !Array.isArray(store) ? store.kind ?? 'json' : null;
-  if (kind === 'json' || kind === 'markdown') return kind;
+  if (kind === 'json' || kind === 'markdown' || kind === 'gbrain') return kind;
   throw storeError('E_STORE_UNSUPPORTED', kind === null
     ? `"store" em ${file} deve ser um objeto como { "kind": "json" } (recebido ${JSON.stringify(store)})`
-    : `"store.kind" ${JSON.stringify(kind)} em ${file} não é suportado ("store" aceita "json" ou "markdown")`);
+    : `"store.kind" ${JSON.stringify(kind)} em ${file} não é suportado ("store" aceita "json", "markdown" ou "gbrain")`);
 }
 
 /** Writes through a temp file and rename; leaves the file alone when the content is the same. */

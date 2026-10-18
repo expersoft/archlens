@@ -20,6 +20,7 @@ import { diffRaw, contentVersion } from './lib/store/ops.mjs';
 import { migrateRaw, reportLines } from './lib/migrate.mjs';
 import { FORMAT, isCanonicalFormat } from './lib/canonical.mjs';
 import { saveFolder, loadFolder, storeKind } from './lib/store/folder.mjs';
+import { initBase } from './lib/store/config.mjs';
 import { convertFolder } from './lib/store/convert.mjs';
 import { scanSource } from './lib/scan/index.mjs';
 import { summarize, formatSummary } from './lib/scan/summary.mjs';
@@ -41,6 +42,9 @@ Planejar (nunca grava a base)
             <pasta|url> --as system|service [--system id] [--id id] --delta d.json [--from inv.json]   monta o delta
 
 Aplicar (grava a base)
+  init      <pasta> --store json|markdown|gbrain [--name N]   cria a base (archlens.json) com o repositório escolhido
+            gbrain --mode git --repo R [--remote origin] [--branch main] [--prefix archlens]   R: clone do repositório do gbrain
+            gbrain --mode mcp --server S [--source-id ID] [--prefix archlens]   S: nome do MCP configurado no Claude Code
   apply     <base> p.json                    grava um plano final (se a base mudou, refaça o plano com --answers) e registra o histórico
   doc       <base> [--out f.md]            regenera o ARCHITECTURE.md (gerado; edite architecture/notes/*.md)
   build     <base> [--out-dir DIR]           ARCHITECTURE.md + HTML (padrão: architecture/diagrams/)
@@ -649,6 +653,22 @@ async function main() {
         } catch (e) { failApi(e, names); }
         applyCommand(store, final, names);
       } else fail(usage);
+      break;
+    }
+    case 'init': {
+      const usage = 'uso: archlens init <pasta> --store json|markdown|gbrain [--name N] [--mode git|mcp] [--repo R] [--remote origin] [--branch main] [--server S] [--source-id ID] [--prefix archlens]';
+      if (!file || !args.store || args.store === true) fail(usage);
+      const dir = resolve(file);
+      const opt = k => (typeof args[k] === 'string' ? args[k] : undefined);
+      const fields = { mode: opt('mode'), remote: opt('remote'), branch: opt('branch'), server: opt('server'), sourceId: opt('source-id'), prefix: opt('prefix') };
+      // The manifest keeps `repo` relative to the base folder, so the base and the clone move together.
+      const repo = opt('repo') && relative(dir, resolve(opt('repo')));
+      const store = Object.fromEntries(Object.entries({ kind: args.store, ...fields, repo }).filter(([, v]) => v !== undefined));
+      const name = opt('name') ?? (basename(dirname(dir)) || 'Arquitetura');
+      let path;
+      try { path = initBase(dir, { name, store, warn: w => console.warn(`  aviso: ${w}`) }); } catch (e) { fail(e.message); }
+      console.log(`✓ ${relPath(path)} criado (conector ${args.store}${store.mode ? `, modo ${store.mode}` : ''})`);
+      console.log(`  próximo: planeje o conteúdo com a skill archlens-plan e grave com archlens-apply`);
       break;
     }
     case 'store': {
