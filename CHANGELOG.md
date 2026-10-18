@@ -3,6 +3,15 @@
 Mudanças relevantes do archlens, por versão. Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/);
 versões seguem [SemVer](https://semver.org/lang/pt-BR/).
 
+## [Não lançado]
+
+### Corrigido
+
+- **Skills instaladas por link simbólico** (`ln -s <repo>/skills/archlens-* ~/.claude/skills/`): o CLI e as referências
+  eram citados como `$SKILL_DIR/../..`, que o Node e a leitura de arquivos resolvem como `~/.claude` (o `..` é cortado antes
+  de seguir o link). As skills agora definem `ARCHLENS="$(realpath "$SKILL_DIR/../..")"` e usam `$ARCHLENS`; um teste
+  instala uma skill por link e roda o CLI por ele.
+
 ## [0.4.0] — pré-release
 
 ### Mudado (incompatível)
@@ -92,6 +101,7 @@ Primeira versão: arquitetura como modelo (ArchiMate 3.2 com perfil C4), diagram
 - Relações explicadas em português, HTML animado num arquivo único, checagem visual com screenshots.
 - `\n` força quebra de linha em nomes; `expand` no schema da visão (#2). Zoom/pan na tela inteira (#3).
 
+[Não lançado]: https://github.com/expersoft/archlens/compare/v0.4.0...HEAD
 [0.4.0]: https://github.com/expersoft/archlens/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/expersoft/archlens/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/expersoft/archlens/compare/v0.1.0...v0.2.0

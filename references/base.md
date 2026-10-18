@@ -24,10 +24,11 @@ skill archlens-plan; só depois do plano final a skill archlens-apply grava.
 
 ## CLI
 
-Em cada skill, `SKILL_DIR` é a pasta dela; o repositório do archlens é `$SKILL_DIR/../..`. CLI:
-`node $SKILL_DIR/../../scripts/archlens.mjs <comando>` (abaixo, `archlens <comando>`). Os caminhos `references/*.md`,
-`docs/` e `examples/` são relativos a `$SKILL_DIR/../..`. Requer Node ≥ 18. A checagem visual (`deliver`/`build`) usa
-`playwright-core` + Chromium (`npm install` e `npx playwright install chromium` em `$SKILL_DIR/../..`). Sem eles, a
+Em cada skill, `SKILL_DIR` é a pasta dela; o repositório do archlens é `ARCHLENS="$(realpath "$SKILL_DIR/../..")"` (o `realpath` segue o link
+simbólico de quem instala por `ln -s`: sem ele, o `..` sai pelo `~/.claude` para o Node e para a leitura de
+arquivos). CLI: `node "$ARCHLENS/scripts/archlens.mjs" <comando>` (abaixo, `archlens <comando>`). Os caminhos
+`references/*.md`, `docs/` e `examples/` são relativos a `$ARCHLENS`. Requer Node ≥ 18. A checagem visual
+(`deliver`/`build`) usa `playwright-core` + Chromium (`npm install` e `npx playwright install chromium` em `$ARCHLENS`). Sem eles, a
 checagem é pulada com aviso. `archlens help` lista os comandos em três blocos: Planejar, Aplicar e Consultar.
 
 ## Localizando a base
