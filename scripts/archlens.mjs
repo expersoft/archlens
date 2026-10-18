@@ -12,7 +12,7 @@ import { renderHtml } from './lib/render.mjs';
 import { suggestViews } from './lib/suggest.mjs';
 import { inspectHtml } from './lib/deliver.mjs';
 import { mergeError, canonicalJson, hashRaw, relationshipIds } from './lib/merge.mjs';
-import { plan as planOf, finalize, apply as applyPlanTo, answersOf, isFinal, preview as previewOf } from './lib/api.mjs';
+import { plan as planOf, finalize, apply as applyPlanTo, answersOf, isFinal, preview as previewOf, show as showPlan } from './lib/api.mjs';
 import { formatPlanReport } from './lib/merge-report.mjs';
 import { previewSummary, annotateView } from './lib/preview.mjs';
 import { resolveBase, openStore, frontmatterSource, MANIFEST, assertWritable as storeWritable } from './lib/store/index.mjs';
@@ -36,6 +36,7 @@ partir do diretório atual). Bases 1.x (pasta, .md com bloco archlens-json ou mo
 Planejar (nunca grava a base)
   plan      <base> <delta.json> --out p.json  compara o delta com a base e grava o plano (aberto: com perguntas; final: pronto)
             [--answers antigo.json]         reaproveita as respostas de um plano anterior (sem delta, usa o delta dele)
+  show      <base> p.json [--out f.md] [--json]   relatório do plano (aberto ou final): decisões, mudanças, relações e visões
   scan      <pasta|url> [--base b] [--out inv.json] [--json]   lê um repositório: inventário e papel sugerido
             <pasta|url> --as system|service [--system id] [--id id] --delta d.json [--from inv.json]   monta o delta
 
@@ -333,7 +334,7 @@ async function main() {
   if (!cmd || args.help || cmd === 'help') { console.log(HELP); return; }
   const previewing = ['render', 'deliver', 'build', 'resolve', 'views'].includes(cmd) && (args.delta || args.plan);
   const create = ['merge', 'plan', 'apply'].includes(cmd) || (previewing && file != null);
-  const BASE_CMDS = ['validate', 'doc', 'extract', 'views', 'resolve', 'render', 'deliver', 'build', 'merge', 'plan', 'apply', 'check'];
+  const BASE_CMDS = ['validate', 'doc', 'extract', 'views', 'resolve', 'render', 'deliver', 'build', 'merge', 'plan', 'apply', 'show', 'check'];
   const store = BASE_CMDS.includes(cmd) ? openBase(file, { create }) : null; // migrate opens its own; unknown → default
   const preview = previewing ? loadPreview(store, args) : null;
   if (preview && cmd !== 'resolve' && !args.json) console.log(`prévia de ${preview.label}`);
@@ -342,7 +343,7 @@ async function main() {
     say(`  visões afetadas pelo delta (somem ou mudam no apply): ${preview.droppedViews.join(', ')}`);
   }
   const specsOf = model => selectSpecs(model, args, preview ? preview.views : model.views);
-  const base = store && !preview && !['merge', 'plan', 'apply'].includes(cmd) ? requireRaw(store) : null;
+  const base = store && !preview && !['merge', 'plan', 'apply', 'show'].includes(cmd) ? requireRaw(store) : null;
   const load = () => (preview ? preview.raw : base.raw);
 
   switch (cmd) {
@@ -600,6 +601,17 @@ async function main() {
       if (!args._[2]) fail(usage);
       loadBase(store);
       applyCommand(store, readJson(args._[2]), { base: file ?? relPath(store.locator.path), plan: args._[2] });
+      break;
+    }
+    case 'show': {
+      if (!args._[2]) fail('uso: archlens show <base> <plano.json> [--out f.md] [--json]');
+      loadBase(store);
+      let text;
+      try {
+        const data = showPlan(store, readJson(args._[2]), { format: args.json ? 'json' : 'md' });
+        text = args.json ? JSON.stringify(data, null, 2) + '\n' : data;
+      } catch (e) { fail(e.message, 2); }
+      if (args.out && args.out !== true) { atomicWrite(args.out, text); console.log(`✓ ${args.out}`); } else process.stdout.write(text);
       break;
     }
     case 'merge': {

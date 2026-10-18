@@ -6,6 +6,7 @@ import { conflictError, short } from './store/contract.mjs';
 import { storeError } from './store/errors.mjs';
 import { previewModel, diffModels } from './preview.mjs';
 import { validateModel } from './validate.mjs';
+import { reportData, formatReport } from './plan-report.mjs';
 
 const EMPTY = { raw: null, notes: {} };
 
@@ -108,4 +109,14 @@ export function apply(store, plan) {
   } catch (e) {
     throw e.code === 'E_STORE_CONFLICT' ? stale(store.version()) : e; // changed between the read and the write
   }
+}
+
+/** The report of a plan (open or final) against the store's current base: markdown, or the structured data for `json`. Never writes. */
+export function show(store, plan, { format = 'md' } = {}) {
+  if (plan?.['archlens-plan'] !== PLAN_VERSION) {
+    throw mergeError('E_PLAN_SCHEMA', 'o arquivo não é um plano do archlens (gere com "archlens plan")');
+  }
+  const loaded = store.read() ?? EMPTY;
+  const data = reportData(loaded.raw, plan, preview(store, { plan }).preview, { currentVersion: contentVersion(loaded) });
+  return format === 'json' ? data : formatReport(data);
 }

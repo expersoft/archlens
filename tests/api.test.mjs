@@ -7,7 +7,7 @@ import { applyOps, contentVersion } from '../scripts/lib/store/ops.mjs';
 import { subgraphOf, conflictError } from '../scripts/lib/store/contract.mjs';
 import { fileURLToPath } from 'node:url';
 import { resolveBase, openStore } from '../scripts/lib/store/index.mjs';
-import { asBase } from './helpers.mjs';
+import { asBase, memStore } from './helpers.mjs';
 
 const shop = () => asBase(JSON.parse(readFileSync(new URL('./fixtures/shop.json', import.meta.url))));
 const SRC = { kind: 'prompt', ref: 'rodada 1', date: '2026-10-01' };
@@ -16,27 +16,6 @@ const delta = (model = {}, extra = {}) => ({ 'archlens-delta': '1.0', source: SR
   model: { elements: [], relationships: [], ...model }, ...extra });
 const answer = (p, map) => { for (const it of p.items) if (it.key in map) it.resolution = map[it.key]; return p; };
 const answersMap = p => new Map(p.items.filter(i => i.resolution != null).map(i => [i.key, i.resolution]));
-
-/** In-memory connector over `base` ({ raw, notes } or null), recording each method called. */
-function memStore(base) {
-  let cur = base ? { raw: structuredClone(base), notes: {} } : null;
-  const calls = [];
-  const track = (name, fn) => (...a) => { calls.push(name); return fn(...a); };
-  return {
-    calls,
-    locator: { path: '/x/architecture' },
-    read: track('read', () => (cur ? structuredClone(cur) : null)),
-    version: track('version', () => contentVersion(cur)),
-    apply: track('apply', (ops, { baseVersion } = {}) => {
-      const now = contentVersion(cur);
-      if (baseVersion !== undefined && baseVersion !== now) throw conflictError(baseVersion, now);
-      cur = applyOps(cur, ops);
-      return { version: contentVersion(cur), preserved: [] };
-    }),
-    history: track('history', () => cur?.raw.changelog ?? []),
-    readSubgraph: track('readSubgraph', opts => subgraphOf(cur.raw, opts)),
-  };
-}
 
 const renameApi = () => delta({ elements: [{ id: 'loja.api', type: 'c4:container', name: 'API Nova' }] });
 const addCache = () => delta({ elements: [{ id: 'loja.cache', type: 'c4:container', name: 'Cache', parent: 'loja' }] });
