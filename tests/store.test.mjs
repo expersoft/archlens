@@ -161,7 +161,7 @@ test('resolveBase: a hand-written .md is not a base, and the message says what t
   const dir = tmp();
   writeFileSync(join(dir, 'ARCHITECTURE.md'), '# Minha arquitetura\n\nTexto livre.\n');
   assert.throws(() => resolveBase('ARCHITECTURE.md', { cwd: dir }),
-    e => e.code === 'E_STORE_NOT_BASE' && /texto livre/.test(e.message) && /merge/.test(e.message));
+    e => e.code === 'E_STORE_NOT_BASE' && /texto livre/.test(e.message) && /archlens plan architecture\/ delta\.json --out plano\.json/.test(e.message));
 });
 
 test('resolveBase: missing bases are created only when asked', () => {

@@ -25,7 +25,7 @@ const folderAt = (path, docPath) => ({
 
 const NOT_BASE_MD = arg => `${arg} não é uma base archlens (nem bloco archlens-json, nem "source:" no cabeçalho). `
   + 'Para começar uma base a partir dele, trate o conteúdo como texto livre (delta) e rode '
-  + '"archlens merge architecture/ delta.json --plan plano.json".';
+  + '"archlens plan architecture/ delta.json --out plano.json".';
 
 /**
  * A folder as a base: with the manifest it is one; missing or empty it can become one (only with `create`);

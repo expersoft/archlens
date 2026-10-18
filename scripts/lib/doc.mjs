@@ -76,7 +76,7 @@ export function generateDoc(raw, { notes = {}, source = 'architecture/' } = {}) 
   out.push(`relationships: ${model.relationships.length}`);
   out.push('---', '');
   out.push(`# ${model.name}`, '');
-  out.push(`> Gerado por archlens a partir de \`${src}\`. Não edite: escreva em \`${src}notes/*.md\` e evolua a base com \`archlens merge\`.`, '');
+  out.push(`> Gerado por archlens a partir de \`${src}\`. Não edite: escreva em \`${src}notes/*.md\` e evolua a base com \`archlens plan\` e \`archlens apply\`.`, '');
 
   out.push('## Visão geral', '');
   out.push(note('overview'), '');

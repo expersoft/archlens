@@ -3,6 +3,7 @@
 import { writeFileSync } from 'node:fs';
 import { ELEMENT_TYPES, RELATIONSHIP_TYPES, C4_KINDS, C4_KIND_TYPES, LAYER_ORDER, STATUSES } from './lib/registry.mjs';
 import { ARCHIMATE_VIEWPOINTS } from './lib/query-archimate.mjs';
+import { OPS } from './lib/store/ops.mjs';
 import { SOURCE_KINDS } from './lib/sources.mjs';
 
 export function buildSchemas() {
@@ -138,6 +139,9 @@ export function buildSchemas() {
         field: str, when: str, resolution: { type: ['string', 'null'] } } } },
       summary: { type: 'object', additionalProperties: { type: 'integer' } },
       blocked: { type: 'boolean' }, errors: { type: 'array' },
+      // Only a final plan carries the store operations that apply it (the last one is appendHistory).
+      state: { enum: ['open', 'final'] }, entry: { type: ['object', 'null'] },
+      ops: { type: 'array', items: { type: 'object', required: ['op'], properties: { op: { enum: OPS } } } },
     },
   };
   return { model, view, delta, plan };

@@ -1,0 +1,15 @@
+{
+  "name": "archlens",
+  "description": "Marketplace do archlens: as skills archlens-plan, archlens-apply e archlens-query",
+  "owner": {
+    "name": "expersoft"
+  },
+  "plugins": [
+    {
+      "name": "archlens",
+      "source": "./",
+      "version": "0.3.0",
+      "description": "Skill: arquitetura como modelo (ArchiMate + perfil C4), diagramas como consultas, HTML animado para apresentação"
+    }
+  ]
+}

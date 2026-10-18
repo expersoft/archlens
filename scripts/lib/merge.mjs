@@ -76,18 +76,10 @@ export function applyPlan(baseRaw, plan, { today } = {}) {
   if (plan?.['archlens-plan'] !== PLAN_VERSION) throw mergeError('E_PLAN_SCHEMA', 'o arquivo não é um plano do archlens (gere com "archlens merge --plan")');
   // Plans made against a connector carry its version, which the connector checks when it applies the ops.
   if (!('storeVersion' in plan) && hashRaw(baseRaw) !== plan.baseHash) throw mergeError('E_PLAN_STALE', 'a base mudou depois que o plano foi gerado; rode "archlens merge --plan" de novo');
-  // Only questions take answers; a resolution written on an informational item is ignored.
-  const questions = plan.items.filter(i => 'resolution' in i && isQuestion(i));
-  const resolutions = new Map(questions.map(i => [i.key, i.resolution]));
-  const applies = it => {
-    if (!it.when) return true;
-    const at = it.when.lastIndexOf('=');
-    return resolutions.get(it.when.slice(0, at)) === it.when.slice(at + 1);
-  };
-  const open = questions.filter(applies);
+  const { applicable: open, resolutions } = questionsOf(plan);
   const pending = open.filter(i => i.resolution == null);
   if (pending.length) throw mergeError('E_PLAN_PENDING', `${pending.length} decisão(ões) sem resposta: item(ns) ${pending.map(i => i.n).join(', ')}`, { pending });
-  const bad = open.filter(i => !RESOLUTION[resolutionKind(i)].test(String(i.resolution)));
+  const bad = open.filter(i => !validResolution(i, i.resolution));
   if (bad.length) throw mergeError('E_PLAN_RESOLUTION', `resposta inválida no(s) item(ns) ${bad.map(i => `${i.n} ("${i.resolution}")`).join(', ')}`);
   const date = today ?? isoToday();
   const ctx = runMerge(baseRaw, plan.delta, { mode: 'apply', resolutions });
@@ -98,6 +90,22 @@ export function applyPlan(baseRaw, plan, { today } = {}) {
   ctx.raw.changelog = [...(ctx.raw.changelog || []), entry];
   return { raw: ctx.raw, entry };
 }
+
+/** The questions of a plan that apply given its own answers (a `when` item only exists under its parent's answer). */
+function questionsOf(plan) {
+  // Only questions take answers; a resolution written on an informational item is ignored.
+  const questions = plan.items.filter(i => 'resolution' in i && isQuestion(i));
+  const resolutions = new Map(questions.map(i => [i.key, i.resolution]));
+  const applies = it => {
+    if (!it.when) return true;
+    const at = it.when.lastIndexOf('=');
+    return resolutions.get(it.when.slice(0, at)) === it.when.slice(at + 1);
+  };
+  return { applicable: questions.filter(applies), resolutions };
+}
+
+/** The applicable questions of a plan whose answer is missing or invalid; none means apply can run. */
+export const openQuestions = plan => questionsOf(plan).applicable.filter(i => !validResolution(i, i.resolution));
 
 const isQuestion = it => it.class === 'conflict' || it.class === 'possible-duplicate'
   || (it.class === 'op' && !it.noop && !it.error && (it.op === 'remove' || (it.op === 'status' && it.status === 'retired')));

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { previewModel, previewSummary, annotateView } from '../scripts/lib/preview.mjs';
+import { previewModel, diffModels, previewSummary, annotateView } from '../scripts/lib/preview.mjs';
 import { planMerge, applyPlan, canonicalJson } from '../scripts/lib/merge.mjs';
 import { normalizeModel } from '../scripts/lib/model.mjs';
 import { resolveView } from '../scripts/lib/query.mjs';
@@ -214,4 +214,20 @@ test('preview of removing a grouping shows its frame as removed, around its form
   const v = annotateView(resolveView(normalizeModel(p.raw), { key: 'l', notation: 'c4', level: 'landscape', groups: { frames: true } }), p);
   assert.equal(v.groups.find(g => g.id === 'plat-cred')?.change, 'removed');
   assert.equal(v.nodes.find(n => n.id === 'motor').group, 'plat-cred');
+});
+
+test('diffModels agrees with previewModel on a fully answered plan', () => {
+  const d = delta(
+    { elements: [{ id: 'loja.worker', type: 'c4:container', name: 'Worker', parent: 'loja' }, { id: 'loja.web', type: 'c4:container', technology: 'Next.js 15' }] },
+    { ops: [{ op: 'remove', id: 'loja.db' }] },
+  );
+  const open = planMerge(shop(), d, TODAY);
+  const answers = new Map(open.items.filter(i => 'resolution' in i).map(i => [i.key, i.class === 'op' ? 'yes' : 'take']));
+  const answered = planMerge(shop(), d, { ...TODAY, answers });
+  const via = previewModel(shop(), { plan: answered });
+  const merged = applyPlan(shop(), answered, TODAY).raw;
+  const dm = diffModels(shop(), merged);
+  assert.deepEqual([...dm.changes], [...via.changes]);
+  assert.deepEqual([...dm.relChanges], [...via.relChanges]);
+  assert.equal(dm.pending.size, 0);
 });

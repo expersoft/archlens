@@ -1,6 +1,6 @@
 # archlens
 
-Skill para Claude Code: **arquitetura como modelo, diagramas como consultas.**
+Plugin para Claude Code com três skills (`archlens-plan`, `archlens-apply`, `archlens-query`): **arquitetura como modelo, diagramas como consultas.**
 
 - Aceita **texto livre** ou uma **DSL JSON** documentada (`references/notation.md`).
 - Um metamodelo só: **ArchiMate 3.2** com **perfil C4** por cima. O mesmo container é caixa azul no
@@ -8,7 +8,7 @@ Skill para Claude Code: **arquitetura como modelo, diagramas como consultas.**
 - Mantém a base em **`architecture/`** e gera dela o **`ARCHITECTURE.md`**, de onde se
   extraem visões novas a qualquer momento. A base grava um **formato único (2.0)**: tipos ArchiMate, perfil C4 em
   `c4.kind`, hierarquia por `parent`; `c4:*`, `uses` e `children` valem só na entrada. Base 1.x: `archlens migrate`.
-- **Base que evolui:** cada informação nova vira um delta; `archlens merge` casa entidades (id, alias, nome parecido),
+- **Base que evolui:** cada informação nova vira um delta; `archlens plan` casa entidades (id, alias, nome parecido),
   pergunta conflitos e duplicatas, e registra proveniência, ciclo de vida (as-is/to-be) e histórico.
 - **Lê repositórios** (compose, k8s/Helm, Terraform, OpenAPI/AsyncAPI, graphify) e gera deltas com proveniência (`archlens scan`).
 - **Prévia de mudanças:** `--delta` / `--plan` desenham a base com um delta ainda não aplicado (esboço à mão no estilo do draw.io, com hachura, `+ ~ − ?`,
@@ -30,13 +30,72 @@ node scripts/archlens.mjs build examples/loja-online/architecture
 
 | | |
 |---|---|
-| Instruções da skill | [SKILL.md](SKILL.md) |
+| Skills | [skills/archlens-plan](skills/archlens-plan/SKILL.md), [skills/archlens-apply](skills/archlens-apply/SKILL.md), [skills/archlens-query](skills/archlens-query/SKILL.md) |
 | Guia do usuário | [docs/GUIA.md](docs/GUIA.md) |
 | DSL | [references/notation.md](references/notation.md) |
 | Visões | [references/views.md](references/views.md) |
 | Evolução da base (merge) | [references/merge.md](references/merge.md) |
 | Exemplos | [examples/loja-online](examples/loja-online), [examples/telemedicina](examples/telemedicina) |
 | Plano de implementação | [docs/plans/](docs/plans/) |
+
+## As três skills
+
+| Skill | Faz | Grava a base? |
+|---|---|---|
+| `archlens-plan` | transforma informação nova (texto, documento, DSL JSON, repositório) em delta, pergunta cada decisão e termina com um plano final revisado e uma prévia em HTML (`plan`, `plan --answers`, `show`) | não |
+| `archlens-apply` | grava o plano final, regenera o `ARCHITECTURE.md` e os diagramas, escreve as notas; também `check`, `migrate` e `store convert` (`apply`, `build`) | sim |
+| `archlens-query` | responde com diagramas (C4, ArchiMate) ou markdown/JSON, incluindo o cartão de um elemento (`query`, `render`, `deliver`) | não |
+
+O fluxo: `plan` → responder os itens → `plan --answers` → `apply` → `build`. Exemplo pronto em
+`examples/telemedicina/` (`plano-02.json` aberto, `plano-02-final.json` final, `plano-02-final.md` relatório).
+
+### Instalação
+
+Como plugin (marketplace do repositório):
+
+```bash
+claude plugin marketplace add <repo>
+claude plugin install archlens
+```
+
+Ou ligando as skills direto no Claude Code:
+
+```bash
+ln -s <repo>/skills/archlens-* ~/.claude/skills/
+```
+
+Quem tinha `~/.claude/skills/archlens → <repo>` deve **trocar esse link**: o `SKILL.md` da raiz foi removido e o link antigo
+não aponta mais para nenhuma skill (`rm ~/.claude/skills/archlens` e use um dos dois caminhos acima).
+
+### Atualização
+
+Pelo plugin: atualize o marketplace, depois o plugin, e abra uma sessão nova do Claude Code (a atualização só vale nela):
+
+```bash
+claude plugin marketplace update archlens
+claude plugin update archlens@archlens
+```
+
+O Claude Code guarda o plugin instalado por **versão**: só chega aos usuários o que sai numa versão nova (veja abaixo). Com o
+marketplace do GitHub, vale a branch padrão do repositório. A cópia instalada não tem `node_modules`: a checagem visual do
+`deliver`/`build` (Playwright + Chromium) é pulada com aviso, a menos que se rode `npm install` nela.
+
+Pelos links simbólicos: um `git pull` (ou trocar de branch) no repositório já atualiza as skills na próxima sessão, sem versão
+nova. É o caminho mais prático para quem desenvolve o archlens.
+
+### Publicar uma versão
+
+A versão do plugin vem do `package.json`. Nunca edite `.claude-plugin/*.json` à mão: `npm version` regrava os dois
+manifestos e os inclui no commit da versão (o teste `tests/skills.test.mjs` recusa manifestos fora de sincronia).
+
+```bash
+npm version minor            # ou patch / major: package.json, plugin.json e marketplace.json no mesmo commit + tag v<x>
+claude plugin validate .     # manifestos válidos
+git push --follow-tags
+```
+
+Antes, mova as entradas de `[Não lançado]` do `CHANGELOG.md` para a versão nova. `npm run check-plugin` só confere a
+sincronia (sai com 1 se os manifestos não acompanham o `package.json`).
 
 ## Manter o ARCHITECTURE.md em dia
 

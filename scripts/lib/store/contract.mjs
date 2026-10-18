@@ -15,7 +15,7 @@ export function checkConnector(c) {
   return c;
 }
 
-const short = v => (v ? String(v).replace(/^sha256:/, '').slice(0, 12) : 'base inexistente');
+export const short = v => (v ? String(v).replace(/^sha256:/, '').slice(0, 12) : 'base inexistente');
 export const conflictError = (baseVersion, now) => storeError('E_STORE_CONFLICT',
   `a base mudou depois que as mudanças foram calculadas (${short(baseVersion)} → ${short(now)}); nada foi gravado. `
   + 'Gere o plano de novo com "archlens merge --plan"');

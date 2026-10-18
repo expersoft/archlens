@@ -1,6 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, mkdtempSync, cpSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { resolveBase, openStore } from '../scripts/lib/store/index.mjs';
 import { generateDoc } from '../scripts/lib/doc.mjs';
@@ -20,3 +23,22 @@ for (const ex of ['loja-online', 'telemedicina', 'repos', 'loja-online-vault']) 
     assert.equal(readFileSync(store.locator.docPath, 'utf8'), generateDoc(raw, { notes, source: 'architecture/' }));
   });
 }
+
+test('telemedicina plano-02-final is current', () => {
+  const src = fileURLToPath(new URL('../examples/telemedicina/', import.meta.url));
+  const cli = fileURLToPath(new URL('../scripts/archlens.mjs', import.meta.url));
+  const tmp = mkdtempSync(join(tmpdir(), 'archlens-ex-'));
+  try {
+    cpSync(src, tmp, { recursive: true });
+    const run = (...args) => execFileSync(process.execPath, [cli, ...args], { cwd: tmp, encoding: 'utf8' });
+    // dates come from "today": drop them (created, and date fields inside ops/entry) before comparing
+    const strip = v => JSON.parse(JSON.stringify(v, (k, x) => (k === 'created' || k === 'date' || k === 'at' || (k === 'id' && /^\d{4}-\d\d-\d\d-\d+$/.test(x)) ? undefined : x)));
+    const before = run('show', 'architecture', 'plano-02-final.json');
+    run('plan', 'architecture', '--answers', 'plano-02-final.json', '--out', 'x.json');
+    assert.deepEqual(strip(JSON.parse(readFileSync(join(tmp, 'x.json'), 'utf8'))),
+      strip(JSON.parse(readFileSync(join(src, 'plano-02-final.json'), 'utf8'))));
+    assert.equal(before, readFileSync(join(src, 'plano-02-final.md'), 'utf8'));
+    run('show', 'architecture', 'plano-02-final.json', '--out', 'y.md');
+    assert.equal(readFileSync(join(tmp, 'y.md'), 'utf8'), readFileSync(join(src, 'plano-02-final.md'), 'utf8'));
+  } finally { rmSync(tmp, { recursive: true, force: true }); }
+});
