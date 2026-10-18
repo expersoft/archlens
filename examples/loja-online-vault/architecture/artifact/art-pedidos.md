@@ -16,6 +16,9 @@ tags:
 # pedidos-api.jar
 
 <!-- archlens:begin -->
+
 ## Relações
+
 - **realization** → [[application-component/loja.pedidos|API de Pedidos]]
+
 <!-- archlens:end -->

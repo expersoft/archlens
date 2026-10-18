@@ -29,7 +29,10 @@ tags:
 Persistência de pedidos
 
 <!-- archlens:begin -->
+
 ## Relações
+
 - **serving** → [[application-component/loja.pedidos.checkout|Checkout Controller]] — Persiste pedido
 - **access** (write) → [[data-object/do-pedido|Registro de Pedido]]
+
 <!-- archlens:end -->

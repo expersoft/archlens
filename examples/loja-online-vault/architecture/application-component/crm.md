@@ -30,7 +30,10 @@ tags:
 Atendimento (SaaS)
 
 <!-- archlens:begin -->
+
 ## Relações
+
 - **serving** → [[business-actor/atendente|Atendente SAC]] — Atende clientes
 - **serving** → [[business-process/bp-atendimento|Tratar solicitação]]
+
 <!-- archlens:end -->

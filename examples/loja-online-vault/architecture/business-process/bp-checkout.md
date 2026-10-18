@@ -37,10 +37,13 @@ tags:
 Do carrinho ao pedido pago
 
 <!-- archlens:begin -->
+
 ## Relações
+
 - **realization** → [[business-service/bs-compra|Compra online]]
 - **realization** → [[business-service/bs-pagamento|Pagamento seguro]]
 - **triggering** → [[business-process/bp-faturamento|Faturamento]]
 - **access** (write) → [[business-object/bo-pedido|Pedido]]
 - **realization** → [[goal/goal-abandono|Reduzir abandono de carrinho]]
+
 <!-- archlens:end -->

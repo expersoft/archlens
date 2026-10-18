@@ -33,15 +33,19 @@ tags:
 Carrinho, checkout e ciclo de vida do pedido
 
 <!-- archlens:begin -->
+
 ## Relações
+
 - **serving** → [[application-component/crm|CRM]] — Consulta pedidos [REST]
 - **realization** → [[application-service/as-consulta|Consulta de Pedidos]]
 - **realization** → [[requirement/req-latencia|Checkout < 2s (p95)]]
 
 ## Contém
+
 - [[application-component/loja.pedidos.carrinho|Carrinho Service]]
 - [[application-component/loja.pedidos.checkout|Checkout Controller]]
 - [[application-component/loja.pedidos.eventos|Publicador de Eventos]]
 - [[application-component/loja.pedidos.pagamento|Pagamento Adapter]]
 - [[application-component/loja.pedidos.repo|Pedido Repository]]
+
 <!-- archlens:end -->

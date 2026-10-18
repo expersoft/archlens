@@ -37,8 +37,11 @@ tags:
 Faturamento, fiscal e expedição (legado on-premises)
 
 <!-- archlens:begin -->
+
 ## Relações
+
 - **serving** → [[business-actor/operador|Operador de Logística]] — Gerencia expedição
 - **realization** → [[application-service/as-faturamento|Serviço de Faturamento]]
 - **realization** → [[application-service/as-logistica|Serviço de Logística]]
+
 <!-- archlens:end -->

@@ -16,6 +16,9 @@ tags:
 # Serviço de Faturamento
 
 <!-- archlens:begin -->
+
 ## Relações
+
 - **serving** → [[business-process/bp-faturamento|Faturamento]]
+
 <!-- archlens:end -->

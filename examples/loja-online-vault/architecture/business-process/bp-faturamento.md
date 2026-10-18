@@ -27,8 +27,11 @@ tags:
 # Faturamento
 
 <!-- archlens:begin -->
+
 ## Relações
+
 - **triggering** → [[business-process/bp-expedicao|Expedição]]
 - **access** (read) → [[business-object/bo-pedido|Pedido]]
 - **access** (write) → [[business-object/bo-nota|Nota Fiscal]]
+
 <!-- archlens:end -->

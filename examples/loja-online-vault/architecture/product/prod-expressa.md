@@ -18,6 +18,9 @@ tags:
 Entrega em até 24h nas capitais
 
 <!-- archlens:begin -->
+
 ## Relações
+
 - **aggregation** → [[business-service/bs-entrega|Entrega do pedido]]
+
 <!-- archlens:end -->

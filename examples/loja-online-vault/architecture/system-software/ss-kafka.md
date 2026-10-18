@@ -16,6 +16,9 @@ tags:
 # Apache Kafka (MSK)
 
 <!-- archlens:begin -->
+
 ## Relações
+
 - **realization** → [[technology-service/ts-mensageria|Mensageria]]
+
 <!-- archlens:end -->

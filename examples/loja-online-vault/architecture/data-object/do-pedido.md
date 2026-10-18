@@ -16,6 +16,9 @@ tags:
 # Registro de Pedido
 
 <!-- archlens:begin -->
+
 ## Relações
+
 - **realization** → [[business-object/bo-pedido|Pedido]]
+
 <!-- archlens:end -->

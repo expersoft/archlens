@@ -28,7 +28,10 @@ tags:
 Antifraude + autorização no gateway
 
 <!-- archlens:begin -->
+
 ## Relações
+
 - **serving** → [[application-component/loja.pedidos.checkout|Checkout Controller]] — Solicita autorização
 - **realization** → [[application-service/as-pagamento|Serviço de Pagamento]]
+
 <!-- archlens:end -->

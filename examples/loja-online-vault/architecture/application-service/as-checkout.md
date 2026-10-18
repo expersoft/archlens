@@ -16,6 +16,9 @@ tags:
 # Serviço de Checkout
 
 <!-- archlens:begin -->
+
 ## Relações
+
 - **serving** → [[business-process/bp-checkout|Checkout]]
+
 <!-- archlens:end -->

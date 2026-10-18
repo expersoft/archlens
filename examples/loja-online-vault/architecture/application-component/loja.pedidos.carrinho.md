@@ -29,7 +29,10 @@ tags:
 Itens, preços e cupons
 
 <!-- archlens:begin -->
+
 ## Relações
+
 - **serving** → [[application-component/loja.bff|BFF]] — Gerencia carrinho [REST]
 - **serving** → [[application-component/loja.pedidos.checkout|Checkout Controller]] — Obtém itens
+
 <!-- archlens:end -->

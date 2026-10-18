@@ -25,6 +25,9 @@ tags:
 Pedidos e pagamentos
 
 <!-- archlens:begin -->
+
 ## Relações
+
 - **serving** → [[application-component/loja.pedidos.repo|Pedido Repository]] — Lê e grava pedidos [JDBC]
+
 <!-- archlens:end -->

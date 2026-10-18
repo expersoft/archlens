@@ -21,7 +21,10 @@ tags:
 # Cluster Kubernetes (EKS)
 
 <!-- archlens:begin -->
+
 ## Relações
+
 - **realization** → [[technology-service/ts-hosting|Hospedagem de contêineres]]
 - **assignment** → [[artifact/art-pedidos|pedidos-api.jar]]
+
 <!-- archlens:end -->

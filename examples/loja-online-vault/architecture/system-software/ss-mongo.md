@@ -16,6 +16,9 @@ tags:
 # MongoDB Atlas
 
 <!-- archlens:begin -->
+
 ## Relações
+
 - **serving** → [[application-component/loja.catalogo|API de Catálogo]]
+
 <!-- archlens:end -->

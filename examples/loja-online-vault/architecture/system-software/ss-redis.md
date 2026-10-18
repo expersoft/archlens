@@ -16,6 +16,9 @@ tags:
 # Redis (ElastiCache)
 
 <!-- archlens:begin -->
+
 ## Relações
+
 - **serving** → [[application-component/loja.pedidos|API de Pedidos]]
+
 <!-- archlens:end -->

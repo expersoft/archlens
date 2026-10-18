@@ -24,8 +24,11 @@ tags:
 # Hospedagem de contêineres
 
 <!-- archlens:begin -->
+
 ## Relações
+
 - **serving** → [[application-component/loja.pedidos|API de Pedidos]]
 - **serving** → [[application-component/loja.catalogo|API de Catálogo]]
 - **serving** → [[application-component/loja.bff|BFF]]
+
 <!-- archlens:end -->

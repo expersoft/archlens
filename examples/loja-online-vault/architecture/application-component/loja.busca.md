@@ -31,7 +31,10 @@ tags:
 Busca textual de produtos
 
 <!-- archlens:begin -->
+
 ## Relações
+
 - **serving** → [[application-component/loja.bff|BFF]] — Busca textual [HTTP]
 - **serving** → [[application-component/loja.catalogo|API de Catálogo]] — Indexa produtos [HTTP]
+
 <!-- archlens:end -->

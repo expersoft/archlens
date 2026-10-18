@@ -27,6 +27,9 @@ tags:
 Score de risco da transação
 
 <!-- archlens:begin -->
+
 ## Relações
+
 - **serving** → [[application-component/loja.pedidos.pagamento|Pagamento Adapter]] — Avalia risco [HTTPS]
+
 <!-- archlens:end -->

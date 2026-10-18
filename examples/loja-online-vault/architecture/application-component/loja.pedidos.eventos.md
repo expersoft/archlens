@@ -23,6 +23,9 @@ tags:
 Publica eventos de domínio
 
 <!-- archlens:begin -->
+
 ## Relações
+
 - **serving** → [[application-component/loja.pedidos.checkout|Checkout Controller]] — Publica PedidoCriado
+
 <!-- archlens:end -->

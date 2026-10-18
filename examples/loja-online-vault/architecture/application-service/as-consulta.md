@@ -16,6 +16,9 @@ tags:
 # Consulta de Pedidos
 
 <!-- archlens:begin -->
+
 ## Relações
+
 - **serving** → [[business-process/bp-atendimento|Tratar solicitação]]
+
 <!-- archlens:end -->

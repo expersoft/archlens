@@ -16,6 +16,9 @@ tags:
 # Compra online
 
 <!-- archlens:begin -->
+
 ## Relações
+
 - **serving** → [[business-role/br-comprador|Comprador]]
+
 <!-- archlens:end -->

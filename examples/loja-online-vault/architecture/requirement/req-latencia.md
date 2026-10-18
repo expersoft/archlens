@@ -16,6 +16,9 @@ tags:
 # Checkout < 2s (p95)
 
 <!-- archlens:begin -->
+
 ## Relações
+
 - **influence** → [[goal/goal-abandono|Reduzir abandono de carrinho]]
+
 <!-- archlens:end -->

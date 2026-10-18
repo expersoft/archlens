@@ -31,7 +31,10 @@ tags:
 Tópicos de pedidos e estoque
 
 <!-- archlens:begin -->
+
 ## Relações
+
 - **serving** → [[application-component/loja.pedidos.eventos|Publicador de Eventos]] — Publica eventos [Kafka]
 - **serving** → [[application-component/erp|ERP]] — Consome pedidos pagos [Kafka]
+
 <!-- archlens:end -->

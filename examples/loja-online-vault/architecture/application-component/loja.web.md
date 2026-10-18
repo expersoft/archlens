@@ -24,6 +24,9 @@ tags:
 Vitrine e checkout web
 
 <!-- archlens:begin -->
+
 ## Relações
+
 - **serving** → [[business-actor/cliente|Cliente]] — Navega e compra [HTTPS]
+
 <!-- archlens:end -->

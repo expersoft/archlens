@@ -16,6 +16,9 @@ tags:
 # CDN CloudFront
 
 <!-- archlens:begin -->
+
 ## Relações
+
 - **serving** → [[application-component/loja.web|Web Storefront]]
+
 <!-- archlens:end -->

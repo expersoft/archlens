@@ -16,6 +16,9 @@ tags:
 # Tratar solicitação
 
 <!-- archlens:begin -->
+
 ## Relações
+
 - **realization** → [[business-service/bs-atendimento|Atendimento pós-venda]]
+
 <!-- archlens:end -->

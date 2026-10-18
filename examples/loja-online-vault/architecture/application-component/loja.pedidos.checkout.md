@@ -29,7 +29,10 @@ tags:
 Orquestra o fechamento do pedido
 
 <!-- archlens:begin -->
+
 ## Relações
+
 - **serving** → [[application-component/loja.bff|BFF]] — Fecha pedido [REST]
 - **realization** → [[application-service/as-checkout|Serviço de Checkout]]
+
 <!-- archlens:end -->

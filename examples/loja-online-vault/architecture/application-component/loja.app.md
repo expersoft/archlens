@@ -24,6 +24,9 @@ tags:
 App iOS/Android
 
 <!-- archlens:begin -->
+
 ## Relações
+
 - **serving** → [[business-actor/cliente|Cliente]] — Compra pelo celular [HTTPS]
+
 <!-- archlens:end -->

@@ -16,6 +16,9 @@ tags:
 # PostgreSQL 16 (RDS)
 
 <!-- archlens:begin -->
+
 ## Relações
+
 - **serving** → [[application-component/loja.pedidos|API de Pedidos]]
+
 <!-- archlens:end -->

@@ -20,6 +20,9 @@ tags:
 Compra produtos pela web ou pelo app
 
 <!-- archlens:begin -->
+
 ## Relações
+
 - **assignment** → [[business-role/br-comprador|Comprador]]
+
 <!-- archlens:end -->

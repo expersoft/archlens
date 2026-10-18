@@ -44,17 +44,16 @@ export function renderPage(el, { outgoing = [], children = [], info, userText })
     if (tos.length) fm[t] = tos;
   }
   fm.tags = [`${TAG}${el.type}`, ...(el.c4?.kind ? [`${TAG}c4/${el.c4.kind}`] : []), ...(el.tags ?? []).map(t => `${TAG}tag/${t}`)];
-  const block = [BEGIN];
+  // Every heading and list sits between blank lines (markdownlint MD022/MD032).
+  const block = [BEGIN, ''];
   if (outgoing.length) {
-    block.push('## Relações');
+    block.push('## Relações', '');
     for (const r of outgoing) {
       block.push(`- **${r.type}**${r.accessType ? ` (${r.accessType})` : ''} → ${wikilink(r.to, info)}${r.description ? ` — ${display(r.description)}` : ''}${r.technology ? ` [${display(r.technology)}]` : ''}`);
     }
+    block.push('');
   }
-  if (children.length) {
-    if (outgoing.length) block.push('');
-    block.push('## Contém', ...children.map(id => `- ${wikilink(id, info)}`));
-  }
+  if (children.length) block.push('## Contém', '', ...children.map(id => `- ${wikilink(id, info)}`), '');
   block.push(END);
   const description = el.description != null && el.description !== '' ? `${el.description}\n\n` : '';
   return `---\n${stringifyYaml(fm, { lineWidth: 0 })}---\n# ${display(el.name ?? el.id)}\n\n${description}${block.join('\n')}${userText ?? '\n'}`;

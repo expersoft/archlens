@@ -23,6 +23,9 @@ tags:
 Autoriza cartões e Pix
 
 <!-- archlens:begin -->
+
 ## Relações
+
 - **serving** → [[application-component/loja.pedidos.pagamento|Pagamento Adapter]] — Autoriza pagamento [HTTPS]
+
 <!-- archlens:end -->

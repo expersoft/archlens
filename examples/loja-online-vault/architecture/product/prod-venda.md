@@ -34,10 +34,13 @@ tags:
 Oferta principal: comprar pela web/app e receber em casa
 
 <!-- archlens:begin -->
+
 ## Relações
+
 - **aggregation** → [[business-service/bs-compra|Compra online]]
 - **aggregation** → [[business-service/bs-pagamento|Pagamento seguro]]
 - **aggregation** → [[business-service/bs-entrega|Entrega do pedido]]
 - **aggregation** → [[business-service/bs-atendimento|Atendimento pós-venda]]
 - **aggregation** → [[contract/ct-termos|Termos de Compra]]
+
 <!-- archlens:end -->

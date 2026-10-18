@@ -25,6 +25,9 @@ tags:
 Carrinhos ativos
 
 <!-- archlens:begin -->
+
 ## Relações
+
 - **serving** → [[application-component/loja.pedidos.carrinho|Carrinho Service]] — Lê e grava carrinho [RESP]
+
 <!-- archlens:end -->

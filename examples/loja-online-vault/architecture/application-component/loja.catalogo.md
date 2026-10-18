@@ -35,8 +35,11 @@ tags:
 Produtos, preços e estoque
 
 <!-- archlens:begin -->
+
 ## Relações
+
 - **serving** → [[application-component/loja.bff|BFF]] — Consulta produtos [REST]
 - **realization** → [[application-service/as-catalogo|Serviço de Catálogo]]
 - **access** (readwrite) → [[data-object/do-produto|Registro de Produto]]
+
 <!-- archlens:end -->

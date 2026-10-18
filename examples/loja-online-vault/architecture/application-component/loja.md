@@ -21,7 +21,9 @@ tags:
 Vitrine, carrinho e checkout
 
 <!-- archlens:begin -->
+
 ## Contém
+
 - [[application-component/loja.app|App Mobile]]
 - [[application-component/loja.bff|BFF]]
 - [[application-component/loja.busca|Índice de Busca]]
@@ -32,4 +34,5 @@ Vitrine, carrinho e checkout
 - [[application-component/loja.eventos|Barramento de Eventos]]
 - [[application-component/loja.pedidos|API de Pedidos]]
 - [[application-component/loja.web|Web Storefront]]
+
 <!-- archlens:end -->

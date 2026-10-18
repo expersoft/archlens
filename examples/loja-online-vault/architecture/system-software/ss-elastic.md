@@ -16,6 +16,9 @@ tags:
 # Elasticsearch
 
 <!-- archlens:begin -->
+
 ## Relações
+
 - **serving** → [[application-component/loja.catalogo|API de Catálogo]]
+
 <!-- archlens:end -->

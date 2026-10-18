@@ -17,6 +17,7 @@ const json = v => JSON.stringify(v, null, 2) + '\n';
 const FILE_SAFE = /^[^/\\:*?"<>|\0[\]#^]+$/;
 // Where the human text of the page of a removed element goes (never read as base content nor removed).
 export const REMOVED = 'notes/removidos/';
+const LINT_FILE = '.markdownlint.json';
 const typeFolders = dir => readdirSync(dir).filter(n => ELEMENT_TYPES[n] && statSync(join(dir, n)).isDirectory()).sort();
 
 export function readVault(dir, { anyFormat = false } = {}) {
@@ -53,6 +54,9 @@ export function vaultContents(dir, { raw, notes }, cur) {
   if (views !== undefined) files.set('views.json', json(views));
   if (changelog !== undefined) files.set('changelog.json', json(changelog));
   for (const [rel, text] of noteFiles(dir, notes)) files.set(rel, text);
+  // The frontmatter title is the page name, the "# Name" heading is for readers: markdownlint must not count two H1.
+  // Written once; a config the people of the vault adjusted stays.
+  if (!existsSync(join(dir, LINT_FILE))) files.set(LINT_FILE, json({ MD025: { front_matter_title: '' } }));
   const els = (model?.elements ?? []).filter(e => e && typeof e.id === 'string');
   const byId = new Map(els.map(e => [e.id, e]));
   const info = id => { const e = byId.get(id); return e && { type: e.type, name: e.name }; };
@@ -84,9 +88,10 @@ export function vaultContents(dir, { raw, notes }, cur) {
   for (const [id, { rel, userText, name }] of old) {
     if (byId.has(id) || !userText?.trim()) continue;
     const keep = `${REMOVED}${rel}`;
-    const before = existsSync(join(dir, keep)) ? `${readFileSync(join(dir, keep), 'utf8').replace(/\n*$/, '')}\n\n` : '';
     const label = String(name ?? id).replace(/\s+/g, ' ').trim();
-    files.set(keep, `${before}# ${label} ("${id}"): elemento removido da base; texto escrito em ${rel}\n${userText.replace(/\n*$/, '')}\n`);
+    // One H1 per file; each removal is a section of its own (markdownlint MD022/MD025).
+    const before = existsSync(join(dir, keep)) ? `${readFileSync(join(dir, keep), 'utf8').replace(/\n*$/, '')}\n\n` : `# ${label} ("${id}")\n\n`;
+    files.set(keep, `${before}## ${label} ("${id}"): elemento removido da base; texto escrito em ${rel}\n\n${userText.replace(/^\n+/, '').replace(/\n*$/, '')}\n`);
   }
   files.set(PACK_FILE, gbrainPack(raw));
   return files;

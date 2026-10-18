@@ -20,6 +20,9 @@ tags:
 Resolve dúvidas e problemas de pedidos
 
 <!-- archlens:begin -->
+
 ## Relações
+
 - **assignment** → [[business-process/bp-atendimento|Tratar solicitação]]
+
 <!-- archlens:end -->

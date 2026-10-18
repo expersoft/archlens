@@ -16,6 +16,9 @@ tags:
 # Serviço de Logística
 
 <!-- archlens:begin -->
+
 ## Relações
+
 - **serving** → [[business-process/bp-expedicao|Expedição]]
+
 <!-- archlens:end -->

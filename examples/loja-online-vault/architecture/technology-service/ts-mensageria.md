@@ -20,7 +20,10 @@ tags:
 # Mensageria
 
 <!-- archlens:begin -->
+
 ## Relações
+
 - **serving** → [[application-component/loja.pedidos|API de Pedidos]]
 - **serving** → [[application-component/erp|ERP]]
+
 <!-- archlens:end -->

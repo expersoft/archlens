@@ -210,6 +210,48 @@ test('the page aliases start with the element name; reading gives back the model
   }
 });
 
+/** markdownlint MD022/MD032/MD025 problems in a page body (frontmatter left out): headings and lists not surrounded by blank lines, more than one H1. */
+const lintProblems = text => {
+  const body = text.replace(/^---\n[\s\S]*?\n---\n/, '');
+  const lines = body.split('\n');
+  const out = [];
+  const isList = l => /^\s*- /.test(l);
+  lines.forEach((l, i) => {
+    const prev = lines[i - 1], next = lines[i + 1];
+    if (/^#{1,6} /.test(l)) {
+      if (i > 0 && prev !== '') out.push(`MD022 above line ${i + 1}: ${l}`);
+      if (next !== undefined && next !== '') out.push(`MD022 below line ${i + 1}: ${l}`);
+    }
+    if (isList(l) && prev !== undefined && prev !== '' && !isList(prev)) out.push(`MD032 before line ${i + 1}: ${l}`);
+    if (isList(l) && next !== undefined && next !== '' && !isList(next)) out.push(`MD032 after line ${i + 1}: ${l}`);
+  });
+  if (lines.filter(l => /^# /.test(l)).length > 1) out.push('MD025: more than one H1');
+  return out;
+};
+
+test('generated pages and kept texts pass markdownlint (blank lines around headings and lists, one H1), with a config for the frontmatter title', () => {
+  const { dir, c } = vault();
+  for (const type of readdirSync(dir).filter(n => !n.includes('.') && n !== 'notes')) {
+    for (const f of readdirSync(join(dir, type))) assert.deepEqual(lintProblems(page(dir, `${type}/${f}`)), [], `${type}/${f}`);
+  }
+  const lint = JSON.parse(page(dir, '.markdownlint.json'));
+  assert.deepEqual(lint.MD025, { front_matter_title: '' }, 'the frontmatter title does not count as a second H1');
+  const rel = 'system-software/pg.md';
+  writeFileSync(join(dir, rel), `${page(dir, rel)}\nBackup diário às 3h.\n`);
+  change(c(), raw => { raw.model.elements = raw.model.elements.filter(e => e.id !== 'pg'); raw.model.relationships = raw.model.relationships.filter(r => r.from !== 'pg' && r.to !== 'pg'); });
+  change(c(), raw => { raw.model.elements.push({ id: 'pg', type: 'system-software', name: 'PostgreSQL 17' }); });
+  writeFileSync(join(dir, rel), `${page(dir, rel)}\nRéplica em outra zona.\n`);
+  change(c(), raw => { raw.model.elements = raw.model.elements.filter(e => e.id !== 'pg'); });
+  assert.deepEqual(lintProblems(page(dir, 'notes/removidos/system-software/pg.md')), []);
+});
+
+test('a markdownlint config the people of the vault adjusted is kept', () => {
+  const { dir, c } = vault();
+  writeFileSync(join(dir, '.markdownlint.json'), '{ "default": true, "MD013": false }\n');
+  change(c(), raw => { raw.model.elements.find(e => e.id === 'loja.web').technology = 'Remix'; });
+  assert.equal(page(dir, '.markdownlint.json'), '{ "default": true, "MD013": false }\n');
+});
+
 test('two ids of one type that differ only by letter case are refused (one file on case-insensitive disks)', () => {
   const { dir, c } = vault();
   const before = readdirSync(dir).sort();

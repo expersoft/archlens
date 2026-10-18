@@ -16,6 +16,9 @@ tags:
 # Serviço de Pagamento
 
 <!-- archlens:begin -->
+
 ## Relações
+
 - **serving** → [[business-process/bp-checkout|Checkout]]
+
 <!-- archlens:end -->

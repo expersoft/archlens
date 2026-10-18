@@ -20,6 +20,9 @@ tags:
 Separa e despacha pedidos
 
 <!-- archlens:begin -->
+
 ## Relações
+
 - **assignment** → [[business-process/bp-expedicao|Expedição]]
+
 <!-- archlens:end -->

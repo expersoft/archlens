@@ -23,6 +23,9 @@ tags:
 Coleta e rastreio
 
 <!-- archlens:begin -->
+
 ## Relações
+
 - **serving** → [[application-component/erp|ERP]] — Solicita coleta [REST]
+
 <!-- archlens:end -->

@@ -16,6 +16,9 @@ tags:
 # Expedição
 
 <!-- archlens:begin -->
+
 ## Relações
+
 - **realization** → [[business-service/bs-entrega|Entrega do pedido]]
+
 <!-- archlens:end -->

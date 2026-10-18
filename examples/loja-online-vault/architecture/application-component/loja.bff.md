@@ -30,7 +30,10 @@ tags:
 Agrega APIs para os canais
 
 <!-- archlens:begin -->
+
 ## Relações
+
 - **serving** → [[application-component/loja.web|Web Storefront]] — Consulta e envia pedidos [GraphQL]
 - **serving** → [[application-component/loja.app|App Mobile]] — Consulta e envia pedidos [GraphQL]
+
 <!-- archlens:end -->

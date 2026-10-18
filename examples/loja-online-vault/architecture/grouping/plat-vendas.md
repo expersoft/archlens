@@ -15,4 +15,5 @@ tags:
 Sistemas que sustentam a jornada de compra: vitrine, checkout e análise de risco.
 
 <!-- archlens:begin -->
+
 <!-- archlens:end -->

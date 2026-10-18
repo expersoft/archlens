@@ -25,6 +25,9 @@ tags:
 Produtos e atributos
 
 <!-- archlens:begin -->
+
 ## Relações
+
 - **serving** → [[application-component/loja.catalogo|API de Catálogo]] — Lê e grava produtos [MongoDB wire]
+
 <!-- archlens:end -->
