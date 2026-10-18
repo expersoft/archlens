@@ -15,15 +15,17 @@ const display = s => String(s).replace(/[[\]|\n\r]/g, ' ').replace(/\s+/g, ' ').
 
 export const pagePath = el => `${el.type}/${el.id}.md`;
 
-/** `[[type/id|name]]` for an element id; the bare id when the element is unknown. */
-const wikilink = (id, info) => { const t = info(id); return t ? `[[${t.type}/${id}|${display(t.name ?? id)}]]` : id; };
-/** The id inside `[[type/id|name]]` (or the value itself when it is not a wikilink). */
+/** `[[<prefix>type/id|name]]` for an element id; the bare id when the element is unknown. */
+export const link = (id, info, prefix = '') => { const t = info(id); return t ? `[[${prefix}${t.type}/${id}|${display(t.name ?? id)}]]` : id; };
+/** The id inside `[[<folders>/id|name]]` (or the value itself when it is not a wikilink). */
 const unlink = v => {
-  const m = typeof v === 'string' && /^\[\[(?:[^/|\]]+\/)?([^|\]]+)(?:\|[^\]]*)?\]\]$/.exec(v.trim());
+  const m = typeof v === 'string' && /^\[\[(?:[^|\]]+\/)?([^|\]]+)(?:\|[^\]]*)?\]\]$/.exec(v.trim());
   return m ? m[1] : v;
 };
 
-export function renderPage(el, { outgoing = [], children = [], info, userText }) {
+/** `linkPrefix` ("archlens/") goes before the type folder of each wikilink; `extraTags` lead the tags. */
+export function renderPage(el, { outgoing = [], children = [], info, userText, linkPrefix = '', extraTags = [] }) {
+  const wikilink = (id, info) => link(id, info, linkPrefix);
   const fm = {};
   const put = (k, v) => { if (v !== undefined) fm[k] = v; };
   put('id', el.id);
@@ -43,7 +45,7 @@ export function renderPage(el, { outgoing = [], children = [], info, userText })
     const tos = [...new Set(outgoing.filter(r => r.type === t).map(r => wikilink(r.to, info)))];
     if (tos.length) fm[t] = tos;
   }
-  fm.tags = [`${TAG}${el.type}`, ...(el.c4?.kind ? [`${TAG}c4/${el.c4.kind}`] : []), ...(el.tags ?? []).map(t => `${TAG}tag/${t}`)];
+  fm.tags = [...extraTags, `${TAG}${el.type}`, ...(el.c4?.kind ? [`${TAG}c4/${el.c4.kind}`] : []), ...(el.tags ?? []).map(t => `${TAG}tag/${t}`)];
   // Every heading and list sits between blank lines (markdownlint MD022/MD032).
   const block = [BEGIN, ''];
   if (outgoing.length) {

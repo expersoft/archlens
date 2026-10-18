@@ -12,10 +12,19 @@ import { fileConnector } from './contract.mjs';
 export const MANIFEST = 'archlens.json';
 const json = v => JSON.stringify(v, null, 2) + '\n';
 
-export function readJson(path) {
-  try { return JSON.parse(readFileSync(path, 'utf8')); } catch (e) {
+/** Parses `text` as JSON; `path` names it in the error. */
+export function parseJson(text, path) {
+  try { return JSON.parse(text); } catch (e) {
     throw storeError('E_STORE_JSON', `${path}: JSON inválido: ${e.message}`, { file: path });
   }
+}
+
+export function readJson(path) {
+  let text;
+  try { text = readFileSync(path, 'utf8'); } catch (e) {
+    throw storeError('E_STORE_JSON', `${path}: JSON inválido: ${e.message}`, { file: path });
+  }
+  return parseJson(text, path);
 }
 
 /**
@@ -135,14 +144,16 @@ export function readNotes(dir) {
   return notes;
 }
 
-/** Note files for `notes`; a note file without its trailing newline that already holds the note stays as written. */
-export function noteFiles(dir, notes = {}) {
+/**
+ * Note files for `notes`; a note file without its trailing newline that already holds the note stays as written.
+ * `read(rel)` gives the current text of a file (undefined when absent); by default it reads from `dir`.
+ */
+export function noteFiles(dir, notes = {}, read = rel => (existsSync(join(dir, rel)) ? readFileSync(join(dir, rel), 'utf8') : undefined)) {
   const files = new Map();
   for (const name of NOTE_NAMES) {
     if (notes[name] == null) continue;
     const rel = `notes/${name}.md`;
-    const p = join(dir, rel);
-    files.set(rel, existsSync(p) && readFileSync(p, 'utf8') === notes[name] ? notes[name] : `${notes[name]}\n`);
+    files.set(rel, read(rel) === notes[name] ? notes[name] : `${notes[name]}\n`);
   }
   return files;
 }

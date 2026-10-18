@@ -1,0 +1,132 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { loadFolder } from '../scripts/lib/store/folder.mjs';
+import { vaultFiles, readVaultFiles } from '../scripts/lib/store/markdown.mjs';
+import { toGbrainFiles, fromGbrainFiles, assertGbrainIds, gbrainSlug } from '../scripts/lib/store/gbrain-layout.mjs';
+import { canonicalJson } from '../scripts/lib/merge.mjs';
+import { parse as parseYaml } from '../scripts/vendor/yaml/index.js';
+
+const EXAMPLES = ['loja-online', 'telemedicina', 'repos'];
+const base = name => loadFolder(new URL(`../examples/${name}/architecture`, import.meta.url).pathname);
+const vaultOf = b => new Map([...vaultFiles(b, null)].filter(([, t]) => t !== null));
+const fixture = name => readFileSync(new URL(`./fixtures/gbrain-layout/${name}`, import.meta.url), 'utf8');
+
+// A small base: an element with a relationship and a child, one view, one note, a two-round changelog.
+const small = () => {
+  const raw = {
+    archlens: '2.0', name: 'Loja', description: 'Base de teste',
+    model: {
+      elements: [
+        { id: 'loja', type: 'application-component', name: 'Loja', description: 'A loja.' },
+        { id: 'loja.pedidos', type: 'application-component', name: 'API de Pedidos', parent: 'loja' },
+        { id: 'cliente', type: 'business-actor', name: 'Cliente' },
+      ],
+      relationships: [{ id: 'r1', from: 'loja.pedidos', type: 'serving', to: 'cliente', description: 'Atende' }],
+    },
+    views: [{ key: 'landscape', notation: 'c4', level: 'landscape', title: 'Panorama' }],
+    changelog: [
+      { id: '2026-10-01-01', date: '2026-10-01', summary: 'Primeira', added: ['loja', 'cliente'] },
+      { id: '2026-10-02-01', date: '2026-10-02', summary: 'Pedidos', added: ['loja.pedidos'], changed: ['loja'], removed: ['velho'] },
+    ],
+  };
+  return { raw, notes: { overview: '# Visão\n\nTexto.' } };
+};
+const smallVault = () => vaultOf(small());
+
+test('readVaultFiles reads what readVault reads', () => {
+  for (const name of EXAMPLES) {
+    const b = base(name);
+    const read = readVaultFiles(vaultOf(b));
+    // The vault reads elements by id and writes the id every relationship gets; the json base keeps file order and bare ones.
+    const key = r => `${r.from}|${r.type}|${r.to}|${r.description ?? ''}`;
+    const norm = raw => canonicalJson({
+      ...raw,
+      model: {
+        elements: [...raw.model.elements].sort((x, y) => (x.id < y.id ? -1 : 1)),
+        relationships: raw.model.relationships.map(({ id, ...r }) => r).sort((x, y) => (key(x) < key(y) ? -1 : 1)),
+      },
+    });
+    assert.equal(norm(read.raw), norm(b.raw), name);
+    assert.deepEqual(read.notes, b.notes);
+  }
+});
+
+test('toGbrainFiles then fromGbrainFiles is the identity', () => {
+  for (const name of EXAMPLES) {
+    const v = vaultOf(base(name));
+    const back = fromGbrainFiles(toGbrainFiles(v, { prefix: 'archlens' }), { prefix: 'archlens' });
+    assert.deepEqual([...back.keys()].sort(), [...v.keys()].sort(), name);
+    for (const [rel, text] of v) assert.equal(back.get(rel), text, `${name}: ${rel}`);
+  }
+  const v = smallVault();
+  const back = fromGbrainFiles(toGbrainFiles(v, { prefix: 'a/b' }), { prefix: 'a/b' });
+  for (const [rel, text] of v) assert.equal(back.get(rel), text, rel);
+});
+
+test('layout snapshots', () => {
+  const g = toGbrainFiles(smallVault(), { prefix: 'archlens' });
+  assert.equal(g.get('archlens/application-component/loja.pedidos.md'), fixture('element.md'));
+  assert.equal(g.get('archlens/manifest.md'), fixture('manifest.md'));
+  assert.equal(g.get('archlens/views/landscape.md'), fixture('view.md'));
+  assert.equal(g.get('archlens/notes/overview.md'), fixture('note.md'));
+  assert.equal(g.get('archlens/changelog.md'), fixture('changelog.md'));
+});
+
+test('the pack has prefixed path_prefixes and the four new page types; no lint config', () => {
+  const g = toGbrainFiles(smallVault(), { prefix: 'archlens' });
+  const pack = parseYaml(g.get('archlens/gbrain-pack.yaml'));
+  const prefixes = Object.fromEntries(pack.page_types.map(t => [t.name, t.path_prefixes]));
+  assert.deepEqual(prefixes['application-component'], ['archlens/application-component/']);
+  for (const t of ['archlens-manifest', 'archlens-view', 'archlens-note', 'archlens-changelog']) assert.ok(prefixes[t][0].startsWith('archlens/'), t);
+  assert.ok(![...g.keys()].some(k => k.includes('markdownlint')));
+});
+
+test('every page carries the archlens tag', () => {
+  const g = toGbrainFiles(smallVault(), { prefix: 'archlens' });
+  for (const [rel, text] of g) {
+    if (!rel.endsWith('.md')) continue;
+    const fm = parseYaml(/^---\n([\s\S]*?)\n---/.exec(text)[1]);
+    assert.ok(fm.tags.includes('archlens'), rel);
+  }
+});
+
+test('files outside the prefix are ignored', () => {
+  const g = toGbrainFiles(smallVault(), { prefix: 'archlens' });
+  g.set('outro/application-component/intruso.md', '---\nid: intruso\ntype: application-component\n---\n');
+  g.set('README.md', '# oi');
+  g.set('archlens/solto.md', 'x');
+  const back = fromGbrainFiles(g, { prefix: 'archlens' });
+  assert.deepEqual([...back.keys()].filter(k => k.includes('intruso') || k === 'README.md' || k.includes('solto')), []);
+  assert.equal(readVaultFiles(back).raw.model.elements.length, 3);
+});
+
+test('text written after the archlens block survives the round trip', () => {
+  const v = smallVault();
+  const rel = 'business-actor/cliente.md';
+  v.set(rel, `${v.get(rel).replace(/\n$/, '')}\n\nAnotação humana.\n`);
+  const g = toGbrainFiles(v, { prefix: 'archlens' });
+  assert.match(g.get(`archlens/${rel}`), /Anotação humana\.\n$/);
+  assert.equal(fromGbrainFiles(g, { prefix: 'archlens' }).get(rel), v.get(rel));
+});
+
+test('ids that are not gbrain slugs are refused', () => {
+  const raw = small().raw;
+  raw.model.elements.push({ id: 'Loja.Pedidos', type: 'application-component', name: 'x' }, { id: 'pagamento-crédito', type: 'application-service', name: 'y' });
+  assert.throws(() => assertGbrainIds(raw), e => e.code === 'E_STORE_GBRAIN_SLUG' && e.message.includes('Loja.Pedidos') && e.message.includes('pagamento-crédito'));
+  assert.doesNotThrow(() => assertGbrainIds(small().raw));
+  for (const name of EXAMPLES) assert.doesNotThrow(() => assertGbrainIds(base(name).raw), name);
+});
+
+test('reserved names are refused', () => {
+  const raw = small().raw;
+  raw.model.elements.push({ id: 'index', type: 'application-component', name: 'x' });
+  assert.throws(() => assertGbrainIds(raw), e => e.code === 'E_STORE_GBRAIN_RESERVED');
+});
+
+test('gbrainSlug ports slugifySegment', () => {
+  assert.equal(gbrainSlug('Pagamento Crédito'), 'pagamento-credito');
+  assert.equal(gbrainSlug('  a__b..c  --d '), 'a__b..c-d');
+  assert.equal(gbrainSlug('loja.pedidos'), 'loja.pedidos');
+  assert.equal(gbrainSlug('日本語 x!'), '日本語-x');
+});
