@@ -14,6 +14,13 @@ versões seguem [SemVer](https://semver.org/lang/pt-BR/).
 
 ### Adicionado
 
+- **Conector `markdown`**: a base vira um vault (uma pasta por tipo ArchiMate, um `.md` por elemento) que abre no Obsidian;
+  escolhido por `store.kind` no `archlens.json`. Exemplo em `examples/loja-online-vault/`.
+- **Contrato de conector** com gravação por operações atômicas e versão do conteúdo (`E_STORE_CONFLICT` quando a base muda
+  entre o plano e o `--apply`); os conectores `json` e `markdown` dão a mesma versão para a mesma base.
+- `archlens store convert <base> --to markdown|json`: troca o conector da base na mesma pasta, sem mudar a versão nem
+  apagar arquivos que a base não possui.
+- **Schema pack do gbrain** (`gbrain-pack.yaml`) gerado na base `markdown`.
 - Propriedades do usuário com listas de texto e catálogo opcional no `archlens.json` (`W_PROPERTY`).
 - C4 gerado de modelos ArchiMate: setas derivadas através de serviços, interfaces e funções de aplicação.
 - Aninhamento visual nas visões ArchiMate (`"nesting": "nested"`, com `depth`).

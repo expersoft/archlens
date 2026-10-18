@@ -1,10 +1,10 @@
 // Where the knowledge base lives and how to read and write it. Only this module and its adapters touch base
-// files. A future adapter (another folder, a bucket, an MCP knowledge store) implements the same contract:
-// kind, writable, describe(), load(), save(), assertWritable().
+// files. Each adapter is a connector (contract.mjs): describe(), read(), readSubgraph(), version(), apply(), history().
 import { existsSync, statSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve, relative, basename, extname } from 'node:path';
-import { loadFolder, saveFolder, MANIFEST } from './folder.mjs';
-import { loadLegacy, legacyNotes } from './legacy.mjs';
+import { jsonConnector, readJson, storeKind, MANIFEST } from './folder.mjs';
+import { legacyConnector } from './legacy.mjs';
+import { markdownConnector } from './markdown.mjs';
 import { storeError } from './errors.mjs';
 
 export { storeError, MANIFEST };
@@ -69,33 +69,23 @@ function discover(cwd, create) {
   });
 }
 
+const legacyError = locator => () => storeError('E_STORE_LEGACY',
+  `esta base está no formato antigo (bloco archlens-json no .md); rode "archlens migrate ${rel(locator.path)}" para convertê-la para a pasta architecture/`);
+
+/** The connector `store.kind` names in the manifest (json when there is no manifest or no store). */
+function folderKind(dir) {
+  const p = join(dir, MANIFEST);
+  return existsSync(p) ? storeKind(readJson(p), rel(p)) : 'json';
+}
+
 export function openStore(locator) {
-  if (locator.kind === 'folder') {
-    let last = null; // what load() saw: save() keeps its layout and file origins
-    return {
-      kind: 'folder', writable: true, locator,
-      describe: () => `${rel(locator.path)}/`,
-      assertWritable() {},
-      load({ anyFormat } = {}) {
-        if (!existsSync(join(locator.path, MANIFEST))) return { raw: null, notes: {}, origins: null, layout: undefined };
-        last = loadFolder(locator.path, { anyFormat });
-        return last;
-      },
-      save(raw, { notes, origins = last?.origins, layout = last?.layout } = {}) {
-        saveFolder(locator.path, raw, { notes, origins, layout });
-      },
-    };
-  }
-  const legacyError = () => storeError('E_STORE_LEGACY',
-    `esta base está no formato antigo (bloco archlens-json no .md); rode "archlens migrate ${rel(locator.path)}" para convertê-la para a pasta architecture/`);
-  return {
-    kind: 'legacy', writable: false, locator,
-    describe: () => `${rel(locator.path)} (formato antigo)`,
-    assertWritable() { throw legacyError(); },
-    load({ anyFormat } = {}) {
-      const { raw, keeps } = loadLegacy(locator.path, { anyFormat });
-      return { raw, notes: legacyNotes(raw, keeps), origins: null, layout: undefined };
-    },
-    save() { throw legacyError(); },
-  };
+  if (locator.kind !== 'folder') return legacyConnector(locator, { describe: `${rel(locator.path)} (formato antigo)`, error: legacyError(locator) });
+  return folderKind(locator.path) === 'markdown'
+    ? markdownConnector(locator, `${rel(locator.path)}/ (markdown)`)
+    : jsonConnector(locator, `${rel(locator.path)}/`);
+}
+
+/** Throws the connector's own refusal when it cannot write (the old .md base). */
+export function assertWritable(store) {
+  if (!store.writable) store.apply([]);
 }

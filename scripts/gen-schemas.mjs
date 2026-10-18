@@ -130,7 +130,7 @@ export function buildSchemas() {
     title: 'archlens merge plan',
     type: 'object', required: ['archlens-plan', 'baseHash', 'delta', 'items'],
     properties: {
-      'archlens-plan': { const: '1.0' }, base: str, baseHash: str, created: str, delta: { $ref: 'delta.schema.json' },
+      'archlens-plan': { const: '1.0' }, base: str, baseHash: str, storeVersion: { type: ['string', 'null'] }, created: str, delta: { $ref: 'delta.schema.json' },
       items: { type: 'array', items: { type: 'object', required: ['n', 'key', 'class'], properties: {
         n: { type: 'integer' }, key: str,
         class: { enum: ['new', 'unchanged', 'enrich', 'conflict', 'possible-duplicate', 'op'] },

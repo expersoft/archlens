@@ -1,0 +1,247 @@
+api_version: gbrain-schema-pack-v1
+name: archlens
+version: 2.0.0
+description: Arquitetura (ArchiMate 3.2 + perfil C4) mantida pelo archlens. Gerado pelo archlens; não edite.
+page_types:
+  - name: application-component
+    primitive: entity
+    path_prefixes:
+      - application-component/
+    aliases: []
+    extractable: false
+    expert_routing: false
+  - name: application-service
+    primitive: entity
+    path_prefixes:
+      - application-service/
+    aliases: []
+    extractable: false
+    expert_routing: false
+  - name: artifact
+    primitive: entity
+    path_prefixes:
+      - artifact/
+    aliases: []
+    extractable: false
+    expert_routing: false
+  - name: business-actor
+    primitive: entity
+    path_prefixes:
+      - business-actor/
+    aliases: []
+    extractable: false
+    expert_routing: false
+  - name: business-object
+    primitive: entity
+    path_prefixes:
+      - business-object/
+    aliases: []
+    extractable: false
+    expert_routing: false
+  - name: business-process
+    primitive: entity
+    path_prefixes:
+      - business-process/
+    aliases: []
+    extractable: false
+    expert_routing: false
+  - name: business-role
+    primitive: entity
+    path_prefixes:
+      - business-role/
+    aliases: []
+    extractable: false
+    expert_routing: false
+  - name: business-service
+    primitive: entity
+    path_prefixes:
+      - business-service/
+    aliases: []
+    extractable: false
+    expert_routing: false
+  - name: communication-network
+    primitive: entity
+    path_prefixes:
+      - communication-network/
+    aliases: []
+    extractable: false
+    expert_routing: false
+  - name: contract
+    primitive: entity
+    path_prefixes:
+      - contract/
+    aliases: []
+    extractable: false
+    expert_routing: false
+  - name: data-object
+    primitive: entity
+    path_prefixes:
+      - data-object/
+    aliases: []
+    extractable: false
+    expert_routing: false
+  - name: goal
+    primitive: entity
+    path_prefixes:
+      - goal/
+    aliases: []
+    extractable: false
+    expert_routing: false
+  - name: grouping
+    primitive: entity
+    path_prefixes:
+      - grouping/
+    aliases: []
+    extractable: false
+    expert_routing: false
+  - name: node
+    primitive: entity
+    path_prefixes:
+      - node/
+    aliases: []
+    extractable: false
+    expert_routing: false
+  - name: product
+    primitive: entity
+    path_prefixes:
+      - product/
+    aliases: []
+    extractable: false
+    expert_routing: false
+  - name: requirement
+    primitive: entity
+    path_prefixes:
+      - requirement/
+    aliases: []
+    extractable: false
+    expert_routing: false
+  - name: system-software
+    primitive: entity
+    path_prefixes:
+      - system-software/
+    aliases: []
+    extractable: false
+    expert_routing: false
+  - name: technology-service
+    primitive: entity
+    path_prefixes:
+      - technology-service/
+    aliases: []
+    extractable: false
+    expert_routing: false
+link_types:
+  - name: aggregation
+    inverse: aggregated_into
+  - name: assignment
+    inverse: assigned_from
+  - name: realization
+    inverse: realized_by
+  - name: serving
+    inverse: served_by
+  - name: access
+    inverse: accessed_by
+  - name: influence
+    inverse: influenced_by
+  - name: triggering
+    inverse: triggered_by
+  - name: part_of
+    inverse: composed_of
+  - name: member_of
+    inverse: has_member
+takes_kinds:
+  - fact
+  - take
+  - bet
+  - hunch
+borrow_from: []
+frontmatter_links:
+  - page_type: application-component
+    fields:
+      - realization
+    link_type: realization
+  - page_type: application-component
+    fields:
+      - serving
+    link_type: serving
+  - page_type: application-component
+    fields:
+      - access
+    link_type: access
+  - page_type: application-component
+    fields:
+      - parent
+    link_type: part_of
+  - page_type: application-component
+    fields:
+      - group
+    link_type: member_of
+  - page_type: application-service
+    fields:
+      - serving
+    link_type: serving
+  - page_type: artifact
+    fields:
+      - realization
+    link_type: realization
+  - page_type: business-actor
+    fields:
+      - assignment
+    link_type: assignment
+  - page_type: business-process
+    fields:
+      - realization
+    link_type: realization
+  - page_type: business-process
+    fields:
+      - access
+    link_type: access
+  - page_type: business-process
+    fields:
+      - triggering
+    link_type: triggering
+  - page_type: business-service
+    fields:
+      - serving
+    link_type: serving
+  - page_type: communication-network
+    fields:
+      - serving
+    link_type: serving
+  - page_type: data-object
+    fields:
+      - realization
+    link_type: realization
+  - page_type: node
+    fields:
+      - assignment
+    link_type: assignment
+  - page_type: node
+    fields:
+      - realization
+    link_type: realization
+  - page_type: node
+    fields:
+      - serving
+    link_type: serving
+  - page_type: product
+    fields:
+      - aggregation
+    link_type: aggregation
+  - page_type: requirement
+    fields:
+      - influence
+    link_type: influence
+  - page_type: system-software
+    fields:
+      - realization
+    link_type: realization
+  - page_type: system-software
+    fields:
+      - serving
+    link_type: serving
+  - page_type: technology-service
+    fields:
+      - serving
+    link_type: serving
+enrichable_types: []
+filing_rules: []

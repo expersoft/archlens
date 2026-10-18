@@ -14,10 +14,12 @@ import { inspectHtml } from './lib/deliver.mjs';
 import { planMerge, applyPlan, mergeError, canonicalJson, hashRaw, relationshipIds, PLAN_VERSION } from './lib/merge.mjs';
 import { formatPlanReport } from './lib/merge-report.mjs';
 import { previewModel, previewSummary, annotateView } from './lib/preview.mjs';
-import { resolveBase, openStore, frontmatterSource, MANIFEST } from './lib/store/index.mjs';
+import { resolveBase, openStore, frontmatterSource, MANIFEST, assertWritable as storeWritable } from './lib/store/index.mjs';
+import { diffRaw, contentVersion } from './lib/store/ops.mjs';
 import { migrateRaw, reportLines } from './lib/migrate.mjs';
 import { FORMAT, isCanonicalFormat } from './lib/canonical.mjs';
-import { saveFolder, loadFolder } from './lib/store/folder.mjs';
+import { saveFolder, loadFolder, storeKind } from './lib/store/folder.mjs';
+import { convertFolder } from './lib/store/convert.mjs';
 import { scanSource } from './lib/scan/index.mjs';
 import { summarize, formatSummary } from './lib/scan/summary.mjs';
 import { toDelta } from './lib/scan/to-delta.mjs';
@@ -37,6 +39,7 @@ Comandos
   merge     <base> <delta.json> --plan p.json  compara o delta com a base e grava o plano (decisões pendentes)
             [--answers antigo.json]         reaproveita as respostas de um plano anterior (ex.: duplicata = same)
   merge     <base> --apply p.json               aplica o plano respondido, regrava a base e registra o histórico
+  store convert <base> --to markdown|json [--force]   grava a base em outro conector (mesma pasta; versão inalterada)
   views     <base>                           lista as visões definidas e sugere novas
   resolve   <base> --view k | --spec J       imprime o view IR (nós/arestas) de uma visão
   render    <base> --out f.html [seleção]    gera o HTML animado
@@ -85,8 +88,8 @@ function openBase(arg, { create = false } = {}) {
   try { return openStore(resolveBase(arg, { create })); } catch (e) { fail(e.message); }
 }
 
-function loadBase(store) {
-  try { return store.load(); } catch (e) { fail(e.message); }
+function loadBase(store, opts) {
+  try { return store.read(opts) ?? { raw: null, notes: {} }; } catch (e) { fail(e.message); }
 }
 
 function requireRaw(store) {
@@ -96,7 +99,12 @@ function requireRaw(store) {
 }
 
 function assertWritable(store) {
-  try { store.assertWritable(); } catch (e) { fail(e.message); }
+  try { storeWritable(store); } catch (e) { fail(e.message); }
+}
+
+/** Writes `next` over what the store holds at `baseVersion`, by ops; exits with the connector's refusal. */
+function writeBase(store, before, next, baseVersion) {
+  try { return store.apply(diffRaw(before, next), { baseVersion }); } catch (e) { fail(e.message, e.code === 'E_STORE_CONFLICT' ? 2 : 1); }
 }
 
 /**
@@ -235,9 +243,8 @@ function loadPreview(store, args) {
   if (input === true) fail('informe o arquivo: --delta <delta.json> ou --plan <plano.json>');
   const baseRaw = loadBase(store).raw;
   const doc = readJson(input);
-  if (args.plan && doc.baseHash && doc.baseHash !== hashRaw(baseRaw)) {
-    console.warn('  aviso: a base mudou depois deste plano; a prévia usa a base atual');
-  }
+  const stale = 'storeVersion' in doc ? doc.storeVersion !== store.version() : doc.baseHash && doc.baseHash !== hashRaw(baseRaw);
+  if (args.plan && stale) console.warn('  aviso: a base mudou depois deste plano; a prévia usa a base atual');
   let p;
   try { p = previewModel(baseRaw, args.delta ? { delta: doc } : { plan: doc }); } catch (e) {
     if (e.errors) printIssues(e.errors.map(x => ({ path: '$', hint: '', ...x })), 'ERRO');
@@ -365,13 +372,18 @@ async function main() {
       let loc;
       try { loc = resolveBase(file); } catch (e) { fail(e.message); }
       if (loc.kind === 'folder' && !loc.exists) fail(`base não encontrada: ${file}`);
-      const src = openStore(loc);
-      let loaded;
-      try { loaded = src.load({ anyFormat: true }); } catch (e) { fail(e.message); }
+      let loaded, kind;
+      try {
+        // In place a json folder is converted below the contract (origins and layout travel to the copy); a vault is
+        // read by its connector, only to say it needs no migration.
+        kind = loc.kind === 'folder' ? storeKind(readJson(join(loc.path, MANIFEST)), join(loc.path, MANIFEST)) : null;
+        loaded = kind === 'json' ? loadFolder(loc.path, { anyFormat: true }) : openStore(loc).read({ anyFormat: true });
+      } catch (e) { fail(e.message); }
       const { raw, notes } = loaded;
       // A 2.0 base still in the old single-file container only changes container.
       const already = isCanonicalFormat(raw?.archlens);
       if (already && loc.kind === 'folder') fail(`${file} já está no formato ${FORMAT}`);
+      if (kind === 'markdown') fail(`${file}: "archlens migrate" converte só bases json; esta base usa o conector markdown`);
       const res = already ? { raw, report: null, errors: validateModel(raw).errors, diffs: [] } : migrateRaw(raw);
       if (res.errors.length) { printIssues(res.errors, 'ERRO'); fail('corrija os erros do modelo antes de migrar; nada foi gravado', 2); }
       if (res.diffs.length) {
@@ -380,7 +392,7 @@ async function main() {
       }
       let dest, docPath, replacing;
       if (loc.kind === 'folder') {
-        dest = openStore({ ...loc, exists: true });
+        try { dest = openStore({ ...loc, exists: true }); } catch (e) { fail(e.message); }
         docPath = loc.docPath;
         assertDocOwned(dest, docPath); // before anything is written: a foreign document would stop us after the swap
         // In place: copy the folder, save the 2.0 base over the copy (files of the user and split files that end up
@@ -419,20 +431,21 @@ async function main() {
         }
         if (target.exists) fail(`E_STORE_EXISTS: ${relPath(to)} já tem uma base (${MANIFEST}); escolha outra pasta com --to`);
         docPath = extname(loc.path).toLowerCase() === '.md' ? loc.path : join(dirname(loc.path), 'ARCHITECTURE.md');
-        dest = openStore({ ...target, docPath });
+        try { dest = openStore({ ...target, docPath }); } catch (e) { fail(e.message); }
         replacing = docPath === loc.path ? loc.path : undefined; // the old .md is replaced by the generated one
         assertDocOwned(dest, docPath, { replacing });
         const existed = existsSync(to); // resolveBase only lets an empty folder through, so everything inside is ours
         try {
-          dest.save(res.raw, { notes });
-          if (canonicalJson(dest.load().raw) !== canonicalJson(res.raw)) throw new Error('E_STORE_MIGRATE: a pasta gravada não reproduz o modelo convertido; nada foi trocado');
+          // Not writeBase: a refusal must still reach the cleanup below.
+          dest.apply(diffRaw(null, { raw: res.raw, notes }), { baseVersion: null });
+          if (contentVersion(dest.read()) !== contentVersion({ raw: res.raw, notes })) throw new Error('E_STORE_MIGRATE: a pasta gravada não reproduz o modelo convertido; nada foi trocado');
         } catch (e) {
           if (existed) for (const n of readdirSync(to)) rmSync(join(to, n), { recursive: true, force: true });
           else rmSync(to, { recursive: true, force: true });
           fail(e.message);
         }
       }
-      const back = dest.load();
+      const back = loadBase(dest);
       if (back.notes.assumptions != null && res.raw.assumptions?.length) {
         console.warn(`  aviso: notes/assumptions.md substitui a lista de premissas do manifesto no documento`);
       }
@@ -457,7 +470,7 @@ async function main() {
       try {
         // --base may name a base the first merge will create (missing or empty folder); scan only reads it
         const st = openStore(resolveBase(val('base'), { create: !!val('base') }));
-        const loaded = st.load();
+        const loaded = st.read() ?? { raw: null };
         base = loaded.raw ? normalizeModel(loaded.raw) : null;
         if (!base) newBase(val('base') ? st.locator.path : null);
       } catch (e) {
@@ -510,7 +523,9 @@ async function main() {
     case 'merge': {
       const usage = 'uso: archlens merge <base> <delta.json> --plan <plano.json> [--answers <plano-anterior.json>]  |  archlens merge <base> --apply <plano.json>\n'
         + '  <base>: a pasta architecture/ ou o ARCHITECTURE.md (se não existir, a base é criada em architecture/)';
-      const { raw: baseRaw, notes } = loadBase(store);
+      const loaded = loadBase(store);
+      const { raw: baseRaw, notes } = loaded;
+      const startVersion = contentVersion(loaded); // same read as the content, so the plan's version matches it
       if (args.plan && args.plan !== true) {
         const deltaPath = args._[2];
         if (!deltaPath) fail(usage);
@@ -518,7 +533,7 @@ async function main() {
         try {
           const delta = readJson(deltaPath);
           const answers = args.answers && args.answers !== true ? answersFrom(readJson(args.answers), delta) : undefined;
-          plan = planMerge(baseRaw, delta, { base: basename(store.locator.path), answers });
+          plan = planMerge(baseRaw, delta, { base: basename(store.locator.path), answers, storeVersion: startVersion });
         } catch (e) { fail(e.message, 2); }
         atomicWrite(args.plan, JSON.stringify(plan, null, 2) + '\n');
         if (args.json) console.log(JSON.stringify(plan, null, 2));
@@ -526,21 +541,47 @@ async function main() {
         process.exitCode = plan.blocked ? 2 : 0;
       } else if (args.apply && args.apply !== true) {
         assertWritable(store);
+        const plan = readJson(args.apply);
+        if ('storeVersion' in plan && plan.storeVersion !== startVersion) {
+          fail(`E_STORE_CONFLICT: a base mudou depois que o plano foi gerado; nada foi gravado. Gere o plano de novo com "archlens merge --plan"`, 2);
+        }
         let res;
-        try { res = applyPlan(baseRaw, readJson(args.apply)); } catch (e) {
+        try { res = applyPlan(baseRaw, plan); } catch (e) {
           if (e.errors) printIssues(e.errors.map(x => ({ path: '$', hint: '', ...x })), 'ERRO');
           fail(e.message, 2);
         }
         if (!res.entry) { console.log('= nada mudou; a base não foi regravada'); break; }
         assertDocOwned(store);
-        try { store.save(res.raw, { notes }); } catch (e) { fail(e.message); }
+        const { preserved = [] } = writeBase(store, baseRaw ? loaded : null, { raw: res.raw, notes }, startVersion);
         const saved = loadBase(store); // the document follows what is on disk (a split model regroups items by file)
         const doc = writeDoc(store, saved.raw, saved.notes);
         const e = res.entry;
         const st = Object.keys(e.status).length;
         console.log(`✓ ${store.describe()} e ${relPath(doc)} (revisão ${res.raw.changelog.length}): +${e.added.length} ~${e.changed.length} −${e.removed.length}${st ? `, ${st} mudança(s) de status` : ''}`);
+        for (const rel of preserved) console.log(`  texto da página removida guardado em ${relPath(join(store.locator.path, rel))}`);
         console.log(`  commit sugerido: git add ${relPath(store.locator.path)} ${relPath(doc)} && git commit -m ${JSON.stringify(`docs(arquitetura): ${e.summary}`)}`);
       } else fail(usage);
+      break;
+    }
+    case 'store': {
+      const usage = 'uso: archlens store convert <base> --to markdown|json [--force]';
+      if (file !== 'convert' || !args.to || args.to === true) fail(usage);
+      const target = args._[2];
+      let loc;
+      try { loc = resolveBase(target); } catch (e) { fail(e.message); }
+      if (loc.kind !== 'folder' || !loc.exists) fail(`E_STORE_CONVERT: ${target ?? '.'} não é uma pasta de base (migre bases antigas com "archlens migrate")`);
+      assertDocOwned(openStore(loc)); // before anything is written
+      let res;
+      try { res = convertFolder(loc, String(args.to), { force: args.force === true }); } catch (e) { fail(e.message); }
+      // The element order of a vault differs from model.json, so the generated document is rewritten.
+      const converted = openStore(resolveBase(loc.path));
+      const back = loadBase(converted);
+      const doc = writeDoc(converted, back.raw, back.notes, loc.docPath);
+      console.log(`✓ ${relPath(loc.path)}/ agora usa o conector ${res.to} (era ${res.from}); a versão da base não mudou; ${relPath(doc)} regenerado`);
+      if (res.dropped.length) console.warn(`  aviso: --force descartou o texto das pessoas de ${res.dropped.length} página(s): ${res.dropped.join(', ')}`);
+      if (res.leftover) console.warn(`  aviso: não consegui apagar ${relPath(res.leftover)}; remova-o à mão`);
+      if (res.to === 'markdown') console.log(`  abra ${relPath(loc.path)}/ como vault no Obsidian; para o gbrain: gbrain schema use com ${relPath(join(loc.path, 'gbrain-pack.yaml'))}`);
+      console.log(`  commit sugerido: git add -A ${relPath(loc.path)} && git commit -m "chore(archlens): base no conector ${res.to}"`);
       break;
     }
     default:
