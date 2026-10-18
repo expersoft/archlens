@@ -7,7 +7,7 @@ import { ELEMENT_TYPES } from '../registry.mjs';
 import { storeError } from './errors.mjs';
 import { MANIFEST, parseJson } from './folder.mjs';
 import { NOTE_NAMES } from '../doc.mjs';
-import { readVaultFiles, vaultFiles } from './markdown.mjs';
+import { readVaultFiles, vaultFiles, REMOVED } from './markdown.mjs';
 import { link } from './markdown-page.mjs';
 import { gbrainPack, PACK_FILE } from './gbrain-pack.mjs';
 
@@ -92,7 +92,11 @@ export function toGbrainFiles(vault, { prefix } = {}) {
   for (const name of NOTE_NAMES) {
     if (vault.has(`notes/${name}.md`)) out.set(at(`notes/${name}.md`), `${frontmatter({ type: 'archlens-note', title: name, tags: [COMMON_TAG] })}${vault.get(`notes/${name}.md`)}`);
   }
-  out.set(at(PACK_FILE), gbrainPack(raw, { prefix: p }));
+  // The text of removed elements (kept by the vault in notes/removidos/) travels as note pages too.
+  for (const [rel, text] of vault) {
+    if (rel.startsWith(REMOVED) && rel.endsWith('.md') && text != null) out.set(at(rel), `${frontmatter({ type: 'archlens-note', title: rel.slice(REMOVED.length, -3), tags: [COMMON_TAG] })}${text}`);
+  }
+  out.set(at(PACK_FILE), gbrainPack(raw, { prefix: p, gbrain: true }));
   return out;
 }
 
@@ -108,6 +112,7 @@ export function fromGbrainFiles(files, { prefix, anyFormat = false } = {}) {
     if (rel === 'manifest.md') flat.set(MANIFEST, json(readBlock(text, rel)));
     else if (rel === 'changelog.md') flat.set('changelog.json', json(readBlock(text, rel)));
     else if (/^views\/[^/]+\.md$/.test(rel)) viewPages.push({ position: readFrontmatter(text, rel).fm.position, key: rel.slice(6, -3), view: readBlock(text, rel) });
+    else if (rel.startsWith(REMOVED) && rel.endsWith('.md')) flat.set(rel, readFrontmatter(text, rel).body);
     else if (/^notes\/[^/]+\.md$/.test(rel) && NOTE_NAMES.includes(rel.slice(6, -3))) flat.set(rel, readFrontmatter(text, rel).body);
     else if (/^[^/]+\/[^/]+\.md$/.test(rel) && ELEMENT_TYPES[rel.split('/')[0]]) flat.set(rel, text);
   }
@@ -117,5 +122,7 @@ export function fromGbrainFiles(files, { prefix, anyFormat = false } = {}) {
     flat.set('views.json', json(viewPages.map(v => v.view)));
   }
   const { raw, notes, ctx } = readVaultFiles(flat, { anyFormat });
-  return vaultFiles({ raw, notes }, { ctx }, { read: rel => flat.get(rel) });
+  const out = vaultFiles({ raw, notes }, { ctx }, { read: rel => flat.get(rel) });
+  for (const [rel, text] of flat) if (rel.startsWith(REMOVED) && !out.has(rel)) out.set(rel, text);
+  return out;
 }

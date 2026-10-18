@@ -130,3 +130,24 @@ test('gbrainSlug ports slugifySegment', () => {
   assert.equal(gbrainSlug('loja.pedidos'), 'loja.pedidos');
   assert.equal(gbrainSlug('日本語 x!'), '日本語-x');
 });
+
+test('the text of a removed element travels vault -> gbrain -> vault under notes/removidos/', () => {
+  const v = smallVault();
+  const rel = 'business-actor/cliente.md';
+  v.set(rel, `${v.get(rel).replace(/\n$/, '')}\n\nAnotação humana.\n`);
+  const { raw, ctx } = readVaultFiles(v);
+  raw.model.elements = raw.model.elements.filter(e => e.id !== 'cliente');
+  raw.model.relationships = [];
+  const after = vaultFiles({ raw, notes: {} }, { ctx }, { exists: () => false });
+  assert.match(after.get('notes/removidos/business-actor/cliente.md'), /Anotação humana\./);
+  const vault = new Map([...after].filter(([, t]) => t !== null));
+  const g = toGbrainFiles(vault, { prefix: 'archlens' });
+  assert.match(g.get('archlens/notes/removidos/business-actor/cliente.md'), /^---\ntype: archlens-note\n[\s\S]*Anotação humana\./);
+  const back = fromGbrainFiles(g, { prefix: 'archlens' });
+  assert.equal(back.get('notes/removidos/business-actor/cliente.md'), vault.get('notes/removidos/business-actor/cliente.md'));
+});
+
+test('the pack carries the extra page types even without a prefix', () => {
+  const pack = parseYaml(toGbrainFiles(smallVault(), { prefix: '' }).get('gbrain-pack.yaml'));
+  assert.ok(pack.page_types.some(t => t.name === 'archlens-changelog'));
+});
