@@ -11,8 +11,8 @@ import { layoutView, legibility } from './lib/layout.mjs';
 import { renderHtml } from './lib/render.mjs';
 import { suggestViews } from './lib/suggest.mjs';
 import { inspectHtml } from './lib/deliver.mjs';
-import { planMerge, applyPlan, mergeError, canonicalJson, hashRaw, relationshipIds, PLAN_VERSION } from './lib/merge.mjs';
-import { answersOf } from './lib/api.mjs';
+import { mergeError, canonicalJson, hashRaw, relationshipIds } from './lib/merge.mjs';
+import { plan as planOf, finalize, apply as applyPlanTo, answersOf, isFinal } from './lib/api.mjs';
 import { formatPlanReport } from './lib/merge-report.mjs';
 import { previewModel, previewSummary, annotateView } from './lib/preview.mjs';
 import { resolveBase, openStore, frontmatterSource, MANIFEST, assertWritable as storeWritable } from './lib/store/index.mjs';
@@ -33,23 +33,31 @@ Base: a pasta architecture/ (fonte da verdade), o ARCHITECTURE.md gerado (aponta
 partir do diretório atual). Bases 1.x (pasta, .md com bloco archlens-json ou modelo .json) são recusadas
 (E_STORE_FORMAT): "archlens migrate <base>" converte para o formato 2.0.
 
-Comandos
-  validate  <base>                         valida schema, referências, hierarquia C4 e regras ArchiMate
+Planejar (nunca grava a base)
+  plan      <base> <delta.json> --out p.json  compara o delta com a base e grava o plano (aberto: com perguntas; final: pronto)
+            [--answers antigo.json]         reaproveita as respostas de um plano anterior (sem delta, usa o delta dele)
+  scan      <pasta|url> [--base b] [--out inv.json] [--json]   lê um repositório: inventário e papel sugerido
+            <pasta|url> --as system|service [--system id] [--id id] --delta d.json [--from inv.json]   monta o delta
+
+Aplicar (grava a base)
+  apply     <base> p.json                    grava um plano final (se a base mudou, refaça o plano com --answers) e registra o histórico
   doc       <base> [--out f.md]            regenera o ARCHITECTURE.md (gerado; edite architecture/notes/*.md)
-  extract   <base> [--out m.json]          imprime o modelo canônico em JSON
-  merge     <base> <delta.json> --plan p.json  compara o delta com a base e grava o plano (decisões pendentes)
-            [--answers antigo.json]         reaproveita as respostas de um plano anterior (ex.: duplicata = same)
-  merge     <base> --apply p.json               aplica o plano respondido, regrava a base e registra o histórico
+  build     <base> [--out-dir DIR]           ARCHITECTURE.md + HTML (padrão: architecture/diagrams/)
+  migrate   <base 1.x> [--to DIR]           converte uma base 1.x (pasta, .md ou .json) para o formato 2.0
   store convert <base> --to markdown|json [--force]   grava a base em outro conector (mesma pasta; versão inalterada)
+
+Consultar (nunca grava a base)
   views     <base>                           lista as visões definidas e sugere novas
   resolve   <base> --view k | --spec J       imprime o view IR (nós/arestas) de uma visão
   render    <base> --out f.html [seleção]    gera o HTML animado
   deliver   <base> --out f.html [seleção]    render + screenshots 1920×1080/1280×720 + checagens
-  build     <base> [--out-dir DIR]           ARCHITECTURE.md + HTML (padrão: architecture/diagrams/)
-  migrate   <base 1.x> [--to DIR]           converte uma base 1.x (pasta, .md ou .json) para o formato 2.0
+  validate  <base>                         valida schema, referências, hierarquia C4 e regras ArchiMate
   check     [base] [--json]               valida e confere se o ARCHITECTURE.md está em dia (CI / pre-commit)
-  scan      <pasta|url> [--base b] [--out inv.json] [--json]   lê um repositório: inventário e papel sugerido
-            <pasta|url> --as system|service [--system id] [--id id] --delta d.json [--from inv.json]   monta o delta
+  extract   <base> [--out m.json]          imprime o modelo canônico em JSON
+
+Atalhos
+  merge     <base> <delta.json> --plan p.json  o mesmo que "plan"
+  merge     <base> --apply p.json               fecha o plano respondido e o grava (o mesmo que responder e "apply")
 
 Seleção de visões (render/deliver)
   --view k1,k2        visões do modelo pelo key (padrão: todas as definidas)
@@ -61,8 +69,8 @@ Prévia de um delta ainda não mergeado (render/deliver/build/resolve/views; nun
   --plan P            idem, a partir de um plano (usa as respostas já dadas)
 
 Opções
-  --json              saída em JSON (validate, views, resolve, merge --plan)
-  --answers P         merge --plan: pré-preenche as respostas do plano P (gere de novo após responder "same")
+  --json              saída em JSON (validate, views, resolve, plan, merge --plan)
+  --answers P         plan, merge --plan: pré-preenche as respostas do plano P (gere de novo após responder "same")
   --title T           título da página
   --shots DIR         pasta dos screenshots (deliver; padrão: <out>.shots/)
   --strict            deliver: não substitui a saída se alguma checagem falhar
@@ -95,17 +103,12 @@ function loadBase(store, opts) {
 
 function requireRaw(store) {
   const res = loadBase(store);
-  if (!res.raw) fail(`base não encontrada: ${store.describe()} (crie-a com "archlens merge <base> delta.json --plan plano.json")`);
+  if (!res.raw) fail(`base não encontrada: ${store.describe()} (crie-a com "archlens plan <base> delta.json --out plano.json" e "archlens apply")`);
   return res;
 }
 
 function assertWritable(store) {
   try { storeWritable(store); } catch (e) { fail(e.message); }
-}
-
-/** Writes `next` over what the store holds at `baseVersion`, by ops; exits with the connector's refusal. */
-function writeBase(store, before, next, baseVersion) {
-  try { return store.apply(diffRaw(before, next), { baseVersion }); } catch (e) { fail(e.message, e.code === 'E_STORE_CONFLICT' ? 2 : 1); }
 }
 
 /**
@@ -256,15 +259,70 @@ function loadPreview(store, args) {
   return p;
 }
 
-/** key → resolution of the answered items of an earlier plan (for merge --plan --answers). */
+/** key → resolution of the answered items of an earlier plan (for plan --answers). */
 function answersFrom(old, delta) {
   let res;
   try { res = answersOf(old, delta); } catch (e) {
     if (e.code !== 'E_PLAN_SCHEMA') throw e;
-    throw mergeError('E_PLAN_SCHEMA', '--answers precisa de um plano do archlens (gerado por "archlens merge --plan")');
+    throw mergeError('E_PLAN_SCHEMA', '--answers precisa de um plano do archlens (gerado por "archlens plan")');
   }
   if (res.otherDelta) console.warn('  aviso: o plano de --answers foi gerado com outro delta; confira as respostas pré-preenchidas');
-  return res.answers;
+  return res;
+}
+
+/** The api's messages name their arguments as <base>, <plano> and <novo>; say the real ones. */
+function withArgs(msg, { base, plan }) {
+  const novo = plan.replace(/\.json$/i, '') + '-2.json';
+  return msg.replaceAll('<base>', base).replaceAll('<plano>', plan).replaceAll('<novo>', novo);
+}
+
+/** Exits with the api's refusal (code 2), its model errors listed first. */
+function failApi(e, names) {
+  if (e.errors) printIssues(e.errors.map(x => ({ path: '$', hint: '', ...x })), 'ERRO');
+  fail(withArgs(e.message, names), 2);
+}
+
+/**
+ * plan / merge --plan: the plan of a delta (or, with --answers and no delta, of the delta of the earlier plan) against the
+ * base, written to `out`. Returns the plan; exits 2 when it is blocked.
+ */
+function planCommand(store, deltaPath, args, out, names) {
+  loadBase(store); // a base that cannot be read is reported before the arguments
+  let planned;
+  try {
+    const old = args.answers && args.answers !== true ? readJson(args.answers) : null;
+    const delta = deltaPath ? readJson(deltaPath) : undefined;
+    const given = old ? answersFrom(old, delta) : null;
+    if (!given && !delta) return null;
+    planned = planOf(store, given?.delta ?? delta, { answers: given?.answers }).plan;
+  } catch (e) { fail(e.message, 2); }
+  atomicWrite(out, JSON.stringify(planned, null, 2) + '\n');
+  if (args.json) console.log(JSON.stringify(planned, null, 2));
+  else console.log(`${formatPlanReport(planned)}\n\n✓ plano em ${out}`);
+  process.exitCode = planned.blocked ? 2 : 0;
+  return planned;
+}
+
+/** Revision, preserved texts, regenerated document and suggested commit after a write by apply / merge --apply. */
+function afterApply(store, res) {
+  const saved = loadBase(store); // the document follows what is on disk (a split model regroups items by file)
+  const doc = writeDoc(store, saved.raw, saved.notes);
+  const e = res.entry;
+  const st = Object.keys(e.status).length;
+  console.log(`✓ ${store.describe()} e ${relPath(doc)} (revisão ${saved.raw.changelog.length}): +${e.added.length} ~${e.changed.length} −${e.removed.length}${st ? `, ${st} mudança(s) de status` : ''}`);
+  for (const rel of res.preserved) console.log(`  texto da página removida guardado em ${relPath(join(store.locator.path, rel))}`);
+  console.log(`  commit sugerido: git add ${relPath(store.locator.path)} ${relPath(doc)} && git commit -m ${JSON.stringify(`docs(arquitetura): ${e.summary}`)}`);
+}
+
+/** Writes a final plan through the connector and reports it; the document is only touched when something changed. */
+function applyCommand(store, plan, names) {
+  loadBase(store);
+  assertWritable(store);
+  if (isFinal(plan) && plan.ops?.length) assertDocOwned(store); // before anything is written
+  let res;
+  try { res = applyPlanTo(store, plan); } catch (e) { failApi(e, names); }
+  if (!res.entry) { console.log('= nada mudou; a base não foi regravada'); return; }
+  afterApply(store, res);
 }
 
 async function main() {
@@ -272,8 +330,8 @@ async function main() {
   const [cmd, file] = args._;
   if (!cmd || args.help || cmd === 'help') { console.log(HELP); return; }
   const previewing = ['render', 'deliver', 'build', 'resolve', 'views'].includes(cmd) && (args.delta || args.plan);
-  const create = cmd === 'merge' || (previewing && file != null);
-  const BASE_CMDS = ['validate', 'doc', 'extract', 'views', 'resolve', 'render', 'deliver', 'build', 'merge', 'check'];
+  const create = ['merge', 'plan', 'apply'].includes(cmd) || (previewing && file != null);
+  const BASE_CMDS = ['validate', 'doc', 'extract', 'views', 'resolve', 'render', 'deliver', 'build', 'merge', 'plan', 'apply', 'check'];
   const store = BASE_CMDS.includes(cmd) ? openBase(file, { create }) : null; // migrate opens its own; unknown → default
   const preview = previewing ? loadPreview(store, args) : null;
   if (preview && cmd !== 'resolve' && !args.json) console.log(`prévia de ${preview.label}`);
@@ -282,7 +340,7 @@ async function main() {
     say(`  visões afetadas pelo delta (somem ou mudam no apply): ${preview.droppedViews.join(', ')}`);
   }
   const specsOf = model => selectSpecs(model, args, preview ? preview.views : model.views);
-  const base = store && !preview && cmd !== 'merge' ? requireRaw(store) : null;
+  const base = store && !preview && !['merge', 'plan', 'apply'].includes(cmd) ? requireRaw(store) : null;
   const load = () => (preview ? preview.raw : base.raw);
 
   switch (cmd) {
@@ -521,46 +579,44 @@ async function main() {
       process.exitCode = errors.length || stale ? 1 : 0;
       break;
     }
+    case 'plan': {
+      const usage = 'uso: archlens plan <base> <delta.json> --out <plano.json> [--answers <plano-anterior.json>] [--json]\n'
+        + '  sem <delta.json>, --answers reaproveita o delta do plano anterior';
+      if (!args.out || args.out === true) fail(usage);
+      const names = { base: file ?? relPath(store.locator.path), plan: args.out };
+      const planned = planCommand(store, args._[2], args, args.out, names);
+      if (!planned) fail(usage);
+      if (args.json || planned.blocked) break;
+      const next = planned.state === 'final'
+        ? `archlens apply ${names.base} ${args.out}`
+        : `responda os itens pendentes em ${args.out} (campo "resolution") e rode: archlens plan ${names.base} --answers ${args.out} --out ${withArgs('<novo>', names)}`;
+      console.log(`  próximo passo: ${next}`);
+      break;
+    }
+    case 'apply': {
+      const usage = 'uso: archlens apply <base> <plano.json>   (o plano precisa estar final: archlens plan)';
+      if (!args._[2]) fail(usage);
+      loadBase(store);
+      applyCommand(store, readJson(args._[2]), { base: file ?? relPath(store.locator.path), plan: args._[2] });
+      break;
+    }
     case 'merge': {
       const usage = 'uso: archlens merge <base> <delta.json> --plan <plano.json> [--answers <plano-anterior.json>]  |  archlens merge <base> --apply <plano.json>\n'
         + '  <base>: a pasta architecture/ ou o ARCHITECTURE.md (se não existir, a base é criada em architecture/)';
-      const loaded = loadBase(store);
-      const { raw: baseRaw, notes } = loaded;
-      const startVersion = contentVersion(loaded); // same read as the content, so the plan's version matches it
       if (args.plan && args.plan !== true) {
-        const deltaPath = args._[2];
-        if (!deltaPath) fail(usage);
-        let plan;
-        try {
-          const delta = readJson(deltaPath);
-          const answers = args.answers && args.answers !== true ? answersFrom(readJson(args.answers), delta) : undefined;
-          plan = planMerge(baseRaw, delta, { base: basename(store.locator.path), answers, storeVersion: startVersion });
-        } catch (e) { fail(e.message, 2); }
-        atomicWrite(args.plan, JSON.stringify(plan, null, 2) + '\n');
-        if (args.json) console.log(JSON.stringify(plan, null, 2));
-        else console.log(`${formatPlanReport(plan)}\n\n✓ plano em ${args.plan}`);
-        process.exitCode = plan.blocked ? 2 : 0;
+        if (!args._[2] || !planCommand(store, args._[2], args, args.plan)) fail(usage);
       } else if (args.apply && args.apply !== true) {
+        loadBase(store);
         assertWritable(store);
         const plan = readJson(args.apply);
-        if ('storeVersion' in plan && plan.storeVersion !== startVersion) {
-          fail(`E_STORE_CONFLICT: a base mudou depois que o plano foi gerado; nada foi gravado. Gere o plano de novo com "archlens merge --plan"`, 2);
-        }
-        let res;
-        try { res = applyPlan(baseRaw, plan); } catch (e) {
-          if (e.errors) printIssues(e.errors.map(x => ({ path: '$', hint: '', ...x })), 'ERRO');
-          fail(e.message, 2);
-        }
-        if (!res.entry) { console.log('= nada mudou; a base não foi regravada'); break; }
-        assertDocOwned(store);
-        const { preserved = [] } = writeBase(store, baseRaw ? loaded : null, { raw: res.raw, notes }, startVersion);
-        const saved = loadBase(store); // the document follows what is on disk (a split model regroups items by file)
-        const doc = writeDoc(store, saved.raw, saved.notes);
-        const e = res.entry;
-        const st = Object.keys(e.status).length;
-        console.log(`✓ ${store.describe()} e ${relPath(doc)} (revisão ${res.raw.changelog.length}): +${e.added.length} ~${e.changed.length} −${e.removed.length}${st ? `, ${st} mudança(s) de status` : ''}`);
-        for (const rel of preserved) console.log(`  texto da página removida guardado em ${relPath(join(store.locator.path, rel))}`);
-        console.log(`  commit sugerido: git add ${relPath(store.locator.path)} ${relPath(doc)} && git commit -m ${JSON.stringify(`docs(arquitetura): ${e.summary}`)}`);
+        const names = { base: file ?? relPath(store.locator.path), plan: args.apply };
+        let final;
+        try {
+          const before = store.version(); // a plan without storeVersion is pinned to the version it was closed against
+          ({ plan: final } = finalize(store, plan));
+          if (!('storeVersion' in final)) final = { ...final, storeVersion: before };
+        } catch (e) { failApi(e, names); }
+        applyCommand(store, final, names);
       } else fail(usage);
       break;
     }

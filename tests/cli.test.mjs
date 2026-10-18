@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync, spawnSync as sp } from 'node:child_process';
-import { cpSync, mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync, chmodSync } from 'node:fs';
+import { cpSync, mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync, chmodSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -762,9 +762,10 @@ test('store convert of a split json base keeps the files the base does not own i
 });
 
 test('merge --apply takes the plan version from the same read as the content it merges into', () => {
-  const src = readFileSync(CLI, 'utf8');
-  assert.ok(!/startVersion = store\.version\(\)/.test(src));
-  assert.match(src, /startVersion = contentVersion\(loaded\)/);
+  // the version comes from the api's single read (plan), never from a second look at the store
+  const src = readFileSync(fileURLToPath(new URL('../scripts/lib/api.mjs', import.meta.url)), 'utf8');
+  assert.ok(!/storeVersion = store\.version\(\)/.test(src));
+  assert.match(src, /storeVersion = contentVersion\(loaded\)/);
 });
 
 test('store convert to json refuses a vault with human text after the archlens block, unless --force', () => {
@@ -807,4 +808,130 @@ test('migrate of a markdown vault says it is already in the 2.0 format', () => {
   assert.notEqual(r.status, 0);
   assert.match(r.stderr, /já está no formato 2\.0/);
   assert.doesNotMatch(r.stderr, /não é uma base json/);
+});
+
+// ---- plan / apply ----
+const addDelta = (dir, id = 'a', file = 'd.json') => writeFileSync(join(dir, file), JSON.stringify({ 'archlens-delta': '1.0', source: { kind: 'prompt', ref: id },
+  model: { elements: [{ id: `loja.${id}`, type: 'c4:container', name: id.toUpperCase(), parent: 'loja' }] } }));
+const pending = dir => { // a delta whose plan is open (a technology conflict)
+  writeFileSync(join(dir, 'open.json'), JSON.stringify({ 'archlens-delta': '1.0', source: { kind: 'prompt', ref: 'k' },
+    model: { elements: [{ id: 'loja.api', type: 'c4:container', technology: 'Kotlin' }] } }));
+};
+
+test('plan writes the same plan as merge --plan', () => {
+  const dir = setup();
+  addDelta(dir);
+  assert.equal(run(['merge', 'architecture', 'd.json', '--plan', 'm.json'], dir).status, 0);
+  const r = run(['plan', 'architecture', 'd.json', '--out', 'p.json'], dir);
+  assert.equal(r.status, 0, r.stderr);
+  assert.deepEqual(JSON.parse(readFileSync(join(dir, 'p.json'), 'utf8')), JSON.parse(readFileSync(join(dir, 'm.json'), 'utf8')));
+});
+
+test('plan prints the next step: answers for an open plan, apply for a final one', () => {
+  const dir = setup();
+  addDelta(dir);
+  pending(dir);
+  const open = run(['plan', 'architecture', 'open.json', '--out', 'po.json'], dir);
+  assert.equal(open.status, 0, open.stderr);
+  assert.match(open.stdout, /archlens plan[^\n]*--answers/);
+  const fin = run(['plan', 'architecture', 'd.json', '--out', 'pf.json'], dir);
+  assert.match(fin.stdout, /archlens apply/);
+});
+
+test('plan --answers without a delta reuses the plan\'s delta and comes out final', () => {
+  const dir = setup();
+  pending(dir);
+  assert.equal(run(['plan', 'architecture', 'open.json', '--out', 'p1.json'], dir).status, 0);
+  const p1 = JSON.parse(readFileSync(join(dir, 'p1.json'), 'utf8'));
+  assert.equal(p1.state, 'open');
+  for (const it of p1.items) if (it.key.includes('technology')) it.resolution = 'take';
+  writeFileSync(join(dir, 'p1.json'), JSON.stringify(p1));
+  const r = run(['plan', 'architecture', '--answers', 'p1.json', '--out', 'p2.json'], dir);
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(JSON.parse(readFileSync(join(dir, 'p2.json'), 'utf8')).state, 'final');
+});
+
+test('plan then apply writes the base and the document', () => {
+  const dir = setup();
+  addDelta(dir);
+  const n = existsSync(join(dir, 'architecture', 'changelog.json')) ? changelog(dir).length : 0;
+  assert.equal(run(['plan', 'architecture', 'd.json', '--out', 'p.json'], dir).status, 0);
+  const r = run(['apply', 'architecture', 'p.json'], dir);
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(changelog(dir).length, n + 1);
+  assert.match(r.stdout, /commit sugerido/);
+  assert.equal(run(['check', 'architecture'], dir).status, 0);
+});
+
+test('apply on a changed base exits 2 and writes nothing', () => {
+  const dir = setup();
+  addDelta(dir, 'a', 'a.json');
+  addDelta(dir, 'b', 'b.json');
+  assert.equal(run(['plan', 'architecture', 'a.json', '--out', 'pa.json'], dir).status, 0);
+  assert.equal(run(['plan', 'architecture', 'b.json', '--out', 'pb.json'], dir).status, 0);
+  assert.equal(run(['apply', 'architecture', 'pa.json'], dir).status, 0);
+  const before = snapshot(dir);
+  const r = run(['apply', 'architecture', 'pb.json'], dir);
+  assert.equal(r.status, 2);
+  assert.match(r.stderr, /E_STORE_CONFLICT/);
+  assert.match(r.stderr, /--answers/);
+  assert.doesNotMatch(r.stderr, /<base>|<plano>|<novo>/);
+  assert.deepEqual(snapshot(dir), before);
+});
+
+test('apply of a final plan with no changes prints nada mudou and leaves the document alone', () => {
+  const dir = setup();
+  addDelta(dir);
+  assert.equal(run(['plan', 'architecture', 'd.json', '--out', 'p.json'], dir).status, 0);
+  assert.equal(run(['apply', 'architecture', 'p.json'], dir).status, 0);
+  assert.equal(run(['plan', 'architecture', 'd.json', '--out', 'p2.json'], dir).status, 0);
+  const before = statSync(join(dir, 'ARCHITECTURE.md')).mtimeMs, snap = snapshot(dir);
+  const r = run(['apply', 'architecture', 'p2.json'], dir);
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /nada mudou/);
+  assert.equal(statSync(join(dir, 'ARCHITECTURE.md')).mtimeMs, before);
+  assert.deepEqual(snapshot(dir), snap);
+});
+
+test('apply of an open plan or of a delta is refused', () => {
+  const dir = setup();
+  addDelta(dir);
+  pending(dir);
+  assert.equal(run(['plan', 'architecture', 'open.json', '--out', 'po.json'], dir).status, 0);
+  const before = snapshot(dir);
+  const open = run(['apply', 'architecture', 'po.json'], dir);
+  assert.equal(open.status, 2);
+  assert.match(open.stderr, /E_PLAN_OPEN/);
+  assert.doesNotMatch(open.stderr, /<base>|<plano>|<novo>/);
+  const delta = run(['apply', 'architecture', 'd.json'], dir);
+  assert.notEqual(delta.status, 0);
+  assert.match(delta.stderr, /E_PLAN_SCHEMA/);
+  assert.deepEqual(snapshot(dir), before);
+});
+
+test('plan and apply create a missing base', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'archlens-'));
+  writeFileSync(join(dir, 'd.json'), JSON.stringify({ 'archlens-delta': '1.0', name: 'Nova', source: { kind: 'manual', ref: 'kickoff' },
+    model: { elements: [{ id: 'sis', type: 'c4:softwareSystem', name: 'Sistema' }] } }));
+  const p = run(['plan', 'architecture', 'd.json', '--out', 'p.json'], dir);
+  assert.equal(p.status, 0, p.stderr);
+  const a = run(['apply', 'architecture', 'p.json'], dir);
+  assert.equal(a.status, 0, a.stderr);
+  assert.ok(existsSync(join(dir, 'architecture', 'archlens.json')));
+  assert.ok(existsSync(join(dir, 'ARCHITECTURE.md')));
+});
+
+test('plan and apply work on a markdown base', () => {
+  const dir = setup();
+  assert.equal(run(['store', 'convert', 'architecture', '--to', 'markdown'], dir).status, 0);
+  addDelta(dir);
+  assert.equal(run(['plan', 'architecture', 'd.json', '--out', 'p.json'], dir).status, 0);
+  const a = run(['apply', 'architecture', 'p.json'], dir);
+  assert.equal(a.status, 0, a.stderr);
+  assert.equal(run(['check', 'architecture'], dir).status, 0);
+});
+
+test('the CLI no longer imports planMerge or applyPlan', () => {
+  const src = readFileSync(CLI, 'utf8');
+  for (const line of src.split('\n').filter(l => /^import /.test(l))) assert.doesNotMatch(line, /\b(planMerge|applyPlan)\b/);
 });
