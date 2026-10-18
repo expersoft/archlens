@@ -1,19 +1,20 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync, spawnSync as sp } from 'node:child_process';
-import { cpSync, mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync } from 'node:fs';
+import { cpSync, mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { saveFolder, loadFolder } from '../scripts/lib/store/folder.mjs';
 import { hashRaw } from '../scripts/lib/merge.mjs';
+import { asBase } from './helpers.mjs';
 
 const CLI = fileURLToPath(new URL('../scripts/archlens.mjs', import.meta.url));
 const run = (args, cwd) => spawnSync(process.execPath, [CLI, ...args], { cwd, encoding: 'utf8' });
 const shop = () => JSON.parse(readFileSync(new URL('./fixtures/shop.json', import.meta.url)));
 const setup = () => {
   const dir = mkdtempSync(join(tmpdir(), 'archlens-'));
-  saveFolder(join(dir, 'architecture'), shop(), { notes: { notes: 'Nota à mão.' } });
+  saveFolder(join(dir, 'architecture'), asBase(shop()), { notes: { notes: 'Nota à mão.' } });
   const r = run(['doc', 'architecture'], dir);
   assert.equal(r.status, 0, r.stderr);
   return dir;
@@ -116,7 +117,7 @@ test('merge --plan --answers reuses the answers of an earlier plan (duplicate an
   const ok = run(['merge', 'ARCHITECTURE.md', '--apply', 'p2.json'], dir);
   assert.equal(ok.status, 0, ok.stderr);
   const raw = { model: model(dir) };
-  assert.equal(raw.model.relationships.find(r => r.from === 'loja.api.checkout' && r.to === 'pagamentos').description, 'Captura');
+  assert.equal(raw.model.relationships.find(r => r.from === 'pagamentos' && r.to === 'loja.api.checkout').description, 'Captura');
   const bad = run(['merge', 'ARCHITECTURE.md', 'delta.json', '--plan', 'p3.json', '--answers', 'delta.json'], dir);
   assert.equal(bad.status, 2);
   assert.match(bad.stderr, /E_PLAN_SCHEMA/);
@@ -142,7 +143,7 @@ test('doc regenerates ARCHITECTURE.md from the folder, with the notes; a hand ed
 
 test('commands that write refuse an old-format base and point to migrate; reading still works', () => {
   const dir = mkdtempSync(join(tmpdir(), 'archlens-'));
-  writeFileSync(join(dir, 'ARCHITECTURE.md'), legacyMd(shop()));
+  writeFileSync(join(dir, 'ARCHITECTURE.md'), legacyMd(asBase(shop())));
   for (const args of [['doc', 'ARCHITECTURE.md'], ['build', 'ARCHITECTURE.md']]) {
     const r = run(args, dir);
     assert.equal(r.status, 1, args.join(' '));
@@ -273,61 +274,126 @@ test('a view the delta drops still renders in the preview, with the ghost, and i
   assert.match(v.stderr, /visões afetadas/);
 });
 
-test('migrate turns an old base into architecture/ with the same raw, notes from keep blocks, and a generated .md', () => {
+test('migrate turns an old .md base into a 2.0 architecture/ folder with notes and a generated .md', () => {
   const dir = mkdtempSync(join(tmpdir(), 'archlens-'));
   writeFileSync(join(dir, 'ARCHITECTURE.md'), legacyMd(shop()));
   const r = run(['migrate', 'ARCHITECTURE.md'], dir);
   assert.equal(r.status, 0, r.stderr);
-  assert.match(r.stdout, /git add architecture ARCHITECTURE\.md/);
+  assert.match(r.stdout, /formato 2\.0/);
   const back = loadFolder(join(dir, 'architecture'));
-  assert.deepEqual(back.raw, shop());
-  assert.equal(hashRaw(back.raw), hashRaw(shop()), 'plans made before the migration still apply');
-  assert.deepEqual(back.notes, { notes: 'Nota antiga.' });
-  const md = readFileSync(join(dir, 'ARCHITECTURE.md'), 'utf8');
-  assert.doesNotMatch(md, /archlens-json/);
-  assert.match(md, /Nota antiga\./);
-  assert.equal(run(['check'], dir).status, 0);
+  const { changelog, ...rest } = back.raw;
+  assert.deepEqual(rest, asBase(shop()));
+  assert.equal(back.notes.notes, 'Nota antiga.');
+  assert.match(readFileSync(join(dir, 'ARCHITECTURE.md'), 'utf8'), /^---\n[\s\S]*source: architecture\//);
   const again = run(['migrate', 'ARCHITECTURE.md'], dir);
-  assert.equal(again.status, 1);
-  assert.match(again.stderr, /já está no formato novo/);
+  assert.notEqual(again.status, 0);
+  assert.match(again.stderr, /formato 2\.0/);
 });
 
-test('a plan made before migrate applies after it', () => {
+test('migrate converts a 1.x folder in place, keeping notes and the files that are not the base', () => {
   const dir = mkdtempSync(join(tmpdir(), 'archlens-'));
-  writeFileSync(join(dir, 'ARCHITECTURE.md'), legacyMd(shop()));
-  writeFileSync(join(dir, 'd.json'), JSON.stringify({ 'archlens-delta': '1.0', source: { kind: 'prompt', ref: 'r' },
-    model: { elements: [{ id: 'loja.worker', type: 'c4:container', name: 'Worker', parent: 'loja' }] } }));
-  assert.equal(run(['merge', 'ARCHITECTURE.md', 'd.json', '--plan', 'p.json'], dir).status, 0);
-  assert.equal(run(['migrate', 'ARCHITECTURE.md'], dir).status, 0);
-  const a = run(['merge', 'ARCHITECTURE.md', '--apply', 'p.json'], dir);
-  assert.equal(a.status, 0, a.stderr);
+  saveFolder(join(dir, 'architecture'), shop(), { notes: { notes: 'Nota.' } });
+  mkdirSync(join(dir, 'architecture', 'diagrams'));
+  writeFileSync(join(dir, 'architecture', 'diagrams', 'architecture.html'), '<html></html>');
+  const r = run(['migrate', 'architecture'], dir);
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /1 banco\(s\)/);
+  assert.match(r.stdout, /planos gerados antes/);
+  assert.equal(loadFolder(join(dir, 'architecture')).raw.archlens, '2.0');
+  assert.equal(loadFolder(join(dir, 'architecture')).notes.notes, 'Nota.');
+  assert.ok(existsSync(join(dir, 'architecture', 'diagrams', 'architecture.html')), 'diagrams/ survives');
+  assert.ok(!readdirSync(dir).some(n => /\.(migrate|old)-/.test(n)), 'no temporary folder left behind');
+  assert.equal(run(['validate', 'architecture'], dir).status, 0);
 });
 
-test('migrate refuses a destination that already holds a base and an invalid model, writing nothing', () => {
+test('in-place migrate that cannot remove the old folder warns and still succeeds', { skip: process.platform === 'win32' || process.getuid?.() === 0 }, () => {
   const dir = mkdtempSync(join(tmpdir(), 'archlens-'));
-  writeFileSync(join(dir, 'ARCHITECTURE.md'), legacyMd(shop()));
-  saveFolder(join(dir, 'outra'), shop());
-  const manifestOf = () => readFileSync(join(dir, 'outra', 'archlens.json'), 'utf8');
-  const before = manifestOf();
-  const r = run(['migrate', 'ARCHITECTURE.md', '--to', 'outra'], dir);
+  saveFolder(join(dir, 'architecture'), shop(), { notes: { notes: 'Nota.' } });
+  // A read-only folder of the user's: renaming works, removing the old copy fails (EACCES).
+  const locked = join(dir, 'architecture', 'travado');
+  mkdirSync(locked);
+  writeFileSync(join(locked, 'x.txt'), 'x');
+  chmodSync(locked, 0o555);
+  try {
+    const r = run(['migrate', 'architecture'], dir);
+    assert.equal(r.status, 0, r.stderr);
+    const old = readdirSync(dir).find(n => /^architecture\.old-/.test(n));
+    assert.ok(old, 'the old folder is left');
+    assert.match(r.stderr + r.stdout, new RegExp(`aviso: não consegui apagar .*${old.replace('.', '\\.')}.*remova-o à mão`));
+    assert.equal(loadFolder(join(dir, 'architecture')).raw.archlens, '2.0');
+  } finally {
+    for (const n of readdirSync(dir)) if (existsSync(join(dir, n, 'travado'))) chmodSync(join(dir, n, 'travado'), 0o755);
+  }
+});
+
+test('an old .md that already holds a 2.0 base is moved to a folder without conversion', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'archlens-'));
+  writeFileSync(join(dir, 'ARCHITECTURE.md'), legacyMd(asBase(shop())));
+  const r = run(['migrate', 'ARCHITECTURE.md'], dir);
+  assert.equal(r.status, 0, r.stderr);
+  assert.deepEqual(loadFolder(join(dir, 'architecture')).raw, asBase(shop()));
+});
+
+test('migrate of a split folder keeps every element in its file; a nested child goes with its parent', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'archlens-'));
+  const base = join(dir, 'architecture');
+  mkdirSync(join(base, 'model'), { recursive: true });
+  writeFileSync(join(base, 'archlens.json'), JSON.stringify({ archlens: '1.0', name: 'Split', layout: { model: 'model/' } }));
+  writeFileSync(join(base, 'model/b-pag.json'), JSON.stringify({ elements: [{ id: 'pag', type: 'c4:softwareSystem', name: 'Pag', children: [{ id: 'pag.api', type: 'c4:container', name: 'API' }] }], relationships: [] }));
+  writeFileSync(join(base, 'model/a-loja.json'), JSON.stringify({ elements: [{ id: 'loja', type: 'c4:softwareSystem', name: 'Loja' }], relationships: [{ from: 'loja', to: 'pag.api', type: 'uses' }] }));
+  const r = run(['migrate', 'architecture'], dir);
+  assert.equal(r.status, 0, r.stderr);
+  const file = f => JSON.parse(readFileSync(join(base, f), 'utf8'));
+  assert.deepEqual(file('model/b-pag.json').elements.map(e => [e.id, e.parent ?? null]), [['pag', null], ['pag.api', 'pag']]);
+  assert.deepEqual(file('model/a-loja.json').elements.map(e => e.id), ['loja']);
+  assert.equal(file('archlens.json').archlens, '2.0');
+});
+
+test('migrate in place keeps every file of the user and each relationship in the model file that held it', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'archlens-'));
+  const base = join(dir, 'architecture');
+  mkdirSync(join(base, 'model'), { recursive: true });
+  mkdirSync(join(base, 'notes'), { recursive: true });
+  writeFileSync(join(base, 'archlens.json'), JSON.stringify({ archlens: '1.0', name: 'Split', layout: { model: 'model/' } }));
+  writeFileSync(join(base, 'model/a-loja.json'), JSON.stringify({ elements: [{ id: 'loja', type: 'c4:softwareSystem', name: 'Loja' }], relationships: [] }));
+  writeFileSync(join(base, 'model/b-pag.json'), JSON.stringify({ elements: [{ id: 'pag', type: 'c4:softwareSystem', name: 'Pag', children: [{ id: 'pag.api', type: 'c4:container', name: 'API' }] }], relationships: [] }));
+  writeFileSync(join(base, 'model/c-rels.json'), JSON.stringify({ elements: [], relationships: [{ from: 'loja', to: 'pag.api', type: 'uses' }] }));
+  writeFileSync(join(base, 'model/README.md'), '# modelo\n');
+  writeFileSync(join(base, 'notes/extra.md'), 'Extra.\n');
+  writeFileSync(join(base, 'notes/diagram.png'), 'png');
+  const r = run(['migrate', 'architecture'], dir);
+  assert.equal(r.status, 0, r.stderr);
+  const file = f => JSON.parse(readFileSync(join(base, f), 'utf8'));
+  assert.deepEqual(file('model/c-rels.json').relationships.map(x => [x.from, x.type, x.to]), [['pag.api', 'serving', 'loja']]);
+  assert.deepEqual(file('model/a-loja.json').relationships, []);
+  assert.equal(readFileSync(join(base, 'model/README.md'), 'utf8'), '# modelo\n');
+  assert.equal(readFileSync(join(base, 'notes/extra.md'), 'utf8'), 'Extra.\n');
+  assert.equal(readFileSync(join(base, 'notes/diagram.png'), 'utf8'), 'png');
+  assert.equal(file('archlens.json').archlens, '2.0');
+});
+
+test('migrate in place refuses a hand-written ARCHITECTURE.md before touching the base', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'archlens-'));
+  saveFolder(join(dir, 'architecture'), shop());
+  writeFileSync(join(dir, 'ARCHITECTURE.md'), '# Nossa arquitetura\n\nTexto escrito à mão.\n');
+  const before = snapshot(dir);
+  const r = run(['migrate', 'architecture'], dir);
   assert.equal(r.status, 1);
-  assert.match(r.stderr, /E_STORE_EXISTS/);
-  assert.equal(manifestOf(), before, 'the existing base is untouched');
-  mkdirSync(join(dir, 'solta'));
-  writeFileSync(join(dir, 'solta', 'leia-me.txt'), 'x');
-  const old = readFileSync(join(dir, 'ARCHITECTURE.md'), 'utf8');
-  const n = run(['migrate', 'ARCHITECTURE.md', '--to', 'solta'], dir);
-  assert.equal(n.status, 1);
-  assert.match(n.stderr, /E_STORE_NOT_BASE/);
-  assert.equal(readFileSync(join(dir, 'solta', 'leia-me.txt'), 'utf8'), 'x');
-  assert.equal(readFileSync(join(dir, 'ARCHITECTURE.md'), 'utf8'), old);
+  assert.match(r.stderr, /E_STORE_DOC_FOREIGN/);
+  assert.deepEqual(snapshot(dir), before);
+  assert.ok(!readdirSync(dir).some(n => /\.(migrate|old)-/.test(n)));
+});
+
+test('migrate writes nothing when the 1.x base is invalid', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'archlens-'));
   const bad = shop();
-  bad.model.relationships.push({ from: 'loja', to: 'nada' });
-  writeFileSync(join(dir, 'ARCHITECTURE.md'), legacyMd(bad));
-  const v = run(['migrate', 'ARCHITECTURE.md'], dir);
-  assert.equal(v.status, 2);
-  assert.ok(!existsSync(join(dir, 'architecture')));
-  assert.match(readFileSync(join(dir, 'ARCHITECTURE.md'), 'utf8'), /archlens-json/, 'the old document stays');
+  bad.model.relationships.push({ from: 'loja.api', to: 'nada', type: 'uses' });
+  saveFolder(join(dir, 'architecture'), bad);
+  const before = snapshot(dir);
+  const r = run(['migrate', 'architecture'], dir);
+  assert.equal(r.status, 2);
+  assert.match(r.stdout + r.stderr, /E_UNKNOWN_REF/);
+  assert.deepEqual(snapshot(dir), before);
 });
 
 test('check: 0 when the document is current, 1 when it was edited by hand or the model is invalid', () => {
@@ -361,7 +427,7 @@ test('a hand-written ARCHITECTURE.md is never overwritten: merge --apply, doc an
   assert.match(a.stderr, /E_STORE_DOC_FOREIGN[\s\S]*source:[\s\S]*--out/);
   assert.equal(readFileSync(join(dir, 'ARCHITECTURE.md'), 'utf8'), PROSE);
   assert.ok(!existsSync(join(dir, 'architecture', 'archlens.json')), 'the base is not written either');
-  saveFolder(join(dir, 'architecture'), shop());
+  saveFolder(join(dir, 'architecture'), asBase(shop()));
   for (const args of [['doc', 'architecture'], ['build', 'architecture']]) {
     const r = run(args, dir);
     assert.equal(r.status, 1, args.join(' '));
@@ -376,7 +442,7 @@ test('a hand-written ARCHITECTURE.md is never overwritten: merge --apply, doc an
 
 test('migrate of a model .json refuses an unrelated ARCHITECTURE.md next to it, creating nothing', () => {
   const dir = mkdtempSync(join(tmpdir(), 'archlens-'));
-  writeFileSync(join(dir, 'm.json'), JSON.stringify(shop()));
+  writeFileSync(join(dir, 'm.json'), JSON.stringify(asBase(shop())));
   writeFileSync(join(dir, 'ARCHITECTURE.md'), PROSE);
   const r = run(['migrate', 'm.json'], dir);
   assert.equal(r.status, 1);
@@ -389,10 +455,10 @@ test('merge --apply on a split model writes the document from what is on disk (c
   const dir = mkdtempSync(join(tmpdir(), 'archlens-'));
   const base = join(dir, 'architecture');
   mkdirSync(join(base, 'model'), { recursive: true });
-  writeFileSync(join(base, 'archlens.json'), JSON.stringify({ archlens: '1.0', name: 'Split', layout: { model: 'model/' } }));
-  writeFileSync(join(base, 'model', 'a.json'), JSON.stringify({ elements: [{ id: 'a', type: 'c4:softwareSystem', name: 'A' }], relationships: [] }));
-  writeFileSync(join(base, 'model', 'b.json'), JSON.stringify({ elements: [{ id: 'b', type: 'c4:softwareSystem', name: 'B' }],
-    relationships: [{ from: 'b', to: 'a', type: 'uses', description: 'b usa a' }] }));
+  writeFileSync(join(base, 'archlens.json'), JSON.stringify({ archlens: '2.0', name: 'Split', layout: { model: 'model/' } }));
+  writeFileSync(join(base, 'model', 'a.json'), JSON.stringify({ elements: [{ id: 'a', type: 'application-component', name: 'A', c4: { kind: 'softwareSystem' } }], relationships: [] }));
+  writeFileSync(join(base, 'model', 'b.json'), JSON.stringify({ elements: [{ id: 'b', type: 'application-component', name: 'B', c4: { kind: 'softwareSystem' } }],
+    relationships: [{ from: 'a', to: 'b', type: 'serving', description: 'b usa a' }] }));
   assert.equal(run(['doc', 'architecture'], dir).status, 0);
   writeFileSync(join(dir, 'delta.json'), JSON.stringify({ 'archlens-delta': '1.0', source: { kind: 'manual', ref: 'r' },
     model: { relationships: [{ from: 'a', to: 'b', type: 'uses', description: 'a usa b' }] } }));
@@ -405,7 +471,7 @@ test('merge --apply on a split model writes the document from what is on disk (c
 
 test('migrate drops a keep:assumptions block that is only an old copy of the list', () => {
   const dir = mkdtempSync(join(tmpdir(), 'archlens-'));
-  const raw = { ...shop(), assumptions: ['Premissa um', 'Premissa dois'] };
+  const raw = { ...asBase(shop()), assumptions: ['Premissa um', 'Premissa dois'] };
   writeFileSync(join(dir, 'ARCHITECTURE.md'), ['---', `name: ${raw.name}`, '---', '',
     '<!-- keep:assumptions -->', '- Premissa um', '<!-- /keep:assumptions -->', '',
     '```archlens-json', JSON.stringify(raw, null, 2), '```', ''].join('\n'));
@@ -418,7 +484,7 @@ test('migrate drops a keep:assumptions block that is only an old copy of the lis
 
 test('migrate warns when a hand-written assumptions note replaces the manifest list', () => {
   const dir = mkdtempSync(join(tmpdir(), 'archlens-'));
-  const raw = { ...shop(), assumptions: ['Premissa um'] };
+  const raw = { ...asBase(shop()), assumptions: ['Premissa um'] };
   writeFileSync(join(dir, 'ARCHITECTURE.md'), ['---', `name: ${raw.name}`, '---', '',
     '<!-- keep:assumptions -->', 'Premissas discutidas na reunião de 12/03.', '<!-- /keep:assumptions -->', '',
     '```archlens-json', JSON.stringify(raw, null, 2), '```', ''].join('\n'));
@@ -438,7 +504,7 @@ test('check ignores line endings: a CRLF copy of the generated document is curre
 
 test('migrate into a non-empty architecture/ suggests --to', () => {
   const dir = mkdtempSync(join(tmpdir(), 'archlens-'));
-  writeFileSync(join(dir, 'ARCHITECTURE.md'), legacyMd(shop()));
+  writeFileSync(join(dir, 'ARCHITECTURE.md'), legacyMd(asBase(shop())));
   mkdirSync(join(dir, 'architecture', 'adr'), { recursive: true });
   writeFileSync(join(dir, 'architecture', 'adr', '0001.md'), '# ADR 1\n');
   const r = run(['migrate', 'ARCHITECTURE.md'], dir);
@@ -598,4 +664,25 @@ test('wording: an explicit --base not created yet says where it will be created 
   assert.doesNotMatch(r.stderr, /Use --base/);
   const none = run(['scan', repo, '--as', 'service', '--system', 'loja', '--delta', 'd2.json'], dir);
   assert.match(none.stderr, /Use --base/, 'without --base the hint stays');
+});
+
+test('every command that reads a 1.x folder fails with E_STORE_FORMAT; scan does not take it for a new base', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'archlens-'));
+  saveFolder(join(dir, 'architecture'), shop());
+  for (const args of [['validate'], ['views'], ['build'], ['merge', 'architecture', 'd.json', '--plan', 'p.json']]) {
+    const r = run(args, dir);
+    assert.notEqual(r.status, 0, args.join(' '));
+    assert.match(r.stderr, /E_STORE_FORMAT[\s\S]*archlens migrate/, args.join(' '));
+  }
+  const repo = fileURLToPath(new URL('./fixtures/repos/pedidos', import.meta.url));
+  const s = run(['scan', repo], dir);
+  assert.notEqual(s.status, 0);
+  assert.match(s.stderr, /E_STORE_FORMAT/);
+});
+
+test('help says 1.x bases are refused and migrate converts them', () => {
+  const r = run(['help']);
+  assert.equal(r.status, 0);
+  assert.doesNotMatch(r.stdout, /são lidas/);
+  assert.match(r.stdout, /1\.x[^]*recusadas[^]*archlens migrate <base>[^]*2\.0/);
 });

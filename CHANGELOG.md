@@ -3,6 +3,21 @@
 Mudanças relevantes do archlens, por versão. Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/);
 versões seguem [SemVer](https://semver.org/lang/pt-BR/).
 
+## [Não lançado]
+
+### Mudado (incompatível)
+
+- **Formato canônico 2.0**: a base guarda tipos ArchiMate, o perfil C4 em `c4.kind`, uma lista plana com `parent` e só
+  relações ArchiMate. `c4:*`, `uses` e `children` continuam aceitos na entrada (prompt, delta, scan) e são traduzidos.
+  Bases 1.x são recusadas com `E_STORE_FORMAT`; `archlens migrate <base>` converte, conferindo que o modelo não muda
+  de sentido. Bancos de dados passam a ser `application-component` com a tag `database`.
+
+### Adicionado
+
+- Propriedades do usuário com listas de texto e catálogo opcional no `archlens.json` (`W_PROPERTY`).
+- C4 gerado de modelos ArchiMate: setas derivadas através de serviços, interfaces e funções de aplicação.
+- Aninhamento visual nas visões ArchiMate (`"nesting": "nested"`, com `depth`).
+
 ## [0.3.0] — pré-release
 
 ### Adicionado

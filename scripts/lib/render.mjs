@@ -180,12 +180,21 @@ function amNode(n, i, prefix) {
   const spec = ELEMENT_TYPES[n.type];
   const lv = LAYER_VAR[n.layer];
   const rx = spec.icon === 'service' ? h / 2 : spec.aspect === 'behavior' ? 14 : spec.icon === 'value-stream' ? 4 : 3;
-  const cls = `node am l-${lv}${n.isAnchor ? ' anchor' : ''}${n.role ? ` r-${n.role}` : ''}${n.inferred ? ' inferred' : ''}${statusClass(n)}${sketchy(n) ? ' sketchy' : ''}${changeClass(n)}`;
+  const cls = `node am${n.isParent ? ' parent' : ''} l-${lv}${n.isAnchor ? ' anchor' : ''}${n.role ? ` r-${n.role}` : ''}${n.inferred ? ' inferred' : ''}${statusClass(n)}${sketchy(n) ? ' sketchy' : ''}${changeClass(n)}`;
   const icon = ICONS[spec.icon] ?? '';
   const nameTop = y + (h - n.lines.title.length * 22) / 2;
-  const tip = `${n.name} — ${spec.label}${n.technology ? ` [${n.technology}]` : ''}${n.description ? `\n${n.description}` : ''}`;
+  const tip = `${n.name} — ${spec.label}${n.technology ? ` [${n.technology}]` : ''}${n.description ? `\n${n.description}` : ''}${n.nestTip ? `\n${n.nestTip}` : ''}`;
   let shape = `<rect class="shape" x="${f(x)}" y="${f(y)}" width="${f(w)}" height="${f(h)}" rx="${f(rx)}"/>`;
   if (sketchy(n)) shape = handDrawn(shape, n.id, { w, h });
+  if (n.isParent) {
+    // A nesting box: the element's own shape (lighter), name at the top left, icon at the top right; children on top.
+    const shift = (n.change ? 26 : 0) + (n.pending?.length ? 26 : 0);
+    return `<g class="${cls}" data-node="${esc(n.id)}" data-distance="${n.distance ?? ''}" style="--i:${i}" tabindex="0" role="button" aria-label="${esc(tip)}">`
+      + shape
+      + (icon ? `<g class="icon" transform="translate(${f(x + w - 36)},${f(y + 8)})">${icon}</g>` : '')
+      + `<text class="title" x="${f(x + 14 + shift)}" y="${f(y + 28)}" font-size="17" font-weight="650">${esc(n.name)}</text>`
+      + decorations(n, prefix, 'left') + '</g>';
+  }
   return `<g class="${cls}" data-node="${esc(n.id)}" data-distance="${n.distance ?? ''}" style="--i:${i}" tabindex="0" role="button" aria-label="${esc(tip)}">`
     + shape
     + (icon ? `<g class="icon" transform="translate(${f(x + w - 36)},${f(y + 8)})">${icon}</g>` : '')
@@ -312,14 +321,25 @@ function viewSvg(v, idx) {
   if (v.notation === 'c4') parts.push(...frames, ...v.boundaries.map(c4Boundary));
   else parts.push(...v.bands.map(b => band(b, v.layers)), ...frames);
   const edges = v.edges.map(e => edge(e, prefix, showLabels)).join('');
-  const nodes = v.nodes.map((n, i) => v.notation === 'c4' ? c4Node(n, i, prefix) : amNode(n, i, prefix)).join('');
+  // nesting boxes before their descendants, so children are drawn on top
+  const depthOf = new Map();
+  const byId = new Map(v.nodes.map(n => [n.id, n]));
+  const depth = n => (depthOf.has(n.id) ? depthOf.get(n.id) : (depthOf.set(n.id, n.nestedIn && byId.has(n.nestedIn) ? depth(byId.get(n.nestedIn)) + 1 : 0), depthOf.get(n.id)));
+  const ordered = [...v.nodes].sort((a, b) => depth(a) - depth(b));
+  // nesting boxes go under the edges (an edge inside a box is not covered by its fill); one --i sequence for both groups
+  const draw = (n, i) => v.notation === 'c4' ? c4Node(n, i, prefix) : amNode(n, i, prefix);
+  const parents = ordered.map((n, i) => n.isParent ? draw(n, i) : '').join('');
+  const nodes = ordered.map((n, i) => n.isParent ? '' : draw(n, i)).join('');
   return `<svg class="diagram n-${v.notation}" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" data-w="${W}" data-h="${H}" role="img" aria-label="${esc(v.title)}" xmlns="http://www.w3.org/2000/svg">`
     + markerDefs(prefix)
     + `<rect class="bgrect" x="0" y="0" width="${W}" height="${H}"/>`
-    + `<g class="content">${parts.join('')}<g class="edges">${edges}</g><g class="nodes">${nodes}</g></g></svg>`;
+    + `<g class="content">${parts.join('')}${parents ? `<g class="nodes parents">${parents}</g>` : ''}<g class="edges">${edges}</g><g class="nodes">${nodes}</g></g></svg>`;
 }
 
 function viewData(v) {
+  // layer of the outermost nesting box: a nested child is shown with that box's band
+  const byId = new Map(v.nodes.map(n => [n.id, n]));
+  const band = n => (n.nestedIn && byId.has(n.nestedIn) ? band(byId.get(n.nestedIn)) : n.layer);
   return {
     key: v.key, title: v.title, description: v.description, notation: v.notation, animation: v.animation,
     level: v.level ?? null, viewpoint: v.viewpoint ?? null, anchor: v.anchor ?? null, scope: v.scope ?? null, mode: v.mode ?? null,
@@ -332,6 +352,7 @@ function viewData(v) {
       name: n.name, typeLabel: ELEMENT_TYPES[n.type]?.label, c4Label: n.c4Label ?? null, layer: n.layer,
       technology: n.technology ?? '', description: n.description ?? '', tags: n.tags ?? [], properties: n.properties ?? {},
       distance: n.distance ?? null, role: n.role ?? null, isAnchor: !!n.isAnchor, inferred: !!n.inferred, status: n.status ?? 'active', statusReason: n.statusReason ?? '', change: n.change ?? null, changeFields: n.changeFields ?? [], pending: n.pending ?? [],
+      nestedIn: n.nestedIn ?? null, band: band(n),
       x: n.x, y: n.y, w: n.w, h: n.h,
     }])),
     edges: v.edges.map(e => ({
@@ -497,6 +518,7 @@ body.presenting.preview .drawer{top:44px}
 .boundary .b-title{fill:var(--ink)}
 /* ArchiMate */
 .node.am .shape{stroke-width:1.8}
+.node.am.parent .shape{fill-opacity:.55}
 .node.am text{fill:var(--am-ink)}
 .node.am .icon{color:var(--am-ink);opacity:.8}
 .node.am .dist{fill:var(--muted)!important;font-weight:700}
@@ -990,7 +1012,7 @@ const JS = String.raw`
       const shown = new Set();
       bands.forEach(layer => steps.push(() => {
         $('.band[data-layer="' + layer + '"]', s).classList.remove('hidden-step');
-        Object.entries(v.nodes).filter(([, n]) => n.layer === layer).forEach(([id]) => { shown.add(id); $('.node[data-node="' + CSS.escape(id) + '"]', s).classList.remove('hidden-step'); });
+        Object.entries(v.nodes).filter(([, n]) => n.band === layer).forEach(([id]) => { shown.add(id); $('.node[data-node="' + CSS.escape(id) + '"]', s).classList.remove('hidden-step'); });
         $$('.edge', s).forEach(e => { if (shown.has(e.dataset.from) && shown.has(e.dataset.to)) e.classList.remove('hidden-step'); });
         caption($('.band[data-layer="' + layer + '"] text', s).textContent);
       }));

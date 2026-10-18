@@ -68,3 +68,32 @@ produto ─aggregation→ business service ←realization─ business process �
 - A tecnologia **serve** containers (system-software, technology-service) ou os **realiza** (artifact).
   Nós são **atribuídos** a artifacts ou **realizam** technology services.
 - Dados de aplicação (data-object) **realizam** objetos de negócio. Containers/componentes os **acessam**.
+- **Banco de dados** é `application-component` (C4 container com tag `database`), não `data-object`: ele pode servir e
+  ser servido. O SGBD o **serve** (`serving`); o conteúdo, quando conhecido, é `data-object` com `parent` no banco.
+
+### Intermediários
+
+Serviços, interfaces e funções de aplicação ligam o componente ao resto do modelo, e o C4 os atravessa
+(`references/c4.md`, "C4 a partir de ArchiMate"):
+
+- o componente **realiza** o `application-service` (`realization`);
+- o componente **compõe** a `application-interface` (`composition`);
+- o componente é **atribuído** (`assignment`) à `application-function` ou ao `application-process`.
+
+Quem consome o serviço (`serving`) passa a aparecer, no C4, ligado ao componente (seta tracejada, "via").
+
+## Aninhamento
+
+`"nesting"` na view spec escolhe como pai e filho aparecem (padrão `"edges"`: losango de composição, como sempre):
+
+- `"nested"`: os filhos são desenhados **dentro** da caixa do pai. Aninham o `parent` e as relações explícitas
+  `composition` e `aggregation` entre elementos visíveis (o todo contém a parte). Cada elemento tem um pai visual só:
+  o `parent` tem prioridade; sem ele, vale a primeira `composition`/`aggregation` na ordem do modelo (as outras
+  seguem como setas).
+- `{ "mode": "nested", "depth": N }`: aninha só até o nível N a partir do topo. Um elemento mais fundo que N fica na
+  caixa do ancestral aninhado mais próximo, ao lado do pai e ligado a ele pelo losango.
+- No modo aninhado, a composição implícita e a relação que originou o aninhamento não viram seta (a descrição vai
+  para o tooltip do filho). O pai é desenhado como caixa grande sob as setas.
+- Vale para os estilos `flow` e `bands-flow`; com aninhamento, `bands` cai para `bands-flow`. Em faixas, um filho de
+  outra camada fica dentro do pai, na faixa do pai.
+- Caixas aninhadas ocupam espaço: em diagramas grandes use `depth` ou `focus`/`granularity`.

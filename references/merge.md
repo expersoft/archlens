@@ -15,7 +15,9 @@ node scripts/archlens.mjs merge architecture/ --apply plano2.json           # gr
 ```
 
 Se a base não existe, o primeiro delta a cria (`name` e `description` do delta viram os da base).
-Planos gerados antes de um `migrate` continuam válidos depois (o hash é sobre o modelo, não sobre o arquivo).
+A base precisa estar no formato 2.0: uma base 1.x falha com `E_STORE_FORMAT` (rode `archlens migrate <base>`).
+Planos gerados antes de um `migrate` **não** valem depois: a base muda (tipos, bancos, ids de relações), e com ela o
+hash do plano (`E_PLAN_STALE`). Gere o plano de novo.
 
 ## O delta
 
@@ -39,11 +41,39 @@ Planos gerados antes de um `migrate` continuam válidos depois (o hash é sobre 
 | Campo | Regra |
 |---|---|
 | `source` | de onde veio a rodada: `kind` = `prompt` \| `repo` \| `doc` \| `manual`, `ref` (rodada, `repo@commit`, documento), `path`, `date`. Herdado por todo item criado ou alterado |
-| elementos | mesmo DSL de `notation.md`. Para **enriquecer** um existente, basta `id` + os campos novos. `parent` e `children` funcionam; `parent` aceita id ou alias |
+| elementos | mesmo DSL de `notation.md` (vocabulário livre, traduzido na entrada). Para **enriquecer** um existente, basta `id` + os campos novos. `parent` e `children` funcionam; `parent` aceita id ou alias |
 | relações | `from`/`to` aceitam id ou alias. `A uses B` casa com o `B serving A` que já estiver na base |
 | `views` | key nova entra; key existente com definição diferente vira conflito (`keep` \| `take`) |
 | `ops` | `rename` (o nome antigo vira alias), `alias`, `status` (+ `reason`), `remove` (cascata: filhos, relações, visões) |
 | `source` num item | texto livre: `"source": "<trecho literal>"` vira `excerpt` junto da fonte do delta |
+
+## Tradução na entrada
+
+O delta usa o vocabulário livre (o do prompt e do `scan`); a CLI o traduz para o formato 2.0 **antes** de casar os
+itens, e o plano e o `apply` já trabalham em 2.0. A base nunca guarda `c4:*`, `uses`, `children` nem o campo `archimate`.
+
+| Entrada | Saída 2.0 |
+|---|---|
+| `c4:person` | `business-actor` + `c4.kind: person` |
+| `c4:softwareSystem` / `c4:container` / `c4:component` | `application-component` + o kind (a tag `database` não muda o tipo) |
+| `c4:deploymentNode` / `c4:infrastructureNode` | `node` + o kind |
+| `archimate:X` ou `X` | `X` |
+| `archimate: Y` num elemento `c4:*` | `type: Y` e o kind C4 mantido; combinação inválida: `E_C4_TYPE` |
+| `children` | lista plana com `parent`, pai antes de filho |
+| `application-component` sem `c4` | kind inferido pela profundidade numa cadeia de componentes (0 sistema, 1 container, 2 componente; mais fundo, sem kind) |
+| `business-actor` ou `business-role` de topo sem `c4` | `c4.kind: person` |
+| `uses` / `c4:uses` com alvo ativo | `serving` com as pontas invertidas |
+| `uses` / `c4:uses` com alvo passivo | `access` com `accessType` (padrão `readwrite`) |
+| `archimate:R` / `R` | `R` |
+
+Duas regras de detalhe:
+
+- **O delta fica como veio no plano** (`plan.delta`, vocabulário livre). O `apply` repete a tradução sobre a mesma base
+  (o hash garante que é a mesma) e o `--answers` compara o delta original. O que o plano simula e o que o `apply`
+  grava é 2.0.
+- **O kind C4 só é inferido para elementos novos.** Um kind inferido nunca vira conflito com o kind gravado de um
+  elemento já casado (por id, alias ou nome): enriquecer `{ "id": "loja.api", "technology": "Kotlin" }` não pergunta
+  nada sobre C4.
 
 ## Como a CLI casa os itens
 

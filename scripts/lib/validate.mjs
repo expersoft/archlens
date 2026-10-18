@@ -39,6 +39,7 @@ export function validateModel(raw) {
   if (inferred.length) {
     warnings.push({ code: 'W_INFERRED', message: `${inferred.length} elemento(s) inferidos (texto livre ou leitura de repositório)`, path: 'model.elements', hint: 'revise a seção "Premissas e inferências" do ARCHITECTURE.md' });
   }
+  warnings.push(...propertyWarnings(raw, model));
   const seenViews = new Set();
   (model.views || []).forEach((v, i) => {
     if (!v.key) errors.push({ code: 'E_VIEW_KEY', message: 'visão sem "key"', path: `views[${i}]`, hint: 'dê um identificador único à visão' });
@@ -64,4 +65,36 @@ export function validateModel(raw) {
     }
   });
   return { errors, warnings, model };
+}
+
+const PROPERTY_TYPES = {
+  string: v => typeof v === 'string', number: v => typeof v === 'number', boolean: v => typeof v === 'boolean',
+  'string[]': v => Array.isArray(v) && v.every(x => typeof x === 'string'),
+};
+
+/** With a property catalog ("properties" in archlens.json): unknown keys, wrong types, values off the list, wrong element type. */
+function propertyWarnings(raw, model) {
+  const catalog = raw?.properties;
+  if (!catalog || typeof catalog !== 'object' || Array.isArray(catalog)) return [];
+  const out = [];
+  const check = (owner, kind, props, path) => {
+    for (const [k, v] of Object.entries(props || {})) {
+      const warn = (message, hint) => out.push({ code: 'W_PROPERTY', message, path: `${path}.properties.${k}`, hint });
+      const def = catalog[k];
+      if (!def) {
+        warn(`propriedade "${k}" de "${owner}" não está no catálogo`, `declare "${k}" em "properties" do archlens.json, ou use uma das chaves: ${Object.keys(catalog).join(', ')}`);
+        continue;
+      }
+      const type = def.type ?? 'string';
+      if (PROPERTY_TYPES[type] && !PROPERTY_TYPES[type](v)) warn(`propriedade "${k}" de "${owner}" deveria ser ${type}`, `ajuste o valor ${JSON.stringify(v)}`);
+      else if (Array.isArray(def.values)) {
+        const off = (Array.isArray(v) ? v : [v]).filter(x => !def.values.includes(x));
+        if (off.length) warn(`valor ${off.map(x => JSON.stringify(x)).join(', ')} de "${k}" em "${owner}" fora da lista`, `use ${def.values.join(' | ')}`);
+      }
+      if (Array.isArray(def.appliesTo) && !def.appliesTo.includes(kind)) warn(`propriedade "${k}" não se aplica a ${kind} ("${owner}")`, `"${k}" vale para ${def.appliesTo.join(', ')}`);
+    }
+  };
+  for (const e of model.elements.values()) check(e.id, e.type, e.properties, e.path);
+  for (const r of model.relationships) check(r.id, 'relationship', r.properties, r.path);
+  return out;
 }

@@ -3,8 +3,10 @@
 import { readFileSync, writeFileSync, existsSync, renameSync, mkdirSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { relationshipIds } from '../merge.mjs';
+import { c4Orientation } from '../model.mjs';
 import { NOTE_NAMES } from '../doc.mjs';
 import { storeError } from './errors.mjs';
+import { isCanonicalFormat, FORMAT } from '../canonical.mjs';
 
 export const MANIFEST = 'archlens.json';
 const json = v => JSON.stringify(v, null, 2) + '\n';
@@ -69,12 +71,16 @@ function rootIndex(elements) {
   return root;
 }
 
-export function loadFolder(dir) {
+export function loadFolder(dir, { anyFormat = false } = {}) {
   const manifestPath = join(dir, MANIFEST);
   if (!existsSync(manifestPath)) throw storeError('E_STORE_NOT_BASE', `${dir} não é uma base archlens (falta ${MANIFEST})`);
   const { layout, store, ...top } = readJson(manifestPath);
   if (store !== undefined) {
     throw storeError('E_STORE_UNSUPPORTED', `"store" em ${MANIFEST} (fonte externa) ainda não é suportado; remova o campo para usar a pasta`);
+  }
+  if (!anyFormat && !isCanonicalFormat(top.archlens)) {
+    throw storeError('E_STORE_FORMAT', `${dir} está no formato ${top.archlens ?? '1.x'}; o archlens lê só o formato ${FORMAT}. `
+      + `Rode "archlens migrate ${dir}" para converter (a skill pergunta antes de gravar)`);
   }
   const elements = [];
   const relationships = [];
@@ -141,7 +147,9 @@ export function saveFolder(dir, raw, { notes = {}, origins, layout } = {}) {
   const ids = relationshipIds(raw);
   for (const r of model?.relationships ?? []) {
     let rel = L.split ? origins?.relationships.get(ids.get(r)) : L.model;
-    if (!rel) rel = rootOf.has(r?.from) ? fileFor(rootOf.get(r.from)) : L.defaultFile;
+    // A new relationship goes with the side that depends on it (the consumer of a serving), like a C4 "uses".
+    const owner = r && typeof r === 'object' ? (c4Orientation(r)?.from ?? r.from) : undefined;
+    if (!rel) rel = rootOf.has(owner) ? fileFor(rootOf.get(owner)) : L.defaultFile;
     part(rel).relationships.push(r);
   }
 

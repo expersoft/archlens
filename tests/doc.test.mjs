@@ -2,11 +2,12 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { generateDoc, extractModel } from '../scripts/lib/doc.mjs';
+import { asBase } from './helpers.mjs';
 
 const raw = () => JSON.parse(readFileSync(new URL('./fixtures/shop.json', import.meta.url)));
 
 test('generateDoc is a readable document only: no model block, no keep markers, no generation date', () => {
-  const md = generateDoc(raw());
+  const md = generateDoc(asBase(raw()));
   assert.doesNotMatch(md, /```archlens-json/);
   assert.doesNotMatch(md, /<!-- keep:/);
   assert.doesNotMatch(md, /^generated:/m);
@@ -16,16 +17,16 @@ test('generateDoc is a readable document only: no model block, no keep markers, 
   assert.match(md, /## Camada de Negócio/);
   assert.match(md, /## Rastreabilidade/);
   assert.match(md, /## Modelo canônico[\s\S]*archlens\.json/);
-  assert.equal(generateDoc(raw()), md, 'deterministic');
+  assert.equal(generateDoc(asBase(raw())), md, 'deterministic');
 });
 
 test('generateDoc puts the notes in their sections, with defaults when missing', () => {
-  const md = generateDoc({ ...raw(), assumptions: ['p1'] }, { notes: { overview: 'Visão à mão.', notes: 'Risco X.' }, source: '../kb/' });
+  const md = generateDoc({ ...asBase(raw()), assumptions: ['p1'] }, { notes: { overview: 'Visão à mão.', notes: 'Risco X.' }, source: '../kb/' });
   assert.match(md, /## Visão geral\n\nVisão à mão\.\n/);
   assert.match(md, /## Premissas e inferências\n\n- p1\n/);
   assert.match(md, /## Notas\n\nRisco X\.\n/);
   assert.match(md, /^source: \.\.\/kb\/$/m);
-  const bare = generateDoc(raw());
+  const bare = generateDoc(asBase(raw()));
   assert.match(bare, /## Notas\n\n_Decisões, riscos e pendências\._/);
   assert.match(bare, /## Visão geral\n\n_Descreva aqui/);
 });
@@ -36,7 +37,7 @@ test('generateDoc shows lifecycle, sources and history', () => {
   Object.assign(api, { status: 'deprecated', statusReason: 'migração para Kotlin', sources: [{ kind: 'repo', ref: 'github.com/x/orders@a1b2c3d', date: '2026-10-02' }] });
   r.changelog = [{ id: '2026-10-02-01', date: '2026-10-02', source: { kind: 'repo', ref: 'github.com/x/orders@a1b2c3d' }, summary: 'Leitura do repo orders',
     added: ['loja.worker'], changed: ['loja.api'], status: { 'loja.api': 'deprecated' }, removed: [], decisions: ['conflito loja.api.technology: take "Kotlin"'] }];
-  const md = generateDoc(r);
+  const md = generateDoc(asBase(r));
   assert.match(md, /^revision: 1$/m);
   assert.match(md, /^updated: 2026-10-02$/m);
   assert.match(md, /## Ciclo de vida[\s\S]*API[\s\S]*deprecated[\s\S]*migração para Kotlin/);
@@ -47,7 +48,7 @@ test('generateDoc shows lifecycle, sources and history', () => {
 });
 
 test('generateDoc without lifecycle data keeps the old tables and has no updated date', () => {
-  const md = generateDoc(raw());
+  const md = generateDoc(asBase(raw()));
   assert.doesNotMatch(md, /\| Status \|/);
   assert.doesNotMatch(md, /\| Fontes \|/);
   assert.match(md, /^revision: 0$/m);
@@ -82,20 +83,33 @@ test('schemas describe the new fields', async () => {
 });
 
 test('generateDoc lists the groupings and their direct members by layer', () => {
-  const md = generateDoc(JSON.parse(readFileSync(new URL('./fixtures/platforms.json', import.meta.url))));
+  const md = generateDoc(asBase(JSON.parse(readFileSync(new URL('./fixtures/platforms.json', import.meta.url)))));
   assert.match(md, /## Contexto e atores[\s\S]*## Agrupamentos[\s\S]*### Plataforma de Autorização/);
   assert.match(md, /### Plataforma de Autorização\n\n`plat-aut`\n\nAutoriza e tokeniza transações\n\n\| Camada \| Membros \|/);
   assert.match(md, /\| Aplicação \| Autorizador, Tokenização \|/);
   assert.doesNotMatch(md.slice(md.indexOf('## Agrupamentos'), md.indexOf('## Modelo C4')), /API de Autorização/, 'inherited members are not repeated');
-  assert.doesNotMatch(generateDoc(raw()), /## Agrupamentos/);
+  assert.doesNotMatch(generateDoc(asBase(raw())), /## Agrupamentos/);
 });
 
 test('generateDoc: groupings stay out of the layer tables and counts, and each group shows its id (and status)', () => {
   const r = JSON.parse(readFileSync(new URL('./fixtures/platforms.json', import.meta.url)));
   r.model.elements.find(e => e.id === 'plat-cred').status = 'draft';
-  const md = generateDoc(r);
+  const md = generateDoc(asBase(r));
   assert.doesNotMatch(md, /## Camada de Outros/);
   assert.doesNotMatch(md.slice(md.indexOf('## Resumo'), md.indexOf('## Contexto e atores')), /Outros/);
   assert.match(md, /### Plataforma de Autorização\n\n`plat-aut`\n\nAutoriza/);
   assert.match(md, /### Plataforma de Crédito\n\n`plat-cred` · status: draft\n/);
+});
+
+test('generateDoc marks containers tagged bucket or storage as data stores', () => {
+  const md = generateDoc({ archlens: '2.0', name: 'Lojas', model: {
+    elements: [
+      { id: 's', type: 'application-component', name: 'S', c4: { kind: 'softwareSystem' } },
+      { id: 's.bucket', type: 'application-component', name: 'Bucket', parent: 's', c4: { kind: 'container' }, tags: ['bucket'] },
+      { id: 's.files', type: 'application-component', name: 'Files', parent: 's', c4: { kind: 'container' }, tags: ['storage'] },
+    ],
+    relationships: [],
+  } });
+  assert.match(md, /Bucket 🛢/);
+  assert.match(md, /Files 🛢/);
 });

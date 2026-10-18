@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { extname } from 'node:path';
 import { extractModel, NOTE_NAMES, noteDefaults } from '../doc.mjs';
 import { storeError } from './errors.mjs';
+import { isCanonicalFormat, FORMAT } from '../canonical.mjs';
 
 const KEEP_RE = /<!-- keep:([\w-]+) -->\n?([\s\S]*?)\n?<!-- \/keep:\1 -->/g;
 
@@ -10,7 +11,7 @@ export function readKeepBlocks(markdown) {
   return new Map([...markdown.matchAll(KEEP_RE)].map(m => [m[1], m[2]]));
 }
 
-export function loadLegacy(path) {
+function readLegacy(path) {
   const text = readFileSync(path, 'utf8');
   if (extname(path).toLowerCase() !== '.md') {
     try { return { raw: JSON.parse(text), keeps: new Map() }; } catch (e) {
@@ -20,6 +21,15 @@ export function loadLegacy(path) {
   try { return { raw: extractModel(text), keeps: readKeepBlocks(text) }; } catch (e) {
     throw storeError(e.code === 'E_MODEL_JSON' ? 'E_STORE_JSON' : 'E_STORE_NOT_BASE', e.message, { file: path });
   }
+}
+
+export function loadLegacy(path, { anyFormat = false } = {}) {
+  const loaded = readLegacy(path);
+  if (!anyFormat && !isCanonicalFormat(loaded.raw?.archlens)) {
+    throw storeError('E_STORE_FORMAT', `${path} está no formato ${loaded.raw?.archlens ?? '1.x'}; o archlens lê só o formato ${FORMAT}. `
+      + `Rode "archlens migrate ${path}" para converter (a skill pergunta antes de gravar)`);
+  }
+  return loaded;
 }
 
 /** An assumptions block that is only an old copy of (part of) the model's list: "- <text>" lines, all in the list. */

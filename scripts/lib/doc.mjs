@@ -1,7 +1,7 @@
 // ARCHITECTURE.md: the human-readable knowledge-base document, generated from the base folder (never read back).
 import { normalizeModel, c4KindOf, childrenOf, c4Orientation } from './model.mjs';
 import { resolveView } from './query.mjs';
-import { ELEMENT_TYPES, LAYER_ORDER, LAYER_LABELS, C4_LABELS } from './registry.mjs';
+import { ELEMENT_TYPES, LAYER_ORDER, LAYER_LABELS, C4_LABELS, STORE_TAGS } from './registry.mjs';
 
 /** Hand-written notes of a knowledge base (architecture/notes/<name>.md). */
 export const NOTE_NAMES = ['overview', 'notes', 'assumptions'];
@@ -50,6 +50,8 @@ export function generateDoc(raw, { notes = {}, source = 'architecture/' } = {}) 
   const els = [...model.elements.values()];
   const name = id => model.elements.get(id)?.name ?? id;
   const kind = el => c4KindOf(model, el);
+  // A C4 "uses": serving between two C4 elements, read consumer → provider.
+  const uses = r => r.type === 'serving' && !!model.elements.get(r.from)?.c4 && !!model.elements.get(r.to)?.c4;
   const hasC4 = els.some(e => e.c4);
   const hasArchimate = els.some(e => !e.c4);
   const hasStatus = els.some(e => e.status !== 'active') || model.relationships.some(r => r.status !== 'active');
@@ -117,7 +119,7 @@ export function generateDoc(raw, { notes = {}, source = 'architecture/' } = {}) 
       if (s.description) out.push(s.description, '');
       const containers = childrenOf(model, s.id).filter(c => kind(c) === 'container');
       if (containers.length) {
-        out.push(table(['Container', 'Tecnologia', 'Descrição', ...extraHead, 'id'], containers.map(c => [c.name + (c.type === 'data-object' ? ' 🛢' : ''), c.technology, c.description, ...extra(c), `\`${c.id}\``])), '');
+        out.push(table(['Container', 'Tecnologia', 'Descrição', ...extraHead, 'id'], containers.map(c => [c.name + (c.tags.some(t => STORE_TAGS.includes(t.toLowerCase())) ? ' 🛢' : ''), c.technology, c.description, ...extra(c), `\`${c.id}\``])), '');
         for (const c of containers) {
           const comps = childrenOf(model, c.id).filter(x => kind(x) === 'component');
           if (!comps.length) continue;
@@ -141,7 +143,7 @@ export function generateDoc(raw, { notes = {}, source = 'architecture/' } = {}) 
   // Relationships
   out.push('## Relacionamentos', '');
   out.push(table(['Origem', 'Relação', 'Destino', 'Descrição', 'Tecnologia'], model.relationships.map(r => {
-    if (r.c4) return [name(r.c4.from), 'usa', name(r.c4.to), r.description, r.technology];
+    if (uses(r)) return [name(r.to), 'usa', name(r.from), r.description, r.technology];
     return [name(r.from), r.type, name(r.to), r.description, r.technology];
   })), '');
 
@@ -175,7 +177,7 @@ export function generateDoc(raw, { notes = {}, source = 'architecture/' } = {}) 
     ...els.filter(e => e.status !== 'active').map(e => [e.name, ELEMENT_TYPES[e.type].label, e.status, e.statusReason, `\`${e.id}\``]),
     ...model.relationships.filter(r => r.status !== 'active').map(r => {
       const o = c4Orientation(r) ?? r;
-      return [`${name(o.from)} → ${name(o.to)}`, r.c4 ? 'usa' : r.type, r.status, r.statusReason, `\`${r.id}\``];
+      return [`${name(o.from)} → ${name(o.to)}`, uses(r) ? 'usa' : r.type, r.status, r.statusReason, `\`${r.id}\``];
     }),
   ];
   out.push(lifecycle.length ? table(['Item', 'Tipo', 'Status', 'Motivo', 'id'], lifecycle) : '_Todos os elementos e relações estão ativos._', '');
@@ -188,7 +190,7 @@ export function generateDoc(raw, { notes = {}, source = 'architecture/' } = {}) 
   if (inferred.length || inferredRels.length) {
     out.push(table(['Item', 'Tipo', 'Confiança', 'Origem no texto'], [
       ...inferred.map(e => [e.name, ELEMENT_TYPES[e.type].label, e.confidence, e.sources.map(s => s.excerpt).filter(Boolean).join(' · ')]),
-      ...inferredRels.map(r => { const o = c4Orientation(r) ?? r; return [`${name(o.from)} → ${name(o.to)}`, r.c4 ? 'usa' : r.type, '—', '—']; }),
+      ...inferredRels.map(r => { const o = c4Orientation(r) ?? r; return [`${name(o.from)} → ${name(o.to)}`, uses(r) ? 'usa' : r.type, '—', '—']; }),
     ]), '');
   }
 

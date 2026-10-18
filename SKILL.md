@@ -23,8 +23,9 @@ Requer Node ≥ 18. A checagem visual (`deliver`/`build`) usa `playwright-core` 
 ## Fluxo
 
 1. **Localize a base.** Procure `architecture/archlens.json` (a CLI também acha sozinha, subindo a
-   partir do diretório atual). Se só existir um `ARCHITECTURE.md` com bloco `archlens-json` (formato antigo), proponha
-   `archlens migrate ARCHITECTURE.md` e **pergunte antes**. Se não existe base, o primeiro delta a cria; mas, se o
+   partir do diretório atual). Base no formato 1.x (pasta com `"archlens"` diferente de `2.x`, ou só um `ARCHITECTURE.md`
+   com bloco `archlens-json`): todo comando falha com `E_STORE_FORMAT` e nada é gravado. Proponha
+   `archlens migrate <base>` (ou `archlens migrate ARCHITECTURE.md`) e **pergunte antes**. Se não existe base, o primeiro delta a cria; mas, se o
    repositório já tem um `ARCHITECTURE.md` que não foi gerado pelo archlens (sem `source:` no cabeçalho), **pergunte
    antes** ao usuário: movê-lo, ou usar o conteúdo dele como texto livre do primeiro delta. A CLI nunca o sobrescreve
    (`E_STORE_DOC_FOREIGN`).
@@ -69,6 +70,31 @@ Requer Node ≥ 18. A checagem visual (`deliver`/`build`) usa `playwright-core` 
     `architecture/notes/notes.md`; depois `archlens doc architecture/`.
 11. **Entregue**: caminhos do `.md` e do `.html`, visões, premissas abertas, alertas e o commit sugerido.
 
+## Formato 2.0
+
+A base guarda **só** tipos ArchiMate (sem prefixo), o perfil C4 em `c4.kind` (`person`, `softwareSystem`, `container`,
+`component`, `deploymentNode`, `infrastructureNode`; cada kind vale para certos tipos, senão `E_C4_TYPE`), uma lista
+plana com `parent` (sem `children`) e as 11 relações ArchiMate (sem `uses`). Banco de dados é `application-component`
+com `c4.kind: container` e tag `database`. O vocabulário livre (`c4:*`, `uses`, `children`, `archimate:*`, o campo
+`archimate`) continua aceito **na entrada** (deltas, prompts, `scan`) e é traduzido antes de qualquer coisa ser
+gravada; por isso você pode escrever o delta como sempre (`references/merge.md`, `references/notation.md`).
+
+## Propriedades
+
+`properties` guarda o que o usuário quer anotar (squad, unidade de negócio, canais): valores texto, número, booleano
+ou **lista de textos**. Um catálogo opcional em `properties` do `archlens.json` (`label`, `type`, `values`,
+`appliesTo`) faz o `validate` avisar `W_PROPERTY` (chave desconhecida, tipo errado, valor fora da lista).
+Regra: **propriedade serve para filtrar, elemento serve para atravessar.** Se o usuário pedir uma visão que
+atravesse por um valor ("tudo da squad Checkout"), sugira promovê-lo a `business-actor` + `assignment` em vez de
+manter a propriedade.
+
+## Aninhamento (ArchiMate)
+
+Por padrão a visão ArchiMate liga pai e filho por seta de composição (losango). Pedidos como "dentro de",
+"aninhado", "caixas dentro de caixas" → `"nesting": "nested"`; "com o losango", "com setas de composição" → `"edges"`.
+Em diagramas grandes use `"nesting": { "mode": "nested", "depth": N }` (só os N primeiros níveis ficam dentro; abaixo
+disso o elemento fica ao lado, ligado pelo losango). Detalhes em `references/views.md`.
+
 ## Pedido → view spec
 
 | O usuário pede | View spec |
@@ -88,6 +114,8 @@ Requer Node ≥ 18. A checagem visual (`deliver`/`build`) usa `playwright-core` 
 | interações entre os sistemas de A e de B | acrescente `groups:{only:["A","B"]}` (molduras aparecem sozinhas) |
 | só o que cruza entre A e B | `groups:{only:["A","B"], crossOnly:true}` |
 | sem molduras | `groups:{frames:false}` |
+| containers dentro do sistema, "caixas dentro de caixas" (ArchiMate) | acrescente `nesting:"nested"` (ou `nesting:{mode:"nested", depth:1}`) |
+| C4 sem as setas derivadas por serviços e interfaces | acrescente `derive:false` |
 | como está hoje (as-is) | acrescente `status:["active","deprecated"]` |
 | como fica depois das mudanças (to-be) | acrescente `status:["draft","planned","active"]` (sem `draft` para só o decidido) |
 | como fica se aplicarmos este delta? | `deliver architecture/ --delta delta.json` (prévia, nada é gravado) |
@@ -124,11 +152,14 @@ recorta com scope, focus, depth, anchor, traverse, layers, granularity, collapse
 - **`draft` × `planned`**: `draft` é "em discussão"; `planned` é "decidido, ainda não existe".
 - **Direção do `uses`**: em C4 é consumidor → provedor (`cliente uses web`). A CLI converte para
   ArchiMate (`web serving cliente`). Não inverta à mão.
+- **Propriedade onde cabe um elemento**: se a pergunta é "o que depende de X" por um valor, a propriedade não
+  atravessa; promova a elemento (ver *Propriedades*).
 - **Camadas desconectadas**: travessias ArchiMate só cruzam camadas por relações. Ligue containers C4
   a application services (`realization`) e estes a processos (`serving`). Ligue a tecnologia aos
   containers (`serving`/`realization`). Sem isso, "o que sustenta o produto" para no negócio.
-- **Banco como sistema**: em C4, use `c4:container` com `tags:["database"]` (vira data object). O SGBD
-  (PostgreSQL, RDS) é `archimate:system-software` servindo o container da aplicação.
+- **Banco como sistema**: em C4, use `c4:container` com `tags:["database"]` (grava `application-component` +
+  `c4.kind: container`; o C4 desenha o cilindro pela tag). O SGBD (PostgreSQL, RDS) é `archimate:system-software`
+  servindo o banco; o conteúdo (tabelas), se conhecido, é `data-object` com `parent` no banco.
 - **Hierarquia C4**: component dentro de container, que fica dentro de softwareSystem (`E_C4_HIERARCHY`).
 - **Ids instáveis**: ids são a chave da base de conhecimento. Não os renomeie sem necessidade; use
   `sistema.container.componente`.
@@ -139,8 +170,8 @@ recorta com scope, focus, depth, anchor, traverse, layers, granularity, collapse
   as relações entre as aplicações.
 - **Elemento dentro do `grouping`**: não aninhe membros em `children` (nem use `parent`) de um agrupamento; use
   `"group": "<agrupamento>"`. Aninhado, ele é lido como membro com o aviso `W_GROUP_CHILD`.
-- **Base no formato antigo**: comandos de leitura, `merge --plan` e as prévias funcionam; só `merge --apply`, `doc`
-  e `build` recusam. Rode `archlens migrate` (com o ok do usuário).
+- **Base no formato antigo (1.x)**: todos os comandos recusam com `E_STORE_FORMAT`. Rode `archlens migrate <base>`
+  (com o ok do usuário). Planos feitos antes da migração deixam de valer: gere-os de novo.
 - **Duplicata aceita sem perguntar**: `possible-duplicate` é sempre pergunta ao usuário. Um `same` errado funde
   dois elementos diferentes.
 - **Assumir o sistema pelo nome do repositório**: `terminus-*` é só um indício; pergunte.
@@ -159,5 +190,5 @@ recorta com scope, focus, depth, anchor, traverse, layers, granularity, collapse
 - `references/repo-reading.md`: `archlens scan`, leitura de repositórios, mapeamento, nova leitura e limites
 - `references/knowledge-doc.md`: a pasta `architecture/`, o `ARCHITECTURE.md` gerado, `check` e `migrate`
 - `docs/GUIA.md`: guia do usuário (apresentação, atalhos, exemplos)
-- `examples/`: `loja-online` (DSL completa, 13 visões) e `telemedicina` (texto livre + `delta-01.json`/`plano-01.json`,
+- `examples/`: `loja-online` (DSL completa, 16 visões) e `telemedicina` (texto livre + `delta-01.json`/`plano-01.json`,
   uma rodada de merge com duplicata, `deprecated`/`planned` e a visão to-be)

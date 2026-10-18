@@ -5,8 +5,9 @@ import { planMerge, applyPlan, previewMerge, relationshipIds, canonicalJson } fr
 import { normalizeModel } from '../scripts/lib/model.mjs';
 import { validateModel } from '../scripts/lib/validate.mjs';
 import { formatPlanReport } from '../scripts/lib/merge-report.mjs';
+import { asBase } from './helpers.mjs';
 
-const shop = () => JSON.parse(readFileSync(new URL('./fixtures/shop.json', import.meta.url)));
+const shop = () => asBase(JSON.parse(readFileSync(new URL('./fixtures/shop.json', import.meta.url))));
 const SRC = { kind: 'prompt', ref: 'rodada 1', date: '2026-10-01' };
 const delta = (model = {}, extra = {}) => ({ 'archlens-delta': '1.0', source: SRC, summary: 'teste',
   model: { elements: [], relationships: [], ...model }, ...extra });
@@ -47,13 +48,13 @@ test('a different filled value is a conflict answered with keep, take or value',
   assert.throws(() => applyPlan(shop(), answer(structuredClone(plan), { 'el:loja.api:technology': 'talvez' }), TODAY), /E_PLAN_RESOLUTION/);
 });
 
-test('a new element is inserted under its parent, keeping the nesting', () => {
+test('a new element is inserted with its parent', () => {
   const plan = planMerge(shop(), delta({ elements: [{ id: 'loja.worker', type: 'c4:container', name: 'Worker', parent: 'loja', technology: 'Node.js' }] }), TODAY);
   assert.deepEqual(plan.summary, { new: 1 });
   const { raw, entry } = applyPlan(shop(), plan, TODAY);
-  const worker = find(raw, 'loja').children.find(c => c.id === 'loja.worker');
+  const worker = find(raw, 'loja.worker');
   assert.ok(worker);
-  assert.equal(worker.parent, undefined);
+  assert.equal(worker.parent, 'loja');
   assert.deepEqual(worker.sources, [SRC]);
   assert.deepEqual(entry.added, ['loja.worker']);
 });
@@ -69,7 +70,7 @@ test('elements match by alias in both directions and references are rewritten to
   const plan = planMerge(base, d, TODAY);
   assert.equal(plan.blocked, false, JSON.stringify(plan.errors));
   const { raw } = applyPlan(base, plan, TODAY);
-  assert.ok(find(raw, 'loja.api').children.some(c => c.id === 'orders-worker'));
+  assert.equal(find(raw, 'orders-worker').parent, 'loja.api');
   assert.equal(find(raw, 'loja.api').description, 'Pedidos');
   assert.equal(find(raw, 'orders-service'), undefined);
   assert.equal(find(raw, 'gw'), undefined);
@@ -101,7 +102,7 @@ test('an element the same delta removes is never offered as a possible duplicate
   const { raw } = applyPlan(shop(), answer(plan, { 'op:0': 'yes' }), TODAY);
   assert.equal(find(raw, 'pagamentos'), undefined);
   assert.ok(find(raw, 'gateway-pag'));
-  assert.ok(raw.model.relationships.some(r => r.from === 'loja.api' && r.to === 'gateway-pag'), 'the new relationship survives the cascade');
+  assert.ok(raw.model.relationships.some(r => r.from === 'gateway-pag' && r.to === 'loja.api' && r.type === 'serving'), 'the new relationship survives the cascade');
   assert.ok(!raw.model.relationships.some(r => r.from === 'pagamentos' || r.to === 'pagamentos'));
 });
 
@@ -201,7 +202,7 @@ test('planning and applying never mutate the delta or leak simulated values over
 
 test('moving an element under its own descendant is a blocking error, not a silent delete', () => {
   const base = shop();
-  base.model.elements.push({ id: 'x', type: 'c4:softwareSystem', name: 'X', children: [{ id: 'x.y', type: 'c4:container', name: 'Y' }] });
+  base.model.elements.push(...asBase({ archlens: '1.0', model: { elements: [{ id: 'x', type: 'c4:softwareSystem', name: 'X', children: [{ id: 'x.y', type: 'c4:container', name: 'Y' }] }], relationships: [] } }).model.elements);
   const snapshot = structuredClone(base);
   const plan = planMerge(base, delta({ elements: [{ id: 'x', parent: 'x.y' }] }), TODAY);
   assert.equal(plan.blocked, true);
@@ -235,7 +236,8 @@ test('relationships may point at elements by alias', () => {
   const base = shop();
   find(base, 'loja.api').aliases = ['orders-service'];
   const { raw } = applyPlan(base, planMerge(base, delta({ relationships: [{ from: 'orders-service', to: 'pagamentos', description: 'Estorna' }] }), TODAY), TODAY);
-  assert.equal(raw.model.relationships.at(-1).from, 'loja.api');
+  const rel = raw.model.relationships.at(-1);
+  assert.deepEqual([rel.from, rel.type, rel.to], ['pagamentos', 'serving', 'loja.api'], 'stored as serving, the alias rewritten');
 });
 
 test('a relationship to an unknown element blocks the plan (typo protection)', () => {
@@ -344,11 +346,12 @@ test('an op on an unknown id or with an invalid status blocks the plan', () => {
 // --- possible duplicate answered "same": re-plan with earlier answers (plan and apply must agree) ---
 const agendaBase = () => {
   const base = shop();
-  base.model.elements.push({ id: 'sys', type: 'c4:softwareSystem', name: 'Agenda', children: [
+  const extra = asBase({ archlens: '1.0', model: { elements: [{ id: 'sys', type: 'c4:softwareSystem', name: 'Agenda', children: [
     { id: 'sys.agenda', type: 'c4:container', name: 'API de Agendamento', technology: 'Node.js' },
     { id: 'sys.db', type: 'c4:container', name: 'Banco de agendas', technology: 'PostgreSQL', tags: ['database'] },
-  ] });
-  base.model.relationships.push({ from: 'sys.agenda', to: 'sys.db', type: 'uses', description: 'Lê e grava agendas' });
+  ] }], relationships: [{ from: 'sys.agenda', to: 'sys.db', type: 'uses', description: 'Lê e grava agendas' }] } }).model;
+  base.model.elements.push(...extra.elements);
+  base.model.relationships.push(...extra.relationships);
   return base;
 };
 const answersOf = plan => Object.fromEntries(plan.items.filter(i => i.resolution != null).map(i => [i.key, i.resolution]));
@@ -370,7 +373,7 @@ test('duplicate answered same: re-planning with the answers asks the questions a
   assert.ok(!plan2.items.some(i => i.class === 'new' && i.kind === 'relationship'));
   const { raw } = applyPlan(agendaBase(), answer(plan2, { 'rel:0:description': 'take' }), TODAY);
   assert.equal(find(raw, 'api-agenda'), undefined);
-  const rels = raw.model.relationships.filter(r => r.from === 'sys.agenda' && r.to === 'sys.db');
+  const rels = raw.model.relationships.filter(r => r.from === 'sys.db' && r.to === 'sys.agenda');
   assert.equal(rels.length, 1);
   assert.equal(rels[0].description, 'grava');
   assert.equal(raw.model.relationships.length, agendaBase().model.relationships.length);
@@ -389,7 +392,7 @@ test('duplicate answered same: a new child of the duplicate is nested under the 
   assert.equal(plan2.items.find(i => i.key === 'el:api-agenda.slots').parent, 'sys.agenda', 'planned against the base element');
   assert.ok(!plan2.items.some(i => i.key === 'el:api-agenda' && i.class === 'new'));
   const { raw } = applyPlan(agendaBase(), plan2, TODAY);
-  assert.ok(find(raw, 'sys.agenda').children.some(c => c.id === 'api-agenda.slots'));
+  assert.equal(find(raw, 'api-agenda.slots').parent, 'sys.agenda');
   assert.equal(find(raw, 'api-agenda'), undefined);
 });
 
@@ -403,8 +406,8 @@ test('earlier answers that are invalid for their question are ignored when re-pl
 const parallelBase = () => {
   const base = shop();
   base.model.relationships.push(
-    { from: 'cliente', to: 'pagamentos', type: 'uses', description: 'lê' },
-    { from: 'cliente', to: 'pagamentos', type: 'uses', description: 'grava' },
+    { from: 'pagamentos', to: 'cliente', type: 'serving', description: 'lê' },
+    { from: 'pagamentos', to: 'cliente', type: 'serving', description: 'grava' },
   );
   return base;
 };
@@ -414,7 +417,7 @@ test('remove on the second of two parallel relationships uses the #2 id and remo
   assert.equal(plan.blocked, false, JSON.stringify(plan.errors));
   assert.deepEqual(plan.items[0].cascade.relationships, ['pagamentos-serving-cliente#2']);
   const { raw } = applyPlan(parallelBase(), answer(plan, { 'op:0': 'yes' }), TODAY);
-  const left = raw.model.relationships.filter(r => r.from === 'cliente' && r.to === 'pagamentos');
+  const left = raw.model.relationships.filter(r => r.from === 'pagamentos' && r.to === 'cliente');
   assert.deepEqual(left.map(r => r.description), ['lê']);
 });
 
@@ -422,7 +425,7 @@ test('remove on the first of two parallel relationships keeps the other one', ()
   const plan = planMerge(parallelBase(), delta({}, { ops: [{ op: 'remove', id: 'pagamentos-serving-cliente' }] }), TODAY);
   assert.deepEqual(plan.items[0].cascade.relationships, ['pagamentos-serving-cliente']);
   const { raw } = applyPlan(parallelBase(), answer(plan, { 'op:0': 'yes' }), TODAY);
-  const left = raw.model.relationships.filter(r => r.from === 'cliente' && r.to === 'pagamentos');
+  const left = raw.model.relationships.filter(r => r.from === 'pagamentos' && r.to === 'cliente');
   assert.deepEqual(left.map(r => r.description), ['grava']);
 });
 
@@ -535,7 +538,7 @@ test('previewMerge does not throw on a blocked plan (the caller decides)', () =>
 
 test('relationshipIds names relationships exactly like normalizeModel, parallels included', () => {
   const base = shop();
-  base.model.relationships.push({ from: 'cliente', to: 'loja.web', description: 'Volta a comprar' });
+  base.model.relationships.push({ from: 'loja.web', to: 'cliente', type: 'serving', description: 'Volta a comprar' });
   assert.deepEqual([...relationshipIds(base).values()], normalizeModel(base).relationships.map(r => r.id));
 });
 
@@ -548,7 +551,7 @@ test('parallel relationships in the same delta are both new, with no false confl
   assert.equal(plan.items.filter(i => i.class === 'conflict').length, 0);
   assert.equal(plan.summary.new, 2);
   const { raw } = applyPlan(shop(), plan, TODAY);
-  const par = raw.model.relationships.filter(r => r.from === 'loja.api.catalogo' && r.to === 'pagamentos');
+  const par = raw.model.relationships.filter(r => r.from === 'pagamentos' && r.to === 'loja.api.catalogo');
   assert.deepEqual(par.map(r => r.technology), ['POST /balances', 'POST /operations']);
   assert.deepEqual(par.map(r => r.id), ['pagamentos-serving-loja.api.catalogo', 'pagamentos-serving-loja.api.catalogo#2']);
   assert.deepEqual(validateModel(raw).errors, []);
@@ -559,8 +562,8 @@ test('parallel relationships in the same delta are both new, with no false confl
 test('a delta relationship matches the parallel with the same description, not the first one', () => {
   const base = shop();
   base.model.relationships.push(
-    { from: 'loja.api.checkout', to: 'pagamentos', description: 'Consulta saldo', technology: 'POST /balances' },
-    { from: 'loja.api.checkout', to: 'pagamentos', description: 'Movimenta', technology: 'POST /operations' },
+    { from: 'pagamentos', to: 'loja.api.checkout', type: 'serving', description: 'Consulta saldo', technology: 'POST /balances' },
+    { from: 'pagamentos', to: 'loja.api.checkout', type: 'serving', description: 'Movimenta', technology: 'POST /operations' },
   );
   const plan = planMerge(base, delta({ relationships: [
     { from: 'loja.api.checkout', to: 'pagamentos', description: 'Movimenta', tags: ['financeiro'] },
@@ -569,7 +572,7 @@ test('a delta relationship matches the parallel with the same description, not t
   const { raw } = applyPlan(base, plan, TODAY);
   const mov = raw.model.relationships.find(r => r.description === 'Movimenta');
   assert.deepEqual(mov.tags, ['financeiro']);
-  assert.equal(raw.model.relationships.filter(r => r.from === 'loja.api.checkout' && r.to === 'pagamentos').length, 3);
+  assert.equal(raw.model.relationships.filter(r => r.from === 'pagamentos' && r.to === 'loja.api.checkout').length, 3);
 });
 
 test('the same relationship listed twice in one delta is added once', () => {
@@ -584,7 +587,7 @@ test('a single changed description against a single base relationship is still a
   assert.equal(plan.items.filter(i => i.class === 'conflict').length, 1);
 });
 
-const platBase = () => JSON.parse(readFileSync(new URL('./fixtures/platforms.json', import.meta.url)));
+const platBase = () => asBase(JSON.parse(readFileSync(new URL('./fixtures/platforms.json', import.meta.url))));
 
 test('moving an element to another group is a conflict; filling an empty group is an enrichment', () => {
   const plan = planMerge(platBase(), { 'archlens-delta': '1.0', model: { elements: [
@@ -655,9 +658,9 @@ test('removing a grouping clears its members and trims or drops the views that l
 test('removing a grouping keeps the elements nested in it, now top-level and groupless', () => {
   const b = platBase();
   const take = id => { const i = b.model.elements.findIndex(e => e.id === id); return b.model.elements.splice(i, 1)[0]; };
-  const motor = take('motor');
+  const motor = take('motor'), cred = take('plat-cred');
   delete motor.group;
-  b.model.elements.find(e => e.id === 'plat-cred').children = [motor];
+  b.model.elements.push(...asBase({ archlens: '1.0', model: { elements: [{ ...cred, children: [motor] }], relationships: [] } }).model.elements);
   const plan = planMerge(b, { 'archlens-delta': '1.0', ops: [{ op: 'remove', id: 'plat-cred' }] }, TODAY);
   assert.equal(plan.blocked, false, JSON.stringify(plan.errors));
   const it = plan.items.find(i => i.op === 'remove');
@@ -702,4 +705,70 @@ test('repo provenance follows the latest reading of that repository; other sourc
   // the same reading again changes nothing (no reordering)
   const again = applyPlan(raw, planMerge(raw, d, TODAY), TODAY);
   assert.equal(again.entry, null);
+});
+
+test('a delta in the free vocabulary is planned and applied in 2.0', () => {
+  const base = asBase(shop());
+  const d = delta({
+    elements: [{ id: 'loja.worker', type: 'c4:container', name: 'Worker', parent: 'loja' }],
+    relationships: [{ from: 'loja.worker', to: 'loja.db', type: 'uses', description: 'grava' }],
+  });
+  const plan = planMerge(base, d, TODAY);
+  assert.equal(plan.blocked, false, JSON.stringify(plan.errors));
+  assert.equal(plan.delta.model.elements[0].type, 'c4:container', 'the plan keeps the delta as written');
+  const { raw } = applyPlan(base, plan, TODAY);
+  assert.equal(raw.archlens, '2.0');
+  assert.deepEqual(find(raw, 'loja.worker'), { id: 'loja.worker', type: 'application-component', name: 'Worker', parent: 'loja', c4: { kind: 'container' }, sources: [SRC] });
+  const rel = raw.model.relationships.at(-1);
+  assert.deepEqual([rel.from, rel.type, rel.to], ['loja.db', 'serving', 'loja.worker']);
+  assert.ok(raw.model.elements.findIndex(e => e.id === 'loja') < raw.model.elements.findIndex(e => e.id === 'loja.worker'));
+});
+
+test('enriching a nested element without type, parent or c4 asks only about the changed field', () => {
+  const base = asBase(shop());
+  const plan = planMerge(base, delta({ elements: [{ id: 'loja.api', technology: 'Kotlin' }] }), TODAY);
+  assert.deepEqual(plan.items.filter(i => i.class === 'conflict').map(i => i.field), ['technology']);
+  answer(plan, { 'el:loja.api:technology': 'take' });
+  const { raw } = applyPlan(base, plan, TODAY);
+  assert.equal(find(raw, 'loja.api').parent, 'loja');
+  assert.deepEqual(find(raw, 'loja.api').c4, { kind: 'container' });
+});
+
+test('a kind inferred for an element matched by alias never conflicts with the stored kind', () => {
+  const base = asBase(shop());
+  find(base, 'loja.api').aliases = ['orders-service'];
+  const plan = planMerge(base, delta({ elements: [{ id: 'orders-service', type: 'application-component', description: 'Pedidos' }] }), TODAY);
+  assert.ok(!plan.items.some(i => i.field === 'c4'), JSON.stringify(plan.items));
+});
+
+test('moving an element under a parent listed after it keeps parents first', () => {
+  const base = asBase(shop());
+  const d = delta({ elements: [{ id: 'novo', type: 'c4:softwareSystem', name: 'Novo' }, { id: 'loja.web', type: 'c4:container', parent: 'novo' }] });
+  const plan = planMerge(base, d, TODAY);
+  answer(plan, { 'el:loja.web:parent': 'take' });
+  const { raw } = applyPlan(base, plan, TODAY);
+  const at = id => raw.model.elements.findIndex(e => e.id === id);
+  assert.equal(find(raw, 'loja.web').parent, 'novo');
+  assert.ok(at('novo') < at('loja.web'));
+});
+
+test('a kind inferred for a duplicate answered same is never asked about nor written (container in the base)', () => {
+  const base = shop();
+  const d = delta({ elements: [{ id: 'api-loja', type: 'application-component', name: 'API' }] });
+  const plan = planMerge(base, d, TODAY);
+  assert.equal(plan.items.find(i => i.key === 'dup:api-loja')?.candidate, 'loja.api');
+  const plan2 = planMerge(base, d, { ...TODAY, answers: { 'dup:api-loja': 'same' } });
+  assert.ok(!plan2.items.some(i => i.field === 'c4'), JSON.stringify(plan2.items));
+  const { raw } = applyPlan(base, plan2, TODAY);
+  assert.deepEqual(find(raw, 'loja.api').c4, { kind: 'container' });
+});
+
+test('a kind inferred for a duplicate answered same is never written onto a base element without c4', () => {
+  const base = shop();
+  base.model.elements.push({ id: 'erp', type: 'application-component', name: 'ERP' });
+  const d = delta({ elements: [{ id: 'erp-novo', type: 'application-component', name: 'ERP' }] });
+  const plan = planMerge(base, d, { ...TODAY, answers: { 'dup:erp-novo': 'same' } });
+  assert.ok(!plan.items.some(i => i.field === 'c4'), JSON.stringify(plan.items));
+  const { raw } = applyPlan(base, plan, TODAY);
+  assert.equal(find(raw, 'erp').c4, undefined);
 });

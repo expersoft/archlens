@@ -3,9 +3,11 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { normalizeModel } from '../scripts/lib/model.mjs';
 import { validateModel } from '../scripts/lib/validate.mjs';
-import { ELEMENT_TYPES, resolveType } from '../scripts/lib/registry.mjs';
+import { ELEMENT_TYPES, C4_KIND_TYPES } from '../scripts/lib/registry.mjs';
+import { asBase } from './helpers.mjs';
 
-const raw = () => JSON.parse(readFileSync(new URL('./fixtures/shop.json', import.meta.url)));
+const shopRaw = () => JSON.parse(readFileSync(new URL('./fixtures/shop.json', import.meta.url)));
+const raw = () => asBase(shopRaw());
 
 test('registry covers ArchiMate 3.2 core layers', () => {
   for (const t of ['business-actor', 'business-process', 'product', 'application-component',
@@ -17,39 +19,98 @@ test('registry covers ArchiMate 3.2 core layers', () => {
   assert.equal(ELEMENT_TYPES['data-object'].aspect, 'passive');
 });
 
-test('resolveType maps c4 types onto the ArchiMate metamodel', () => {
-  assert.deepEqual(resolveType('c4:person', {}), { type: 'business-actor', c4Kind: 'person' });
-  assert.deepEqual(resolveType('c4:container', {}), { type: 'application-component', c4Kind: 'container' });
-  assert.deepEqual(resolveType('c4:container', { tags: ['database'] }), { type: 'data-object', c4Kind: 'container' });
-  assert.deepEqual(resolveType('archimate:node', {}), { type: 'node', c4Kind: null });
-  assert.deepEqual(resolveType('node', {}), { type: 'node', c4Kind: null });
-  assert.deepEqual(resolveType('c4:container', { archimate: 'system-software' }), { type: 'system-software', c4Kind: 'container' });
-  assert.equal(resolveType('c4:banana', {}).error, 'E_UNKNOWN_TYPE');
-});
-
-test('normalizeModel flattens children and keeps parent links', () => {
+test('normalizeModel reads the 2.0 format: flat parents, c4 kinds, external', () => {
   const m = normalizeModel(raw());
   const checkout = m.elements.get('loja.api.checkout');
   assert.equal(checkout.parent, 'loja.api');
   assert.equal(checkout.c4.kind, 'component');
   assert.equal(m.elements.get('loja.api').parent, 'loja');
-  assert.equal(m.elements.get('loja.db').type, 'data-object');
+  assert.equal(m.elements.get('loja.db').type, 'application-component');
+  assert.ok(m.elements.get('loja.db').tags.includes('database'));
   assert.equal(m.elements.get('pagamentos').c4.external, true);
   assert.equal(m.elements.get('venda').layer, 'business');
 });
 
-test('c4 "uses" becomes reversed serving, or access when the target is passive', () => {
+test('relationships are read as stored: no uses, no c4 orientation', () => {
   const m = normalizeModel(raw());
-  const web = m.relationships.find(r => r.c4 && r.c4.from === 'cliente');
-  assert.equal(web.type, 'serving');
-  assert.equal(web.from, 'loja.web');
-  assert.equal(web.to, 'cliente');
-  assert.equal(web.technology, 'HTTPS');
-  const db = m.relationships.find(r => r.to === 'loja.db');
-  assert.equal(db.type, 'access');
-  assert.equal(db.from, 'loja.api.checkout');
-  assert.deepEqual(db.c4, { from: 'loja.api.checkout', to: 'loja.db' });
+  const web = m.relationships.find(r => r.to === 'cliente');
+  assert.deepEqual([web.type, web.from, web.technology, 'c4' in web], ['serving', 'loja.web', 'HTTPS', false]);
+  const db = m.relationships.find(r => r.from === 'loja.db');
+  assert.deepEqual([db.type, db.to], ['serving', 'loja.api.checkout']);
   assert.ok(m.relationships.every(r => r.id), 'every relationship gets an id');
+});
+
+test('a 1.x base is refused with E_STORE_FORMAT pointing to migrate', () => {
+  const { errors } = validateModel(shopRaw());
+  assert.equal(errors.length, 1);
+  assert.equal(errors[0].code, 'E_STORE_FORMAT');
+  assert.match(errors[0].hint, /archlens migrate/);
+});
+
+test('the free vocabulary is an error inside a 2.0 base', () => {
+  const r = raw();
+  r.model.elements.push({ id: 'x', type: 'c4:container', name: 'X' });
+  r.model.elements.push({ id: 'y', type: 'application-component', name: 'Y', children: [] });
+  r.model.relationships.push({ from: 'loja.web', to: 'loja.api', type: 'uses' });
+  const codes = validateModel(r).errors.map(e => e.code);
+  for (const c of ['E_UNKNOWN_TYPE', 'E_SCHEMA', 'E_REL_TYPE']) assert.ok(codes.includes(c), `expected ${c} in ${codes}`);
+});
+
+test('c4.kind must fit the ArchiMate type', () => {
+  for (const [kind, types] of Object.entries(C4_KIND_TYPES)) {
+    const ok = raw();
+    ok.model.elements.push({ id: 'k', type: types[0], name: 'K', c4: { kind } });
+    assert.ok(!validateModel(ok).errors.some(e => e.code === 'E_C4_TYPE'), kind);
+    const bad = raw();
+    bad.model.elements.push({ id: 'k', type: 'data-object', name: 'K', c4: { kind } });
+    assert.ok(validateModel(bad).errors.some(e => e.code === 'E_C4_TYPE' && /data-object/.test(e.message)), kind);
+  }
+});
+
+test('validation reports stable codes', () => {
+  const r = raw();
+  r.model.elements.push({ id: 'cliente', type: 'business-actor', name: 'dup' });
+  r.model.elements.push({ id: 'sys2', type: 'application-component', name: 's', c4: { kind: 'softwareSystem' } });
+  r.model.elements.push({ id: 'bad', type: 'application-component', name: 'b', c4: { kind: 'component' }, parent: 'sys2' });
+  r.model.relationships.push({ from: 'loja.api', to: 'nope', type: 'serving' });
+  r.model.relationships.push({ from: 'loja.api', to: 'k8s', type: 'access' });
+  r.model.relationships.push({ from: 'proc-checkout', to: 'k8s', type: 'serving' });
+  const { errors, warnings } = validateModel(r);
+  const codes = errors.map(e => e.code);
+  for (const c of ['E_DUPLICATE_ID', 'E_C4_HIERARCHY', 'E_UNKNOWN_REF', 'E_REL_INVALID']) {
+    assert.ok(codes.includes(c), `expected ${c} in ${codes}`);
+  }
+  assert.ok(warnings.some(w => w.code === 'W_REL_DIRECTION'));
+  assert.ok(errors.every(e => e.message && e.hint), 'errors carry message + hint');
+});
+
+test('a data-object may sit inside a container; a parent cycle is reported', () => {
+  const r = raw();
+  r.model.elements.push({ id: 'pedidos', type: 'data-object', name: 'Pedidos', parent: 'loja.db' });
+  assert.deepEqual(validateModel(r).errors, []);
+  const c = raw();
+  c.model.elements.find(e => e.id === 'loja').parent = 'loja.api';
+  assert.ok(validateModel(c).errors.some(e => e.code === 'E_PARENT_CYCLE'));
+});
+
+test('properties take scalars and lists of text; a catalog turns mistakes into W_PROPERTY', () => {
+  const r = raw();
+  r.model.elements.find(e => e.id === 'loja.api').properties = { squad: 'Checkout', tiers: ['web', 'mobile'], businessUnit: 'Atacadão' };
+  r.model.elements.find(e => e.id === 'venda').properties = { squad: 'Vendas' };
+  assert.deepEqual(validateModel(r).errors, []);
+  assert.ok(!validateModel(r).warnings.some(w => w.code === 'W_PROPERTY'), 'no catalog, no warning');
+  r.properties = {
+    squad: { label: 'Squad', appliesTo: ['application-component'] },
+    tiers: { type: 'string[]' },
+    businessUnit: { values: ['Varejo', 'Atacado'] },
+  };
+  r.model.elements.find(e => e.id === 'loja.web').properties = { time: 'Front' };
+  const w = validateModel(r).warnings.filter(x => x.code === 'W_PROPERTY').map(x => x.message);
+  assert.equal(w.length, 3, w.join('\n'));
+  assert.ok(w.some(m => /"time"/.test(m)) && w.some(m => /Atacadão/.test(m)) && w.some(m => /venda/.test(m)));
+  const bad = raw();
+  bad.model.elements[0].properties = { x: { nested: true } };
+  assert.ok(validateModel(bad).errors.some(e => e.code === 'E_SCHEMA' && /properties\.x/.test(e.path)));
 });
 
 test('valid model has no errors', () => {
@@ -57,24 +118,6 @@ test('valid model has no errors', () => {
   assert.deepEqual(errors, []);
 });
 
-test('validation reports stable codes', () => {
-  const r = raw();
-  r.model.elements.push({ id: 'cliente', type: 'c4:person', name: 'dup' });
-  r.model.elements.push({ id: 'x', type: 'c4:banana', name: 'x' });
-  r.model.elements.push({ id: 'sys2', type: 'c4:softwareSystem', name: 's', children: [{ id: 'bad', type: 'c4:component', name: 'b' }] });
-  r.model.relationships.push({ from: 'loja.api', to: 'nope', type: 'uses' });
-  r.model.relationships.push({ from: 'loja.api', to: 'k8s', type: 'archimate:access' });
-  r.model.relationships.push({ from: 'proc-checkout', to: 'k8s', type: 'archimate:serving' });
-  const { errors, warnings } = validateModel(r);
-  const codes = errors.map(e => e.code);
-  for (const c of ['E_DUPLICATE_ID', 'E_UNKNOWN_TYPE', 'E_C4_HIERARCHY', 'E_UNKNOWN_REF', 'E_REL_INVALID']) {
-    assert.ok(codes.includes(c), `expected ${c} in ${codes}`);
-  }
-  assert.ok(warnings.some(w => w.code === 'W_REL_DIRECTION'));
-  assert.ok(errors.every(e => e.message && e.hint), 'errors carry message + hint');
-});
-
-import { canonicalRel } from '../scripts/lib/model.mjs';
 import { addSources } from '../scripts/lib/sources.mjs';
 
 const findRaw = (r, id) => {
@@ -120,15 +163,6 @@ test('validate warns when something active depends on a retired element', () => 
   assert.match(w[0].message, /loja\.api/);
 });
 
-test('canonicalRel reads uses as inverted serving, or access to passive targets', () => {
-  const types = { web: 'application-component', api: 'application-component', db: 'data-object' };
-  const typeOf = id => types[id];
-  assert.deepEqual(canonicalRel({ from: 'web', to: 'api', type: 'uses' }, typeOf), { type: 'serving', from: 'api', to: 'web' });
-  assert.deepEqual(canonicalRel({ from: 'api', to: 'db' }, typeOf), { type: 'access', from: 'api', to: 'db', accessType: 'readwrite' });
-  assert.deepEqual(canonicalRel({ from: 'api', to: 'web', type: 'archimate:serving' }, typeOf), { type: 'serving', from: 'api', to: 'web' });
-  assert.equal(canonicalRel({ from: 'a', to: 'b', type: 'banana' }, () => undefined).error, 'E_REL_TYPE');
-});
-
 test('addSources deduplicates by kind+ref+path and migrates a legacy source string', () => {
   const el = { id: 'x', source: 'trecho antigo' };
   assert.equal(addSources(el, [{ kind: 'repo', ref: 'r@1', path: 'a.yml' }, { kind: 'repo', ref: 'r@1', path: 'a.yml', date: '2026-10-01' }]), 1);
@@ -163,7 +197,8 @@ test('draft is a valid status for elements and relationships', () => {
   assert.equal(normalizeModel(r).elements.get('loja.api').status, 'draft');
 });
 
-const platforms = () => JSON.parse(readFileSync(new URL('./fixtures/platforms.json', import.meta.url)));
+const platformsRaw = () => JSON.parse(readFileSync(new URL('./fixtures/platforms.json', import.meta.url)));
+const platforms = () => asBase(platformsRaw());
 
 test('group: direct membership, inheritance down the hierarchy, groupings have none', () => {
   const m = normalizeModel(platforms());
@@ -178,7 +213,7 @@ test('group: direct membership, inheritance down the hierarchy, groupings have n
 
 test('a container may override the inherited group', () => {
   const r = platforms();
-  r.model.elements.find(e => e.id === 'autorizador').children[1].group = 'plat-cred';
+  r.model.elements.find(e => e.id === 'autorizador.regras').group = 'plat-cred';
   const m = normalizeModel(r);
   assert.equal(m.elements.get('autorizador.regras').groupId, 'plat-cred');
 });
@@ -191,7 +226,7 @@ test('group errors: unknown or non-grouping target, nested groupings, relationsh
   assert.ok(codes(b).includes('E_GROUP_REF'));
   const c = platforms(); c.model.elements.find(e => e.id === 'plat-cred').group = 'plat-aut';
   assert.ok(codes(c).includes('E_GROUP_NESTED'));
-  const d = platforms(); d.model.relationships.push({ from: 'motor', to: 'plat-aut', type: 'archimate:association' });
+  const d = platforms(); d.model.relationships.push({ from: 'motor', to: 'plat-aut', type: 'association' });
   assert.ok(codes(d).includes('E_GROUP_REL'));
 });
 
@@ -207,18 +242,34 @@ test('schemas accept "group" on elements', async () => {
   const { buildSchemas } = await import('../scripts/gen-schemas.mjs');
   const s = buildSchemas();
   assert.deepEqual(s.model.$defs.element.properties.group, { type: ['string', 'null'] });
+  assert.deepEqual(s.delta.$defs.element.properties.group, { type: ['string', 'null'] });
+});
+
+test('schemas: the model is strict 2.0, the delta keeps the free vocabulary, views take nesting', async () => {
+  const { buildSchemas } = await import('../scripts/gen-schemas.mjs');
+  const s = buildSchemas();
+  const el = s.model.$defs.element.properties;
+  assert.ok(!el.type.enum.some(t => t.includes(':')));
+  assert.ok(!('children' in el) && !('archimate' in el));
+  assert.deepEqual(Object.keys(el.c4.properties), ['kind']);
+  assert.ok(!s.model.$defs.relationship.properties.type.enum.includes('uses'));
+  assert.equal(s.model.properties.archlens.pattern, '^2\\.\\d+$');
+  assert.ok(s.model.properties.properties, 'property catalog');
+  assert.ok(s.delta.$defs.element.properties.type.enum.includes('c4:container'));
+  assert.ok(s.delta.$defs.relationship.properties.type.enum.includes('uses'));
+  assert.ok(s.view.properties.nesting);
 });
 
 // A base where the credit systems sit inside their grouping (nested, or with "parent") instead of using "group".
 const nestedInGrouping = form => {
-  const r = platforms();
+  const r = platformsRaw();
   const cred = r.model.elements.find(e => e.id === 'plat-cred');
   const take = id => { const i = r.model.elements.findIndex(e => e.id === id); return r.model.elements.splice(i, 1)[0]; };
   const motor = take('motor'), limites = take('limites');
   delete motor.group; delete limites.group;
   if (form === 'nested') cred.children = [motor, limites];
   else { motor.parent = 'plat-cred'; limites.parent = 'plat-cred'; r.model.elements.push(motor, limites); }
-  return r;
+  return asBase(r);
 };
 
 for (const form of ['nested', 'parent']) {
@@ -235,11 +286,11 @@ for (const form of ['nested', 'parent']) {
 }
 
 test('a grouping nested in another grouping is still E_GROUP_NESTED', () => {
-  const r = platforms();
+  const r = platformsRaw();
   const cred = r.model.elements.find(e => e.id === 'plat-cred');
   r.model.elements.splice(r.model.elements.indexOf(cred), 1);
   r.model.elements.find(e => e.id === 'plat-aut').children = [cred];
-  assert.ok(validateModel(r).errors.some(e => e.code === 'E_GROUP_NESTED'));
+  assert.ok(validateModel(asBase(r)).errors.some(e => e.code === 'E_GROUP_NESTED'));
 });
 
 test('"group": null means no group (not a schema error)', async () => {

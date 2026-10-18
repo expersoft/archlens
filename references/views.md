@@ -25,6 +25,7 @@ de visões novas sem remodelar. Campos comuns:
 | `depth` | saltos a partir do foco (padrão 1) |
 | `expand` | `container`/`dynamic` com scope num sistema: outros software systems a abrir também, cada um no seu boundary (ex.: mostrar o tópico do produtor num fluxo do consumidor) |
 | `steps` | só `dynamic`: `[{ "from", "to", "description"?, "technology"? }]` ou `[{ "rel": "<id>" }]` |
+| `derive` | `false` desliga as setas derivadas através de `application-service`, `application-interface`, `application-function` e `application-process` (padrão ligado; veja `c4.md`) |
 
 Semântica:
 
@@ -56,10 +57,11 @@ Exemplo, containers com foco na API e seus vizinhos imediatos:
 | `traverse.mode` | `supporters` (o que sustenta a âncora), `dependents` (o que depende dela), `both` |
 | `traverse.via` | relações percorridas (padrão: composition, aggregation, assignment, realization, serving, access, influence). Acrescente `flow`/`triggering` para seguir processos |
 | `traverse.maxDepth` | padrão 12 |
-| `traverse.hierarchy` | considera o aninhamento (children) como composição (padrão true) |
+| `traverse.hierarchy` | considera a hierarquia (`parent`) como composição (padrão true) |
 | `granularity` | `component` (tudo), `container` (esconde componentes C4 e o sistema-pai quando seus containers aparecem), `system`. Padrão: `container` em `product-support`/`impact`, `component` nos demais |
 | `collapse` | tipos a esconder, com derivação através deles (ex.: `["application-service"]`) |
 | `derive` | cria relações derivadas através do que ficou oculto (padrão true) |
+| `nesting` | `"edges"` (padrão: pai e filho ligados pelo losango de composição), `"nested"` (filhos dentro da caixa do pai) ou `{ "mode": "edges" \| "nested", "depth": <inteiro ≥ 1> }` (aninha só até esse nível; abaixo dele, o elemento fica na caixa do ancestral aninhado mais próximo, ligado pelo losango). Valor inválido: `E_VIEW_NESTING` |
 | `output` | `["diagram","matrix"]` gera a matriz de dependência (sempre ativa em `impact`) |
 
 ### Travessia por suporte
@@ -114,6 +116,13 @@ Matriz de dependência de um application component (negócio impactado + tecnolo
 { "key": "impacto-api", "notation": "archimate", "viewpoint": "impact", "anchor": "loja.pedidos" }
 ```
 
+Camada de aplicação com os containers dentro do sistema e os componentes ao lado, ligados pelo losango:
+
+```json
+{ "key": "aplicacao-aninhada", "notation": "archimate", "viewpoint": "application", "include": ["loja"],
+  "nesting": { "mode": "nested", "depth": 1 } }
+```
+
 Só negócio × tecnologia (a aplicação vira relações derivadas):
 
 ```json
@@ -157,7 +166,7 @@ Camada de aplicação sem ruído de componentes:
 Desenho. **C4:** moldura → fronteira do sistema → containers; a fronteira do sistema aberto fica dentro da moldura
 do grupo dele, e as setas ligam elementos, nunca a moldura. **ArchiMate:** uma moldura por grupo × camada (nenhuma
 atravessa faixas). `bands` não agrupa: com molduras, `auto` escolhe entre `flow` e `bands-flow`, e `bands` pedido
-vira `bands-flow` com aviso no build.
+vira `bands-flow` com aviso no build. Com `nesting` aninhado, `bands` também vira `bands-flow`.
 
 ## Layout
 

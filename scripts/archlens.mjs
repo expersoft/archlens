@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // archlens CLI — model → knowledge base (ARCHITECTURE.md) → C4 / ArchiMate views → animated HTML.
-import { readFileSync, writeFileSync, existsSync, renameSync, mkdirSync, rmSync, readdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, renameSync, mkdirSync, rmSync, readdirSync, cpSync } from 'node:fs';
 import { dirname, basename, extname, join, resolve, relative, sep } from 'node:path';
 import { spawn } from 'node:child_process';
 import { normalizeModel, c4KindOf } from './lib/model.mjs';
@@ -11,10 +11,13 @@ import { layoutView, legibility } from './lib/layout.mjs';
 import { renderHtml } from './lib/render.mjs';
 import { suggestViews } from './lib/suggest.mjs';
 import { inspectHtml } from './lib/deliver.mjs';
-import { planMerge, applyPlan, mergeError, canonicalJson, hashRaw, PLAN_VERSION } from './lib/merge.mjs';
+import { planMerge, applyPlan, mergeError, canonicalJson, hashRaw, relationshipIds, PLAN_VERSION } from './lib/merge.mjs';
 import { formatPlanReport } from './lib/merge-report.mjs';
 import { previewModel, previewSummary, annotateView } from './lib/preview.mjs';
 import { resolveBase, openStore, frontmatterSource, MANIFEST } from './lib/store/index.mjs';
+import { migrateRaw, reportLines } from './lib/migrate.mjs';
+import { FORMAT, isCanonicalFormat } from './lib/canonical.mjs';
+import { saveFolder, loadFolder } from './lib/store/folder.mjs';
 import { scanSource } from './lib/scan/index.mjs';
 import { summarize, formatSummary } from './lib/scan/summary.mjs';
 import { toDelta } from './lib/scan/to-delta.mjs';
@@ -24,8 +27,8 @@ const HELP = `archlens — arquitetura como modelo, diagramas como consultas
 Uso: node scripts/archlens.mjs <comando> [base] [opções]
 
 Base: a pasta architecture/ (fonte da verdade), o ARCHITECTURE.md gerado (aponta para ela) ou nada (procura a
-partir do diretório atual). Bases antigas (bloco archlens-json no .md, ou um modelo .json) são lidas, mas só
-"migrate" as converte para gravar.
+partir do diretório atual). Bases 1.x (pasta, .md com bloco archlens-json ou modelo .json) são recusadas
+(E_STORE_FORMAT): "archlens migrate <base>" converte para o formato 2.0.
 
 Comandos
   validate  <base>                         valida schema, referências, hierarquia C4 e regras ArchiMate
@@ -39,7 +42,7 @@ Comandos
   render    <base> --out f.html [seleção]    gera o HTML animado
   deliver   <base> --out f.html [seleção]    render + screenshots 1920×1080/1280×720 + checagens
   build     <base> [--out-dir DIR]           ARCHITECTURE.md + HTML (padrão: architecture/diagrams/)
-  migrate   <ARCHITECTURE.md|m.json> [--to DIR]  converte uma base antiga para a pasta architecture/
+  migrate   <base 1.x> [--to DIR]           converte uma base 1.x (pasta, .md ou .json) para o formato 2.0
   check     [base] [--json]               valida e confere se o ARCHITECTURE.md está em dia (CI / pre-commit)
   scan      <pasta|url> [--base b] [--out inv.json] [--json]   lê um repositório: inventário e papel sugerido
             <pasta|url> --as system|service [--system id] [--id id] --delta d.json [--from inv.json]   monta o delta
@@ -358,42 +361,88 @@ async function main() {
       break;
     }
     case 'migrate': {
-      if (!file) fail('uso: archlens migrate <ARCHITECTURE.md | modelo.json> [--to <pasta>]');
+      if (!file) fail('uso: archlens migrate <architecture/ | ARCHITECTURE.md | modelo.json> [--to <pasta>]');
       let loc;
       try { loc = resolveBase(file); } catch (e) { fail(e.message); }
-      if (loc.kind !== 'legacy') fail(`${file} já está no formato novo (${relPath(loc.path)}/)`);
-      const { raw, notes } = loadBase(openStore(loc));
-      const { errors } = validateModel(raw);
-      if (errors.length) { printIssues(errors, 'ERRO'); fail('corrija os erros do modelo antes de migrar; nada foi gravado', 2); }
-      const to = resolve(args.to && args.to !== true ? args.to : join(dirname(loc.path), 'architecture'));
-      let target;
-      try { target = resolveBase(to, { create: true }); } catch (e) {
-        fail(e.code === 'E_STORE_NOT_BASE' && !(args.to && args.to !== true) ? `${e.message}; use --to <pasta> para escolher outro destino` : e.message);
+      if (loc.kind === 'folder' && !loc.exists) fail(`base não encontrada: ${file}`);
+      const src = openStore(loc);
+      let loaded;
+      try { loaded = src.load({ anyFormat: true }); } catch (e) { fail(e.message); }
+      const { raw, notes } = loaded;
+      // A 2.0 base still in the old single-file container only changes container.
+      const already = isCanonicalFormat(raw?.archlens);
+      if (already && loc.kind === 'folder') fail(`${file} já está no formato ${FORMAT}`);
+      const res = already ? { raw, report: null, errors: validateModel(raw).errors, diffs: [] } : migrateRaw(raw);
+      if (res.errors.length) { printIssues(res.errors, 'ERRO'); fail('corrija os erros do modelo antes de migrar; nada foi gravado', 2); }
+      if (res.diffs.length) {
+        for (const d of res.diffs) console.log(`  diferença: ${d}`);
+        fail(`E_MIGRATE_EQUIV: a tradução para ${FORMAT} não reproduz o modelo (${res.diffs.length} diferença(s)); nada foi gravado`, 2);
       }
-      if (target.exists) fail(`E_STORE_EXISTS: ${relPath(to)} já tem uma base (${MANIFEST}); escolha outra pasta com --to`);
-      const docPath = extname(loc.path).toLowerCase() === '.md' ? loc.path : join(dirname(loc.path), 'ARCHITECTURE.md');
-      const dest = openStore({ ...target, docPath });
-      const replacing = docPath === loc.path ? loc.path : undefined; // the old .md is replaced by the generated one
-      assertDocOwned(dest, docPath, { replacing });
-      const existed = existsSync(to); // resolveBase only lets an empty folder through, so everything inside is ours
-      let back;
-      try {
-        dest.save(raw, { notes });
-        back = dest.load();
-        if (canonicalJson(back.raw) !== canonicalJson(raw)) throw new Error('E_STORE_MIGRATE: a pasta gravada não reproduz o modelo original; nada foi trocado');
-        if (hashRaw(back.raw) !== hashRaw(raw)) console.warn('  aviso: a ordem das chaves mudou; planos gerados antes da migração precisarão ser refeitos');
-      } catch (e) {
-        if (existed) for (const n of readdirSync(to)) rmSync(join(to, n), { recursive: true, force: true });
-        else rmSync(to, { recursive: true, force: true });
-        fail(e.message);
+      let dest, docPath, replacing;
+      if (loc.kind === 'folder') {
+        dest = openStore({ ...loc, exists: true });
+        docPath = loc.docPath;
+        assertDocOwned(dest, docPath); // before anything is written: a foreign document would stop us after the swap
+        // In place: copy the folder, save the 2.0 base over the copy (files of the user and split files that end up
+        // empty stay), read it back, then swap; the old folder is removed only after the swap.
+        const tmp = `${loc.path}.migrate-${process.pid}`;
+        const old = `${loc.path}.old-${process.pid}`;
+        // Relationship ids change (uses → serving); toCanonical keeps order and count, so origins follow the index.
+        const oldIds = relationshipIds(raw), newIds = relationshipIds(res.raw);
+        const relOrigins = new Map();
+        (raw.model?.relationships ?? []).forEach((r, i) => {
+          const from = loaded.origins?.relationships.get(oldIds.get(r));
+          if (from) relOrigins.set(newIds.get(res.raw.model.relationships[i]), from);
+        });
+        const origins = { elements: loaded.origins?.elements ?? new Map(), relationships: relOrigins };
+        try {
+          cpSync(loc.path, tmp, { recursive: true });
+          saveFolder(tmp, res.raw, { notes, origins, layout: loaded.layout });
+          const back = loadFolder(tmp);
+          if (canonicalJson(back.raw) !== canonicalJson(res.raw)) throw new Error('E_STORE_MIGRATE: a pasta gravada não reproduz o modelo convertido; nada foi trocado');
+          renameSync(loc.path, old);
+          renameSync(tmp, loc.path);
+        } catch (e) {
+          rmSync(tmp, { recursive: true, force: true });
+          if (existsSync(old) && !existsSync(loc.path)) renameSync(old, loc.path);
+          fail(e.message);
+        }
+        // Past the swap the base is migrated: a leftover old folder (EBUSY/EPERM on Windows) is only a warning.
+        try { rmSync(old, { recursive: true, force: true }); } catch {
+          console.warn(`  aviso: não consegui apagar ${relPath(old)}; remova-o à mão`);
+        }
+      } else {
+        const to = resolve(args.to && args.to !== true ? args.to : join(dirname(loc.path), 'architecture'));
+        let target;
+        try { target = resolveBase(to, { create: true }); } catch (e) {
+          fail(e.code === 'E_STORE_NOT_BASE' && !(args.to && args.to !== true) ? `${e.message}; use --to <pasta> para escolher outro destino` : e.message);
+        }
+        if (target.exists) fail(`E_STORE_EXISTS: ${relPath(to)} já tem uma base (${MANIFEST}); escolha outra pasta com --to`);
+        docPath = extname(loc.path).toLowerCase() === '.md' ? loc.path : join(dirname(loc.path), 'ARCHITECTURE.md');
+        dest = openStore({ ...target, docPath });
+        replacing = docPath === loc.path ? loc.path : undefined; // the old .md is replaced by the generated one
+        assertDocOwned(dest, docPath, { replacing });
+        const existed = existsSync(to); // resolveBase only lets an empty folder through, so everything inside is ours
+        try {
+          dest.save(res.raw, { notes });
+          if (canonicalJson(dest.load().raw) !== canonicalJson(res.raw)) throw new Error('E_STORE_MIGRATE: a pasta gravada não reproduz o modelo convertido; nada foi trocado');
+        } catch (e) {
+          if (existed) for (const n of readdirSync(to)) rmSync(join(to, n), { recursive: true, force: true });
+          else rmSync(to, { recursive: true, force: true });
+          fail(e.message);
+        }
       }
-      if (back.notes.assumptions != null && raw.assumptions?.length) {
+      const back = dest.load();
+      if (back.notes.assumptions != null && res.raw.assumptions?.length) {
         console.warn(`  aviso: notes/assumptions.md substitui a lista de premissas do manifesto no documento`);
       }
       const doc = writeDoc(dest, back.raw, back.notes, docPath, { replacing });
-      console.log(`✓ ${dest.describe()} criada; ${relPath(doc)} regenerado (formato novo)`);
-      console.log(`  notas: ${Object.keys(notes).length ? Object.keys(notes).map(n => `notes/${n}.md`).join(', ') : '(nenhuma)'}`);
-      console.log(`  commit sugerido: git add ${relPath(to)} ${relPath(doc)} && git commit -m "chore(archlens): base migrada para ${relPath(to)}/"`);
+      console.log(`✓ ${dest.describe()} no formato ${FORMAT}; ${relPath(doc)} regenerado`);
+      if (res.report) {
+        for (const l of reportLines(res.report)) console.log(`  ${l}`);
+        console.log('  aviso: planos gerados antes da migração não se aplicam mais (a base mudou); gere-os de novo');
+      }
+      console.log(`  commit sugerido: git add ${relPath(dest.locator.path)} ${relPath(doc)} && git commit -m "chore(archlens): base migrada para o formato ${FORMAT}"`);
       break;
     }
     case 'scan': {
@@ -412,7 +461,7 @@ async function main() {
         base = loaded.raw ? normalizeModel(loaded.raw) : null;
         if (!base) newBase(val('base') ? st.locator.path : null);
       } catch (e) {
-        if (val('base')) fail(e.message);
+        if (val('base') || e.code === 'E_STORE_FORMAT') fail(e.message);
         newBase();
       }
       if (args.delta) {

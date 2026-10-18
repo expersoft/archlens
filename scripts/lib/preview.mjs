@@ -5,7 +5,7 @@ import { previewMerge, relationshipIds, relationshipKeys, canonicalJson, mergeEr
 import { indexTree, attach } from './raw-tree.mjs';
 import { describeItem } from './merge-report.mjs';
 
-const ELEMENT_COMPARED = ['name', 'type', 'description', 'technology', 'external', 'archimate', 'parent', 'group', 'status', 'statusReason', 'tags', 'aliases', 'properties', 'owner', 'url'];
+const ELEMENT_COMPARED = ['name', 'type', 'description', 'technology', 'external', 'c4', 'parent', 'group', 'status', 'statusReason', 'tags', 'aliases', 'properties', 'owner', 'url'];
 const REL_COMPARED = ['description', 'technology', 'accessType', 'status', 'statusReason', 'tags', 'properties'];
 const OPTIONS = { conflict: ['keep', 'take', 'value:<x>'], 'view-conflict': ['keep', 'take'], 'possible-duplicate': ['same', 'different'], op: ['yes', 'no'] };
 const ASSUMED = { conflict: 'take', 'possible-duplicate': 'different', op: 'yes' };
@@ -48,12 +48,12 @@ export function previewModel(baseRaw, { delta, plan } = {}) {
   // Ghosts: removed elements go back under their old parent (indexTree walks top-down, so parents come first).
   for (const [id, b] of before) {
     if (after.has(id)) continue;
-    const { children, ...el } = structuredClone(b.el);
+    const el = structuredClone(b.el);
     attach(raw, after, el, b.parent ?? null);
     changes.set(id, { kind: 'removed' });
   }
   // Members of a removed grouping keep it in the preview, so its frame shows as removed around them.
-  const removedGroups = new Set([...before].filter(([id, b]) => changes.get(id)?.kind === 'removed' && String(b.el.type).replace(/^archimate:/, '') === 'grouping').map(([id]) => id));
+  const removedGroups = new Set([...before].filter(([id, b]) => changes.get(id)?.kind === 'removed' && b.el.type === 'grouping').map(([id]) => id));
   if (removedGroups.size) {
     for (const [id, a] of after) {
       const b = before.get(id);
