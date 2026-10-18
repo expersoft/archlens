@@ -1,7 +1,7 @@
 // ARCHITECTURE.md: the human-readable knowledge-base document, generated from the base folder (never read back).
 import { normalizeModel, c4KindOf, childrenOf, c4Orientation } from './model.mjs';
 import { resolveView } from './query.mjs';
-import { ELEMENT_TYPES, LAYER_ORDER, LAYER_LABELS, C4_LABELS } from './registry.mjs';
+import { ELEMENT_TYPES, LAYER_ORDER, LAYER_LABELS, C4_LABELS, STORE_TAGS } from './registry.mjs';
 
 /** Hand-written notes of a knowledge base (architecture/notes/<name>.md). */
 export const NOTE_NAMES = ['overview', 'notes', 'assumptions'];
@@ -119,7 +119,7 @@ export function generateDoc(raw, { notes = {}, source = 'architecture/' } = {}) 
       if (s.description) out.push(s.description, '');
       const containers = childrenOf(model, s.id).filter(c => kind(c) === 'container');
       if (containers.length) {
-        out.push(table(['Container', 'Tecnologia', 'Descrição', ...extraHead, 'id'], containers.map(c => [c.name + (c.tags.some(t => ['database', 'datastore'].includes(t.toLowerCase())) ? ' 🛢' : ''), c.technology, c.description, ...extra(c), `\`${c.id}\``])), '');
+        out.push(table(['Container', 'Tecnologia', 'Descrição', ...extraHead, 'id'], containers.map(c => [c.name + (c.tags.some(t => STORE_TAGS.includes(t.toLowerCase())) ? ' 🛢' : ''), c.technology, c.description, ...extra(c), `\`${c.id}\``])), '');
         for (const c of containers) {
           const comps = childrenOf(model, c.id).filter(x => kind(x) === 'component');
           if (!comps.length) continue;

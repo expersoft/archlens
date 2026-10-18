@@ -1,7 +1,7 @@
 // The only reader of the free vocabulary: c4:* types, archimate:* prefixes, "uses", nested "children" and the
 // "archimate" override. Prompts, deltas and 1.x bases go through here; everything else reads the 2.0 format
 // (ArchiMate types, c4.kind, flat "parent", ArchiMate relationships). Pure.
-import { ELEMENT_TYPES, RELATIONSHIP_TYPES } from './registry.mjs';
+import { ELEMENT_TYPES, RELATIONSHIP_TYPES, STORE_TAGS } from './registry.mjs';
 import { orderDelta } from './raw-tree.mjs';
 
 export const FORMAT = '2.0';
@@ -12,7 +12,7 @@ const C4_TO_ARCHIMATE = {
   component: 'application-component', deploymentNode: 'node', infrastructureNode: 'node',
 };
 // Tags that made a 1.x c4:container a data-object; in 2.0 such a container is an application-component.
-export const DATA_TAGS = ['database', 'datastore', 'data-store', 'bucket', 'storage'];
+export const DATA_TAGS = STORE_TAGS;
 const NEXT_KIND = { softwareSystem: 'container', container: 'component' };
 const isPassiveType = t => ELEMENT_TYPES[t]?.aspect === 'passive';
 
@@ -122,7 +122,15 @@ export function sortParentsFirst(elements) {
   return out;
 }
 
-/** A whole base (1.x or free vocabulary) in 2.0. An access to a 1.x database becomes serving from it. */
+/** A 1.x database engine (system-software or node) realizing a database: in 2.0 the engine serves it. */
+const ENGINE_TYPES = ['system-software', 'node'];
+export const isEngineRealization = (r, types, databases) =>
+  r.type === 'realization' && ENGINE_TYPES.includes(types.get(r.from)) && databases.has(r.to);
+
+/**
+ * A whole base (1.x or free vocabulary) in 2.0. An access to a 1.x database becomes serving from it; an engine
+ * realizing it becomes serving it.
+ */
 export function toCanonical(raw) {
   const els = canonicalElements(raw?.model?.elements ?? []);
   const types = new Map(els.elements.map(e => [e.id, e.type]));
@@ -132,7 +140,9 @@ export function toCanonical(raw) {
     const c = canonicalRelationship(r, id => types.get(id));
     if (!c) return r;
     if (/^(c4:)?uses$/.test(String(r.type ?? 'uses'))) report.uses++;
-    return c.type === 'access' && els.databases.has(c.to) ? toServing(c, true) : c;
+    if (c.type === 'access' && els.databases.has(c.to)) return toServing(c, true);
+    if (isEngineRealization(c, types, els.databases)) return { ...c, type: 'serving' };
+    return c;
   });
   // Same key order as the input (only "archlens" goes first), so a saved and reloaded base hashes the same.
   const out = { archlens: FORMAT };

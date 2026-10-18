@@ -1,6 +1,6 @@
 // Frozen 1.x reader (normalizeModel of archlens 0.3), kept only so "migrate" can validate a 1.x base and check
 // that the 2.0 translation means the same thing. Never use it for anything else.
-import { ELEMENT_TYPES, RELATIONSHIP_TYPES, checkRelationship, isPassive, STATUSES } from './registry.mjs';
+import { ELEMENT_TYPES, RELATIONSHIP_TYPES, checkRelationship, isPassive, STATUSES, STORE_TAGS } from './registry.mjs';
 import { readSources, sourceProblem } from './sources.mjs';
 import { aliasKey } from './match.mjs';
 
@@ -247,7 +247,7 @@ const C4_TO_ARCHIMATE = {
   person: 'business-actor', softwareSystem: 'application-component', container: 'application-component',
   component: 'application-component', deploymentNode: 'node', infrastructureNode: 'node',
 };
-const DATA_TAGS = ['database', 'datastore', 'data-store', 'bucket', 'storage'];
+const DATA_TAGS = STORE_TAGS;
 
 function resolveType(raw, hints = {}) {
   if (typeof raw !== 'string') return { error: 'E_UNKNOWN_TYPE' };

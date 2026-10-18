@@ -88,6 +88,15 @@ test('an explicit access to a 1.x database becomes serving from it, keeping read
   assert.deepEqual(toCanonical(r).raw.model.relationships.at(-1), { from: 'loja.db', to: 'loja.web', type: 'serving', properties: { accessType: 'read' } });
 });
 
+test('a 1.x engine realizing a database becomes serving the database, in the same direction', () => {
+  const r = shop();
+  r.model.relationships.push({ from: 'pg', to: 'loja.db', type: 'archimate:realization' });
+  r.model.relationships.push({ id: 'no-k8s', from: 'k8s', to: 'loja.db', type: 'realization' });
+  const rels = toCanonical(r).raw.model.relationships;
+  assert.deepEqual(rels.at(-2), { from: 'pg', to: 'loja.db', type: 'serving' });
+  assert.deepEqual(rels.at(-1), { id: 'no-k8s', from: 'k8s', to: 'loja.db', type: 'serving' });
+});
+
 test('sortParentsFirst moves parents ahead of their children and keeps the rest in order', () => {
   const list = [{ id: 'c', parent: 'b' }, { id: 'x' }, { id: 'b', parent: 'a' }, { id: 'a' }];
   assert.deepEqual(sortParentsFirst(list).map(e => e.id), ['a', 'b', 'c', 'x']);

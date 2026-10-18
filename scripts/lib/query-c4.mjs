@@ -1,6 +1,6 @@
 // C4 projections: landscape, context, container, component, dynamic — with focus, lifting and filters.
 import { c4KindOf, c4Orientation, childrenOf, ancestors } from './model.mjs';
-import { C4_LABELS } from './registry.mjs';
+import { C4_LABELS, STORE_TAGS } from './registry.mjs';
 import { viewError, matchesPattern } from './query-util.mjs';
 import { groupSpec, groupOf, cutByGroups, cutEdges, frameGroups } from './query-groups.mjs';
 
@@ -221,7 +221,7 @@ export function resolveC4(model, spec) {
       technology: el.technology, description: el.description, tags: el.tags, properties: el.properties,
       external: !!el.c4?.external,
       queue: el.tags.some(t => QUEUE_TAGS.includes(t.toLowerCase())),
-      database: !el.tags.some(t => QUEUE_TAGS.includes(t.toLowerCase())) && el.tags.some(t => ['database', 'datastore'].includes(t.toLowerCase())),
+      database: !el.tags.some(t => QUEUE_TAGS.includes(t.toLowerCase())) && el.tags.some(t => STORE_TAGS.includes(t.toLowerCase())),
       boundary: internal.has(id) ? boundary.id : boundaryOf.get(id)?.id ?? null,
       parentName: !internal.has(id) && !boundaryOf.has(id) && parent && k !== 'person' && k !== 'softwareSystem' ? parent.name : null,
       isScope: scope?.id === id,

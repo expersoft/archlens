@@ -100,3 +100,16 @@ test('generateDoc: groupings stay out of the layer tables and counts, and each g
   assert.match(md, /### Plataforma de Autorização\n\n`plat-aut`\n\nAutoriza/);
   assert.match(md, /### Plataforma de Crédito\n\n`plat-cred` · status: draft\n/);
 });
+
+test('generateDoc marks containers tagged bucket or storage as data stores', () => {
+  const md = generateDoc({ archlens: '2.0', name: 'Lojas', model: {
+    elements: [
+      { id: 's', type: 'application-component', name: 'S', c4: { kind: 'softwareSystem' } },
+      { id: 's.bucket', type: 'application-component', name: 'Bucket', parent: 's', c4: { kind: 'container' }, tags: ['bucket'] },
+      { id: 's.files', type: 'application-component', name: 'Files', parent: 's', c4: { kind: 'container' }, tags: ['storage'] },
+    ],
+    relationships: [],
+  } });
+  assert.match(md, /Bucket 🛢/);
+  assert.match(md, /Files 🛢/);
+});

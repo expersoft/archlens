@@ -358,7 +358,7 @@
     {
       "from": "tech.postgres-16",
       "to": "loja.pedidos-pedidos-db",
-      "type": "realization",
+      "type": "serving",
       "id": "tech.postgres-16-realization-loja.pedidos-pedidos-db",
       "sources": [
         {
@@ -430,7 +430,7 @@
     {
       "from": "tech.postgres-15",
       "to": "financeiro.pagamentos-pagamentos-db",
-      "type": "realization",
+      "type": "serving",
       "id": "tech.postgres-15-realization-financeiro.pagamentos-pagamentos-db",
       "sources": [
         {

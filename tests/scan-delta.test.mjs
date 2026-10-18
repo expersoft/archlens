@@ -235,6 +235,14 @@ test('consumer first, then producer: the producer reading claims ext.pedidos-api
   assert.ok(!impact.nodes.some(n => n.id.startsWith('ext.')));
 });
 
+test('a claimed placeholder re-emits its relationships with their properties', () => {
+  const raw = applyNew(readCons(null));
+  const r = raw.model.relationships.find(x => x.type === 'serving' && x.from === 'ext.pedidos-api' && x.to === 'financeiro.pagamentos');
+  r.properties = { accessType: 'read', dono: 'time-pagamentos' };
+  const moved = rel(readProd(normalizeModel(raw)), 'financeiro.pagamentos', 'loja.pedidos');
+  assert.deepEqual(moved?.properties, { accessType: 'read', dono: 'time-pagamentos' });
+});
+
 test('producer first, then consumer: the consumer reading claims ext.pagamentos and links to loja.pedidos by its runtime name', () => {
   let raw = applyNew(readProd(null));
   assert.ok(normalizeModel(raw).elements.has('ext.pagamentos'));

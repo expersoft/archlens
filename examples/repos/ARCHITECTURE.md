@@ -94,12 +94,12 @@ _Nenhum._
 
 | Origem | Relação | Destino | Descrição | Tecnologia |
 | --- | --- | --- | --- | --- |
-| PostgreSQL 16 | realization | pedidos-db | — | — |
+| PostgreSQL 16 | serving | pedidos-db | — | — |
 | pedidos | usa | pedidos-db | depends_on | — |
 | pedidos | realization | API de Pedidos | — | — |
 | pedidos | flow | pedido-criado | publica PedidoCriado | — |
 | Redis | serving | redis | — | — |
-| PostgreSQL 15 | realization | pagamentos-db | — | — |
+| PostgreSQL 15 | serving | pagamentos-db | — | — |
 | pagamentos | usa | antifraude.acme.com | via ANTIFRAUDE_URL | — |
 | pagamentos | usa | kafka | via KAFKA_BROKERS | — |
 | pagamentos | usa | pedidos | via PEDIDOS_URL | — |

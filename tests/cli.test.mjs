@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync, spawnSync as sp } from 'node:child_process';
-import { cpSync, mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync } from 'node:fs';
+import { cpSync, mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -304,6 +304,26 @@ test('migrate converts a 1.x folder in place, keeping notes and the files that a
   assert.ok(existsSync(join(dir, 'architecture', 'diagrams', 'architecture.html')), 'diagrams/ survives');
   assert.ok(!readdirSync(dir).some(n => /\.(migrate|old)-/.test(n)), 'no temporary folder left behind');
   assert.equal(run(['validate', 'architecture'], dir).status, 0);
+});
+
+test('in-place migrate that cannot remove the old folder warns and still succeeds', { skip: process.platform === 'win32' || process.getuid?.() === 0 }, () => {
+  const dir = mkdtempSync(join(tmpdir(), 'archlens-'));
+  saveFolder(join(dir, 'architecture'), shop(), { notes: { notes: 'Nota.' } });
+  // A read-only folder of the user's: renaming works, removing the old copy fails (EACCES).
+  const locked = join(dir, 'architecture', 'travado');
+  mkdirSync(locked);
+  writeFileSync(join(locked, 'x.txt'), 'x');
+  chmodSync(locked, 0o555);
+  try {
+    const r = run(['migrate', 'architecture'], dir);
+    assert.equal(r.status, 0, r.stderr);
+    const old = readdirSync(dir).find(n => /^architecture\.old-/.test(n));
+    assert.ok(old, 'the old folder is left');
+    assert.match(r.stderr + r.stdout, new RegExp(`aviso: não consegui apagar .*${old.replace('.', '\\.')}.*remova-o à mão`));
+    assert.equal(loadFolder(join(dir, 'architecture')).raw.archlens, '2.0');
+  } finally {
+    for (const n of readdirSync(dir)) if (existsSync(join(dir, n, 'travado'))) chmodSync(join(dir, n, 'travado'), 0o755);
+  }
 });
 
 test('an old .md that already holds a 2.0 base is moved to a folder without conversion', () => {
@@ -658,4 +678,11 @@ test('every command that reads a 1.x folder fails with E_STORE_FORMAT; scan does
   const s = run(['scan', repo], dir);
   assert.notEqual(s.status, 0);
   assert.match(s.stderr, /E_STORE_FORMAT/);
+});
+
+test('help says 1.x bases are refused and migrate converts them', () => {
+  const r = run(['help']);
+  assert.equal(r.status, 0);
+  assert.doesNotMatch(r.stdout, /são lidas/);
+  assert.match(r.stdout, /1\.x[^]*recusadas[^]*archlens migrate <base>[^]*2\.0/);
 });

@@ -1,6 +1,6 @@
 // 1.x → 2.0: translate with toCanonical, check that the 2.0 model means what the 1.x reader read (elements, kinds,
 // parents, groups, relationships), rewrite relationship ids that changed in saved views and record the round. Pure.
-import { toCanonical, FORMAT } from './canonical.mjs';
+import { toCanonical, isEngineRealization, FORMAT } from './canonical.mjs';
 import { normalizeLegacy, legacyKindOf } from './canonical-legacy.mjs';
 import { normalizeModel } from './model.mjs';
 import { validateModel } from './validate.mjs';
@@ -46,9 +46,14 @@ function equivalence(legacy, model, databases) {
     for (const [f, x, y] of pairs) if (canonicalJson(x ?? null) !== canonicalJson(y ?? null)) diffs.push(`${id}.${f}: ${JSON.stringify(x)} → ${JSON.stringify(y)}`);
   }
   for (const id of model.elements.keys()) if (!legacy.elements.has(id)) diffs.push(`elemento ${id} apareceu`);
-  // 1.x accesses to a database are 2.0 servings from it; everything else keeps from/type/to.
+  // 1.x accesses to a database are 2.0 servings from it, engines realizing it serve it; the rest keeps from/type/to.
   const key = r => `${r.from}|${r.type}|${r.to}`;
-  const expected = legacy.relationships.map(r => (r.type === 'access' && databases.has(r.to) ? { id: r.id, from: r.to, type: 'serving', to: r.from } : r));
+  const types = new Map([...legacy.elements].map(([id, e]) => [id, e.type]));
+  const expected = legacy.relationships.map(r => {
+    if (r.type === 'access' && databases.has(r.to)) return { id: r.id, from: r.to, type: 'serving', to: r.from };
+    if (isEngineRealization(r, types, databases)) return { id: r.id, from: r.from, type: 'serving', to: r.to };
+    return r;
+  });
   const group = list => { const m = new Map(); for (const r of list) m.set(key(r), [...(m.get(key(r)) ?? []), r.id]); return m; };
   const before = group(expected), after = group(model.relationships);
   const idMap = new Map();

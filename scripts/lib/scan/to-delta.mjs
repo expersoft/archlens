@@ -298,6 +298,7 @@ export function toDelta(inv, { role, system, id, base = null } = {}) {
       }
       relSeen.add(k);
       rels.push({ from, to, type, ...pick(r, ['description', 'technology', 'inferred', 'accessType']),
+        ...(r.properties && Object.keys(r.properties).length ? { properties: structuredClone(r.properties) } : {}),
         ...(r.status && r.status !== 'active' ? pick(r, ['status', 'statusReason']) : {}), sources });
     }
   }

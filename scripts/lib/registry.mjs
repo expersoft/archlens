@@ -100,6 +100,9 @@ export const LAYER_LABELS = {
 // Abstraction rank used to judge the direction of serving/realization across layers.
 export const LAYER_RANK = { physical: 0, technology: 1, application: 2, business: 3, strategy: 4, motivation: 5, implementation: 2.5, other: 2.5 };
 
+// Tags that make a C4 container a data store (cylinder in C4, 🛢 in the document; a 1.x data-object container).
+export const STORE_TAGS = ['database', 'datastore', 'data-store', 'bucket', 'storage'];
+
 export const C4_KINDS = ['person', 'softwareSystem', 'container', 'component', 'deploymentNode', 'infrastructureNode'];
 export const C4_LABELS = {
   person: 'Person', softwareSystem: 'Software System', container: 'Container', component: 'Component',

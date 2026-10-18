@@ -550,3 +550,23 @@ test('an invalid nesting is E_VIEW_NESTING', () => {
     assert.throws(() => appView({ nesting: bad }), e => e.code === 'E_VIEW_NESTING', JSON.stringify(bad));
   }
 });
+
+test('C4 containers tagged bucket, storage or data-store draw as a data store; a queue tag still wins', () => {
+  const m = normalizeModel({ archlens: '2.0', name: 'Lojas', model: {
+    elements: [
+      { id: 's', type: 'application-component', name: 'S', c4: { kind: 'softwareSystem' } },
+      { id: 's.bucket', type: 'application-component', name: 'Bucket', parent: 's', c4: { kind: 'container' }, tags: ['bucket'] },
+      { id: 's.files', type: 'application-component', name: 'Files', parent: 's', c4: { kind: 'container' }, tags: ['storage'] },
+      { id: 's.lake', type: 'application-component', name: 'Lake', parent: 's', c4: { kind: 'container' }, tags: ['data-store'] },
+      { id: 's.q', type: 'application-component', name: 'Q', parent: 's', c4: { kind: 'container' }, tags: ['queue', 'storage'] },
+    ],
+    relationships: [],
+  } });
+  const v = resolveView(m, { key: 'k', notation: 'c4', level: 'container', scope: 's' });
+  const n = id => v.nodes.find(x => x.id === id);
+  assert.equal(n('s.bucket').database, true);
+  assert.equal(n('s.files').database, true);
+  assert.equal(n('s.lake').database, true);
+  assert.equal(n('s.q').database, false);
+  assert.equal(n('s.q').queue, true);
+});

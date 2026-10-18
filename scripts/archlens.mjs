@@ -27,8 +27,8 @@ const HELP = `archlens — arquitetura como modelo, diagramas como consultas
 Uso: node scripts/archlens.mjs <comando> [base] [opções]
 
 Base: a pasta architecture/ (fonte da verdade), o ARCHITECTURE.md gerado (aponta para ela) ou nada (procura a
-partir do diretório atual). Bases antigas (bloco archlens-json no .md, ou um modelo .json) são lidas, mas só
-"migrate" as converte para gravar.
+partir do diretório atual). Bases 1.x (pasta, .md com bloco archlens-json ou modelo .json) são recusadas
+(E_STORE_FORMAT): "archlens migrate <base>" converte para o formato 2.0.
 
 Comandos
   validate  <base>                         valida schema, referências, hierarquia C4 e regras ArchiMate
@@ -402,11 +402,14 @@ async function main() {
           if (canonicalJson(back.raw) !== canonicalJson(res.raw)) throw new Error('E_STORE_MIGRATE: a pasta gravada não reproduz o modelo convertido; nada foi trocado');
           renameSync(loc.path, old);
           renameSync(tmp, loc.path);
-          rmSync(old, { recursive: true, force: true });
         } catch (e) {
           rmSync(tmp, { recursive: true, force: true });
           if (existsSync(old) && !existsSync(loc.path)) renameSync(old, loc.path);
           fail(e.message);
+        }
+        // Past the swap the base is migrated: a leftover old folder (EBUSY/EPERM on Windows) is only a warning.
+        try { rmSync(old, { recursive: true, force: true }); } catch {
+          console.warn(`  aviso: não consegui apagar ${relPath(old)}; remova-o à mão`);
         }
       } else {
         const to = resolve(args.to && args.to !== true ? args.to : join(dirname(loc.path), 'architecture'));
