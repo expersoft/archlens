@@ -2,7 +2,7 @@
 // files. Each adapter is a connector (contract.mjs): describe(), read(), readSubgraph(), version(), apply(), history().
 import { existsSync, statSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve, relative, basename, extname } from 'node:path';
-import { jsonConnector, readJson, MANIFEST } from './folder.mjs';
+import { jsonConnector, readJson, storeKind, MANIFEST } from './folder.mjs';
 import { legacyConnector } from './legacy.mjs';
 import { storeError } from './errors.mjs';
 
@@ -74,7 +74,7 @@ const legacyError = locator => () => storeError('E_STORE_LEGACY',
 /** The connector `store.kind` names in the manifest (json when there is no manifest or no store). */
 function folderKind(dir) {
   const p = join(dir, MANIFEST);
-  const kind = existsSync(p) ? readJson(p).store?.kind ?? 'json' : 'json';
+  const kind = existsSync(p) ? storeKind(readJson(p), rel(p)) : 'json';
   if (kind !== 'json') {
     throw storeError('E_STORE_UNSUPPORTED', `"store.kind" "${kind}" em ${rel(p)} ainda não é suportado; use "json"`);
   }

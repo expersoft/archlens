@@ -58,7 +58,7 @@ export function previewMerge(baseRaw, delta, opts = {}) {
   return { plan, raw: ctx.raw, idMap: ctx.idMap };
 }
 
-function planContext(baseRaw, delta, { base = 'ARCHITECTURE.md', today, answers } = {}) {
+function planContext(baseRaw, delta, { base = 'ARCHITECTURE.md', today, answers, storeVersion } = {}) {
   checkDelta(delta);
   const earlier = answers instanceof Map ? answers : new Map(Object.entries(answers ?? {}));
   const ctx = runMerge(baseRaw, delta, { mode: 'plan', resolutions: earlier });
@@ -66,7 +66,7 @@ function planContext(baseRaw, delta, { base = 'ARCHITECTURE.md', today, answers 
   const summary = {};
   for (const it of ctx.items) if (!it.when) summary[it.class] = (summary[it.class] ?? 0) + 1;
   const plan = {
-    'archlens-plan': PLAN_VERSION, base, baseHash: hashRaw(baseRaw), created: today ?? isoToday(), delta,
+    'archlens-plan': PLAN_VERSION, base, baseHash: hashRaw(baseRaw), ...(storeVersion !== undefined ? { storeVersion } : {}), created: today ?? isoToday(), delta,
     items: ctx.items.map((it, i) => ({ n: i + 1, ...it })), summary, blocked: errors.length > 0, errors,
   };
   return { ctx, plan };
@@ -74,7 +74,8 @@ function planContext(baseRaw, delta, { base = 'ARCHITECTURE.md', today, answers 
 
 export function applyPlan(baseRaw, plan, { today } = {}) {
   if (plan?.['archlens-plan'] !== PLAN_VERSION) throw mergeError('E_PLAN_SCHEMA', 'o arquivo não é um plano do archlens (gere com "archlens merge --plan")');
-  if (hashRaw(baseRaw) !== plan.baseHash) throw mergeError('E_PLAN_STALE', 'a base mudou depois que o plano foi gerado; rode "archlens merge --plan" de novo');
+  // Plans made against a connector carry its version, which the connector checks when it applies the ops.
+  if (!('storeVersion' in plan) && hashRaw(baseRaw) !== plan.baseHash) throw mergeError('E_PLAN_STALE', 'a base mudou depois que o plano foi gerado; rode "archlens merge --plan" de novo');
   // Only questions take answers; a resolution written on an informational item is ignored.
   const questions = plan.items.filter(i => 'resolution' in i && isQuestion(i));
   const resolutions = new Map(questions.map(i => [i.key, i.resolution]));

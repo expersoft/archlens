@@ -13,7 +13,7 @@ for (const ex of ['loja-online', 'telemedicina', 'repos']) {
     const dir = fileURLToPath(new URL(`../examples/${ex}/`, import.meta.url));
     const store = openStore(resolveBase('ARCHITECTURE.md', { cwd: dir }));
     assert.equal(store.kind, 'json');
-    const { raw, notes } = store.load();
+    const { raw, notes } = store.read();
     assert.deepEqual(validateModel(raw).errors, []);
     const model = normalizeModel(raw);
     for (const v of model.views) assert.ok(resolveView(model, v).nodes.length, v.key);

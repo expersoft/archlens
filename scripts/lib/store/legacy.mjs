@@ -65,8 +65,5 @@ export function legacyConnector(locator, { describe, error }) {
     version: () => contentVersion(read()),
     history: () => read().raw.changelog ?? [],
     apply() { throw error(); },
-    // Until the CLI moves to the contract (next task).
-    load: opts => ({ ...read(opts), origins: null, layout: undefined }),
-    save() { throw error(); },
   };
 }

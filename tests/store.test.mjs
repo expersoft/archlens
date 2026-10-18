@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { loadFolder, saveFolder } from '../scripts/lib/store/folder.mjs';
 import { resolveBase, openStore, assertWritable } from '../scripts/lib/store/index.mjs';
+import { diffRaw } from '../scripts/lib/store/ops.mjs';
 import { asBase } from './helpers.mjs';
 
 const shop = () => asBase(JSON.parse(readFileSync(new URL('./fixtures/shop.json', import.meta.url))));
@@ -123,11 +124,11 @@ test('legacy: reads the block and the hand-written keep blocks (guide texts drop
   assert.equal(loc.kind, 'legacy');
   assert.equal(loc.docPath, join(dir, 'ARCHITECTURE.md'));
   const store = openStore(loc);
-  const { raw, notes } = store.load();
+  const { raw, notes } = store.read();
   assert.deepEqual(raw, shop());
   assert.deepEqual(notes, { overview: 'Visão à mão.', assumptions: '- p1' });
   assert.equal(store.writable, false);
-  assert.throws(() => store.save(raw), e => e.code === 'E_STORE_LEGACY' && /archlens migrate/.test(e.message));
+  assert.throws(() => store.apply(diffRaw(store.read(), { raw, notes }), { baseVersion: store.version() }), e => e.code === 'E_STORE_LEGACY' && /archlens migrate/.test(e.message));
   assert.throws(() => assertWritable(store), e => e.code === 'E_STORE_LEGACY');
 });
 
@@ -136,8 +137,8 @@ test('legacy: a raw model .json is read-only too', () => {
   writeFileSync(join(dir, 'm.json'), JSON.stringify(shop()));
   const store = openStore(resolveBase('m.json', { cwd: dir }));
   assert.equal(store.kind, 'legacy');
-  assert.deepEqual(store.load().raw, shop());
-  assert.deepEqual(store.load().notes, {});
+  assert.deepEqual(store.read().raw, shop());
+  assert.deepEqual(store.read().notes, {});
 });
 
 test('resolveBase: folder, manifest, generated .md (source:), and the folder found from a subdirectory', () => {
@@ -153,7 +154,7 @@ test('resolveBase: folder, manifest, generated .md (source:), and the folder fou
     assert.equal(loc.docPath, join(dir, 'ARCHITECTURE.md'), String(arg));
     assert.equal(loc.exists, true);
   }
-  assert.deepEqual(openStore(resolveBase('architecture', { cwd: dir })).load().raw, shop());
+  assert.deepEqual(openStore(resolveBase('architecture', { cwd: dir })).read().raw, shop());
 });
 
 test('resolveBase: a hand-written .md is not a base, and the message says what to do', () => {
@@ -169,7 +170,7 @@ test('resolveBase: missing bases are created only when asked', () => {
   assert.throws(() => resolveBase('architecture', { cwd: dir }), e => e.code === 'E_STORE_NOT_FOUND');
   const viaMd = resolveBase('ARCHITECTURE.md', { cwd: dir, create: true });
   assert.deepEqual([viaMd.kind, viaMd.path, viaMd.exists, viaMd.docPath], ['folder', join(dir, 'architecture'), false, join(dir, 'ARCHITECTURE.md')]);
-  assert.equal(openStore(viaMd).load().raw, null);
+  assert.equal(openStore(viaMd).read(), null);
   assert.equal(resolveBase(undefined, { cwd: dir, create: true }).path, join(dir, 'architecture'));
   writeFileSync(join(dir, 'ARCHITECTURE.md'), '---\nsource: architecture/\n---\n');
   assert.throws(() => resolveBase('ARCHITECTURE.md', { cwd: dir }), e => e.code === 'E_STORE_NOT_FOUND');
@@ -222,6 +223,23 @@ test('a 1.x folder is refused with E_STORE_FORMAT unless the caller asks for any
   assert.throws(() => loadFolder(dir), e => e.code === 'E_STORE_FORMAT' && /archlens migrate/.test(e.message));
   assert.equal(loadFolder(dir, { anyFormat: true }).raw.archlens, '1.0');
   const store = openStore(resolveBase(dir));
-  assert.throws(() => store.load(), e => e.code === 'E_STORE_FORMAT');
-  assert.equal(store.load({ anyFormat: true }).raw.archlens, '1.0');
+  assert.throws(() => store.read(), e => e.code === 'E_STORE_FORMAT');
+  assert.equal(store.read({ anyFormat: true }).raw.archlens, '1.0');
+});
+
+test('an odd "store" value is refused the same way by openStore and loadFolder, with a clear message', () => {
+  for (const store of [null, 'json', ['json'], { kind: 3 }, { kind: 'neo4j' }]) {
+    const dir = tmp();
+    saveFolder(dir, shop());
+    writeFileSync(join(dir, 'archlens.json'), JSON.stringify({ archlens: '2.0', name: 'x', store }));
+    const clear = e => e.code === 'E_STORE_UNSUPPORTED' && /"store"/.test(e.message) && !/undefined/.test(e.message);
+    assert.throws(() => openStore(resolveBase(dir)), clear, JSON.stringify(store));
+    assert.throws(() => loadFolder(dir), clear, JSON.stringify(store));
+  }
+  for (const store of [{}, { kind: 'json' }]) {
+    const dir = tmp();
+    saveFolder(dir, shop());
+    writeFileSync(join(dir, 'archlens.json'), JSON.stringify({ ...JSON.parse(read(dir, 'archlens.json')), store }));
+    assert.equal(openStore(resolveBase(dir)).read().raw.name, shop().name, JSON.stringify(store));
+  }
 });

@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { saveFolder, loadFolder } from '../scripts/lib/store/folder.mjs';
 import { hashRaw } from '../scripts/lib/merge.mjs';
+import { contentVersion } from '../scripts/lib/store/ops.mjs';
 import { asBase } from './helpers.mjs';
 
 const CLI = fileURLToPath(new URL('../scripts/archlens.mjs', import.meta.url));
@@ -282,7 +283,9 @@ test('migrate turns an old .md base into a 2.0 architecture/ folder with notes a
   assert.match(r.stdout, /formato 2\.0/);
   const back = loadFolder(join(dir, 'architecture'));
   const { changelog, ...rest } = back.raw;
-  assert.deepEqual(rest, asBase(shop()));
+  // Written by apply: generated relationship ids come back explicit, the same base (Decision 3).
+  assert.equal(contentVersion({ raw: rest }), contentVersion({ raw: asBase(shop()) }));
+  assert.deepEqual(rest.model.elements, asBase(shop()).model.elements);
   assert.equal(back.notes.notes, 'Nota antiga.');
   assert.match(readFileSync(join(dir, 'ARCHITECTURE.md'), 'utf8'), /^---\n[\s\S]*source: architecture\//);
   const again = run(['migrate', 'ARCHITECTURE.md'], dir);
@@ -331,7 +334,7 @@ test('an old .md that already holds a 2.0 base is moved to a folder without conv
   writeFileSync(join(dir, 'ARCHITECTURE.md'), legacyMd(asBase(shop())));
   const r = run(['migrate', 'ARCHITECTURE.md'], dir);
   assert.equal(r.status, 0, r.stderr);
-  assert.deepEqual(loadFolder(join(dir, 'architecture')).raw, asBase(shop()));
+  assert.equal(contentVersion({ raw: loadFolder(join(dir, 'architecture')).raw }), contentVersion({ raw: asBase(shop()) }));
 });
 
 test('migrate of a split folder keeps every element in its file; a nested child goes with its parent', () => {
@@ -685,4 +688,42 @@ test('help says 1.x bases are refused and migrate converts them', () => {
   assert.equal(r.status, 0);
   assert.doesNotMatch(r.stdout, /são lidas/);
   assert.match(r.stdout, /1\.x[^]*recusadas[^]*archlens migrate <base>[^]*2\.0/);
+});
+
+test('merge --apply refuses a plan made before another change to the base, and writes nothing', () => {
+  const dir = setup();
+  writeFileSync(join(dir, 'a.json'), JSON.stringify({ 'archlens-delta': '1.0', source: { kind: 'prompt', ref: 'a' }, model: { elements: [{ id: 'loja.a', type: 'c4:container', name: 'A', parent: 'loja' }] } }));
+  writeFileSync(join(dir, 'b.json'), JSON.stringify({ 'archlens-delta': '1.0', source: { kind: 'prompt', ref: 'b' }, model: { elements: [{ id: 'loja.b', type: 'c4:container', name: 'B', parent: 'loja' }] } }));
+  assert.equal(run(['merge', 'architecture', 'a.json', '--plan', 'pa.json'], dir).status, 0);
+  assert.equal(run(['merge', 'architecture', 'b.json', '--plan', 'pb.json'], dir).status, 0);
+  assert.match(readFileSync(join(dir, 'pa.json'), 'utf8'), /"storeVersion": "sha256:/);
+  assert.equal(run(['merge', 'architecture', '--apply', 'pa.json'], dir).status, 0);
+  const before = snapshot(dir), doc = readFileSync(join(dir, 'ARCHITECTURE.md'), 'utf8');
+  const r = run(['merge', 'architecture', '--apply', 'pb.json'], dir);
+  assert.notEqual(r.status, 0);
+  assert.match(r.stderr, /E_STORE_CONFLICT[\s\S]*merge --plan/);
+  assert.deepEqual(snapshot(dir), before);
+  assert.equal(readFileSync(join(dir, 'ARCHITECTURE.md'), 'utf8'), doc);
+});
+
+test('a plan made by an older archlens (baseHash only) still applies', () => {
+  const dir = setup();
+  writeFileSync(join(dir, 'a.json'), JSON.stringify({ 'archlens-delta': '1.0', source: { kind: 'prompt', ref: 'a' }, model: { elements: [{ id: 'loja.a', type: 'c4:container', name: 'A', parent: 'loja' }] } }));
+  assert.equal(run(['merge', 'architecture', 'a.json', '--plan', 'p.json'], dir).status, 0);
+  const plan = JSON.parse(readFileSync(join(dir, 'p.json'), 'utf8'));
+  delete plan.storeVersion;
+  writeFileSync(join(dir, 'p.json'), JSON.stringify(plan));
+  const r = run(['merge', 'architecture', '--apply', 'p.json'], dir);
+  assert.equal(r.status, 0, r.stderr);
+  assert.ok(model(dir).elements.some(e => e.id === 'loja.a'));
+});
+
+test('migrate of a folder with an unsupported store reports the error, without a stack trace', () => {
+  const dir = setup();
+  const p = join(dir, 'architecture', 'archlens.json');
+  writeFileSync(p, JSON.stringify({ ...JSON.parse(readFileSync(p, 'utf8')), archlens: '1.0', store: { kind: 'neo4j' } }));
+  const r = run(['migrate', 'architecture'], dir);
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /^archlens: .*E_STORE_UNSUPPORTED|^archlens: .*"store"/);
+  assert.doesNotMatch(r.stderr, /\n\s+at /);
 });

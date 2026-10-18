@@ -772,3 +772,15 @@ test('a kind inferred for a duplicate answered same is never written onto a base
   const { raw } = applyPlan(base, plan, TODAY);
   assert.equal(find(raw, 'erp').c4, undefined);
 });
+
+test('a plan records the store version it was made against; only plans without it check the hash', () => {
+  const base = shop();
+  const plan = planMerge(base, delta({ elements: [{ id: 'loja.x', type: 'c4:container', name: 'X', parent: 'loja' }] }), { ...TODAY, storeVersion: 'sha256:abc' });
+  assert.equal(plan.storeVersion, 'sha256:abc');
+  const changed = structuredClone(base);
+  changed.name = 'Outra';
+  assert.doesNotThrow(() => applyPlan(changed, plan, TODAY), 'the connector checks the version, not applyPlan');
+  const old = planMerge(base, delta({ elements: [{ id: 'loja.y', type: 'c4:container', name: 'Y', parent: 'loja' }] }), TODAY);
+  assert.equal('storeVersion' in old, false);
+  assert.throws(() => applyPlan(changed, old, TODAY), e => e.code === 'E_PLAN_STALE');
+});

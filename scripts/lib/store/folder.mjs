@@ -18,6 +18,20 @@ export function readJson(path) {
   }
 }
 
+/**
+ * The connector the manifest's `store` names: "json" when it is absent or has no kind, "markdown", or
+ * E_STORE_UNSUPPORTED for anything else (a non-object `store`, another kind).
+ */
+export function storeKind(manifest, file = MANIFEST) {
+  const { store } = manifest ?? {};
+  if (store === undefined) return 'json';
+  const kind = store && typeof store === 'object' && !Array.isArray(store) ? store.kind ?? 'json' : null;
+  if (kind === 'json' || kind === 'markdown') return kind;
+  throw storeError('E_STORE_UNSUPPORTED', kind === null
+    ? `"store" em ${file} deve ser um objeto como { "kind": "json" } (recebido ${JSON.stringify(store)})`
+    : `"store.kind" ${JSON.stringify(kind)} em ${file} não é suportado ("store" aceita "json" ou "markdown")`);
+}
+
 /** Writes through a temp file and rename; leaves the file alone when the content is the same. */
 function writeIfChanged(path, text) {
   if (existsSync(path) && readFileSync(path, 'utf8') === text) return;
@@ -76,8 +90,9 @@ export function loadFolder(dir, { anyFormat = false } = {}) {
   const manifestPath = join(dir, MANIFEST);
   if (!existsSync(manifestPath)) throw storeError('E_STORE_NOT_BASE', `${dir} não é uma base archlens (falta ${MANIFEST})`);
   const { layout, store, ...top } = readJson(manifestPath);
-  if (store !== undefined && store?.kind !== 'json') {
-    throw storeError('E_STORE_UNSUPPORTED', `"store" em ${MANIFEST} indica o conector "${store?.kind}"; esta pasta não é uma base json`);
+  const kind = storeKind({ store }, manifestPath);
+  if (kind !== 'json') {
+    throw storeError('E_STORE_UNSUPPORTED', `"store" em ${manifestPath} indica o conector "${kind}"; esta pasta não é uma base json`);
   }
   if (!anyFormat && !isCanonicalFormat(top.archlens)) {
     throw storeError('E_STORE_FORMAT', `${dir} está no formato ${top.archlens ?? '1.x'}; o archlens lê só o formato ${FORMAT}. `
@@ -190,17 +205,10 @@ export function saveFolder(dir, raw, opts = {}) {
 export function jsonConnector(locator, describe) {
   const dir = locator.path;
   const load = opts => (existsSync(join(dir, MANIFEST)) ? toBase(loadFolder(dir, opts)) : null);
-  const c = fileConnector({
+  return fileConnector({
     kind: 'json', dir, locator, describe, load,
     contents: (next, cur) => folderContents(dir, next.raw, { notes: next.notes, ...cur?.ctx }),
   });
-  // Until the CLI moves to the contract (next task): the old load/save.
-  c.load = opts => (existsSync(join(dir, MANIFEST)) ? loadFolder(dir, opts) : { raw: null, notes: {}, origins: null, layout: undefined });
-  c.save = (raw, { notes, origins, layout } = {}) => {
-    const cur = existsSync(join(dir, MANIFEST)) ? loadFolder(dir, { anyFormat: true }) : null;
-    saveFolder(dir, raw, { notes, origins: origins ?? cur?.origins, layout: layout ?? cur?.layout, store: cur?.store });
-  };
-  return c;
 }
 
 const toBase = ({ raw, notes, origins, layout, store }) => ({ raw, notes, ctx: { origins, layout, store } });
