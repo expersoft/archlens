@@ -18,17 +18,28 @@ const RETRIES = 3; // pushes redone after a rejection
 // Variables that would point git at another repository than the one given with -C (set when run from a git hook).
 const FOREIGN = ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_OBJECT_DIRECTORY', 'GIT_ALTERNATE_OBJECT_DIRECTORIES', 'GIT_COMMON_DIR', 'GIT_PREFIX'];
 
-function gitEnv() {
-  const env = { ...process.env, GIT_TERMINAL_PROMPT: '0', GIT_SSH_COMMAND: process.env.GIT_SSH_COMMAND ?? 'ssh -o BatchMode=yes' };
+function baseEnv() {
+  const env = { ...process.env, GIT_TERMINAL_PROMPT: '0' };
   for (const k of FOREIGN) delete env[k];
   return env;
 }
-const run = (cwd, args, opts = {}) => spawnSync('git', ['-C', cwd, ...args], { encoding: 'utf8', timeout: 120000, env: gitEnv(), ...opts });
+const spawnGit = (cwd, args, opts = {}) => spawnSync('git', ['-C', cwd, ...args], { encoding: 'utf8', timeout: 120000, env: baseEnv(), ...opts });
+
+/**
+ * The environment of every git the connector runs for the clone `repo`: never prompts; ssh in batch mode (no password
+ * prompt) unless the user chose how git runs ssh (GIT_SSH_COMMAND, GIT_SSH or core.sshCommand), which then stays as is.
+ */
+export function gitEnvFor(repo) {
+  const env = baseEnv();
+  const own = env.GIT_SSH_COMMAND || env.GIT_SSH || spawnGit(repo, ['config', 'core.sshCommand'], { env }).stdout?.trim();
+  if (!own) env.GIT_SSH_COMMAND = 'ssh -o BatchMode=yes';
+  return env;
+}
 const output = r => (r.error ? (r.error.code === 'ENOENT' ? 'git não encontrado no PATH' : r.error.message) : `${r.stderr ?? ''}${r.stdout ?? ''}`.trim());
 const gitError = (what, r, hint = '') => storeError('E_STORE_GIT', `${what}${hint}: ${output(r) || `git saiu com ${r.status}`}`, { git: output(r) });
 /** Runs git and returns its stdout (trimmed); E_STORE_GIT with git's output when it fails. */
-function git(cwd, args, what, opts) {
-  const r = run(cwd, args, opts);
+function gitOut(cwd, args, what, opts) {
+  const r = spawnGit(cwd, args, opts);
   if (r.error || r.status !== 0) throw gitError(what, r);
   return r.stdout.trim();
 }
@@ -56,15 +67,6 @@ function readTree(root, sub) {
   return out;
 }
 
-/** A commit of `tree` over `parent` (none when null), with the identity the user's git has; never one made up. */
-function commitTree(cwd, tree, parent, message) {
-  const r = run(cwd, ['-c', 'user.useConfigOnly=true', 'commit-tree', tree, ...(parent ? ['-p', parent] : []), '-m', message], { input: '' });
-  if (r.error || r.status !== 0) {
-    throw gitError('não consegui criar o commit', r, ' (configure a identidade do git: git config user.name "Seu Nome" e git config user.email voce@empresa.com)');
-  }
-  return r.stdout.trim();
-}
-
 /** The commit message of a round: its summary on one line. */
 const subject = entry => `docs(arquitetura): ${String(entry?.summary ?? '').replace(/\s+/g, ' ').trim() || 'base atualizada pelo archlens'}`;
 
@@ -79,19 +81,49 @@ export function gbrainGitConnector(locator, store, { describe = `${relative(proc
   const tip = join(locator.path, TIP);
   const hasTip = () => existsSync(join(tip, '.git'));
   const where = `${remote}/${branch}`;
+  let env;
+  const run = (cwd, args, opts) => spawnGit(cwd, args, { env: (env ??= gitEnvFor(repo)), ...opts });
+  const git = (cwd, args, what, opts) => gitOut(cwd, args, what, { env: (env ??= gitEnvFor(repo)), ...opts });
+
+  /** A commit of `tree` over `parent` (none when null), with the identity the user's git has; never one made up. */
+  function commitTree(cwd, tree, parent, message) {
+    const r = run(cwd, ['-c', 'user.useConfigOnly=true', 'commit-tree', tree, ...(parent ? ['-p', parent] : []), '-m', message], { input: '' });
+    if (r.error || r.status !== 0) {
+      throw gitError('não consegui criar o commit', r, ' (configure a identidade do git: git config user.name "Seu Nome" e git config user.email voce@empresa.com)');
+    }
+    return r.stdout.trim();
+  }
+
+  // --refmap= keeps the remote-tracking branches of the clone as they are; --no-tags brings no tags into it.
+  const FETCH = ['fetch', '--quiet', '--no-tags', '--refmap='];
+  const unreachable = r => gitError(`não consegui buscar ${where} (sem rede, sem acesso ou remote inexistente?)`, r);
+
+  /**
+   * The first time, makes the worktree at the remote tip from the clone, writing nothing of the clone but objects (not
+   * even its FETCH_HEAD). Null when the remote does not have the branch (no worktree is made then).
+   */
+  function firstTip() {
+    if (!existsSync(repo)) throw storeError('E_STORE_GIT', `${repo}: pasta não encontrada (o "repo" de ${join(locator.path, 'archlens.json')} deve apontar para um clone do repositório do gbrain)`);
+    const ls = run(repo, ['ls-remote', '--exit-code', '--heads', remote, `refs/heads/${branch}`]);
+    if (ls.status === 2) return null; // the remote is there, the branch is not: no base yet
+    if (ls.error || ls.status !== 0) throw unreachable(ls);
+    const sha = ls.stdout.split(/\s/)[0];
+    git(repo, [...FETCH, '--no-write-fetch-head', remote, `refs/heads/${branch}`], `não consegui buscar ${where}`);
+    if (run(repo, ['cat-file', '-e', `${sha}^{commit}`]).status !== 0) throw storeError('E_STORE_GIT', `${where} mudou enquanto era buscada (${sha.slice(0, 12)}); rode de novo`);
+    checkout(sha);
+    return sha;
+  }
 
   /** Fetches the branch; the commit at its tip, or null when the remote does not have it. Moves no ref of the clone. */
   function fetchTip() {
-    const at = hasTip() ? tip : repo;
-    if (!existsSync(at)) throw storeError('E_STORE_GIT', `${repo}: pasta não encontrada (o "repo" de ${join(locator.path, 'archlens.json')} deve apontar para um clone do repositório do gbrain)`);
-    // --refmap= keeps the remote-tracking branches of the clone as they are; --no-tags brings no tags into it.
-    const f = run(at, ['fetch', '--quiet', '--no-tags', '--refmap=', remote, `refs/heads/${branch}`]);
+    if (!hasTip() && firstTip() === null) return null;
+    const f = run(tip, [...FETCH, remote, `refs/heads/${branch}`]); // FETCH_HEAD of the worktree, not the clone's
     if (f.error || f.status !== 0) {
-      const ls = run(at, ['ls-remote', '--exit-code', '--heads', remote, `refs/heads/${branch}`]);
-      if (ls.status === 2) return null; // the remote is there, the branch is not: no base yet
-      throw gitError(`não consegui buscar ${where} (sem rede, sem acesso ou remote inexistente?)`, f);
+      const ls = run(tip, ['ls-remote', '--exit-code', '--heads', remote, `refs/heads/${branch}`]);
+      if (ls.status === 2) return null;
+      throw unreachable(f);
     }
-    return git(at, ['rev-parse', '--verify', 'FETCH_HEAD^{commit}'], 'FETCH_HEAD ilegível');
+    return git(tip, ['rev-parse', '--verify', 'FETCH_HEAD^{commit}'], 'FETCH_HEAD ilegível');
   }
 
   /** A commit with the empty tree, to stand for the tip of a branch the remote does not have yet (never pushed). */

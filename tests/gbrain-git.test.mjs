@@ -1,11 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, chmodSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, chmodSync, rmSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 import { openStore, resolveBase } from '../scripts/lib/store/index.mjs';
-import { gbrainGitConnector } from '../scripts/lib/store/gbrain-git.mjs';
+import { gbrainGitConnector, gitEnvFor } from '../scripts/lib/store/gbrain-git.mjs';
 import { initBase, validateStore } from '../scripts/lib/store/config.mjs';
 import { diffRaw, contentVersion } from '../scripts/lib/store/ops.mjs';
 import { plan, apply } from '../scripts/lib/api.mjs';
@@ -249,6 +249,7 @@ test("the user's clone keeps its branch, working tree and index", () => {
     worktree: sh(u.clone, 'diff'),
     refs: sh(u.clone, 'for-each-ref', '--format=%(refname) %(objectname)'),
     work: readFileSync(join(u.clone, 'work.txt'), 'utf8'),
+    fetchHead: existsSync(join(u.clone, '.git', 'FETCH_HEAD')) ? readFileSync(join(u.clone, '.git', 'FETCH_HEAD'), 'utf8') : null,
   });
   const before = state();
   apply(u.store(), finalPlan(u.store(), addVendas()));
@@ -297,4 +298,26 @@ test("git errors become E_STORE_GIT with git's output", () => {
   assert.match(e2.message, /user\.email/);
   assert.match(e2.message, /Please tell me who you are|empty ident|no email/i);
   assert.equal(w.head(), null);
+});
+
+test("ssh runs in batch mode unless the user chose how git runs ssh", () => {
+  const w = world();
+  const a = w.user('a');
+  const saved = { GIT_SSH_COMMAND: process.env.GIT_SSH_COMMAND, GIT_SSH: process.env.GIT_SSH };
+  delete process.env.GIT_SSH_COMMAND;
+  delete process.env.GIT_SSH;
+  try {
+    assert.equal(gitEnvFor(a.clone).GIT_SSH_COMMAND, 'ssh -o BatchMode=yes');
+    assert.equal(gitEnvFor(a.clone).GIT_TERMINAL_PROMPT, '0');
+    process.env.GIT_SSH = '/usr/bin/ssh';
+    assert.equal(gitEnvFor(a.clone).GIT_SSH_COMMAND, undefined);
+    delete process.env.GIT_SSH;
+    process.env.GIT_SSH_COMMAND = 'ssh -i chave';
+    assert.equal(gitEnvFor(a.clone).GIT_SSH_COMMAND, 'ssh -i chave');
+    delete process.env.GIT_SSH_COMMAND;
+    sh(a.clone, 'config', 'core.sshCommand', 'ssh -i ~/.ssh/work_key');
+    assert.equal(gitEnvFor(a.clone).GIT_SSH_COMMAND, undefined); // core.sshCommand of the clone applies
+  } finally {
+    for (const [k, v] of Object.entries(saved)) if (v === undefined) delete process.env[k]; else process.env[k] = v;
+  }
 });
