@@ -21,7 +21,9 @@ node scripts/archlens.mjs apply architecture/ p2.json                           
 Se a base não existe, o primeiro delta a cria (`name` e `description` do delta viram os da base).
 A base precisa estar no formato 2.0: uma base 1.x falha com `E_STORE_FORMAT` (rode `archlens migrate <base>`).
 Planos gerados antes de um `migrate` **não** valem depois: a base muda (tipos, bancos, ids de relações), e com ela a
-versão gravada no plano (`E_STORE_CONFLICT` no `apply`). Gere o plano de novo.
+versão gravada no plano. Um plano de antes do e.3 nem tem `state`: o `apply` o recusa com `E_PLAN_OPEN` ("o plano está
+aberto, mas todas as perguntas já têm resposta") e o `merge --apply` com `E_PLAN_STALE` / `E_STORE_CONFLICT`. Em
+qualquer caso, gere o plano de novo.
 
 ## O plano aberto e o plano final
 

@@ -8,7 +8,7 @@ Plugin para Claude Code com três skills (`archlens-plan`, `archlens-apply`, `ar
 - Mantém a base em **`architecture/`** e gera dela o **`ARCHITECTURE.md`**, de onde se
   extraem visões novas a qualquer momento. A base grava um **formato único (2.0)**: tipos ArchiMate, perfil C4 em
   `c4.kind`, hierarquia por `parent`; `c4:*`, `uses` e `children` valem só na entrada. Base 1.x: `archlens migrate`.
-- **Base que evolui:** cada informação nova vira um delta; `archlens merge` casa entidades (id, alias, nome parecido),
+- **Base que evolui:** cada informação nova vira um delta; `archlens plan` casa entidades (id, alias, nome parecido),
   pergunta conflitos e duplicatas, e registra proveniência, ciclo de vida (as-is/to-be) e histórico.
 - **Lê repositórios** (compose, k8s/Helm, Terraform, OpenAPI/AsyncAPI, graphify) e gera deltas com proveniência (`archlens scan`).
 - **Prévia de mudanças:** `--delta` / `--plan` desenham a base com um delta ainda não aplicado (esboço à mão no estilo do draw.io, com hachura, `+ ~ − ?`,

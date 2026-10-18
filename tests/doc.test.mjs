@@ -12,7 +12,7 @@ test('generateDoc is a readable document only: no model block, no keep markers, 
   assert.doesNotMatch(md, /<!-- keep:/);
   assert.doesNotMatch(md, /^generated:/m);
   assert.match(md, /^source: architecture\/$/m);
-  assert.match(md, /Gerado por archlens a partir de `architecture\/`\. Não edite: escreva em `architecture\/notes\/\*\.md` e evolua a base com `archlens merge`\./);
+  assert.match(md, /Gerado por archlens a partir de `architecture\/`\. Não edite: escreva em `architecture\/notes\/\*\.md` e evolua a base com `archlens plan` e `archlens apply`\./);
   assert.match(md, /Venda Online/);
   assert.match(md, /## Camada de Negócio/);
   assert.match(md, /## Rastreabilidade/);

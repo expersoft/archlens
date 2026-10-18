@@ -55,7 +55,7 @@ test('markdown table cells escape the pipe', () => {
 });
 
 test('an unknown view key fails with the message selectSpecs uses today', () => {
-  assert.throws(() => query(open(), { view: 'nao-existe' }), e => e.message === 'visão "nao-existe" não existe (veja "archlens views")');
+  assert.throws(() => query(open(), { view: 'nao-existe' }), e => e.code === 'E_QUERY_VIEW' && e.message === 'E_QUERY_VIEW: visão "nao-existe" não existe (veja "archlens views")');
   assert.throws(() => query(open(), {}), e => e.code === 'E_QUERY_INPUT');
   const r = run(['query', BASE, '--view', 'nao-existe']);
   assert.equal(r.status, 1);
@@ -131,6 +131,22 @@ test('query --element --via passes the types as a list', () => {
   const md = run(['query', BASE, '--element', ID, '--depth', '2']);
   assert.match(md.stdout, /^# API de Pedidos/m);
   const bad = run(['query', BASE, '--element', 'nada']);
-  assert.equal(bad.status, 2);
+  assert.equal(bad.status, 1);
   assert.match(bad.stderr, /não existe na base/);
+});
+
+test('every query input error exits with 1', () => {
+  assert.equal(run(['query', BASE]).status, 1);
+  assert.equal(run(['query', BASE, '--view', 'x', '--format', 'xml']).status, 1);
+  assert.equal(run(['query', BASE, '--element', 'nao.existe']).status, 1);
+  assert.equal(run(['query', BASE, '--view', 'nao-existe']).stderr.includes('E_QUERY_VIEW: visão'), true);
+});
+
+test('query --element needs a depth that is an integer of 1 or more', () => {
+  for (const d of ['0', '-1', '1.5', 'x']) {
+    const r = run(['query', BASE, '--element', 'loja', '--depth', d]);
+    assert.equal(r.status, 1, `depth ${d}`);
+    assert.match(r.stderr, /--depth/);
+  }
+  assert.equal(run(['query', BASE, '--element', 'loja', '--depth', '2']).status, 0);
 });

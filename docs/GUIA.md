@@ -83,9 +83,9 @@ A base cresce por rodadas. A cada informação nova, diga ao Claude o que mudou:
 
 > A API de Pedidos agora é Kotlin, e existe um worker novo que consome o tópico de pedidos.
 
-O Claude escreve um **delta**, roda `archlens merge … --plan`, mostra o que é novo e pergunta, **um item por vez**,
+O Claude escreve um **delta**, roda `archlens plan`, mostra o que é novo e pergunta, **um item por vez**,
 só o que exige decisão: conflitos ("a base diz Java, você disse Kotlin"), possíveis duplicatas ("'API Agendamento' é
-a mesma 'API de Agendamento'?"), remoções e desativações. Depois aplica, e o `ARCHITECTURE.md` ganha:
+a mesma 'API de Agendamento'?"), remoções e desativações. Depois grava com `archlens apply`, e o `ARCHITECTURE.md` ganha:
 
 - a coluna **Fontes** e a seção **Fontes** (de onde veio cada fato);
 - a seção **Ciclo de vida** (`planned`, `deprecated`, `retired`) e visões as-is/to-be;

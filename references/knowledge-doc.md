@@ -13,7 +13,7 @@ A base é uma **pasta** (padrão `architecture/`, ao lado do `ARCHITECTURE.md`):
 | `notes/assumptions.md` | prosa de premissas (opcional; sem ele, a lista de `assumptions`) | pessoas / agente |
 | `diagrams/` | HTML e screenshots do `build` | build |
 
-O **`ARCHITECTURE.md` é 100% gerado** (por `merge --apply`, `doc` e `build`): resumo, contexto, modelo C4, camadas
+O **`ARCHITECTURE.md` é 100% gerado** (por `apply`, `doc` e `build`): resumo, contexto, modelo C4, camadas
 ArchiMate, relacionamentos, rastreabilidade, ciclo de vida, premissas, fontes, visões, histórico e notas. O
 frontmatter traz `source:` (a pasta), e a CLI aceita o `.md` como atalho para ela. Não edite o `.md`.
 
@@ -128,7 +128,7 @@ Texto das pessoas fica aqui e é preservado.
   leitura tira de volta, e segue com os aliases do modelo. Os campos de ligação por tipo de relação (`serving`, `access`, …) e as `tags` são derivados e
   regravados a cada escrita: tags que não sejam `archlens/tag/*` são reescritas na próxima gravação.
 - Tudo entre o título da página e o bloco do archlens é a **descrição**. O bloco `archlens:begin` … `archlens:end` é
-  regenerado. Só o texto **depois** do bloco é das pessoas: é preservado por toda gravação do conector markdown, inclusive se o elemento mudar de tipo (e de pasta). Se o elemento é removido, a página sai e esse texto vai, na mesma gravação, para `notes/removidos/<tipo>/<id>.md` (uma linha de cabeçalho com o nome e o id, depois o texto; uma nova remoção do mesmo id acrescenta ao fim); o `merge --apply` diz o caminho. Essa pasta não faz parte da base e o archlens nunca a apaga. Só se perde ao converter para `json`, que não tem onde guardá-lo (veja `store convert`).
+  regenerado. Só o texto **depois** do bloco é das pessoas: é preservado por toda gravação do conector markdown, inclusive se o elemento mudar de tipo (e de pasta). Se o elemento é removido, a página sai e esse texto vai, na mesma gravação, para `notes/removidos/<tipo>/<id>.md` (uma linha de cabeçalho com o nome e o id, depois o texto; uma nova remoção do mesmo id acrescenta ao fim); o `apply` diz o caminho. Essa pasta não faz parte da base e o archlens nunca a apaga. Só se perde ao converter para `json`, que não tem onde guardá-lo (veja `store convert`).
 - Wikilinks são sempre `[[<tipo>/<id>|<nome>]]`; renomear um elemento atualiza os links nas outras páginas.
 
 ### `gbrain-pack.yaml`
@@ -175,4 +175,4 @@ node scripts/archlens.mjs deliver architecture/ --spec '{"key":"x","notation":"a
 ```
 
 Nenhuma remodelagem: a pergunta nova vira uma view spec sobre o mesmo estado. Para guardar a visão na base, mande-a
-num delta (`views`). Para acrescentar conhecimento, delta → `merge --plan` → `--apply`.
+num delta (`views`). Para acrescentar conhecimento, delta → `plan` → `apply`.

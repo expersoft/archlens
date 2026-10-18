@@ -15,7 +15,7 @@ import { suggestViews } from './suggest.mjs';
 const EMPTY = { raw: null, notes: {} };
 
 /** A plan of the current format that was already finalized. */
-export const isFinal = doc => doc?.['archlens-plan'] === PLAN_VERSION && doc.state === 'final';
+export const isFinal = doc => doc?.['archlens-plan'] === PLAN_VERSION && doc.state === 'final' && Array.isArray(doc.ops);
 
 /**
  * `plan` with its store operations: applies the (fully answered) plan to the loaded base and adds `entry` and `ops`
@@ -95,7 +95,9 @@ export function apply(store, plan) {
     const open = openQuestions(plan);
     throw mergeError('E_PLAN_OPEN', open.length
       ? `o plano tem ${open.length} pergunta(s) sem resposta: item(ns) ${open.map(i => i.n).join(', ')}; responda e rode ${redo}`
-      : `o plano está bloqueado por erros do delta; corrija o delta e rode ${redo}`);
+      : plan.blocked
+        ? `o plano está bloqueado por erros do delta; corrija o delta e rode ${redo}`
+        : `o plano está aberto, mas todas as perguntas já têm resposta; feche-o com ${redo}`);
   }
   if (!plan.ops.length) return { version: null, entry: null, preserved: [] };
   const stale = now => storeError('E_STORE_CONFLICT', `a base mudou depois do plano (${short(plan.storeVersion)} → ${short(now)}); `
@@ -142,7 +144,7 @@ export function query(store, { view, spec, element, depth = 1, via, format = 'md
   const model = normalizeModel(loaded.raw);
   const picked = keys.map(k => {
     const found = model.views.find(v => v.key === k) ?? suggestViews(model).find(v => v.key === k);
-    if (!found) throw Object.assign(new Error(`visão "${k}" não existe (veja "archlens views")`), { code: 'E_QUERY_VIEW' });
+    if (!found) throw mergeError('E_QUERY_VIEW', `visão "${k}" não existe (veja "archlens views")`);
     return found;
   });
   const answers = [...picked, ...specs].map(sp => viewAnswer(model, sp));

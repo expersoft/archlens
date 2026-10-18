@@ -289,6 +289,28 @@ test('apply refuses an open plan', () => {
   assert.ok(!store.calls.includes('apply'));
 });
 
+test('apply names the real reason for an open plan: blocked by the delta, or answered but not closed', () => {
+  const store = memStore(shop());
+  const blocked = plan(store, delta({ relationships: [{ from: 'loja', to: 'nao-existe', type: 'uses' }] }), TODAY).plan;
+  assert.throws(() => apply(store, blocked), e => e.code === 'E_PLAN_OPEN' && /bloqueado por erros do delta/.test(e.message));
+  const open = plan(store, renameApi(), TODAY).plan;
+  const answered = answer(structuredClone(open), { [open.items.find(i => i.class === 'conflict').key]: 'keep' });
+  for (const p of [answered, (({ state, ...rest }) => rest)(answered)]) { // the second is a plan from before e.3 (no state)
+    assert.throws(() => apply(store, p), e => e.code === 'E_PLAN_OPEN' && /todas as perguntas já têm resposta/.test(e.message)
+      && !/bloqueado/.test(e.message) && /archlens plan <base> --answers <plano> --out <novo>/.test(e.message));
+  }
+  assert.ok(!store.calls.includes('apply'));
+});
+
+test('a final plan without ops is not final', () => {
+  const store = memStore(shop());
+  const { plan: p } = plan(store, addCache(), TODAY);
+  const { ops, ...noOps } = p;
+  assert.equal(isFinal(noOps), false);
+  assert.throws(() => apply(store, noOps), e => e.code === 'E_PLAN_OPEN');
+  assert.doesNotThrow(() => preview(store, { plan: noOps })); // read as an open plan, not as a TypeError on ops
+});
+
 test('apply refuses what is not a plan', () => {
   const store = memStore(shop());
   assert.throws(() => apply(store, renameApi()), e => e.code === 'E_PLAN_SCHEMA');

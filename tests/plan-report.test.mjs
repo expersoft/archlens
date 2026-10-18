@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, writeFileSync, mkdtempSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdtempSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { plan, answersOf, show } from '../scripts/lib/api.mjs';
 import { resolveBase, openStore } from '../scripts/lib/store/index.mjs';
 import { saveFolder } from '../scripts/lib/store/folder.mjs';
+import { hashRaw } from '../scripts/lib/merge.mjs';
 import { asBase, memStore, matchSnapshot } from './helpers.mjs';
 
 const TODAY = { today: '2026-10-01' };
@@ -102,6 +103,16 @@ test('a changed base is flagged in the first line', () => {
   assert.ok(!/^> Atenção/.test(show(telePlans().mem, final)));
 });
 
+test('an old plan without storeVersion is stale when its baseHash no longer matches', () => {
+  const { final } = telePlans();
+  const { storeVersion, ...old } = final;
+  old.baseHash = hashRaw(tele());
+  const moved = tele();
+  moved.model.elements.push({ id: 'zz', type: 'application-component', name: 'Zz' });
+  assert.equal(show(memStore(moved), old, { format: 'json' }).stale, true);
+  assert.equal(show(memStore(tele()), old, { format: 'json' }).stale, false);
+});
+
 test('json format returns the structured data', () => {
   const { mem, final } = telePlans();
   const data = show(mem, final, { format: 'json' });
@@ -128,4 +139,17 @@ test('CLI: show prints markdown, --out writes it and --json gives valid JSON', (
   const js = run(['show', 'architecture', 'p.json', '--json']);
   assert.equal(JSON.parse(js.stdout).state, 'final');
   assert.match(run(['show', 'architecture']).stderr, /uso: archlens show/);
+});
+
+test('CLI: show of a plan made for a missing base prints the report and writes nothing', () => {
+  const tmp = mkdtempSync(join(tmpdir(), 'archlens-show-'));
+  const run = args => spawnSync(process.execPath, [CLI, ...args], { cwd: tmp, encoding: 'utf8' });
+  writeFileSync(join(tmp, 'd.json'), JSON.stringify({ 'archlens-delta': '1.0', name: 'Nova', source: { kind: 'manual', ref: 'k' },
+    model: { elements: [{ id: 'sis', type: 'c4:softwareSystem', name: 'Sistema' }] } }));
+  assert.equal(run(['plan', 'ARCHITECTURE.md', 'd.json', '--out', 'p.json']).status, 0);
+  assert.deepEqual(readdirSync(tmp).sort(), ['d.json', 'p.json']);
+  const r = run(['show', 'ARCHITECTURE.md', 'p.json']);
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /Sistema/);
+  assert.deepEqual(readdirSync(tmp).sort(), ['d.json', 'p.json']);
 });

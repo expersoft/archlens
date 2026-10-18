@@ -1,7 +1,7 @@
 // The plan report (`archlens show`): a deterministic markdown summary of what a plan does, for a PR or a conversation.
 // reportData builds the structure (also the --json output); formatReport only lays it out.
 import { indexTree } from './raw-tree.mjs';
-import { relationshipIds } from './merge.mjs';
+import { relationshipIds, hashRaw } from './merge.mjs';
 import { describeItem } from './merge-report.mjs';
 import { short } from './store/contract.mjs';
 
@@ -68,7 +68,9 @@ export function reportData(baseRaw, plan, preview, { currentVersion } = {}) {
       relRemoved: relationships.filter(r => r.kind === 'removed').length,
     },
     pending, decisions, added, changed, removed, relationships, views,
-    stale: plan.storeVersion != null && currentVersion !== undefined && plan.storeVersion !== currentVersion,
+    // same rule as api.preview: by store version, or (an old plan without one) by the base hash
+    stale: plan.storeVersion != null ? currentVersion !== undefined && plan.storeVersion !== currentVersion
+      : Boolean(plan.baseHash) && plan.baseHash !== hashRaw(baseRaw ?? null),
     ...(plan.storeVersion != null && currentVersion !== undefined ? { currentVersion } : {}),
   };
 }

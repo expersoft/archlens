@@ -22,7 +22,7 @@ versões seguem [SemVer](https://semver.org/lang/pt-BR/).
   final carrega as operações do store** e a versão da base, e o `apply` recusa se a base mudou. `merge` segue como atalho.
 - **`archlens query`**: responde em markdown (padrão) ou JSON (`--format`) a uma visão ou spec, e `--element <id>` dá o
   cartão do elemento (pai, filhos, relações, fontes, rodadas; `--depth` inclui o que está em volta).
-- **Prévia de plano final**: `render`/`deliver`/`build`/`resolve`/`views` com `--plan <plano.json>` desenham a base com o plano, aberto ou final, já aplicado (sem gravar).
+- **Prévia de plano final**: `render`/`deliver`/`build`/`resolve`/`views` com `--plan <plano.json>` desenham a base com o plano, aberto ou final, já aplicado. `render` e `deliver` não gravam nada; `build` grava os diagramas em `architecture/diagrams/` (a base não muda).
 - **Plugin com três skills** (`archlens-plan`, `archlens-apply`, `archlens-query`) em `.claude-plugin/`; exemplo em
   `examples/telemedicina/plano-02*.json`.
 - **Conector `markdown`**: a base vira um vault (uma pasta por tipo ArchiMate, um `.md` por elemento) que abre no Obsidian;

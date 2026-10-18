@@ -11,7 +11,7 @@ import { layoutView, legibility } from './lib/layout.mjs';
 import { renderHtml } from './lib/render.mjs';
 import { suggestViews } from './lib/suggest.mjs';
 import { inspectHtml } from './lib/deliver.mjs';
-import { mergeError, canonicalJson, hashRaw, relationshipIds } from './lib/merge.mjs';
+import { mergeError, canonicalJson, relationshipIds } from './lib/merge.mjs';
 import { plan as planOf, finalize, apply as applyPlanTo, answersOf, isFinal, preview as previewOf, show as showPlan, query as queryBase } from './lib/api.mjs';
 import { formatPlanReport } from './lib/merge-report.mjs';
 import { previewSummary, annotateView } from './lib/preview.mjs';
@@ -335,7 +335,7 @@ async function main() {
   const [cmd, file] = args._;
   if (!cmd || args.help || cmd === 'help') { console.log(HELP); return; }
   const previewing = ['render', 'deliver', 'build', 'resolve', 'views'].includes(cmd) && (args.delta || args.plan);
-  const create = ['merge', 'plan', 'apply'].includes(cmd) || (previewing && file != null);
+  const create = ['merge', 'plan', 'apply', 'show'].includes(cmd) || (previewing && file != null);
   const BASE_CMDS = ['validate', 'doc', 'extract', 'views', 'resolve', 'query', 'render', 'deliver', 'build', 'merge', 'plan', 'apply', 'show', 'check'];
   const store = BASE_CMDS.includes(cmd) ? openBase(file, { create }) : null; // migrate opens its own; unknown → default
   const preview = previewing ? loadPreview(store, args) : null;
@@ -398,12 +398,12 @@ async function main() {
       try {
         const spec = loadSpecs(args.spec);
         const depth = args.depth === undefined ? 1 : Number(args.depth);
-        if (!Number.isInteger(depth) || depth < 0) fail('--depth aceita um número inteiro (0 ou mais)');
+        if (!Number.isInteger(depth) || depth < 1) fail('--depth aceita um número inteiro (1 ou mais)');
         const via = typeof args.via === 'string' ? args.via.split(',').map(t => t.trim()).filter(Boolean) : undefined;
         const res = queryBase(store, { view: args.view === true ? undefined : args.view, spec: spec.length ? spec : undefined,
           element: typeof args.element === 'string' ? args.element : undefined, depth, via, format });
         text = format === 'json' ? JSON.stringify(res, null, 2) + '\n' : res;
-      } catch (e) { fail(e.message, e.code === 'E_QUERY_VIEW' ? 1 : 2); }
+      } catch (e) { fail(e.message, 1); }
       if (args.out && args.out !== true) { atomicWrite(args.out, text); console.log(`✓ ${args.out}`); } else process.stdout.write(text);
       break;
     }
@@ -544,7 +544,7 @@ async function main() {
       if (!file && !val('from')) fail(usage);
       let base = null;
       const newBase = at => console.warn(at
-        ? `  aviso: nenhuma base encontrada; o delta será para uma base nova: a base será criada em ${relPath(at)} pelo primeiro "merge --apply".`
+        ? `  aviso: nenhuma base encontrada; o delta será para uma base nova: a base será criada em ${relPath(at)} pelo primeiro "apply".`
         : '  aviso: nenhuma base encontrada; o delta será para uma base nova. Use --base para apontar a base existente.');
       try {
         // --base may name a base the first merge will create (missing or empty folder); scan only reads it
@@ -579,7 +579,7 @@ async function main() {
       const delta = toDelta(inv, { role: val('as'), system: val('system'), id: val('id'), base });
       atomicWrite(args.delta, JSON.stringify(delta, null, 2) + '\n');
       console.log(`✓ delta em ${args.delta}: ${delta.model.elements.length} elemento(s), ${delta.model.relationships.length} relação(ões)${delta.ops ? `, ${delta.ops.length} sugestão(ões) de retired para confirmar` : ''}`);
-      console.log(`  próximo passo: archlens merge <base> ${args.delta} --plan plano.json`);
+      console.log(`  próximo passo: archlens plan <base> ${args.delta} --out plano.json`);
       break;
     }
     case 'check': {

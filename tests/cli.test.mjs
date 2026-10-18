@@ -909,6 +909,23 @@ test('apply of an open plan or of a delta is refused', () => {
   assert.deepEqual(snapshot(dir), before);
 });
 
+test('apply of an open plan whose questions are all answered says so', () => {
+  const dir = setup();
+  addDelta(dir);
+  pending(dir);
+  assert.equal(run(['plan', 'architecture', 'open.json', '--out', 'p1.json'], dir).status, 0);
+  const p = JSON.parse(readFileSync(join(dir, 'p1.json'), 'utf8'));
+  for (const it of p.items) if ('resolution' in it) it.resolution = it.options?.[0] ?? 'keep';
+  writeFileSync(join(dir, 'p1.json'), JSON.stringify(p));
+  const before = snapshot(dir);
+  const r = run(['apply', 'architecture', 'p1.json'], dir);
+  assert.equal(r.status, 2);
+  assert.match(r.stderr, /E_PLAN_OPEN/);
+  assert.match(r.stderr, /todas as perguntas já têm resposta/);
+  assert.match(r.stderr, /archlens plan architecture --answers p1\.json --out p1-2\.json/);
+  assert.deepEqual(snapshot(dir), before);
+});
+
 test('plan and apply create a missing base', () => {
   const dir = mkdtempSync(join(tmpdir(), 'archlens-'));
   writeFileSync(join(dir, 'd.json'), JSON.stringify({ 'archlens-delta': '1.0', name: 'Nova', source: { kind: 'manual', ref: 'kickoff' },

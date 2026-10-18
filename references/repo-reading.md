@@ -9,7 +9,7 @@ Use quando o usuário apontar um repositório (pasta ou URL git) como fonte de a
 
 1. `archlens scan <repo> --base <base>`: imprime o resumo (fatos por fonte, avisos, papel sugerido, elemento já
    existente, sistemas prováveis com o motivo). Sem base, avisa e segue. Na primeira leitura, `--base` pode apontar a
-   base que o primeiro `merge --apply` vai criar (pasta ausente ou vazia): o aviso de base nova sai e o delta é para
+   base que o primeiro `apply` vai criar (pasta ausente ou vazia): o aviso de base nova sai e o delta é para
    uma base nova (o aviso diz onde a base será criada).
 2. **Pergunte o papel e o sistema** mostrando a sugestão e os motivos. Nunca assuma pelo nome. Se o resumo mostrar
    `já na base: <nome> (<id>), semelhança de nome <n>`, confirme com o usuário se é o mesmo elemento e, se for, passe

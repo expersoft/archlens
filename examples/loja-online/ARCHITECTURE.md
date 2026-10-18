@@ -11,7 +11,7 @@ relationships: 78
 
 # Loja Online
 
-> Gerado por archlens a partir de `architecture/`. Não edite: escreva em `architecture/notes/*.md` e evolua a base com `archlens merge`.
+> Gerado por archlens a partir de `architecture/`. Não edite: escreva em `architecture/notes/*.md` e evolua a base com `archlens plan` e `archlens apply`.
 
 ## Visão geral
 
