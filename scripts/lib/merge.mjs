@@ -212,7 +212,8 @@ function resolveRef(ctx, ref) {
   return id;
 }
 
-const describe = (el, parent) => ({
+/** An element as findCandidates compares it (apply rechecks the elements a plan creates with it). */
+export const describe = (el, parent) => ({
   id: el.id, names: [el.name ?? el.id, ...aliasesOf(el)], parent: parent ?? null, technology: el.technology,
   type: el.type ?? null,
 });

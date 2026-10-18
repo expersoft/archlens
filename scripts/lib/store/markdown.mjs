@@ -110,7 +110,7 @@ export function markdownConnector(locator, describe) {
   let emptied = new Set();
   let preserved = [];
   return fileConnector({
-    kind: 'markdown', dir, locator, describe,
+    kind: 'markdown', dir, locator, describe, versioning: 'object', // a page per element: its relationships live in it
     load: opts => (existsSync(join(dir, MANIFEST)) ? readVault(dir, opts) : null),
     contents: (next, cur) => {
       const files = vaultContents(dir, next, cur);

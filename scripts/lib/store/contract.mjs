@@ -5,20 +5,31 @@ import { join } from 'node:path';
 import { applyOps, contentVersion, manifestOf } from './ops.mjs';
 import { writeFilesAtomically } from './atomic.mjs';
 import { storeError } from './errors.mjs';
+import { objectVersionsOf, checkExpect } from './versions.mjs';
 
-export const CONNECTOR_METHODS = ['describe', 'read', 'readSubgraph', 'version', 'apply', 'history'];
+export const CONNECTOR_METHODS = ['describe', 'read', 'readSubgraph', 'version', 'objectVersions', 'apply', 'history'];
 export const CONNECTOR_KINDS = ['json', 'markdown', 'legacy'];
+// "object": each object has its own version (apply checks the plan's objects); "base": one version for the whole base.
+export const VERSIONING = ['object', 'base'];
 
 export function checkConnector(c) {
   if (!CONNECTOR_KINDS.includes(c?.kind)) throw new Error(`conector de tipo desconhecido: ${c?.kind}`);
+  if (!VERSIONING.includes(c.versioning)) throw new Error(`o conector ${c.kind} não declara versioning (${VERSIONING.join(' | ')})`);
   for (const m of CONNECTOR_METHODS) if (typeof c[m] !== 'function') throw new Error(`o conector ${c.kind} não tem ${m}()`);
   return c;
 }
+
+/** objectVersions for a "base" connector: the version of the whole base for every ref. */
+export const baseVersions = (refs, snapshot) => new Map([...refs].map(ref => [ref, contentVersion(snapshot)]));
 
 export const short = v => (v ? String(v).replace(/^sha256:/, '').slice(0, 12) : 'base inexistente');
 export const conflictError = (baseVersion, now) => storeError('E_STORE_CONFLICT',
   `a base mudou depois que as mudanças foram calculadas (${short(baseVersion)} → ${short(now)}); nada foi gravado. `
   + 'Gere o plano de novo com "archlens merge --plan"');
+/** Objects of the plan (`conflicts`: [{ ref, planned, current }]) that changed since it was made. */
+export const objectConflictError = conflicts => storeError('E_STORE_CONFLICT',
+  `${conflicts.length} objeto(s) do plano mudaram depois que as mudanças foram calculadas (${conflicts.map(c => c.ref).join(', ')}); nada foi gravado. `
+  + 'Gere o plano de novo com "archlens plan --answers"', { conflicts });
 
 /**
  * The part of `raw` reachable from `seeds` in `depth` hops over relationships (of the types in `via`, all when absent)
@@ -51,15 +62,19 @@ export function subgraphOf(raw, { seeds = [], depth = 1, via } = {}) {
   } } };
 }
 
+/** The round the ops appended, as written (its id is the one given when written), or null. */
+export const appendedEntry = (next, ops) => (ops.some(o => o?.op === 'appendHistory') ? next.raw.changelog?.at(-1) ?? null : null);
+
 /**
  * A connector over a base folder. `load(opts)` reads it ({ raw, notes, ctx } or null when there is no base);
  * `contents(next, cur)` lists every file the base should have (relative path → text, null to delete); `after(next)`
  * runs once the files are in place; `preserved()` lists the files this apply wrote to keep text people wrote in what it
- * removed. apply writes only the files whose text changes, all or nothing.
+ * removed. apply writes only the files whose text changes, all or nothing, once the plan's versions still hold: `expect`
+ * (ref → version, for "object" connectors) or `baseVersion`; checked on the base it reads and again right before the swap.
  */
-export function fileConnector({ kind, dir, locator, describe, load, contents, after, preserved }) {
+export function fileConnector({ kind, dir, locator, describe, load, contents, after, preserved, versioning = 'base' }) {
   const c = {
-    kind, writable: true, locator,
+    kind, writable: true, locator, versioning,
     describe: () => describe,
     read(opts) { const r = load(opts); return r && { raw: r.raw, notes: r.notes }; },
     readSubgraph(query) {
@@ -68,11 +83,22 @@ export function fileConnector({ kind, dir, locator, describe, load, contents, af
       return subgraphOf(r.raw, query);
     },
     version() { return contentVersion(c.read()); },
+    objectVersions(refs, snapshot = c.read()) {
+      return versioning === 'object' ? objectVersionsOf(snapshot, refs) : baseVersions(refs, snapshot);
+    },
     history() { return c.read()?.raw.changelog ?? []; },
-    apply(ops, { baseVersion = null } = {}) {
+    apply(ops, { expect, baseVersion = null } = {}) {
+      const verify = base => {
+        if (expect) {
+          const conflicts = checkExpect(c.objectVersions(Object.keys(expect), base), expect);
+          if (conflicts.length) throw objectConflictError(conflicts);
+          return;
+        }
+        const now = contentVersion(base);
+        if (now !== baseVersion) throw conflictError(baseVersion, now);
+      };
       const cur = load();
-      const now = contentVersion(cur);
-      if (now !== baseVersion) throw conflictError(baseVersion, now);
+      verify(cur);
       const next = applyOps(cur, ops);
       const changes = new Map();
       for (const [rel, text] of contents(next, cur)) {
@@ -80,9 +106,9 @@ export function fileConnector({ kind, dir, locator, describe, load, contents, af
         const exists = existsSync(path);
         if (text === null ? exists : !(exists && readFileSync(path, 'utf8') === text)) changes.set(rel, text);
       }
-      writeFilesAtomically(dir, changes, { check: () => { const v = contentVersion(load()); if (v !== now) throw conflictError(baseVersion, v); } });
+      writeFilesAtomically(dir, changes, { check: () => verify(load()) });
       after?.(next);
-      return { version: contentVersion(next), preserved: preserved?.() ?? [] };
+      return { version: contentVersion(next), preserved: preserved?.() ?? [], entry: appendedEntry(next, ops) };
     },
   };
   return c;

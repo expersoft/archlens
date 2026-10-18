@@ -55,6 +55,19 @@ export function diffRaw(before, after) {
   return ops;
 }
 
+/**
+ * The round as appended to `history`: a plan's "<date>-NN" id is provisional, so it is numbered here, after the rounds of
+ * its day already there (a history copied in order gets its own ids back). An id of another shape stays.
+ */
+function numbered(entry, history) {
+  const e = structuredClone(entry);
+  const prefix = `${e.date}-`;
+  if (typeof e.date === 'string' && typeof e.id === 'string' && e.id.startsWith(prefix) && /^\d+$/.test(e.id.slice(prefix.length))) {
+    e.id = prefix + String(history.filter(x => x?.date === e.date).length + 1).padStart(2, '0');
+  }
+  return e;
+}
+
 /** Reference implementation: `base` ({ raw, notes } or null) with `ops` applied, in order. E_STORE_OP on a bad op. */
 export function applyOps(base, ops) {
   if (!Array.isArray(ops)) throw storeError('E_STORE_OP', 'as operações precisam ser uma lista');
@@ -108,7 +121,7 @@ export function applyOps(base, ops) {
         break;
       case 'appendHistory':
         if (!op.entry || typeof op.entry !== 'object') throw bad(i, '"entry" precisa ser uma rodada do changelog');
-        changelog = [...(changelog ?? []), structuredClone(op.entry)];
+        changelog = [...(changelog ?? []), numbered(op.entry, changelog ?? [])];
         break;
       default:
         throw bad(i, `operação desconhecida; use ${OPS.join(' | ')}`);

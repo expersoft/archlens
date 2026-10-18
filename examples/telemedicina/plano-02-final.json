@@ -476,17 +476,17 @@
     }
   ],
   "objects": {
-    "element:sms": null,
-    "element:tele": "sha256:dd0d0a1e07652f89f8c0e292f26f809b19924ec709fbdcc973f92544a8d9772e",
-    "element:tele.api": "sha256:24cfe2c2ddd1b12c99105d31f30e2cf689df23ab6abd1a2381465f366c65ece2",
-    "element:tele.chatbot": null,
-    "element:tele.fila": null,
-    "element:tele.notificador": "sha256:4737b03920f4f744c49b47bdd671ddc7901bb18ea865c4def02be5ebbdf7f3ce",
-    "element:whatsapp": "sha256:abf54318b84f2f31dfb2212c8a8086949656f0729f82d3ea747667075e9c262c",
-    "relationship:sms-serving-tele.notificador": null,
-    "relationship:tele.fila-serving-tele.api": null,
-    "relationship:tele.fila-serving-tele.notificador": null,
-    "relationship:whatsapp-serving-tele.notificador": "sha256:abf54318b84f2f31dfb2212c8a8086949656f0729f82d3ea747667075e9c262c"
+    "element:sms": "sha256:a6a5d2d0620045ff8a81cec95d4729cb2f42f46bea47a8883f9b5dd14c56b39e",
+    "element:tele": "sha256:a6a5d2d0620045ff8a81cec95d4729cb2f42f46bea47a8883f9b5dd14c56b39e",
+    "element:tele.api": "sha256:a6a5d2d0620045ff8a81cec95d4729cb2f42f46bea47a8883f9b5dd14c56b39e",
+    "element:tele.chatbot": "sha256:a6a5d2d0620045ff8a81cec95d4729cb2f42f46bea47a8883f9b5dd14c56b39e",
+    "element:tele.fila": "sha256:a6a5d2d0620045ff8a81cec95d4729cb2f42f46bea47a8883f9b5dd14c56b39e",
+    "element:tele.notificador": "sha256:a6a5d2d0620045ff8a81cec95d4729cb2f42f46bea47a8883f9b5dd14c56b39e",
+    "element:whatsapp": "sha256:a6a5d2d0620045ff8a81cec95d4729cb2f42f46bea47a8883f9b5dd14c56b39e",
+    "relationship:sms-serving-tele.notificador": "sha256:a6a5d2d0620045ff8a81cec95d4729cb2f42f46bea47a8883f9b5dd14c56b39e",
+    "relationship:tele.fila-serving-tele.api": "sha256:a6a5d2d0620045ff8a81cec95d4729cb2f42f46bea47a8883f9b5dd14c56b39e",
+    "relationship:tele.fila-serving-tele.notificador": "sha256:a6a5d2d0620045ff8a81cec95d4729cb2f42f46bea47a8883f9b5dd14c56b39e",
+    "relationship:whatsapp-serving-tele.notificador": "sha256:a6a5d2d0620045ff8a81cec95d4729cb2f42f46bea47a8883f9b5dd14c56b39e"
   },
   "knownCandidates": {
     "sms": [],

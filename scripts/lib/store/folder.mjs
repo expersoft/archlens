@@ -206,7 +206,7 @@ export function jsonConnector(locator, describe) {
   const dir = locator.path;
   const load = opts => (existsSync(join(dir, MANIFEST)) ? toBase(loadFolder(dir, opts)) : null);
   return fileConnector({
-    kind: 'json', dir, locator, describe, load,
+    kind: 'json', dir, locator, describe, load, versioning: 'base',
     contents: (next, cur) => folderContents(dir, next.raw, { notes: next.notes, ...cur?.ctx }),
   });
 }

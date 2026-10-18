@@ -4,7 +4,7 @@ import { extname } from 'node:path';
 import { extractModel, NOTE_NAMES, noteDefaults } from '../doc.mjs';
 import { storeError } from './errors.mjs';
 import { isCanonicalFormat, FORMAT } from '../canonical.mjs';
-import { subgraphOf } from './contract.mjs';
+import { subgraphOf, baseVersions } from './contract.mjs';
 import { contentVersion } from './ops.mjs';
 
 const KEEP_RE = /<!-- keep:([\w-]+) -->\n?([\s\S]*?)\n?<!-- \/keep:\1 -->/g;
@@ -58,11 +58,12 @@ export function legacyNotes(raw, keeps) {
 export function legacyConnector(locator, { describe, error }) {
   const read = opts => { const { raw, keeps } = loadLegacy(locator.path, opts); return { raw, notes: legacyNotes(raw, keeps) }; };
   return {
-    kind: 'legacy', writable: false, locator,
+    kind: 'legacy', writable: false, locator, versioning: 'base',
     describe: () => describe,
     read,
     readSubgraph: query => subgraphOf(read().raw, query),
     version: () => contentVersion(read()),
+    objectVersions: (refs, snapshot = read()) => baseVersions(refs, snapshot),
     history: () => read().raw.changelog ?? [],
     apply() { throw error(); },
   };

@@ -82,3 +82,13 @@ export function objectVersionsOf(snapshot, refs) {
   };
   return new Map([...refs].map(ref => [ref, versionOf(ref)]));
 }
+
+/** The refs of `expect` (ref → version a plan read) whose version in `current` (ref → version) differs. */
+export function checkExpect(current, expect) {
+  const out = [];
+  for (const [ref, planned] of Object.entries(expect ?? {})) {
+    const now = current.get(ref) ?? null;
+    if (now !== (planned ?? null)) out.push({ ref, planned: planned ?? null, current: now });
+  }
+  return out;
+}
