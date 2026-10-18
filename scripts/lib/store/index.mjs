@@ -5,6 +5,7 @@ import { dirname, join, resolve, relative, basename, extname } from 'node:path';
 import { jsonConnector, readJson, storeKind, MANIFEST } from './folder.mjs';
 import { legacyConnector } from './legacy.mjs';
 import { markdownConnector } from './markdown.mjs';
+import { gbrainGitConnector } from './gbrain-git.mjs';
 import { storeError } from './errors.mjs';
 import { validateStore } from './config.mjs';
 
@@ -84,14 +85,14 @@ export function openStore(locator) {
   const kind = folderKind(locator.path);
   if (kind === 'markdown') return markdownConnector(locator, `${rel(locator.path)}/ (markdown)`);
   if (kind === 'gbrain') {
-    const { mode } = validateStore(readJson(join(locator.path, MANIFEST)).store);
-    return (mode === 'mcp' ? gbrainMcpConnector : gbrainGitConnector)(locator, `${rel(locator.path)}/ (gbrain ${mode})`);
+    const store = validateStore(readJson(join(locator.path, MANIFEST)).store);
+    const describe = `${rel(locator.path)}/ (gbrain ${store.mode})`;
+    return store.mode === 'mcp' ? gbrainMcpConnector(locator, describe) : gbrainGitConnector(locator, store, { describe });
   }
   return jsonConnector(locator, `${rel(locator.path)}/`);
 }
 
-// Stubs until the gbrain connectors land (git: Task 5, MCP: Task 7).
-const gbrainGitConnector = () => { throw storeError('E_STORE_UNSUPPORTED', 'o conector gbrain (modo git) ainda não está disponível'); };
+// Stub until the gbrain MCP connector lands (Task 7).
 const gbrainMcpConnector = () => { throw storeError('E_STORE_UNSUPPORTED', 'o conector gbrain (modo mcp) ainda não está disponível'); };
 
 /** Throws the connector's own refusal when it cannot write (the old .md base). */

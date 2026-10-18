@@ -8,7 +8,7 @@ import { storeError } from './errors.mjs';
 import { objectVersionsOf, checkExpect } from './versions.mjs';
 
 export const CONNECTOR_METHODS = ['describe', 'read', 'readSubgraph', 'version', 'objectVersions', 'apply', 'history'];
-export const CONNECTOR_KINDS = ['json', 'markdown', 'legacy'];
+export const CONNECTOR_KINDS = ['json', 'markdown', 'gbrain', 'legacy'];
 // "object": each object has its own version (apply checks the plan's objects); "base": one version for the whole base.
 export const VERSIONING = ['object', 'base'];
 
@@ -70,7 +70,8 @@ export const appendedEntry = (next, ops) => (ops.some(o => o?.op === 'appendHist
  * `contents(next, cur)` lists every file the base should have (relative path → text, null to delete); `after(next)`
  * runs once the files are in place; `preserved()` lists the files this apply wrote to keep text people wrote in what it
  * removed. apply writes only the files whose text changes, all or nothing, once the plan's versions still hold: `expect`
- * (ref → version, for "object" connectors) or `baseVersion`; checked on the base it reads and again right before the swap.
+ * (ref → version, for "object" connectors) or `baseVersion`; checked on the base it reads and again right before the swap,
+ * with `recheck(base)`, the caller's own conflicts on that base (a duplicate created in parallel), alongside `expect`.
  */
 export function fileConnector({ kind, dir, locator, describe, load, contents, after, preserved, versioning = 'base' }) {
   const c = {
@@ -87,10 +88,10 @@ export function fileConnector({ kind, dir, locator, describe, load, contents, af
       return versioning === 'object' ? objectVersionsOf(snapshot, refs) : baseVersions(refs, snapshot);
     },
     history() { return c.read()?.raw.changelog ?? []; },
-    apply(ops, { expect, baseVersion = null } = {}) {
+    apply(ops, { expect, baseVersion = null, recheck } = {}) {
       const verify = base => {
         if (expect) {
-          const conflicts = checkExpect(c.objectVersions(Object.keys(expect), base), expect);
+          const conflicts = [...checkExpect(c.objectVersions(Object.keys(expect), base), expect), ...(recheck?.(base) ?? [])];
           if (conflicts.length) throw objectConflictError(conflicts);
           return;
         }

@@ -168,7 +168,8 @@ export function apply(store, plan) {
     throw mergeError('E_MERGE_INVALID', `o resultado do plano é inválido (${errors.length} erro(s)); nada foi gravado`, { errors });
   }
   try {
-    const res = store.apply(plan.ops, expect ? { expect } : { baseVersion: plan.storeVersion ?? null });
+    // A connector that redoes the write over a newer base (gbrain git, after a rejected push) checks both again there.
+    const res = store.apply(plan.ops, expect ? { expect, recheck: base => parallelDuplicates(base, plan) } : { baseVersion: plan.storeVersion ?? null });
     return { version: res.version, entry: res.entry ?? appendedEntry(next, plan.ops) ?? plan.entry, preserved: res.preserved };
   } catch (e) {
     if (e.code !== 'E_STORE_CONFLICT') throw e;
