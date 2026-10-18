@@ -60,10 +60,11 @@ export function renderPage(el, { outgoing = [], children = [], info, userText })
 }
 
 export function parsePage(text, rel) {
-  const m = /^---\r?\n([\s\S]*?)\r?\n?---\r?\n/.exec(text);
+  // The closing fence counts only at the start of a line, so a value holding "---" stays in the frontmatter.
+  const m = /^---\r?\n(?:([\s\S]*?)\r?\n)?---[ \t]*(?:\r?\n|$)/.exec(text);
   if (!m) throw storeError('E_STORE_MD', `${rel}: falta o frontmatter (--- … ---) no início do arquivo`, { file: rel });
   let fm;
-  try { fm = parseYaml(m[1]); } catch (e) {
+  try { fm = parseYaml(m[1] ?? ''); } catch (e) {
     throw storeError('E_STORE_MD', `${rel}: YAML inválido no frontmatter: ${e.message}`, { file: rel });
   }
   if (!fm || typeof fm !== 'object' || typeof fm.id !== 'string' || typeof fm.type !== 'string') {

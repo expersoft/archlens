@@ -97,3 +97,48 @@ test('the gbrain pack declares exactly the page types and link fields the pages 
   assert.deepEqual(new Set(pack.frontmatter_links.map(l => `${l.page_type}:${l.fields[0]}`)), used);
   for (const l of pack.frontmatter_links) assert.ok(pack.link_types.some(t => t.name === l.link_type), l.link_type);
 });
+
+test('values with "---" in them read back as written (a closing fence counts only at the start of a line)', () => {
+  const { c } = vault();
+  change(c(), raw => {
+    const el = raw.model.elements.find(e => e.id === 'loja.web');
+    el.owner = 'team---';
+    el.statusReason = 'antes\n---\ndepois';
+    el.properties = { nota: 'x\n---\ny' };
+  });
+  const el = c().read().raw.model.elements.find(e => e.id === 'loja.web');
+  assert.equal(el.owner, 'team---');
+  assert.equal(el.statusReason, 'antes\n---\ndepois');
+  assert.deepEqual(el.properties, { nota: 'x\n---\ny' });
+  assert.equal(el.name, 'Web');
+  assert.equal(el.description, undefined);
+});
+
+test('an id that would break a wikilink is refused on write and nothing is written', () => {
+  const { dir, c } = vault();
+  for (const ch of ['[', ']', '|', '#', '^']) {
+    const before = readdirSync(dir).sort();
+    assert.throws(() => change(c(), raw => { raw.model.elements.push({ id: `p${ch}x`, type: 'node', name: 'N' }); }),
+      e => e.code === 'E_STORE_MD_ID', ch);
+    assert.deepEqual(readdirSync(dir).sort(), before);
+    assert.ok(!existsSync(join(dir, 'node', `p${ch}x.md`)), ch);
+  }
+});
+
+test('a description holding an archlens marker is refused on write, naming the element', () => {
+  const { c } = vault();
+  for (const marker of ['<!-- archlens:begin -->', '<!-- archlens:end -->']) {
+    assert.throws(() => change(c(), raw => { raw.model.elements.find(e => e.id === 'loja.web').description = `a ${marker} b`; }),
+      e => e.code === 'E_STORE_MD' && /loja\.web/.test(e.message), marker);
+  }
+});
+
+test('an empty type folder a person made survives an apply; one the apply emptied goes away', () => {
+  const { dir, c } = vault();
+  mkdirSync(join(dir, 'device'));
+  change(c(), raw => { raw.model.elements.find(e => e.id === 'loja.web').technology = 'Remix'; });
+  assert.ok(existsSync(join(dir, 'device')), 'the person-made folder stays');
+  change(c(), raw => { raw.model.elements = raw.model.elements.filter(e => e.id !== 'pg'); raw.model.relationships = raw.model.relationships.filter(r => r.from !== 'pg' && r.to !== 'pg'); });
+  assert.ok(!existsSync(join(dir, 'system-software')), 'the folder this apply emptied goes away');
+  assert.ok(existsSync(join(dir, 'device')));
+});

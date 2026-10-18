@@ -7,13 +7,14 @@ import { ELEMENT_TYPES } from '../registry.mjs';
 import { sortParentsFirst, isCanonicalFormat, FORMAT } from '../canonical.mjs';
 import { storeError } from './errors.mjs';
 import { MANIFEST, readJson, readNotes, noteFiles } from './folder.mjs';
-import { renderPage, parsePage, pagePath } from './markdown-page.mjs';
+import { renderPage, parsePage, pagePath, BEGIN, END } from './markdown-page.mjs';
 import { gbrainPack, PACK_FILE } from './gbrain-pack.mjs';
 import { fileConnector } from './contract.mjs';
 import { relationshipIds } from '../merge.mjs';
 
 const json = v => JSON.stringify(v, null, 2) + '\n';
-const FILE_SAFE = /^[^/\\:*?"<>|\0]+$/;
+// A file name, and a wikilink target: no "[", "]" or "|" (link syntax) nor "#" or "^" (heading and block anchors).
+const FILE_SAFE = /^[^/\\:*?"<>|\0[\]#^]+$/;
 const typeFolders = dir => readdirSync(dir).filter(n => ELEMENT_TYPES[n] && statSync(join(dir, n)).isDirectory()).sort();
 
 export function readVault(dir, { anyFormat = false } = {}) {
@@ -65,6 +66,9 @@ export function vaultContents(dir, { raw, notes }, cur) {
   const old = cur?.ctx.pages ?? new Map();
   for (const el of els) {
     if (!FILE_SAFE.test(el.id) || !ELEMENT_TYPES[el.type]) throw storeError('E_STORE_MD_ID', `"${el.id}" (${el.type}) não pode virar o arquivo ${pagePath(el)}`);
+    if (typeof el.description === 'string' && (el.description.includes(BEGIN) || el.description.includes(END))) {
+      throw storeError('E_STORE_MD', `a descrição de "${el.id}" contém o marcador ${el.description.includes(BEGIN) ? BEGIN : END}, que delimita o bloco do archlens na página`);
+    }
     files.set(pagePath(el), renderPage(el, { outgoing: outgoing.get(el.id), children: children.get(el.id) ?? [], info, userText: old.get(el.id)?.userText }));
   }
   for (const { rel } of old.values()) if (!files.has(rel)) files.set(rel, null);
@@ -72,17 +76,26 @@ export function vaultContents(dir, { raw, notes }, cur) {
   return files;
 }
 
-/** Type folders left empty by an apply go away (one with files the base does not own stays). */
-function removeEmptyTypeFolders(dir) {
-  for (const type of typeFolders(dir)) if (!readdirSync(join(dir, type)).length) rmdirSync(join(dir, type));
+/** Type folders this apply emptied go away (one with files the base does not own, or made by a person, stays). */
+function removeEmptiedFolders(dir, folders) {
+  for (const type of folders) {
+    const d = join(dir, type);
+    if (existsSync(d) && statSync(d).isDirectory() && !readdirSync(d).length) rmdirSync(d);
+  }
 }
 
 export function markdownConnector(locator, describe) {
   const dir = locator.path;
+  let emptied = new Set();
   return fileConnector({
     kind: 'markdown', dir, locator, describe,
     load: opts => (existsSync(join(dir, MANIFEST)) ? readVault(dir, opts) : null),
-    contents: (next, cur) => vaultContents(dir, next, cur),
-    after: () => removeEmptyTypeFolders(dir),
+    contents: (next, cur) => {
+      const files = vaultContents(dir, next, cur);
+      // The folders of the pages this apply deletes or moves away: the only ones it may remove once emptied.
+      emptied = new Set([...files].filter(([rel, text]) => text === null && ELEMENT_TYPES[rel.split('/')[0]]).map(([rel]) => rel.split('/')[0]));
+      return files;
+    },
+    after: () => removeEmptiedFolders(dir, emptied),
   });
 }
