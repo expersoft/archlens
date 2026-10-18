@@ -5,9 +5,10 @@ description: Use when the user brings new information for the architecture knowl
 
 # archlens-plan
 
-Leia `references/base.md` antes do primeiro comando (caminhos relativos a `$SKILL_DIR/../..`).
+Leia `references/base.md` antes do primeiro comando (caminhos relativos a `$ARCHLENS`).
 
-`SKILL_DIR` = pasta deste arquivo. CLI: `node $SKILL_DIR/../../scripts/archlens.mjs <comando>` (abaixo,
+`SKILL_DIR` = pasta deste arquivo; `ARCHLENS="$(realpath "$SKILL_DIR/../..")"` = o repositório do archlens (o `realpath` segue o link
+simbólico da instalação; sem ele, o `..` sai pelo `~/.claude` e não acha o repositório). CLI: `node "$ARCHLENS/scripts/archlens.mjs" <comando>` (abaixo,
 `archlens <comando>`). `$OUT` = uma pasta **fora** da base (ex.: `/tmp/archlens`).
 
 Esta skill **nunca grava a base**: usa só `scan`, `plan`, `show` e a prévia `deliver --delta/--plan`, com a saída

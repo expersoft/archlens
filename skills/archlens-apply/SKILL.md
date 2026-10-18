@@ -5,9 +5,10 @@ description: Use when the user wants to write a reviewed final archlens plan int
 
 # archlens-apply
 
-Leia `references/base.md` antes do primeiro comando (caminhos relativos a `$SKILL_DIR/../..`).
+Leia `references/base.md` antes do primeiro comando (caminhos relativos a `$ARCHLENS`).
 
-`SKILL_DIR` = pasta deste arquivo. CLI: `node $SKILL_DIR/../../scripts/archlens.mjs <comando>` (abaixo,
+`SKILL_DIR` = pasta deste arquivo; `ARCHLENS="$(realpath "$SKILL_DIR/../..")"` = o repositório do archlens (o `realpath` segue o link
+simbólico da instalação; sem ele, o `..` sai pelo `~/.claude` e não acha o repositório). CLI: `node "$ARCHLENS/scripts/archlens.mjs" <comando>` (abaixo,
 `archlens <comando>`).
 
 Esta é a única skill que grava a base. **Sem plano final, não siga**: se o usuário pede "adicione Y na base",

@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { readFileSync, readdirSync, existsSync } from 'node:fs';
+import { readFileSync, readdirSync, existsSync, mkdtempSync, symlinkSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { pluginManifests } from '../scripts/sync-plugin.mjs';
@@ -130,6 +131,33 @@ test('archlens-plan ends with show and a deliver --plan preview', () => {
 
 test('the root SKILL.md is gone', () => {
   assert.equal(existsSync(join(ROOT, 'SKILL.md')), false);
+});
+
+// Installed as ~/.claude/skills/<name> → <repo>/skills/<name>, "$SKILL_DIR/../.." is ~/.claude for Node and the Read
+// tool, which normalize ".." before following the link; realpath follows the link first.
+const ARCHLENS_DEF = 'ARCHLENS="$(realpath "$SKILL_DIR/../..")"';
+
+test('skills reach the repo through realpath, never through a bare $SKILL_DIR/../..', () => {
+  const texts = [...skills().map(s => [s.name, s.text]), ['references/base.md', read(join(ROOT, 'references', 'base.md'))]];
+  for (const [name, text] of texts) {
+    const bare = text.split(ARCHLENS_DEF).join('').match(/\$SKILL_DIR\/\.\.\/\.\./g);
+    assert.equal(bare, null, `${name}: use $ARCHLENS (${ARCHLENS_DEF}) em vez de $SKILL_DIR/../..`);
+  }
+  for (const { name, text } of skills()) {
+    assert.ok(text.includes(ARCHLENS_DEF), `${name}: define ${ARCHLENS_DEF}`);
+    assert.ok(text.includes('node "$ARCHLENS/scripts/archlens.mjs"'), `${name}: CLI por $ARCHLENS`);
+  }
+});
+
+test('a skill linked into a skills folder finds the CLI with the documented commands', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'archlens-skills-'));
+  symlinkSync(join(ROOT, 'skills', 'archlens-plan'), join(dir, 'archlens-plan'));
+  const SKILL_DIR = join(dir, 'archlens-plan');
+  const sh = cmd => spawnSync('bash', ['-c', cmd], { encoding: 'utf8', env: { ...process.env, SKILL_DIR } });
+  const r = sh(`${ARCHLENS_DEF}; node "$ARCHLENS/scripts/archlens.mjs" help && test -f "$ARCHLENS/references/base.md"`);
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /^archlens — /);
+  assert.notEqual(sh('node "$SKILL_DIR/../../scripts/archlens.mjs" help').status, 0, 'o caminho sem realpath falha pelo link');
 });
 
 test('merge.md previews never run build (it writes inside the base)', () => {
