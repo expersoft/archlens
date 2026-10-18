@@ -1,8 +1,10 @@
 // The operations behind the plan/apply/show/query commands, over a store connector. Pure apart from reading the store.
 import { basename } from 'node:path';
 import { planMerge, applyPlan, openQuestions, canonicalJson, mergeError, PLAN_VERSION } from './merge.mjs';
-import { diffRaw, contentVersion } from './store/ops.mjs';
-import { conflictError } from './store/contract.mjs';
+import { diffRaw, contentVersion, applyOps } from './store/ops.mjs';
+import { conflictError, short } from './store/contract.mjs';
+import { storeError } from './store/errors.mjs';
+import { validateModel } from './validate.mjs';
 
 const EMPTY = { raw: null, notes: {} };
 
@@ -52,4 +54,37 @@ export function answersOf(doc, delta) {
     delta: delta ?? doc.delta,
     otherDelta: delta !== undefined && canonicalJson(doc.delta) !== canonicalJson(delta),
   };
+}
+
+/**
+ * Writes a final plan through the connector, nothing else: the plan's ops, checked against the store version it was made
+ * for. The merge is not replayed, so a hand-edited plan is only checked for the model it would leave.
+ */
+export function apply(store, plan) {
+  if (plan?.['archlens-plan'] !== PLAN_VERSION) {
+    throw mergeError('E_PLAN_SCHEMA', 'o arquivo não é um plano do archlens (gere com "archlens plan")');
+  }
+  const redo = 'archlens plan <base> --answers <plano> --out <novo>';
+  if (!isFinal(plan)) {
+    const open = openQuestions(plan);
+    throw mergeError('E_PLAN_OPEN', open.length
+      ? `o plano tem ${open.length} pergunta(s) sem resposta: item(ns) ${open.map(i => i.n).join(', ')}; responda e rode ${redo}`
+      : `o plano está bloqueado por erros do delta; corrija o delta e rode ${redo}`);
+  }
+  if (!plan.ops.length) return { version: null, entry: null, preserved: [] };
+  const stale = now => storeError('E_STORE_CONFLICT', `a base mudou depois do plano (${short(plan.storeVersion)} → ${short(now)}); `
+    + `nada foi gravado. Refaça o plano reaproveitando as respostas: ${redo}`);
+  const loaded = store.read();
+  const version = contentVersion(loaded); // checked here too: against another base the model errors below would mislead
+  if (version !== (plan.storeVersion ?? null)) throw stale(version);
+  const errors = validateModel(applyOps(loaded, plan.ops).raw).errors;
+  if (errors.length) {
+    throw mergeError('E_MERGE_INVALID', `o resultado do plano é inválido (${errors.length} erro(s)); nada foi gravado`, { errors });
+  }
+  try {
+    const { version: written, preserved } = store.apply(plan.ops, { baseVersion: plan.storeVersion ?? null });
+    return { version: written, entry: plan.entry, preserved };
+  } catch (e) {
+    throw e.code === 'E_STORE_CONFLICT' ? stale(store.version()) : e; // changed between the read and the write
+  }
 }

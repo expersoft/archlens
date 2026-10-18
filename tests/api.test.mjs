@@ -1,10 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { plan, finalize, answersOf, isFinal } from '../scripts/lib/api.mjs';
-import { planMerge, applyPlan } from '../scripts/lib/merge.mjs';
+import { plan, finalize, answersOf, isFinal, apply } from '../scripts/lib/api.mjs';
+import { planMerge, applyPlan, canonicalJson, relationshipIds } from '../scripts/lib/merge.mjs';
 import { applyOps, contentVersion } from '../scripts/lib/store/ops.mjs';
 import { subgraphOf, conflictError } from '../scripts/lib/store/contract.mjs';
+import { fileURLToPath } from 'node:url';
+import { resolveBase, openStore } from '../scripts/lib/store/index.mjs';
 import { asBase } from './helpers.mjs';
 
 const shop = () => asBase(JSON.parse(readFileSync(new URL('./fixtures/shop.json', import.meta.url))));
@@ -29,7 +31,7 @@ function memStore(base) {
       const now = contentVersion(cur);
       if (baseVersion !== undefined && baseVersion !== now) throw conflictError(baseVersion, now);
       cur = applyOps(cur, ops);
-      return {};
+      return { version: contentVersion(cur), preserved: [] };
     }),
     history: track('history', () => cur?.raw.changelog ?? []),
     readSubgraph: track('readSubgraph', opts => subgraphOf(cur.raw, opts)),
@@ -161,4 +163,179 @@ test('finalize keeps applyPlan errors for pending answers and stale plans', () =
   const legacy = structuredClone(open);
   delete legacy.storeVersion;
   assert.throws(() => finalize(memStore(moved), legacy, TODAY), e => e.code === 'E_PLAN_STALE');
+});
+
+// --- apply ---
+const find = (r, id) => {
+  let hit;
+  const walk = list => list.forEach(e => { if (e.id === id) hit = e; walk(e.children || []); });
+  walk(r.model.elements);
+  return hit;
+};
+const parallelBase = () => {
+  const base = shop();
+  base.model.relationships.push(
+    { from: 'pagamentos', to: 'cliente', type: 'serving', description: 'lê' },
+    { from: 'pagamentos', to: 'cliente', type: 'serving', description: 'grava' },
+  );
+  return base;
+};
+const aliased = () => { const b = shop(); find(b, 'loja.api').aliases = ['orders-service']; return b; };
+// The ops carry the generated id of each relationship they write, which merge --apply leaves implicit: same base.
+const sameBase = raw => {
+  const out = structuredClone(raw);
+  const ids = relationshipIds(out);
+  for (const r of out.model.relationships) if (r.id === ids.get(r)) delete r.id;
+  return canonicalJson(out);
+};
+const finalPlan = (store, d, answers) => plan(store, d, { ...TODAY, answers: new Map(Object.entries(answers ?? {})) }).plan;
+
+test('apply writes only through the connector and never replays the merge', () => {
+  const store = memStore(shop());
+  const { plan: p } = plan(store, addCache(), TODAY);
+  const hollow = { ...p, delta: {}, items: [] };
+  store.calls.length = 0;
+  const res = apply(store, hollow);
+  assert.ok(store.calls.every(c => ['read', 'version', 'apply'].includes(c)), store.calls.join());
+  assert.ok(store.calls.includes('apply'));
+  assert.deepEqual(res.entry, p.entry);
+  assert.ok(find(store.read().raw, 'loja.cache'));
+});
+
+// base, delta and answers of the merge-test scenarios; each one must end up with the same base through the api as
+// through planMerge + applyPlan (a "same" answer needs a second plan, as in the real flow).
+const SCENARIOS = {
+  'enrich by id': [shop, delta({ elements: [{ id: 'loja.api', type: 'c4:container', description: 'Pedidos e checkout', tags: ['core'] }] }), {}],
+  'conflict take': [shop, delta({ elements: [{ id: 'loja.api', technology: 'Kotlin' }] }), { 'el:loja.api:technology': 'take' }],
+  'conflict value': [shop, delta({ elements: [{ id: 'loja.api', technology: 'Kotlin' }] }), { 'el:loja.api:technology': 'value:Kotlin / Spring Boot' }],
+  'new element': [shop, delta({ elements: [{ id: 'loja.worker', type: 'c4:container', name: 'Worker', parent: 'loja', technology: 'Node.js' }] }), {}],
+  'alias matching': [aliased, delta({ elements: [
+    { id: 'orders-worker', type: 'c4:component', name: 'Consumidor', parent: 'orders-service' },
+    { id: 'orders-service', type: 'c4:container', description: 'Pedidos' },
+    { id: 'gw', type: 'c4:softwareSystem', aliases: ['pagamentos'] },
+  ] }), {}],
+  'removed element moves relationships': [shop, delta({ elements: [{ id: 'gateway-pag', type: 'c4:softwareSystem', name: 'Gateway Pagamentos', external: true }],
+    relationships: [{ from: 'loja.api', to: 'gateway-pag', type: 'uses', description: 'cobra' }] },
+  { ops: [{ op: 'remove', id: 'pagamentos', reason: 'substituído por gateway-pag' }] }), { 'op:0': 'yes' }],
+  'uses matches serving': [shop, delta({ relationships: [{ from: 'loja.api', to: 'k8s', type: 'uses', technology: 'containerd' }] }), {}],
+  'relationship conflict': [shop, delta({ relationships: [
+    { from: 'cliente', to: 'loja.web', description: 'Navega e compra' },
+    { from: 'loja.api.checkout', to: 'loja.api.catalogo', description: 'Consulta preço' },
+  ] }), { 'rel:0:description': 'keep' }],
+  'views and assumptions': [aliased, delta({}, {
+    views: [{ key: 'comp', notation: 'c4', level: 'component', scope: 'orders-service' },
+      { key: 'ctx', notation: 'c4', level: 'context', scope: 'loja', title: 'Contexto' }],
+    assumptions: ['O ERP é SaaS'],
+  }), { 'view:ctx': 'take' }],
+  'rename and alias': [shop, delta({}, { ops: [{ op: 'rename', id: 'loja.api', name: 'Orders API' }, { op: 'alias', id: 'loja.api', add: ['orders-service'] }] }), {}],
+  'status': [shop, delta({}, { ops: [
+    { op: 'status', id: 'pagamentos', status: 'deprecated', reason: 'troca de adquirente' },
+    { op: 'status', id: 'k8s', status: 'retired', reason: 'migrado para ECS' },
+  ] }), { 'op:1': 'no' }],
+  'remove cascade': [shop, delta({}, { ops: [{ op: 'remove', id: 'loja.api' }] }), { 'op:0': 'yes' }],
+  'remove relationship id': [shop, delta({}, { ops: [{ op: 'remove', id: 'k8s-serving-loja.api' }] }), { 'op:0': 'yes' }],
+  'duplicate same with relationship': [agendaBase, dupDelta(), { 'dup:api-agenda': 'same', 'el:api-agenda:name': 'keep', 'rel:0:description': 'take' }],
+  'remove parallel relationship': [parallelBase, delta({}, { ops: [{ op: 'remove', id: 'pagamentos-serving-cliente#2' }] }), { 'op:0': 'yes' }],
+  'duplicate same adds aliases': [agendaBase, delta({ elements: [{ id: 'api-agenda', type: 'c4:container', name: 'API Agendamento', parent: 'sys' }] }),
+    { 'dup:api-agenda': 'same', 'el:api-agenda:name': 'keep' }],
+};
+
+for (const [name, [base, d, answers]] of Object.entries(SCENARIOS)) {
+  test(`apply reproduces merge --apply: ${name}`, () => {
+    const store = memStore(base());
+    const given = new Map(Object.entries(answers));
+    let p = plan(store, d, { ...TODAY, answers: given }).plan;
+    if (p.state === 'open') p = plan(store, d, { ...TODAY, answers: answersOf(p).answers }).plan;
+    assert.equal(p.state, 'final', JSON.stringify(p.items.filter(i => 'resolution' in i && i.resolution == null)));
+    let ref = planMerge(base(), d, { ...TODAY, answers: given });
+    if (Object.keys(answers).some(k => k.startsWith('dup:'))) ref = planMerge(base(), d, { ...TODAY, answers: answersMap(ref) });
+    apply(store, p);
+    assert.equal(sameBase(store.read().raw), sameBase(applyPlan(base(), ref, TODAY).raw));
+  });
+}
+
+test('apply reproduces merge --apply for telemedicina delta-02', () => {
+  const dir = fileURLToPath(new URL('../examples/telemedicina/', import.meta.url));
+  const loaded = openStore(resolveBase('ARCHITECTURE.md', { cwd: dir })).read();
+  const base = () => structuredClone(loaded.raw);
+  const d = JSON.parse(readFileSync(new URL('../examples/telemedicina/delta-02.json', import.meta.url)));
+  const open = planMerge(base(), d, TODAY);
+  const byN = { 3: 'take', 5: 'same', 6: 'keep', 12: 'yes' };
+  const fill = p => { for (const it of p.items) if (it.n in byN && 'resolution' in it) it.resolution = byN[it.n]; return p; };
+  const second = planMerge(base(), d, { ...TODAY, answers: answersMap(fill(open)) });
+  const refPlan = planMerge(base(), d, { ...TODAY, answers: answersMap(fill(second)) });
+  const mem = memStore(loaded.raw);
+  const answers = new Map(answersMap(fill(second)));
+  let p = plan(mem, d, { ...TODAY, answers }).plan;
+  if (p.state === 'open') p = plan(mem, d, { ...TODAY, answers: new Map([...answers, ...answersOf(fill(p)).answers]) }).plan;
+  assert.equal(p.state, 'final', JSON.stringify(p.items.filter(i => i.resolution === null)));
+  apply(mem, p);
+  assert.equal(sameBase(mem.read().raw), sameBase(applyPlan(base(), refPlan, TODAY).raw));
+});
+
+test('apply refuses a stale plan and writes nothing', () => {
+  const store = memStore(shop());
+  const { plan: p } = plan(store, addCache(), TODAY);
+  apply(memStore(shop()), p); // sanity: the plan is good on the base it was made for
+  const moved = shop();
+  moved.model.elements.push({ id: 'x', type: 'c4:softwareSystem', name: 'X' });
+  const other = memStore(moved);
+  const before = contentVersion(other.read());
+  assert.throws(() => apply(other, p), e => e.code === 'E_STORE_CONFLICT' && /nada foi gravado/.test(e.message)
+    && /archlens plan <base> --answers <plano> --out <novo>/.test(e.message));
+  assert.equal(contentVersion(other.read()), before);
+});
+
+test('apply refuses a plan made for another base', () => {
+  const { plan: p } = plan(memStore(shop()), addCache(), TODAY);
+  assert.throws(() => apply(memStore(agendaBase()), p), e => e.code === 'E_STORE_CONFLICT');
+  assert.throws(() => apply(memStore(null), p), e => e.code === 'E_STORE_CONFLICT');
+});
+
+test('apply creates a missing base', () => {
+  const d = delta({ elements: [{ id: 'novo', type: 'c4:softwareSystem', name: 'Novo' }] }, { name: 'Nova base' });
+  const store = memStore(null);
+  const { plan: p } = plan(store, d, TODAY);
+  const res = apply(store, p);
+  assert.equal(store.read().raw.name, 'Nova base');
+  assert.ok(find(store.read().raw, 'novo'));
+  assert.deepEqual(res.entry, p.entry);
+});
+
+test('apply refuses an open plan', () => {
+  const store = memStore(shop());
+  const { plan: p } = plan(store, renameApi(), TODAY);
+  assert.throws(() => apply(store, p), e => e.code === 'E_PLAN_OPEN' && /1 pergunta\(s\) sem resposta: item\(ns\) 1;/.test(e.message)
+    && /archlens plan <base> --answers <plano> --out <novo>/.test(e.message));
+  assert.ok(!store.calls.includes('apply'));
+});
+
+test('apply refuses what is not a plan', () => {
+  const store = memStore(shop());
+  assert.throws(() => apply(store, renameApi()), e => e.code === 'E_PLAN_SCHEMA');
+  assert.throws(() => apply(store, {}), e => e.code === 'E_PLAN_SCHEMA');
+});
+
+test('apply with no ops returns without touching the connector', () => {
+  const store = memStore(shop());
+  const { plan: p } = plan(store, delta(), TODAY);
+  store.calls.length = 0;
+  assert.deepEqual(apply(store, p), { version: null, entry: null, preserved: [] });
+  assert.ok(!store.calls.includes('apply'));
+});
+
+test('apply refuses a hand-edited plan that breaks the model', () => {
+  const store = memStore(shop());
+  const { plan: p } = plan(store, addCache(), TODAY);
+  const bad = { ...p, ops: [{ op: 'upsertRelationship', relationship: { id: 'x-serving-loja', from: 'nao-existe', to: 'loja', type: 'serving' } }, ...p.ops] };
+  const before = contentVersion(store.read());
+  assert.throws(() => apply(store, bad), e => e.code === 'E_MERGE_INVALID' && e.errors.length > 0);
+  assert.equal(contentVersion(store.read()), before);
+});
+
+test('apply words a conflict raised by the connector itself like a stale plan', () => {
+  const store = memStore(shop());
+  const { plan: p } = plan(store, addCache(), TODAY);
+  const racing = { ...store, apply: () => { throw conflictError(p.storeVersion, 'sha256:abc'); } };
+  assert.throws(() => apply(racing, p), e => e.code === 'E_STORE_CONFLICT' && /a base mudou depois do plano \(/.test(e.message));
 });
