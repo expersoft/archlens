@@ -1,14 +1,20 @@
 // store convert: the same base written by another connector in the same folder. The folder is copied, the source
 // connector's files are taken out of the copy, the target connector writes the base into it, the copy is read back and
 // checked, then swapped in. Files the base does not own stay.
-import { cpSync, renameSync, rmSync, existsSync, readdirSync, writeFileSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { cpSync, renameSync, rmSync, existsSync, readdirSync, writeFileSync, mkdirSync, copyFileSync, readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { join, dirname, resolve } from 'node:path';
 import { storeError } from './errors.mjs';
 import { contentVersion, diffRaw } from './ops.mjs';
+import { writeSetOf } from './versions.mjs';
+import { FORMAT } from '../canonical.mjs';
 import { MANIFEST, readJson, loadFolder, jsonConnector } from './folder.mjs';
 import { readVault, markdownConnector } from './markdown.mjs';
 import { PACK_FILE } from './gbrain-pack.mjs';
 import { openStore } from './index.mjs';
+import { validateStore, probeGitRepo, ignoreMirror } from './config.mjs';
+import { gbrainGitConnector, TIP } from './gbrain-git.mjs';
+import { assertGbrainIds } from './gbrain-layout.mjs';
 
 /** The files of `kind` in `dir` that are the base itself (not notes, views or changelog, which every connector shares). */
 function ownFiles(dir, kind) {
@@ -29,6 +35,7 @@ export function convertFolder(locator, to, { force = false } = {}) {
   if (!['json', 'markdown'].includes(to)) throw storeError('E_STORE_CONVERT', `conector de destino desconhecido "${to}"; use json ou markdown`);
   const source = openStore(locator);
   if (!source.writable) source.apply([]);
+  if (source.kind === 'gbrain') return convertFromGbrain(locator, to);
   if (source.kind === to) throw storeError('E_STORE_CONVERT', `${source.describe()} já usa o conector ${to}`);
   const cur = source.read();
   if (!cur) throw storeError('E_STORE_NOT_FOUND', `base não encontrada: ${source.describe()}`);
@@ -62,4 +69,109 @@ export function convertFolder(locator, to, { force = false } = {}) {
   let leftover = null;
   try { rmSync(old, { recursive: true, force: true }); } catch { leftover = old; }
   return { from: source.kind, to, version: before, leftover, dropped };
+}
+
+/** Writes `text` over `path` through a temporary file next to it. */
+function writeAtomic(path, text) {
+  const tmp = `${path}.tmp-${process.pid}`;
+  writeFileSync(tmp, text);
+  renameSync(tmp, path);
+}
+
+/** Removes the folders of `rels` that the removal left empty. */
+function dropEmptied(dir, rels) {
+  for (const d of new Set(rels.map(rel => dirname(rel)).filter(d => d !== '.'))) {
+    if (existsSync(join(dir, d)) && !readdirSync(join(dir, d)).length) rmSync(join(dir, d), { recursive: true });
+  }
+}
+
+/**
+ * Moves a local base (json or markdown) into the gbrain in git mode: the whole base in one commit, written only if no page of
+ * the archlens exists under the prefix (E_STORE_EXISTS). Only then the local folder changes: archlens.json becomes the
+ * configuration one and the old model files go; notes/, diagrams/ and files the base does not own stay.
+ */
+export function convertToGbrain(locator, store) {
+  const valid = validateStore(store);
+  if (valid.kind !== 'gbrain' || valid.mode !== 'git') throw storeError('E_STORE_CONVERT', 'só o gbrain em modo git é destino de "store convert" por enquanto (--to gbrain --mode git --repo R)');
+  const dir = locator.path;
+  const source = openStore(locator);
+  if (source.kind === 'gbrain') throw storeError('E_STORE_CONVERT', `${source.describe()} já usa o conector gbrain`);
+  if (!source.writable) source.apply([]);
+  const cur = source.read();
+  if (!cur) throw storeError('E_STORE_NOT_FOUND', `base não encontrada: ${source.describe()}`);
+  assertGbrainIds(cur.raw); // before anything is written
+  const warnings = probeGitRepo({ ...valid, repo: resolve(dir, valid.repo) });
+  const own = [...new Set([...ownFiles(dir, source.kind), 'views.json', 'changelog.json'])];
+  const target = gbrainGitConnector(locator, valid);
+  const ops = diffRaw(null, cur);
+  const expect = Object.fromEntries([...writeSetOf(ops)].map(ref => [ref, null]));
+  try {
+    target.apply(ops, { expect });
+  } catch (e) {
+    if (e.code === 'E_STORE_CONFLICT') {
+      throw storeError('E_STORE_EXISTS', `${valid.remote}/${valid.branch} já tem páginas do archlens em ${valid.prefix}/ (${(e.conflicts ?? []).slice(0, 5).map(c => c.ref).join(', ')}); `
+        + 'use outro --prefix ou leia a base de lá com um archlens.json de configuração (archlens init --store gbrain)', { conflicts: e.conflicts });
+    }
+    throw e;
+  }
+  if (contentVersion(target.read()) !== contentVersion(cur)) throw storeError('E_STORE_CONVERT', 'a base lida do gbrain não reproduz a original; a pasta local não foi alterada (confira o commit enviado)');
+  const tip = join(dir, TIP);
+  const commit = spawnSync('git', ['-C', tip, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).stdout.trim();
+  const listed = spawnSync('git', ['-C', tip, 'ls-tree', '-r', '--name-only', 'HEAD', '--', valid.prefix], { encoding: 'utf8' }).stdout.split('\n').filter(Boolean);
+  // The gbrain has the base; now the folder follows.
+  writeAtomic(join(dir, MANIFEST), JSON.stringify({ archlens: cur.raw.archlens ?? FORMAT, name: cur.raw.name, store: valid }, null, 2) + '\n');
+  ignoreMirror(dir);
+  for (const rel of own) rmSync(join(dir, rel), { force: true });
+  dropEmptied(dir, own);
+  return { pages: listed.length, commit, warnings, from: source.kind, to: 'gbrain', version: contentVersion(cur), leftover: null, dropped: [] };
+}
+
+/** Every file under `dir` as a path relative to it. */
+function filesUnder(dir, rel = '') {
+  return readdirSync(join(dir, rel), { withFileTypes: true }).flatMap(e => (e.isDirectory() ? filesUnder(dir, join(rel, e.name)) : [join(rel, e.name)]));
+}
+
+/** Takes the tip worktree (<dir>/.archlens/tip) out of the clone and the folder; the base is local again. */
+function dropTip(dir, store) {
+  const tip = join(dir, TIP);
+  const repo = resolve(dir, store.repo);
+  if (existsSync(repo)) {
+    spawnSync('git', ['-C', repo, 'worktree', 'remove', '--force', tip], { encoding: 'utf8' });
+    spawnSync('git', ['-C', repo, 'worktree', 'prune'], { encoding: 'utf8' });
+  }
+  rmSync(tip, { recursive: true, force: true });
+  const mirror = join(dir, '.archlens');
+  if (existsSync(mirror) && !readdirSync(mirror).length) rmSync(mirror, { recursive: true });
+}
+
+/**
+ * Brings a gbrain (git) base back to the folder as json or markdown: the base is written to a temporary folder, read back
+ * and checked, and its files go over the folder (archlens.json last), which keeps its notes/, diagrams/ and other files.
+ */
+export function convertFromGbrain(locator, to) {
+  if (!['json', 'markdown'].includes(to)) throw storeError('E_STORE_CONVERT', `conector de destino desconhecido "${to}"; use json ou markdown`);
+  const dir = locator.path;
+  const source = openStore(locator);
+  if (source.kind !== 'gbrain') throw storeError('E_STORE_CONVERT', `${source.describe()} não usa o conector gbrain`);
+  const cur = source.read();
+  if (!cur) throw storeError('E_STORE_NOT_FOUND', `base não encontrada: ${source.describe()}`);
+  const before = contentVersion(cur);
+  const store = validateStore(readJson(join(dir, MANIFEST)).store);
+  const tmp = `${dir}.convert-${process.pid}`;
+  try {
+    mkdirSync(tmp, { recursive: true });
+    writeFileSync(join(tmp, MANIFEST), JSON.stringify({ archlens: cur.raw.archlens ?? FORMAT, name: cur.raw.name, ...(to === 'markdown' ? { store: { kind: 'markdown' } } : {}) }, null, 2) + '\n');
+    const target = to === 'markdown' ? markdownConnector({ ...locator, path: tmp }, tmp) : jsonConnector({ ...locator, path: tmp }, tmp);
+    target.apply(diffRaw(target.read(), cur), { baseVersion: target.version() });
+    if (contentVersion(target.read()) !== before) throw storeError('E_STORE_CONVERT', 'a base gravada pelo conector novo não reproduz a original; nada foi trocado');
+    const files = filesUnder(tmp).sort((a, b) => (a === MANIFEST ? 1 : b === MANIFEST ? -1 : 0));
+    for (const rel of files) {
+      mkdirSync(dirname(join(dir, rel)), { recursive: true });
+      if (rel === MANIFEST) writeAtomic(join(dir, rel), readFileSync(join(tmp, rel), 'utf8')); else copyFileSync(join(tmp, rel), join(dir, rel));
+    }
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+  dropTip(dir, store);
+  return { from: 'gbrain', to, version: before, leftover: null, dropped: [] };
 }

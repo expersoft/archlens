@@ -86,7 +86,7 @@ export function probeGitRepo({ repo, remote, branch }) {
 }
 
 /** Adds ".archlens/" (the local mirror of an MCP base) to <dir>/.gitignore, keeping what is there. */
-function ignoreMirror(dir) {
+export function ignoreMirror(dir) {
   const path = join(dir, '.gitignore');
   const text = existsSync(path) ? readFileSync(path, 'utf8') : '';
   if (text.split(/\r?\n/).some(l => l.trim() === '.archlens/')) return;

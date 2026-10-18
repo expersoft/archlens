@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, chmodSync, rmSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, chmodSync, rmSync, existsSync, cpSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 import { openStore, resolveBase } from '../scripts/lib/store/index.mjs';
@@ -9,6 +9,8 @@ import { gbrainGitConnector, gitEnvFor } from '../scripts/lib/store/gbrain-git.m
 import { initBase, validateStore } from '../scripts/lib/store/config.mjs';
 import { diffRaw, contentVersion } from '../scripts/lib/store/ops.mjs';
 import { plan, apply } from '../scripts/lib/api.mjs';
+import { convertToGbrain, convertFromGbrain } from '../scripts/lib/store/convert.mjs';
+import { canonicalJson } from '../scripts/lib/merge.mjs';
 
 // Hermetic git: no global or system config (identity, signing, hooks), messages in English.
 Object.assign(process.env, { GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1', LC_ALL: 'C', LANG: 'C' });
@@ -320,4 +322,99 @@ test("ssh runs in batch mode unless the user chose how git runs ssh", () => {
   } finally {
     for (const [k, v] of Object.entries(saved)) if (v === undefined) delete process.env[k]; else process.env[k] = v;
   }
+});
+
+// store convert: a local base goes to the gbrain and comes back unchanged.
+// The vault reads elements by id and gives each relationship an id; the json base keeps file order and bare ones.
+const norm = ({ raw }) => {
+  const key = r => `${r.from}|${r.type}|${r.to}|${r.description ?? ''}`;
+  return canonicalJson({
+    ...raw,
+    model: {
+      elements: [...raw.model.elements].sort((x, y) => (x.id < y.id ? -1 : 1)),
+      relationships: raw.model.relationships.map(({ id, ...r }) => r).sort((x, y) => (key(x) < key(y) ? -1 : 1)),
+    },
+  });
+};
+const EXAMPLES = new URL('../examples/', import.meta.url).pathname;
+/** A copy of examples/<ex>/architecture with an extra file of its own, next to a world with a clone to convert into. */
+function localBase(w, ex, who = 'conv') {
+  const dir = join(mkdtempSync(join(tmpdir(), 'archlens-convert-')), 'architecture');
+  cpSync(join(EXAMPLES, ex, 'architecture'), dir, { recursive: true });
+  writeFileSync(join(dir, 'minha-nota.txt'), 'meu\n');
+  const { clone } = w.user(who);
+  return { dir, loc: resolveBase(dir), gbrain: { kind: 'gbrain', mode: 'git', repo: relative(dir, clone) } };
+}
+
+for (const [ex, back] of [['loja-online', 'json'], ['telemedicina', 'json'], ['repos', 'markdown'], ['loja-online-vault', 'markdown']]) {
+  test(`${ex} goes to the gbrain and back unchanged`, () => {
+    const w = world();
+    const { dir, loc, gbrain } = localBase(w, ex);
+    const before = openStore(loc).read();
+    const res = convertToGbrain(loc, gbrain);
+    assert.ok(res.pages > 0);
+    assert.ok(w.head());
+    const manifest = JSON.parse(readFileSync(join(dir, 'archlens.json'), 'utf8'));
+    assert.deepEqual(manifest, { archlens: '2.0', name: before.raw.name, store: { ...gbrain, remote: 'origin', branch: 'main', prefix: 'archlens' } });
+    for (const f of ['model.json', 'views.json', 'changelog.json', 'gbrain-pack.yaml', 'business-actor']) assert.equal(existsSync(join(dir, f)), false, f);
+    assert.ok(existsSync(join(dir, 'diagrams')) || ex === 'repos');
+    assert.equal(readFileSync(join(dir, 'minha-nota.txt'), 'utf8'), 'meu\n');
+    const there = openStore(resolveBase(dir)).read();
+    assert.equal(norm(there), norm(before));
+    assert.equal(contentVersion(there), contentVersion(before));
+    assert.deepEqual(there.notes, before.notes);
+
+    const out = convertFromGbrain(resolveBase(dir), back);
+    assert.equal(out.to, back);
+    assert.equal(existsSync(join(dir, '.archlens', 'tip')), false);
+    const after = openStore(resolveBase(dir)).read();
+    assert.equal(openStore(resolveBase(dir)).kind, back);
+    assert.equal(norm(after), norm(before));
+    assert.equal(contentVersion(after), contentVersion(before));
+    assert.deepEqual(after.notes, before.notes);
+    assert.equal(readFileSync(join(dir, 'minha-nota.txt'), 'utf8'), 'meu\n');
+  });
+}
+
+test('converting onto a prefix that already holds a base is refused', () => {
+  const w = world();
+  const a = localBase(w, 'loja-online');
+  convertToGbrain(a.loc, a.gbrain);
+  const head = w.head();
+  const b = localBase(w, 'telemedicina', 'outra');
+  const before = readFileSync(join(b.dir, 'archlens.json'), 'utf8');
+  const e = refused(() => convertToGbrain(b.loc, b.gbrain), 'E_STORE_EXISTS');
+  assert.match(e.message, /archlens/);
+  assert.equal(w.head(), head);
+  assert.equal(readFileSync(join(b.dir, 'archlens.json'), 'utf8'), before);
+  assert.ok(existsSync(join(b.dir, 'model.json')));
+});
+
+test('ids that are not gbrain slugs are refused before writing', () => {
+  const w = world();
+  const { dir, loc, gbrain } = localBase(w, 'loja-online');
+  const model = JSON.parse(readFileSync(join(dir, 'model.json'), 'utf8'));
+  model.elements[0].id = 'Loja Online';
+  writeFileSync(join(dir, 'model.json'), JSON.stringify(model, null, 2));
+  const before = readFileSync(join(dir, 'archlens.json'), 'utf8');
+  refused(() => convertToGbrain(loc, gbrain), 'E_STORE_GBRAIN_SLUG');
+  assert.equal(w.head(), null);
+  assert.equal(readFileSync(join(dir, 'archlens.json'), 'utf8'), before);
+  assert.ok(existsSync(join(dir, 'model.json')));
+});
+
+test('the CLI converts to the gbrain and back', () => {
+  const w = world();
+  const { dir, gbrain } = localBase(w, 'loja-online');
+  const cli = (...a) => {
+    const r = spawnSync(process.execPath, [new URL('../scripts/archlens.mjs', import.meta.url).pathname, ...a], { encoding: 'utf8' });
+    assert.equal(r.status, 0, r.stderr);
+    return r.stdout;
+  };
+  const clone = join(dir, gbrain.repo);
+  assert.match(cli('store', 'convert', dir, '--to', 'gbrain', '--mode', 'git', '--repo', clone), /agora usa o conector gbrain/);
+  assert.equal(JSON.parse(readFileSync(join(dir, 'archlens.json'), 'utf8')).store.kind, 'gbrain');
+  assert.match(cli('store', 'convert', dir, '--to', 'json'), /agora usa o conector json \(era gbrain\)/);
+  assert.ok(existsSync(join(dir, 'model.json')));
+  cli('validate', dir);
 });

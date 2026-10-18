@@ -21,7 +21,7 @@ import { migrateRaw, reportLines } from './lib/migrate.mjs';
 import { FORMAT, isCanonicalFormat } from './lib/canonical.mjs';
 import { saveFolder, loadFolder, storeKind } from './lib/store/folder.mjs';
 import { initBase } from './lib/store/config.mjs';
-import { convertFolder } from './lib/store/convert.mjs';
+import { convertFolder, convertToGbrain } from './lib/store/convert.mjs';
 import { scanSource } from './lib/scan/index.mjs';
 import { summarize, formatSummary } from './lib/scan/summary.mjs';
 import { toDelta } from './lib/scan/to-delta.mjs';
@@ -50,6 +50,7 @@ Aplicar (grava a base)
   build     <base> [--out-dir DIR]           ARCHITECTURE.md + HTML (padrão: architecture/diagrams/)
   migrate   <base 1.x> [--to DIR]           converte uma base 1.x (pasta, .md ou .json) para o formato 2.0
   store convert <base> --to markdown|json [--force]   grava a base em outro conector (mesma pasta; versão inalterada)
+            <base> --to gbrain --mode git --repo R [--remote origin] [--branch main] [--prefix archlens]   leva a base para o gbrain (e de volta com --to json|markdown)
 
 Consultar (nunca grava a base)
   views     <base>                           lista as visões definidas e sugere novas
@@ -672,7 +673,7 @@ async function main() {
       break;
     }
     case 'store': {
-      const usage = 'uso: archlens store convert <base> --to markdown|json [--force]';
+      const usage = 'uso: archlens store convert <base> --to markdown|json [--force] | --to gbrain --mode git --repo R [--remote origin] [--branch main] [--prefix archlens]';
       if (file !== 'convert' || !args.to || args.to === true) fail(usage);
       const target = args._[2];
       let loc;
@@ -680,12 +681,22 @@ async function main() {
       if (loc.kind !== 'folder' || !loc.exists) fail(`E_STORE_CONVERT: ${target ?? '.'} não é uma pasta de base (migre bases antigas com "archlens migrate")`);
       assertDocOwned(openStore(loc)); // before anything is written
       let res;
-      try { res = convertFolder(loc, String(args.to), { force: args.force === true }); } catch (e) { fail(e.message); }
+      try {
+        if (args.to === 'gbrain') {
+          const opt = k => (typeof args[k] === 'string' ? args[k] : undefined);
+          // The manifest keeps `repo` relative to the base folder, so the base and the clone move together.
+          const repo = opt('repo') && relative(loc.path, resolve(opt('repo')));
+          const store = Object.fromEntries(Object.entries({ kind: 'gbrain', mode: opt('mode'), remote: opt('remote'), branch: opt('branch'), prefix: opt('prefix'), repo }).filter(([, v]) => v !== undefined));
+          res = convertToGbrain(loc, store);
+          for (const w of res.warnings) console.warn(`  aviso: ${w}`);
+        } else res = convertFolder(loc, String(args.to), { force: args.force === true });
+      } catch (e) { fail(e.message); }
       // The element order of a vault differs from model.json, so the generated document is rewritten.
       const converted = openStore(resolveBase(loc.path));
       const back = loadBase(converted);
       const doc = writeDoc(converted, back.raw, back.notes, loc.docPath);
       console.log(`✓ ${relPath(loc.path)}/ agora usa o conector ${res.to} (era ${res.from}); a versão da base não mudou; ${relPath(doc)} regenerado`);
+      if (res.to === 'gbrain') console.log(`  ${res.pages} página(s) gravadas no commit ${res.commit.slice(0, 12)} (push feito); rode o sync do gbrain para indexá-las`);
       if (res.dropped.length) console.warn(`  aviso: --force descartou o texto das pessoas de ${res.dropped.length} página(s): ${res.dropped.join(', ')}`);
       if (res.leftover) console.warn(`  aviso: não consegui apagar ${relPath(res.leftover)}; remova-o à mão`);
       if (res.to === 'markdown') console.log(`  abra ${relPath(loc.path)}/ como vault no Obsidian; para o gbrain: gbrain schema use com ${relPath(join(loc.path, 'gbrain-pack.yaml'))}`);
