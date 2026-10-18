@@ -7,7 +7,8 @@ import { storeError } from './store/errors.mjs';
 import { previewModel, diffModels } from './preview.mjs';
 import { validateModel } from './validate.mjs';
 import { reportData, formatReport } from './plan-report.mjs';
-import { viewAnswer, formatViewAnswer } from './query-md.mjs';
+import { viewAnswer, formatViewAnswer, elementCard, formatElementCard } from './query-md.mjs';
+import { findCandidates } from './match.mjs';
 import { normalizeModel } from './model.mjs';
 import { suggestViews } from './suggest.mjs';
 
@@ -126,9 +127,11 @@ export function show(store, plan, { format = 'md' } = {}) {
 
 /**
  * Answers a question about the base without writing it. Views (`view` keys, comma-separated, and/or `spec` objects):
- * markdown, or the structures for `json` (one view → the object, several → a list). `element` comes with the card.
+ * markdown, or the structures for `json` (one view → the object, several → a list). `element` gives the card of one element,
+ * read with `readSubgraph` (`depth` hops, over the relationship types in `via`); the whole base is read only to suggest names.
  */
-export function query(store, { view, spec, format = 'md' } = {}) {
+export function query(store, { view, spec, element, depth = 1, via, format = 'md' } = {}) {
+  if (element) return elementAnswer(store, { element, depth, via, format });
   const keys = view ? String(view).split(',') : [];
   const specs = spec == null ? [] : Array.isArray(spec) ? spec : [spec];
   if (!keys.length && !specs.length) {
@@ -145,4 +148,30 @@ export function query(store, { view, spec, format = 'md' } = {}) {
   const answers = [...picked, ...specs].map(sp => viewAnswer(model, sp));
   if (format === 'json') return answers.length === 1 ? answers[0] : answers;
   return answers.map(formatViewAnswer).join('\n');
+}
+
+/** Ids and names in the base that look like the unknown `id`, best first. */
+function similarTo(raw, id) {
+  const els = (raw?.model?.elements ?? []).filter(e => e && typeof e.id === 'string');
+  const pool = els.map(e => ({ id: e.id, names: [e.id, e.name ?? e.id, ...(Array.isArray(e.aliases) ? e.aliases : [])], parent: e.parent ?? null, technology: e.technology, type: e.type ?? null }));
+  const found = new Map();
+  for (const type of new Set(pool.map(p => p.type))) {
+    for (const c of findCandidates({ id, names: [id], parent: null, type }, pool)) found.set(c.id, c);
+  }
+  const name = new Map(els.map(e => [e.id, e.name ?? e.id]));
+  return [...found.values()].sort((a, b) => b.score - a.score || a.id.localeCompare(b.id)).slice(0, 5).map(c => ({ ...c, name: name.get(c.id) }));
+}
+
+function elementAnswer(store, { element, depth, via, format }) {
+  let sub;
+  try {
+    sub = store.readSubgraph({ seeds: [element], depth, ...(via?.length ? { via } : {}) });
+  } catch (e) {
+    if (e.code !== 'E_UNKNOWN_REF') throw e;
+    const suggestions = similarTo(store.read()?.raw, element);
+    const hint = suggestions.length ? `; quis dizer: ${suggestions.map(s => `${s.id} (${s.name})`).join(', ')}?` : '';
+    throw Object.assign(new Error(`${e.message}${hint}`), { code: 'E_UNKNOWN_REF', suggestions });
+  }
+  const card = elementCard(sub, element, { history: store.history(), depth });
+  return format === 'json' ? card : formatElementCard(card);
 }

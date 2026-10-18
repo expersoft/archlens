@@ -50,6 +50,7 @@ Aplicar (grava a base)
 Consultar (nunca grava a base)
   views     <base>                           lista as visões definidas e sugere novas
   query     <base> --view k | --spec J [--format md|json] [--out f]   responde em markdown (padrão) ou JSON: elementos por camada/nível, relações, matriz de impacto
+  query     <base> --element id [--depth N] [--via t1,t2] [--format md|json]   cartão do elemento: pai, filhos, relações, fontes, rodadas; --depth N inclui "Em volta"
   resolve   <base> --view k | --spec J       imprime o view IR (nós/arestas) de uma visão
   render    <base> --out f.html [seleção]    gera o HTML animado
   deliver   <base> --out f.html [seleção]    render + screenshots 1920×1080/1280×720 + checagens
@@ -396,7 +397,11 @@ async function main() {
       let text;
       try {
         const spec = loadSpecs(args.spec);
-        const res = queryBase(store, { view: args.view === true ? undefined : args.view, spec: spec.length ? spec : undefined, format });
+        const depth = args.depth === undefined ? 1 : Number(args.depth);
+        if (!Number.isInteger(depth) || depth < 0) fail('--depth aceita um número inteiro (0 ou mais)');
+        const via = typeof args.via === 'string' ? args.via.split(',').map(t => t.trim()).filter(Boolean) : undefined;
+        const res = queryBase(store, { view: args.view === true ? undefined : args.view, spec: spec.length ? spec : undefined,
+          element: typeof args.element === 'string' ? args.element : undefined, depth, via, format });
         text = format === 'json' ? JSON.stringify(res, null, 2) + '\n' : res;
       } catch (e) { fail(e.message, e.code === 'E_QUERY_VIEW' ? 1 : 2); }
       if (args.out && args.out !== true) { atomicWrite(args.out, text); console.log(`✓ ${args.out}`); } else process.stdout.write(text);

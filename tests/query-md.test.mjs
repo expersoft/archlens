@@ -7,9 +7,9 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { query } from '../scripts/lib/api.mjs';
 import { normalizeModel } from '../scripts/lib/model.mjs';
-import { viewAnswer, formatViewAnswer } from '../scripts/lib/query-md.mjs';
+import { viewAnswer, formatViewAnswer, elementCard } from '../scripts/lib/query-md.mjs';
 import { resolveBase, openStore } from '../scripts/lib/store/index.mjs';
-import { matchSnapshot } from './helpers.mjs';
+import { matchSnapshot, memStore } from './helpers.mjs';
 
 const CLI = fileURLToPath(new URL('../scripts/archlens.mjs', import.meta.url));
 const BASE = fileURLToPath(new URL('../examples/loja-online/architecture', import.meta.url));
@@ -74,4 +74,63 @@ test('query --view prints markdown by default, --format json gives the structure
   assert.equal(run(['query', BASE, '--view', 'containers', '--out', out]).status, 0);
   assert.equal(readFileSync(out, 'utf8'), r.stdout);
   assert.equal(open().version(), before);
+});
+
+const ID = 'loja.pedidos';
+const lojaMem = (changelog) => { const raw = open().read().raw; if (changelog) raw.changelog = changelog; return memStore(raw); };
+
+test('the card of a container matches the snapshot', () => {
+  matchSnapshot(query(open(), { element: ID, depth: 1 }), 'query-element-pedidos.md');
+});
+
+test('the card reads through readSubgraph, not read', () => {
+  const store = lojaMem();
+  query(store, { element: ID });
+  assert.ok(store.calls.includes('readSubgraph'));
+  assert.ok(!store.calls.includes('read'));
+});
+
+test('depth 2 adds an Em volta section with the second ring', () => {
+  assert.doesNotMatch(query(lojaMem(), { element: ID, depth: 1 }), /^## Em volta/m);
+  const card = query(lojaMem(), { element: ID, depth: 2, format: 'json' });
+  assert.ok(card.around.length > 0);
+  assert.match(query(lojaMem(), { element: ID, depth: 2 }), /^## Em volta/m);
+});
+
+test('rounds list only changelog entries that cite the id', () => {
+  const e = (id, extra) => ({ id, date: '2026-10-0' + id.slice(-1), summary: 's' + id, added: [], changed: [], removed: [], status: {}, decisions: [], ...extra });
+  const card = query(lojaMem([
+    e('r1', { added: [ID] }), e('r2', { changed: [ID] }), e('r3', { removed: [ID] }), e('r4', { status: { [ID]: 'deprecated' } }),
+    e('r5', { decisions: [`duplicata descartada: ${ID} ≠ x`] }), e('r6', { added: ['outro'], decisions: [`${ID}.repo`] }),
+  ]), { element: ID, format: 'json' });
+  assert.deepEqual(card.rounds.map(r => r.id), ['r1', 'r2', 'r3', 'r4', 'r5']);
+});
+
+test('an unknown id suggests similar names', () => {
+  assert.throws(() => query(lojaMem(), { element: 'loja.pedido' }),
+    e => e.code === 'E_UNKNOWN_REF' && e.suggestions.some(s => s.id === ID) && e.message.includes(ID));
+  assert.throws(() => query(lojaMem(), { element: 'zzz' }), e => e.code === 'E_UNKNOWN_REF' && e.suggestions.length === 0);
+});
+
+test('elementCard groups relationships by type and direction', () => {
+  const card = query(open(), { element: ID, format: 'json' });
+  assert.equal(card.element.id, ID);
+  assert.equal(card.parent.id, 'loja');
+  assert.ok(card.children.length >= 4);
+  assert.ok(card.outgoing.serving && card.incoming.serving && card.incoming.realization);
+  assert.ok(card.outgoing.serving[0].sentence);
+  assert.equal(typeof elementCard, 'function');
+});
+
+test('query --element --via passes the types as a list', () => {
+  const r = run(['query', BASE, '--element', ID, '--via', 'serving', '--format', 'json']);
+  assert.equal(r.status, 0, r.stderr);
+  const card = JSON.parse(r.stdout);
+  assert.deepEqual(Object.keys(card.outgoing), ['serving']);
+  assert.deepEqual(Object.keys(card.incoming), ['serving']);
+  const md = run(['query', BASE, '--element', ID, '--depth', '2']);
+  assert.match(md.stdout, /^# API de Pedidos/m);
+  const bad = run(['query', BASE, '--element', 'nada']);
+  assert.equal(bad.status, 2);
+  assert.match(bad.stderr, /não existe na base/);
 });
