@@ -4,6 +4,7 @@ import { spawnSync } from 'node:child_process';
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { pluginManifests } from '../scripts/sync-plugin.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const CLI = join(ROOT, 'scripts', 'archlens.mjs');
@@ -45,13 +46,24 @@ test('each skill has name and description, and the name matches the folder', () 
 });
 
 test('plugin.json names the plugin archlens and marketplace.json points at the repo root', () => {
-  const pkg = JSON.parse(read(join(ROOT, 'package.json')));
   const plugin = JSON.parse(read(join(ROOT, '.claude-plugin', 'plugin.json')));
-  assert.deepEqual(plugin, { name: 'archlens', version: pkg.version, description: pkg.description });
+  assert.equal(plugin.name, 'archlens');
   const market = JSON.parse(read(join(ROOT, '.claude-plugin', 'marketplace.json')));
   assert.equal(market.plugins.length, 1);
   assert.equal(market.plugins[0].name, 'archlens');
   assert.equal(market.plugins[0].source, './');
+});
+
+// An installed plugin is cached by version: a release that keeps the version never reaches the users.
+test('plugin manifests follow package.json (version, description, author); npm version keeps them in sync', () => {
+  const pkg = JSON.parse(read(join(ROOT, 'package.json')));
+  const expected = pluginManifests(pkg);
+  assert.deepEqual(JSON.parse(read(join(ROOT, '.claude-plugin', 'plugin.json'))), expected.plugin);
+  assert.deepEqual(JSON.parse(read(join(ROOT, '.claude-plugin', 'marketplace.json'))), expected.marketplace);
+  assert.equal(expected.plugin.version, pkg.version);
+  assert.equal(expected.marketplace.plugins[0].version, pkg.version);
+  assert.ok(pkg.author, 'package.json precisa de author (vai para o plugin.json)');
+  assert.match(pkg.scripts.version ?? '', /sync-plugin\.mjs/, 'npm version deve regravar os manifestos do plugin');
 });
 
 test('every references/*.md and scripts/* path cited by a skill exists', () => {

@@ -25,6 +25,8 @@ versões seguem [SemVer](https://semver.org/lang/pt-BR/).
 - **Prévia de plano final**: `render`/`deliver`/`build`/`resolve`/`views` com `--plan <plano.json>` desenham a base com o plano, aberto ou final, já aplicado. `render` e `deliver` não gravam nada; `build` grava os diagramas em `architecture/diagrams/` (a base não muda).
 - **Plugin com três skills** (`archlens-plan`, `archlens-apply`, `archlens-query`) em `.claude-plugin/`; exemplo em
   `examples/telemedicina/plano-02*.json`.
+- **Versão do plugin sincronizada**: `npm version` regrava `.claude-plugin/plugin.json` e `marketplace.json` a partir do
+  `package.json` (`scripts/sync-plugin.mjs`); um teste recusa manifestos fora de sincronia. README com atualização e publicação.
 - **Conector `markdown`**: a base vira um vault (uma pasta por tipo ArchiMate, um `.md` por elemento) que abre no Obsidian;
   escolhido por `store.kind` no `archlens.json`. Exemplo em `examples/loja-online-vault/`.
 - **Contrato de conector** com gravação por operações atômicas e versão do conteúdo (`E_STORE_CONFLICT` quando a base muda

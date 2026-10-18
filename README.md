@@ -67,6 +67,36 @@ ln -s <repo>/skills/archlens-* ~/.claude/skills/
 Quem tinha `~/.claude/skills/archlens → <repo>` deve **trocar esse link**: o `SKILL.md` da raiz foi removido e o link antigo
 não aponta mais para nenhuma skill (`rm ~/.claude/skills/archlens` e use um dos dois caminhos acima).
 
+### Atualização
+
+Pelo plugin: atualize o marketplace, depois o plugin, e abra uma sessão nova do Claude Code (a atualização só vale nela):
+
+```bash
+claude plugin marketplace update archlens
+claude plugin update archlens@archlens
+```
+
+O Claude Code guarda o plugin instalado por **versão**: só chega aos usuários o que sai numa versão nova (veja abaixo). Com o
+marketplace do GitHub, vale a branch padrão do repositório. A cópia instalada não tem `node_modules`: a checagem visual do
+`deliver`/`build` (Playwright + Chromium) é pulada com aviso, a menos que se rode `npm install` nela.
+
+Pelos links simbólicos: um `git pull` (ou trocar de branch) no repositório já atualiza as skills na próxima sessão, sem versão
+nova. É o caminho mais prático para quem desenvolve o archlens.
+
+### Publicar uma versão
+
+A versão do plugin vem do `package.json`. Nunca edite `.claude-plugin/*.json` à mão: `npm version` regrava os dois
+manifestos e os inclui no commit da versão (o teste `tests/skills.test.mjs` recusa manifestos fora de sincronia).
+
+```bash
+npm version minor            # ou patch / major: package.json, plugin.json e marketplace.json no mesmo commit + tag v<x>
+claude plugin validate .     # manifestos válidos
+git push --follow-tags
+```
+
+Antes, mova as entradas de `[Não lançado]` do `CHANGELOG.md` para a versão nova. `npm run check-plugin` só confere a
+sincronia (sai com 1 se os manifestos não acompanham o `package.json`).
+
 ## Manter o ARCHITECTURE.md em dia
 
 ```bash
