@@ -29,6 +29,11 @@ Requer Node ≥ 18. A checagem visual (`deliver`/`build`) usa `playwright-core` 
    repositório já tem um `ARCHITECTURE.md` que não foi gerado pelo archlens (sem `source:` no cabeçalho), **pergunte
    antes** ao usuário: movê-lo, ou usar o conteúdo dele como texto livre do primeiro delta. A CLI nunca o sobrescreve
    (`E_STORE_DOC_FOREIGN`).
+   A base pode usar o conector `json` (padrão, `model.json`) ou `markdown` (`store.kind` no `archlens.json`: uma pasta
+   por tipo, um `.md` por elemento). `archlens store convert <base> --to markdown|json` troca de conector mantendo a
+   versão e os arquivos do usuário. Para abrir no Obsidian, abra a pasta da base como vault; para o gbrain, use o
+   `gbrain-pack.yaml` dela. Nunca edite as páginas à mão fora do texto depois do bloco do archlens (`archlens:end`):
+   o resto é regravado.
 2. **Só pedido de visão, nada novo a modelar?** Vá ao passo 7.
 3. **Traduza a informação nova em delta** (`references/merge.md`):
    - **texto livre**: siga `references/free-text.md` (`source` com o trecho, `inferred` + `confidence`,

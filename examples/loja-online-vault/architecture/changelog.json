@@ -1,0 +1,26 @@
+[
+  {
+    "id": "2026-10-02-01",
+    "date": "2026-10-02",
+    "source": {
+      "kind": "prompt",
+      "ref": "agrupamentos"
+    },
+    "summary": "Plataformas de vendas e de back-office",
+    "added": [
+      "plat-vendas",
+      "plat-backoffice",
+      "view:plataformas",
+      "view:vendas-x-backoffice"
+    ],
+    "changed": [
+      "loja",
+      "antifraude",
+      "erp",
+      "crm"
+    ],
+    "status": {},
+    "removed": [],
+    "decisions": []
+  }
+]

@@ -1,0 +1,140 @@
+{
+  "archlens-plan": "1.0",
+  "base": "architecture",
+  "baseHash": "sha256:48c2ea80846666eaffb4f3ed74e46fdd86e389af36353dfe0d13d15df651cbc7",
+  "created": "2026-10-02",
+  "delta": {
+    "archlens-delta": "1.0",
+    "source": {
+      "kind": "prompt",
+      "ref": "agrupamentos"
+    },
+    "summary": "Plataformas de vendas e de back-office",
+    "model": {
+      "elements": [
+        {
+          "id": "plat-vendas",
+          "type": "grouping",
+          "name": "Plataforma de Vendas",
+          "description": "Sistemas que sustentam a jornada de compra: vitrine, checkout e análise de risco."
+        },
+        {
+          "id": "plat-backoffice",
+          "type": "grouping",
+          "name": "Plataforma de Back-office",
+          "description": "Sistemas internos de faturamento, expedição e atendimento."
+        },
+        {
+          "id": "loja",
+          "group": "plat-vendas"
+        },
+        {
+          "id": "antifraude",
+          "group": "plat-vendas"
+        },
+        {
+          "id": "erp",
+          "group": "plat-backoffice"
+        },
+        {
+          "id": "crm",
+          "group": "plat-backoffice"
+        }
+      ]
+    },
+    "views": [
+      {
+        "key": "plataformas",
+        "notation": "c4",
+        "level": "landscape",
+        "title": "Plataformas",
+        "groups": {
+          "frames": true
+        }
+      },
+      {
+        "key": "vendas-x-backoffice",
+        "notation": "archimate",
+        "viewpoint": "application",
+        "title": "Vendas × Back-office",
+        "groups": {
+          "only": [
+            "plat-vendas",
+            "plat-backoffice"
+          ],
+          "crossOnly": true
+        }
+      }
+    ]
+  },
+  "items": [
+    {
+      "n": 1,
+      "key": "el:plat-vendas",
+      "class": "new",
+      "kind": "element",
+      "target": "plat-vendas",
+      "type": "grouping",
+      "name": "Plataforma de Vendas",
+      "parent": null
+    },
+    {
+      "n": 2,
+      "key": "el:plat-backoffice",
+      "class": "new",
+      "kind": "element",
+      "target": "plat-backoffice",
+      "type": "grouping",
+      "name": "Plataforma de Back-office",
+      "parent": null
+    },
+    {
+      "n": 3,
+      "key": "el:loja",
+      "class": "enrich",
+      "kind": "element",
+      "target": "loja"
+    },
+    {
+      "n": 4,
+      "key": "el:antifraude",
+      "class": "enrich",
+      "kind": "element",
+      "target": "antifraude"
+    },
+    {
+      "n": 5,
+      "key": "el:erp",
+      "class": "enrich",
+      "kind": "element",
+      "target": "erp"
+    },
+    {
+      "n": 6,
+      "key": "el:crm",
+      "class": "enrich",
+      "kind": "element",
+      "target": "crm"
+    },
+    {
+      "n": 7,
+      "key": "view:plataformas",
+      "class": "new",
+      "kind": "view",
+      "target": "plataformas"
+    },
+    {
+      "n": 8,
+      "key": "view:vendas-x-backoffice",
+      "class": "new",
+      "kind": "view",
+      "target": "vendas-x-backoffice"
+    }
+  ],
+  "summary": {
+    "new": 4,
+    "enrich": 4
+  },
+  "blocked": false,
+  "errors": []
+}

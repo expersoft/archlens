@@ -151,6 +151,21 @@ Todos aceitam a pasta, o `ARCHITECTURE.md` gerado ou nada (procura a partir do d
 recusadas (`E_STORE_FORMAT`) até o `migrate`. O `migrate` é a exceção: recebe a pasta 1.x, o `.md` antigo ou um
 `model.json`.
 
+## Base em markdown (Obsidian, gbrain)
+
+Por padrão a base é `model.json`. Para ler e navegar nela como um vault, converta-a para o conector `markdown`:
+
+```bash
+node scripts/archlens.mjs store convert architecture --to markdown   # volta com --to json
+```
+
+A pasta passa a ter uma subpasta por tipo ArchiMate e um `.md` por elemento (`application-component/loja.pedidos.md`),
+com as relações como wikilinks. Abra `architecture/` como vault no Obsidian; o `gbrain-pack.yaml` da pasta é o schema pack
+para o gbrain (`gbrain schema use`; a verificação num gbrain instalado está pendente). A versão da base não muda, o
+`ARCHITECTURE.md` é regenerado e `notes/`, `diagrams/`, `.obsidian/` e anexos ficam onde estão. Edite à vontade o texto
+depois do bloco `archlens:end` de cada página; o resto é regravado pelo archlens. Exemplo pronto:
+`examples/loja-online-vault/`.
+
 ## Apresentando
 
 O HTML é um arquivo único, sem dependências de rede. Cada visão ocupa 100% da largura: o SVG usa

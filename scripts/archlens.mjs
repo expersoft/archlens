@@ -19,6 +19,7 @@ import { diffRaw, contentVersion } from './lib/store/ops.mjs';
 import { migrateRaw, reportLines } from './lib/migrate.mjs';
 import { FORMAT, isCanonicalFormat } from './lib/canonical.mjs';
 import { saveFolder, loadFolder } from './lib/store/folder.mjs';
+import { convertFolder } from './lib/store/convert.mjs';
 import { scanSource } from './lib/scan/index.mjs';
 import { summarize, formatSummary } from './lib/scan/summary.mjs';
 import { toDelta } from './lib/scan/to-delta.mjs';
@@ -38,6 +39,7 @@ Comandos
   merge     <base> <delta.json> --plan p.json  compara o delta com a base e grava o plano (decisões pendentes)
             [--answers antigo.json]         reaproveita as respostas de um plano anterior (ex.: duplicata = same)
   merge     <base> --apply p.json               aplica o plano respondido, regrava a base e registra o histórico
+  store convert <base> --to markdown|json   grava a base em outro conector (mesma pasta; versão inalterada)
   views     <base>                           lista as visões definidas e sugere novas
   resolve   <base> --view k | --spec J       imprime o view IR (nós/arestas) de uma visão
   render    <base> --out f.html [seleção]    gera o HTML animado
@@ -520,7 +522,7 @@ async function main() {
         + '  <base>: a pasta architecture/ ou o ARCHITECTURE.md (se não existir, a base é criada em architecture/)';
       const loaded = loadBase(store);
       const { raw: baseRaw, notes } = loaded;
-      const startVersion = store.version();
+      const startVersion = contentVersion(loaded); // same read as the content, so the plan's version matches it
       if (args.plan && args.plan !== true) {
         const deltaPath = args._[2];
         if (!deltaPath) fail(usage);
@@ -555,6 +557,26 @@ async function main() {
         console.log(`✓ ${store.describe()} e ${relPath(doc)} (revisão ${res.raw.changelog.length}): +${e.added.length} ~${e.changed.length} −${e.removed.length}${st ? `, ${st} mudança(s) de status` : ''}`);
         console.log(`  commit sugerido: git add ${relPath(store.locator.path)} ${relPath(doc)} && git commit -m ${JSON.stringify(`docs(arquitetura): ${e.summary}`)}`);
       } else fail(usage);
+      break;
+    }
+    case 'store': {
+      const usage = 'uso: archlens store convert <base> --to markdown|json';
+      if (file !== 'convert' || !args.to || args.to === true) fail(usage);
+      const target = args._[2];
+      let loc;
+      try { loc = resolveBase(target); } catch (e) { fail(e.message); }
+      if (loc.kind !== 'folder' || !loc.exists) fail(`E_STORE_CONVERT: ${target ?? '.'} não é uma pasta de base (migre bases antigas com "archlens migrate")`);
+      assertDocOwned(openStore(loc)); // before anything is written
+      let res;
+      try { res = convertFolder(loc, String(args.to)); } catch (e) { fail(e.message); }
+      // The element order of a vault differs from model.json, so the generated document is rewritten.
+      const converted = openStore(resolveBase(loc.path));
+      const back = loadBase(converted);
+      const doc = writeDoc(converted, back.raw, back.notes, loc.docPath);
+      console.log(`✓ ${relPath(loc.path)}/ agora usa o conector ${res.to} (era ${res.from}); a versão da base não mudou; ${relPath(doc)} regenerado`);
+      if (res.leftover) console.warn(`  aviso: não consegui apagar ${relPath(res.leftover)}; remova-o à mão`);
+      if (res.to === 'markdown') console.log(`  abra ${relPath(loc.path)}/ como vault no Obsidian; para o gbrain: gbrain schema use com ${relPath(join(loc.path, 'gbrain-pack.yaml'))}`);
+      console.log(`  commit sugerido: git add -A ${relPath(loc.path)} && git commit -m "chore(archlens): base no conector ${res.to}"`);
       break;
     }
     default:

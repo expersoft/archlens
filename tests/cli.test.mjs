@@ -727,3 +727,42 @@ test('migrate of a folder with an unsupported store reports the error, without a
   assert.match(r.stderr, /^archlens: .*E_STORE_UNSUPPORTED|^archlens: .*"store"/);
   assert.doesNotMatch(r.stderr, /\n\s+at /);
 });
+
+test('store convert json → markdown → json keeps the base, its version and every file it does not own', () => {
+  const dir = setup();
+  const arch = join(dir, 'architecture');
+  mkdirSync(join(arch, 'diagrams'), { recursive: true }); writeFileSync(join(arch, 'diagrams', 'a.html'), '<html></html>');
+  mkdirSync(join(arch, '.obsidian')); writeFileSync(join(arch, '.obsidian', 'app.json'), '{}');
+  const v0 = run(['extract', 'architecture'], dir).stdout;
+  const r1 = run(['store', 'convert', 'architecture', '--to', 'markdown'], dir);
+  assert.equal(r1.status, 0, r1.stderr);
+  assert.ok(existsSync(join(arch, 'application-component', 'loja.api.md')));
+  assert.ok(!existsSync(join(arch, 'model.json')));
+  writeFileSync(join(arch, 'application-component', 'diagrama.png'), 'png');
+  assert.equal(run(['check', 'architecture'], dir).status, 0, 'convert regenerates ARCHITECTURE.md');
+  const r2 = run(['store', 'convert', 'architecture', '--to', 'json'], dir);
+  assert.equal(r2.status, 0, r2.stderr);
+  assert.ok(existsSync(join(arch, 'model.json')));
+  assert.ok(!existsSync(join(arch, 'application-component', 'loja.api.md')));
+  for (const f of ['diagrams/a.html', '.obsidian/app.json', 'application-component/diagrama.png', 'notes/notes.md']) assert.ok(existsSync(join(arch, f)), f);
+  assert.equal(JSON.stringify(JSON.parse(run(['extract', 'architecture'], dir).stdout).model.elements.map(e => e.id).sort()),
+    JSON.stringify(JSON.parse(v0).model.elements.map(e => e.id).sort()));
+  assert.ok(!readdirSync(dir).some(n => /\.(convert|old)-/.test(n)), 'no temporary folder left behind');
+  assert.match(run(['store', 'convert', 'architecture', '--to', 'json'], dir).stderr, /E_STORE_CONVERT[\s\S]*json/);
+});
+
+test('store convert of a split json base keeps the files the base does not own in model/', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'archlens-'));
+  const arch = join(dir, 'architecture');
+  saveFolder(arch, asBase(shop()), { layout: { model: 'model/' } });
+  writeFileSync(join(arch, 'model', 'README.md'), 'leia-me');
+  assert.equal(run(['store', 'convert', 'architecture', '--to', 'markdown'], dir).status, 0);
+  assert.ok(existsSync(join(arch, 'model', 'README.md')));
+  assert.ok(!readdirSync(join(arch, 'model')).some(f => f.endsWith('.json')));
+});
+
+test('merge --apply takes the plan version from the same read as the content it merges into', () => {
+  const src = readFileSync(CLI, 'utf8');
+  assert.ok(!/startVersion = store\.version\(\)/.test(src));
+  assert.match(src, /startVersion = contentVersion\(loaded\)/);
+});
