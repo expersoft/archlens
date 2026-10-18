@@ -185,6 +185,32 @@ vira `bands-flow` com aviso no build. Com `nesting` aninhado, `bands` também vi
   O build mostra o estilo escolhido e as notas (`layout "k": bands-flow (auto; …)`). Se o usuário pedir
   um estilo, grave-o na visão e ele deixa de ser automático.
 
+## Consulta em markdown
+
+`archlens query` responde em texto o que o `deliver` desenha, sem gravar nada (skill archlens-query). Resolve a
+mesma view spec que o `resolve` (o mesmo view IR) e escreve markdown (padrão) ou JSON (`--format json`, as mesmas
+estruturas sem formatação); `--out f` grava num arquivo (fora da base).
+
+```bash
+node scripts/archlens.mjs query architecture/ --view containers                                   # visão salva
+node scripts/archlens.mjs query architecture/ --spec '{"notation":"archimate","viewpoint":"impact","anchor":"loja.pedidos"}'
+node scripts/archlens.mjs query architecture/ --element loja.pedidos --depth 1                    # cartão do elemento
+```
+
+**Visão** (`--view k` ou `--spec J`):
+
+- título e a spec usada (uma linha de JSON);
+- elementos agrupados por camada (ArchiMate) ou por nível (C4): tabela `nome · tipo/kind · status · tecnologia`;
+- relações: uma linha por aresta, com a frase da ajuda sobre relações (abaixo);
+- viewpoint `impact`: a matriz de dependência como tabela markdown;
+- visões com mais de 40 nós: nota no fim sugerindo recortar.
+
+**Cartão de elemento** (`--element id [--depth N] [--via t1,t2]`): nome, tipo, perfil C4, status, tecnologia,
+descrição, pai e filhos, relações de saída e de entrada agrupadas por tipo, propriedades, fontes (proveniência) e as
+rodadas do histórico que citam o id. Lê só o subgrafo em volta do elemento (padrão `depth: 1`); `--depth N` inclui os
+vizinhos a N saltos numa seção "Em volta", e `--via` limita a travessia a esses tipos de relação. Id inexistente:
+`E_UNKNOWN_REF` com sugestões por nome e alias.
+
 ## Ajuda sobre relações
 
 Cada aresta do view IR renderizado ganha `help` (`scripts/lib/explain.mjs`), com os campos sentence, meaning, reading, impact, c4 e derived.

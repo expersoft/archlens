@@ -1,0 +1,11 @@
+{
+  "name": "archlens",
+  "owner": { "name": "expersoft" },
+  "plugins": [
+    {
+      "name": "archlens",
+      "source": "./",
+      "description": "Skill: arquitetura como modelo (ArchiMate + perfil C4), diagramas como consultas, HTML animado para apresentação"
+    }
+  ]
+}

@@ -1,23 +1,62 @@
 # Evoluindo a base: delta → plano → apply
 
 A base de conhecimento (a pasta `architecture/`, ou o `ARCHITECTURE.md` gerado, que aponta para ela; se nenhuma
-existe, o apply a cria) muda por **merge**. O agente descreve o que há de novo num **delta**; a CLI compara com a
-base, classifica cada item e grava um **plano** com as perguntas; o usuário responde; o `apply` grava a base,
-regenera o documento e registra a rodada no **Histórico**.
-Nada é decidido em silêncio: conflitos, possíveis duplicatas, remoções e `retired` esperam resposta.
+existe, o apply a cria) muda por rodadas. O agente descreve o que há de novo num **delta**; o `plan` compara com a
+base, classifica cada item e grava um **plano** com as perguntas; o usuário responde; o `plan --answers` refaz o
+plano com as respostas até ele sair **final**; o `apply` grava o plano final, regenera o documento e registra a
+rodada no **Histórico**. Nada é decidido em silêncio: conflitos, possíveis duplicatas, remoções e `retired` esperam
+resposta. `plan`, `show` e as prévias nunca gravam a base (skill archlens-plan); só o `apply` grava (skill
+archlens-apply).
 
 ```bash
-node scripts/archlens.mjs merge architecture/ delta.json --plan plano.json   # relatório + plano
-# … responda as possíveis duplicatas; se alguma for "same", gere o plano de novo com as respostas:
-node scripts/archlens.mjs merge architecture/ delta.json --plan plano2.json --answers plano.json
-# … responda os itens restantes com "resolution": null …
-node scripts/archlens.mjs merge architecture/ --apply plano2.json           # grava e registra
+node scripts/archlens.mjs plan architecture/ delta.json --out p1.json          # relatório + plano (aberto ou final)
+# … responda as perguntas em p1.json ("resolution"), possíveis duplicatas primeiro …
+node scripts/archlens.mjs plan architecture/ --answers p1.json --out p2.json   # refaz com as respostas (usa o delta de p1)
+# … repita até o plano sair final; depois revise …
+node scripts/archlens.mjs show architecture/ p2.json --out plano.md             # relatório markdown do plano
+node scripts/archlens.mjs deliver architecture/ --plan p2.json --out prévia.html # prévia em HTML (fora da base)
+node scripts/archlens.mjs apply architecture/ p2.json                           # grava e registra
 ```
 
 Se a base não existe, o primeiro delta a cria (`name` e `description` do delta viram os da base).
 A base precisa estar no formato 2.0: uma base 1.x falha com `E_STORE_FORMAT` (rode `archlens migrate <base>`).
-Planos gerados antes de um `migrate` **não** valem depois: a base muda (tipos, bancos, ids de relações), e com ela o
-hash do plano (`E_PLAN_STALE`). Gere o plano de novo.
+Planos gerados antes de um `migrate` **não** valem depois: a base muda (tipos, bancos, ids de relações), e com ela a
+versão gravada no plano (`E_STORE_CONFLICT` no `apply`). Gere o plano de novo.
+
+## O plano aberto e o plano final
+
+| `state` | Quando | Próximo passo (a CLI imprime) |
+|---|---|---|
+| `open` | alguma pergunta aplicável sem resposta válida, ou plano bloqueado | responder em `"resolution"` e rodar `plan <base> --answers p.json --out p2.json` |
+| `final` | tudo respondido | revisar (`show`, prévia) e rodar `apply <base> p.json` |
+
+- O plano guarda `storeVersion` (a versão da base lida pelo `plan`; `null` se a base ainda não existe) e o `delta` de
+  origem: por isso `plan <base> --answers p.json --out p2.json` refaz o plano sem informar o delta de novo. Com o
+  delta, a CLI avisa se for outro.
+- `--answers` aceita qualquer plano (aberto ou final). Respostas que não casam mais com o plano novo (item sumiu,
+  resposta inválida para a pergunta nova) são ignoradas sem erro.
+- Só o plano final tem `entry` (a rodada que o apply registra) e `ops` (as operações que ele grava). O `apply` não
+  refaz o merge: grava as `ops`, depois de conferir a versão da base e validar o resultado.
+- O plano final é para ser lido e revisado, não editado. Editado à mão, o `apply` ainda valida o resultado.
+- Plano final sem mudanças: o `apply` imprime `= nada mudou; a base não foi regravada` e sai com 0.
+
+## O relatório (`show`)
+
+`archlens show <base> p.json [--out f.md] [--json]` escreve um markdown determinístico, para colar num PR ou numa
+conversa: título (o `summary` do delta), base e versão, fonte, data e estado (**aberto** ou **final**), contagens, e
+as seções `Decisões pendentes` (só no aberto, com as opções de cada pergunta), `Decisões`, `Novos`, `Alterados`
+(antes → depois), `Removidos`, `Relações` e `Visões`. Seções vazias são omitidas. Se a base mudou desde o plano, a
+primeira linha avisa. `--json` dá o mesmo conteúdo estruturado. Nunca grava a base.
+
+## Conflito de versão: refazer com `--answers`
+
+O `apply` recusa, sem gravar nada:
+
+- plano **aberto**: `E_PLAN_OPEN` com os itens sem resposta; responda e rode `plan <base> --answers p.json --out p2.json`;
+- um **delta** (ou outro arquivo) no lugar do plano: `E_PLAN_SCHEMA`; rode `plan` primeiro;
+- base que **mudou** depois do plano (outra rodada aplicada, edição, `migrate`, ou o próprio plano já aplicado):
+  `E_STORE_CONFLICT`. Refaça o plano sobre a base atual reaproveitando as respostas:
+  `plan <base> --answers p.json --out p3.json`; confira as perguntas novas, revise e aplique o plano novo.
 
 ## O delta
 
@@ -96,13 +135,15 @@ Duas regras de detalhe:
 
 Itens com `"when": "dup:<id>=same"` só valem se a duplicata correspondente for respondida `same`. Eles mostram
 só as diferenças de **campo** do próprio elemento; relações e filhos do item do delta foram planejados como se ele
-fosse novo. Por isso, **se alguma duplicata for `same`, gere o plano de novo com `--answers`**: o plano novo
+fosse novo. Por isso, **se alguma duplicata for `same`, refaça o plano com `--answers`** (o plano continua aberto
+enquanto houver perguntas): o plano novo
 já trata o item como o elemento da base (relações casam com as da base, filhos entram dentro dele) e pode trazer
 perguntas novas. As respostas do plano anterior entram pré-preenchidas (o relatório as marca como
 `✓ respondido`); respostas inválidas são ignoradas.
 
-`--answers <plano.json>` lê os `resolution` preenchidos daquele plano, por `key`. Use-o com o **mesmo delta**
-(a CLI avisa se o delta mudou, porque `rel:<n>` e `op:<n>` são posições no delta).
+`--answers <plano.json>` lê os `resolution` preenchidos daquele plano, por `key`. Sem o argumento do delta, usa o
+delta do próprio plano; com ele, use o **mesmo delta** (a CLI avisa se o delta mudou, porque `rel:<n>` e `op:<n>` são
+posições no delta).
 
 ### Agrupamentos
 
@@ -118,11 +159,12 @@ perguntas novas. As respostas do plano anterior entram pré-preenchidas (o relat
 
 - Mostre o resumo do relatório (contagens e novos).
 - Pergunte **primeiro as possíveis duplicatas**. Se alguma for `same`, grave as respostas, rode
-  `--plan <novo.json> --answers <plano.json>` e continue no plano novo.
+  `plan <base> --answers <plano.json> --out <novo.json>` e continue no plano novo.
 - Faça **uma pergunta por item** com `resolution: null`, na ordem de `n`, com a sua recomendação e o motivo.
   Ex.: *"A base diz que a API de Pedidos é Java/Spring; o repo mostra Kotlin. Recomendo `take` (o repo é mais recente). Ok?"*
 - Pule os itens com `when` se a duplicata foi respondida `different`.
-- Grave as respostas no `plano.json` (campo `resolution` de cada item) e rode o `--apply`.
+- Grave as respostas no `plano.json` (campo `resolution` de cada item) e rode `plan <base> --answers plano.json --out
+  plano2.json`; repita até o plano sair `final`, mostre o `show` e a prévia, e só então o `apply` (skill archlens-apply).
 
 ## Erros
 
@@ -131,11 +173,14 @@ perguntas novas. As respostas do plano anterior entram pré-preenchidas (o relat
 | `E_DELTA_SCHEMA` | falta `"archlens-delta": "1.0"` ou op sem `op`/`id` | corrija o delta |
 | plano `blocked` | o resultado teria erros de validação (`E_UNKNOWN_REF`, `E_UNKNOWN_TYPE`…) | corrija o delta e planeje de novo |
 | `E_PARENT_CYCLE` | o delta move um elemento para dentro de um descendente seu (plano bloqueado) | corrija o `parent` no delta e planeje de novo |
-| `E_PLAN_PENDING` | há `resolution: null` | responda os itens listados |
-| `E_PLAN_RESOLUTION` | resposta fora das opções | use as opções da tabela |
-| `E_PLAN_REPLAN` | o apply encontrou uma decisão que não está no plano (típico: duplicata respondida `same` sem replanejar) | rode `--plan <novo.json> --answers <plano.json>` e responda as perguntas novas |
-| `E_PLAN_STALE` | a base mudou depois do plano (inclusive por já ter aplicado este plano) | gere o plano de novo |
+| `E_PLAN_OPEN` | `apply` de um plano aberto (perguntas sem resposta ou bloqueado) | responda e rode `plan <base> --answers p.json --out p2.json` |
+| `E_PLAN_SCHEMA` | `apply`, `show` ou `--answers` com um arquivo que não é plano (ex.: o delta) | rode `plan` primeiro |
+| `E_STORE_CONFLICT` | a base mudou depois do plano (inclusive por já ter aplicado este plano) | refaça com `plan <base> --answers p.json --out novo.json` |
 | `E_MERGE_INVALID` | o resultado com as respostas reais é inválido | reveja as respostas (ex.: `value:` com id inexistente) |
+| `E_PLAN_RESOLUTION` | resposta fora das opções (atalho `merge --apply`; o `plan --answers` ignora) | use as opções da tabela |
+| `E_PLAN_PENDING` | há `resolution: null` (atalho `merge --apply`) | responda os itens listados |
+| `E_PLAN_REPLAN` | o `merge --apply` encontrou uma decisão que não está no plano (típico: duplicata `same` sem replanejar) | rode `plan <base> --answers p.json --out p2.json` e responda as perguntas novas |
+| `E_PLAN_STALE` | atalho `merge --apply` com um plano antigo (sem `storeVersion`): a base mudou depois dele | gere o plano de novo |
 
 ## Pré-visualizando (antes do apply)
 
@@ -184,3 +229,15 @@ imprime só o JSON. Os comandos de prévia exigem o arquivo da base mesmo que el
 - Reutilize ids da base (`archlens views architecture/` e as tabelas do `.md` mostram os ids).
 - Depois do apply, sugira o commit da pasta `architecture/` e do `ARCHITECTURE.md` ao usuário (a CLI imprime
   `git add architecture ARCHITECTURE.md`).
+
+## Atalhos `merge`
+
+Os comandos antigos continuam, como atalhos:
+
+| Atalho | O mesmo que |
+|---|---|
+| `merge <base> <delta.json> --plan p.json [--answers p0.json]` | `plan <base> <delta.json> --out p.json [--answers p0.json]` (mesmo arquivo, com `state`) |
+| `merge <base> --apply p.json` | fechar o plano aberto todo respondido (`plan` com as respostas em memória) + `apply`; recusa com `E_STORE_CONFLICT` (base mudou), `E_PLAN_PENDING`, `E_PLAN_RESOLUTION`, `E_PLAN_REPLAN` ou `E_PLAN_STALE` (plano antigo) |
+
+O fluxo das skills é `plan` → `plan --answers` → `show` + prévia → `apply`: o plano final revisado é exatamente o que
+o `apply` grava.
