@@ -173,6 +173,17 @@ test('appendHistory numbers the round over the history it is appended to', () =>
   assert.deepEqual(applyOps(null, diffRaw(null, cur)).raw.changelog, cur.raw.changelog);
 });
 
+test('a copied gapped history keeps its ids, and a new round after a gap does not collide', () => {
+  const round = (id, date = '2026-10-17') => ({ id, date, summary: id, added: [], changed: [], status: {}, removed: [], decisions: [] });
+  const gapped = { raw: { ...base().raw, changelog: [round('2026-10-17-01'), round('2026-10-17-03'), round('2026-10-17-1'), round('2026-10-16-05', '2026-10-16')] }, notes: {} };
+  const copied = applyOps(null, diffRaw(null, gapped));
+  assert.deepEqual(copied.raw.changelog, gapped.raw.changelog);
+  assert.equal(contentVersion(copied), contentVersion(gapped));
+  const next = applyOps(gapped, [{ op: 'appendHistory', entry: round('2026-10-17-03') }]);
+  assert.equal(next.raw.changelog.at(-1).id, '2026-10-17-04');
+  assert.equal(new Set(next.raw.changelog.map(e => e.id)).size, next.raw.changelog.length);
+});
+
 test('the json connector keeps whole-base versioning', () => {
   const { at, store } = folder('json');
   assert.equal(store().versioning, 'base');

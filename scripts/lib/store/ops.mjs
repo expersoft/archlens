@@ -56,15 +56,16 @@ export function diffRaw(before, after) {
 }
 
 /**
- * The round as appended to `history`: a plan's "<date>-NN" id is provisional, so it is numbered here, after the rounds of
- * its day already there (a history copied in order gets its own ids back). An id of another shape stays.
+ * The round as appended to `history`: a plan's id is provisional, so one that a round already has (a parallel apply took
+ * it) becomes "<date>-NN", NN = the day's highest sequence + 1. A free id stays, so a copied history keeps its ids.
  */
 function numbered(entry, history) {
   const e = structuredClone(entry);
+  if (typeof e.date !== 'string' || !history.some(x => x?.id === e.id)) return e;
   const prefix = `${e.date}-`;
-  if (typeof e.date === 'string' && typeof e.id === 'string' && e.id.startsWith(prefix) && /^\d+$/.test(e.id.slice(prefix.length))) {
-    e.id = prefix + String(history.filter(x => x?.date === e.date).length + 1).padStart(2, '0');
-  }
+  const seqs = history.map(x => x?.id).filter(id => typeof id === 'string' && id.startsWith(prefix) && /^\d+$/.test(id.slice(prefix.length)))
+    .map(id => Number(id.slice(prefix.length)));
+  e.id = prefix + String(Math.max(0, ...seqs) + 1).padStart(2, '0');
   return e;
 }
 
