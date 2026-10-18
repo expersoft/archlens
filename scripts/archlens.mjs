@@ -14,7 +14,7 @@ import { inspectHtml } from './lib/deliver.mjs';
 import { planMerge, applyPlan, mergeError, canonicalJson, hashRaw, relationshipIds, PLAN_VERSION } from './lib/merge.mjs';
 import { formatPlanReport } from './lib/merge-report.mjs';
 import { previewModel, previewSummary, annotateView } from './lib/preview.mjs';
-import { resolveBase, openStore, frontmatterSource, MANIFEST } from './lib/store/index.mjs';
+import { resolveBase, openStore, assertWritable as storeWritable, frontmatterSource, MANIFEST } from './lib/store/index.mjs';
 import { migrateRaw, reportLines } from './lib/migrate.mjs';
 import { FORMAT, isCanonicalFormat } from './lib/canonical.mjs';
 import { saveFolder, loadFolder } from './lib/store/folder.mjs';
@@ -96,7 +96,7 @@ function requireRaw(store) {
 }
 
 function assertWritable(store) {
-  try { store.assertWritable(); } catch (e) { fail(e.message); }
+  try { storeWritable(store); } catch (e) { fail(e.message); }
 }
 
 /**

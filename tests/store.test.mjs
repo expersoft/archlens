@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync, writeFileSync, mkdirSync, existsSync } from 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { loadFolder, saveFolder } from '../scripts/lib/store/folder.mjs';
-import { resolveBase, openStore } from '../scripts/lib/store/index.mjs';
+import { resolveBase, openStore, assertWritable } from '../scripts/lib/store/index.mjs';
 import { asBase } from './helpers.mjs';
 
 const shop = () => asBase(JSON.parse(readFileSync(new URL('./fixtures/shop.json', import.meta.url))));
@@ -128,7 +128,7 @@ test('legacy: reads the block and the hand-written keep blocks (guide texts drop
   assert.deepEqual(notes, { overview: 'Visão à mão.', assumptions: '- p1' });
   assert.equal(store.writable, false);
   assert.throws(() => store.save(raw), e => e.code === 'E_STORE_LEGACY' && /archlens migrate/.test(e.message));
-  assert.throws(() => store.assertWritable(), e => e.code === 'E_STORE_LEGACY');
+  assert.throws(() => assertWritable(store), e => e.code === 'E_STORE_LEGACY');
 });
 
 test('legacy: a raw model .json is read-only too', () => {

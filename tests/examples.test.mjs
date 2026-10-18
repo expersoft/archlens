@@ -12,7 +12,7 @@ for (const ex of ['loja-online', 'telemedicina', 'repos']) {
   test(`example ${ex}: the folder is valid, every view resolves and ARCHITECTURE.md is current`, () => {
     const dir = fileURLToPath(new URL(`../examples/${ex}/`, import.meta.url));
     const store = openStore(resolveBase('ARCHITECTURE.md', { cwd: dir }));
-    assert.equal(store.kind, 'folder');
+    assert.equal(store.kind, 'json');
     const { raw, notes } = store.load();
     assert.deepEqual(validateModel(raw).errors, []);
     const model = normalizeModel(raw);

@@ -4,6 +4,8 @@ import { extname } from 'node:path';
 import { extractModel, NOTE_NAMES, noteDefaults } from '../doc.mjs';
 import { storeError } from './errors.mjs';
 import { isCanonicalFormat, FORMAT } from '../canonical.mjs';
+import { subgraphOf } from './contract.mjs';
+import { contentVersion } from './ops.mjs';
 
 const KEEP_RE = /<!-- keep:([\w-]+) -->\n?([\s\S]*?)\n?<!-- \/keep:\1 -->/g;
 
@@ -50,4 +52,21 @@ export function legacyNotes(raw, keeps) {
     notes[name] = t;
   }
   return notes;
+}
+
+/** The old single-file base, read only: apply refuses with `error()`. */
+export function legacyConnector(locator, { describe, error }) {
+  const read = opts => { const { raw, keeps } = loadLegacy(locator.path, opts); return { raw, notes: legacyNotes(raw, keeps) }; };
+  return {
+    kind: 'legacy', writable: false, locator,
+    describe: () => describe,
+    read,
+    readSubgraph: query => subgraphOf(read().raw, query),
+    version: () => contentVersion(read()),
+    history: () => read().raw.changelog ?? [],
+    apply() { throw error(); },
+    // Until the CLI moves to the contract (next task).
+    load: opts => ({ ...read(opts), origins: null, layout: undefined }),
+    save() { throw error(); },
+  };
 }
