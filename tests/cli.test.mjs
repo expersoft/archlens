@@ -782,3 +782,29 @@ test('store convert to json refuses a vault with human text after the archlens b
   assert.match(f.stdout + f.stderr, /descartou[\s\S]*loja\.api\.md/);
   assert.ok(existsSync(join(dir, 'architecture', 'model.json')));
 });
+
+test('merge --apply on a vault says where the text of a removed page was kept', () => {
+  const dir = setup();
+  assert.equal(run(['store', 'convert', 'architecture', '--to', 'markdown'], dir).status, 0);
+  const page = join(dir, 'architecture', 'application-component', 'loja.db.md');
+  writeFileSync(page, readFileSync(page, 'utf8') + '\nTexto humano.\n');
+  writeFileSync(join(dir, 'd.json'), JSON.stringify({ 'archlens-delta': '1.0', source: { kind: 'prompt', ref: 'r' }, ops: [{ op: 'remove', id: 'loja.db' }] }));
+  assert.equal(run(['merge', 'architecture', 'd.json', '--plan', 'p.json'], dir).status, 0);
+  const plan = JSON.parse(readFileSync(join(dir, 'p.json'), 'utf8'));
+  for (const i of plan.items) i.resolution = 'yes';
+  writeFileSync(join(dir, 'p.json'), JSON.stringify(plan));
+  const r = run(['merge', 'architecture', '--apply', 'p.json'], dir);
+  assert.equal(r.status, 0, r.stderr);
+  assert.ok(!existsSync(page));
+  assert.match(r.stdout, /texto da página removida guardado em .*notes\/removidos\/application-component\/loja\.db\.md/);
+  assert.match(readFileSync(join(dir, 'architecture', 'notes', 'removidos', 'application-component', 'loja.db.md'), 'utf8'), /Texto humano\./);
+});
+
+test('migrate of a markdown vault says it is already in the 2.0 format', () => {
+  const dir = setup();
+  assert.equal(run(['store', 'convert', 'architecture', '--to', 'markdown'], dir).status, 0);
+  const r = run(['migrate', 'architecture'], dir);
+  assert.notEqual(r.status, 0);
+  assert.match(r.stderr, /já está no formato 2\.0/);
+  assert.doesNotMatch(r.stderr, /não é uma base json/);
+});

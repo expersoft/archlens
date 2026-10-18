@@ -2,6 +2,8 @@
 id: crm
 type: application-component
 title: CRM
+aliases:
+  - CRM
 c4: softwareSystem
 group: "[[grouping/plat-backoffice|Plataforma de Back-office]]"
 external: true

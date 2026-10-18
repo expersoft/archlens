@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openStore, resolveBase } from '../scripts/lib/store/index.mjs';
 import { checkConnector, CONNECTOR_METHODS } from '../scripts/lib/store/contract.mjs';
+import { writeFilesAtomically } from '../scripts/lib/store/atomic.mjs';
 import { diffRaw, contentVersion } from '../scripts/lib/store/ops.mjs';
 import { planMerge, applyPlan } from '../scripts/lib/merge.mjs';
 import { validateModel } from '../scripts/lib/validate.mjs';
@@ -119,4 +120,13 @@ for (const [kind, prepare] of KINDS) {
 test('a manifest with an unknown store kind is refused', () => {
   const dir = fresh(d => writeFileSync(join(d, 'archlens.json'), JSON.stringify({ archlens: '2.0', name: 'x', store: { kind: 'neo4j' } })));
   assert.throws(() => openStore(resolveBase(dir)), e => e.code === 'E_STORE_UNSUPPORTED');
+});
+
+test('a failed atomic write removes the folders it created for its temp files, and only those', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'archlens-atomic-'));
+  mkdirSync(join(dir, 'node'));
+  const fail = () => { throw new Error('mudou'); };
+  assert.throws(() => writeFilesAtomically(dir, new Map([['device/a.md', 'a'], ['x/y/z/b.md', 'b'], ['node/c.md', 'c']]), { check: fail }), /mudou/);
+  assert.deepEqual(readdirSync(dir).sort(), ['node']);
+  assert.deepEqual(readdirSync(join(dir, 'node')), [], 'the folder that was there stays, without temp files');
 });

@@ -2,6 +2,8 @@
 id: antifraude
 type: application-component
 title: Serviço Antifraude
+aliases:
+  - Serviço Antifraude
 c4: softwareSystem
 group: "[[grouping/plat-vendas|Plataforma de Vendas]]"
 external: true

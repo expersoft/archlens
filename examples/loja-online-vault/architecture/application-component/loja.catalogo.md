@@ -2,6 +2,8 @@
 id: loja.catalogo
 type: application-component
 title: API de Catálogo
+aliases:
+  - API de Catálogo
 c4: container
 parent: "[[application-component/loja|Plataforma de E-commerce]]"
 technology: Go

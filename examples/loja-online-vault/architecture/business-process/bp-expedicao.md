@@ -2,6 +2,8 @@
 id: bp-expedicao
 type: business-process
 title: Expedição
+aliases:
+  - Expedição
 relationships:
   - id: bp-expedicao-realization-bs-entrega
     type: realization

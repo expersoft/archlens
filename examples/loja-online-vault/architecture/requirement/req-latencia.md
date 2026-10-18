@@ -2,6 +2,8 @@
 id: req-latencia
 type: requirement
 title: Checkout < 2s (p95)
+aliases:
+  - Checkout < 2s (p95)
 relationships:
   - id: req-latencia-influence-goal-abandono
     type: influence

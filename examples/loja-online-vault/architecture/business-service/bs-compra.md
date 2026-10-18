@@ -2,6 +2,8 @@
 id: bs-compra
 type: business-service
 title: Compra online
+aliases:
+  - Compra online
 relationships:
   - id: bs-compra-serving-br-comprador
     type: serving

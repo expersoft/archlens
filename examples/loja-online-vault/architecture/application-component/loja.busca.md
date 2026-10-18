@@ -2,6 +2,8 @@
 id: loja.busca
 type: application-component
 title: Índice de Busca
+aliases:
+  - Índice de Busca
 c4: container
 parent: "[[application-component/loja|Plataforma de E-commerce]]"
 technology: Elasticsearch

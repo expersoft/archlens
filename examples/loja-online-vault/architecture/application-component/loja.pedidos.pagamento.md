@@ -2,6 +2,8 @@
 id: loja.pedidos.pagamento
 type: application-component
 title: Pagamento Adapter
+aliases:
+  - Pagamento Adapter
 c4: component
 parent: "[[application-component/loja.pedidos|API de Pedidos]]"
 technology: Spring Bean

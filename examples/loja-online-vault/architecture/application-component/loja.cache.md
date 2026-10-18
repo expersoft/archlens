@@ -2,6 +2,8 @@
 id: loja.cache
 type: application-component
 title: Cache de Carrinho
+aliases:
+  - Cache de Carrinho
 c4: container
 parent: "[[application-component/loja|Plataforma de E-commerce]]"
 technology: Redis

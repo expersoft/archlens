@@ -2,6 +2,8 @@
 id: loja.bff
 type: application-component
 title: BFF
+aliases:
+  - BFF
 c4: container
 parent: "[[application-component/loja|Plataforma de E-commerce]]"
 technology: Node.js / GraphQL

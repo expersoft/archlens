@@ -2,6 +2,8 @@
 id: gateway
 type: application-component
 title: Gateway de Pagamentos
+aliases:
+  - Gateway de Pagamentos
 c4: softwareSystem
 external: true
 relationships:

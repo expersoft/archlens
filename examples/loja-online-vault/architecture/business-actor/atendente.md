@@ -2,6 +2,8 @@
 id: atendente
 type: business-actor
 title: Atendente SAC
+aliases:
+  - Atendente SAC
 c4: person
 relationships:
   - id: atendente-assignment-bp-atendimento

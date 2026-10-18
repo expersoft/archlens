@@ -2,6 +2,8 @@
 id: plat-backoffice
 type: grouping
 title: Plataforma de Back-office
+aliases:
+  - Plataforma de Back-office
 sources:
   - kind: prompt
     ref: agrupamentos

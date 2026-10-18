@@ -2,6 +2,8 @@
 id: as-logistica
 type: application-service
 title: Serviço de Logística
+aliases:
+  - Serviço de Logística
 relationships:
   - id: as-logistica-serving-bp-expedicao
     type: serving

@@ -2,6 +2,8 @@
 id: erp
 type: application-component
 title: ERP
+aliases:
+  - ERP
 c4: softwareSystem
 group: "[[grouping/plat-backoffice|Plataforma de Back-office]]"
 technology: SAP ECC

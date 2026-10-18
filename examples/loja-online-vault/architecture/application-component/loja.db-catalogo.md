@@ -2,6 +2,8 @@
 id: loja.db-catalogo
 type: application-component
 title: DB Catálogo
+aliases:
+  - DB Catálogo
 c4: container
 parent: "[[application-component/loja|Plataforma de E-commerce]]"
 technology: MongoDB

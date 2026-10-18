@@ -2,6 +2,8 @@
 id: art-pedidos
 type: artifact
 title: pedidos-api.jar
+aliases:
+  - pedidos-api.jar
 relationships:
   - id: art-pedidos-realization-loja.pedidos
     type: realization

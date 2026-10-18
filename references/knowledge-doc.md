@@ -87,13 +87,16 @@ uma pasta por tipo ArchiMate com um arquivo por elemento, `<tipo>/<id>.md`. O `A
 Relações ficam na página do elemento de origem; a hierarquia é o campo `parent`. Um `.md` dentro de uma pasta de tipo é
 sempre uma página (sem frontmatter válido, `E_STORE_MD`); `.md` fora delas, `.obsidian/` e anexos são ignorados e nunca
 apagados. Só se remove uma pasta de tipo que o próprio `apply` esvaziou. Ids com `[`, `]`, `|`, `#` ou `^` são recusados
-(`E_STORE_MD_ID`), assim como descrições que contêm os marcadores do archlens (`E_STORE_MD`).
+(`E_STORE_MD_ID`), como também dois ids do mesmo tipo que só diferem em maiúsculas e minúsculas (seriam um arquivo só em
+sistemas que não as distinguem), e descrições que contêm os marcadores do archlens (`E_STORE_MD`).
 
 ```markdown
 ---
 id: loja.pedidos
 type: application-component
 title: API de Pedidos
+aliases:
+  - API de Pedidos
 c4: container
 parent: "[[application-component/loja|Plataforma de E-commerce]]"
 technology: Java / Spring Boot
@@ -121,10 +124,11 @@ Texto das pessoas fica aqui e é preservado.
 ```
 
 - O frontmatter (`id`, `type`, `title`, `c4`, `parent`, `group`, `relationships`, `properties`, `sources`, …) é o elemento
-  e é lido como está. Os campos de ligação por tipo de relação (`serving`, `access`, …) e as `tags` são derivados e
+  e é lido como está; `aliases` começa pelo nome do elemento (o Obsidian e o gbrain acham a página por ele), que a
+  leitura tira de volta, e segue com os aliases do modelo. Os campos de ligação por tipo de relação (`serving`, `access`, …) e as `tags` são derivados e
   regravados a cada escrita: tags que não sejam `archlens/tag/*` são reescritas na próxima gravação.
 - Tudo entre o título da página e o bloco do archlens é a **descrição**. O bloco `archlens:begin` … `archlens:end` é
-  regenerado. Só o texto **depois** do bloco é das pessoas: é preservado por toda gravação do conector markdown, inclusive se o elemento mudar de tipo (e de pasta). Só se perde ao converter para `json`, que não tem onde guardá-lo (veja `store convert`).
+  regenerado. Só o texto **depois** do bloco é das pessoas: é preservado por toda gravação do conector markdown, inclusive se o elemento mudar de tipo (e de pasta). Se o elemento é removido, a página sai e esse texto vai, na mesma gravação, para `notes/removidos/<tipo>/<id>.md` (uma linha de cabeçalho com o nome e o id, depois o texto; uma nova remoção do mesmo id acrescenta ao fim); o `merge --apply` diz o caminho. Essa pasta não faz parte da base e o archlens nunca a apaga. Só se perde ao converter para `json`, que não tem onde guardá-lo (veja `store convert`).
 - Wikilinks são sempre `[[<tipo>/<id>|<nome>]]`; renomear um elemento atualiza os links nas outras páginas.
 
 ### `gbrain-pack.yaml`

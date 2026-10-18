@@ -2,6 +2,8 @@
 id: ss-postgres
 type: system-software
 title: PostgreSQL 16 (RDS)
+aliases:
+  - PostgreSQL 16 (RDS)
 relationships:
   - id: ss-postgres-serving-loja.pedidos
     type: serving

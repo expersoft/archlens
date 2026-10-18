@@ -2,6 +2,8 @@
 id: tn-cdn
 type: node
 title: CDN CloudFront
+aliases:
+  - CDN CloudFront
 relationships:
   - id: tn-cdn-serving-loja.web
     type: serving

@@ -2,6 +2,8 @@
 id: as-checkout
 type: application-service
 title: Serviço de Checkout
+aliases:
+  - Serviço de Checkout
 relationships:
   - id: as-checkout-serving-bp-checkout
     type: serving

@@ -33,8 +33,9 @@ Requer Node ≥ 18. A checagem visual (`deliver`/`build`) usa `playwright-core` 
    por tipo, um `.md` por elemento). `archlens store convert <base> --to markdown|json` troca de conector mantendo a
    versão e os arquivos do usuário. Para abrir no Obsidian, abra a pasta da base como vault; para o gbrain, use o
    `gbrain-pack.yaml` dela. Nunca edite as páginas à mão fora do texto depois do bloco do archlens (`archlens:end`):
-   o resto é regravado. Esse texto é preservado por toda gravação markdown e só se perde ao converter para `json`, que
-   exige `--force` (sem ele, `E_STORE_CONVERT` e nada é gravado).
+   o resto é regravado. Esse texto é preservado por toda gravação markdown (se o elemento é removido, vai para
+   `notes/removidos/<tipo>/<id>.md`, e o `merge --apply` diz onde) e só se perde ao converter para `json`, que exige
+   `--force` (sem ele, `E_STORE_CONVERT` e nada é gravado).
 2. **Só pedido de visão, nada novo a modelar?** Vá ao passo 7.
 3. **Traduza a informação nova em delta** (`references/merge.md`):
    - **texto livre**: siga `references/free-text.md` (`source` com o trecho, `inferred` + `confidence`,

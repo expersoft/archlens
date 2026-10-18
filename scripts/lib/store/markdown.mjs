@@ -1,6 +1,6 @@
 // Base as an Obsidian/gbrain vault: manifest, views, changelog and notes as in the json connector, and one page per
 // element in a folder named after its ArchiMate type (<type>/<id>.md). Files outside the type folders are never read nor
-// removed; the text people write after the archlens block of a page is kept.
+// removed; the text people write after the archlens block of a page is kept, in notes/removidos/ once its element goes.
 import { existsSync, readFileSync, readdirSync, statSync, rmdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { ELEMENT_TYPES } from '../registry.mjs';
@@ -15,6 +15,8 @@ import { relationshipIds } from '../merge.mjs';
 const json = v => JSON.stringify(v, null, 2) + '\n';
 // A file name, and a wikilink target: no "[", "]" or "|" (link syntax) nor "#" or "^" (heading and block anchors).
 const FILE_SAFE = /^[^/\\:*?"<>|\0[\]#^]+$/;
+// Where the human text of the page of a removed element goes (never read as base content nor removed).
+export const REMOVED = 'notes/removidos/';
 const typeFolders = dir => readdirSync(dir).filter(n => ELEMENT_TYPES[n] && statSync(join(dir, n)).isDirectory()).sort();
 
 export function readVault(dir, { anyFormat = false } = {}) {
@@ -33,7 +35,7 @@ export function readVault(dir, { anyFormat = false } = {}) {
         throw storeError('E_STORE_MD_PATH', `${rel}: o elemento "${element.id}" (${element.type}) deveria estar em ${pagePath(element)}`, { file: rel });
       }
       if (pages.has(element.id)) throw storeError('E_STORE_DUP_ID', `elemento "${element.id}" aparece em ${pages.get(element.id).rel} e em ${rel}`);
-      pages.set(element.id, { rel, userText });
+      pages.set(element.id, { rel, userText, name: element.name });
       elements.push(element);
       outgoing.set(element.id, relationships);
     }
@@ -64,14 +66,28 @@ export function vaultContents(dir, { raw, notes }, cur) {
   for (const e of els) if (e.parent != null && byId.has(e.parent)) children.set(e.parent, [...(children.get(e.parent) ?? []), e.id]);
   for (const list of children.values()) list.sort(); // by id, as the vault reads them back: same base, same bytes
   const old = cur?.ctx.pages ?? new Map();
+  const byPath = new Map(); // lower-cased page path → id: one file on a case-insensitive file system
   for (const el of els) {
     if (!FILE_SAFE.test(el.id) || !ELEMENT_TYPES[el.type]) throw storeError('E_STORE_MD_ID', `"${el.id}" (${el.type}) não pode virar o arquivo ${pagePath(el)}`);
+    const key = pagePath(el).toLowerCase();
+    if (byPath.has(key) && byPath.get(key) !== el.id) {
+      throw storeError('E_STORE_MD_ID', `"${byPath.get(key)}" e "${el.id}" (${el.type}) só diferem em maiúsculas e minúsculas: seriam o mesmo arquivo ${pagePath(el)} em sistemas que não distinguem`);
+    }
+    byPath.set(key, el.id);
     if (typeof el.description === 'string' && (el.description.includes(BEGIN) || el.description.includes(END))) {
       throw storeError('E_STORE_MD', `a descrição de "${el.id}" contém o marcador ${el.description.includes(BEGIN) ? BEGIN : END}, que delimita o bloco do archlens na página`);
     }
     files.set(pagePath(el), renderPage(el, { outgoing: outgoing.get(el.id), children: children.get(el.id) ?? [], info, userText: old.get(el.id)?.userText }));
   }
   for (const { rel } of old.values()) if (!files.has(rel)) files.set(rel, null);
+  // The page of a removed element goes; what people wrote in it is kept (a retyped element carries it to its new page).
+  for (const [id, { rel, userText, name }] of old) {
+    if (byId.has(id) || !userText?.trim()) continue;
+    const keep = `${REMOVED}${rel}`;
+    const before = existsSync(join(dir, keep)) ? `${readFileSync(join(dir, keep), 'utf8').replace(/\n*$/, '')}\n\n` : '';
+    const label = String(name ?? id).replace(/\s+/g, ' ').trim();
+    files.set(keep, `${before}# ${label} ("${id}"): elemento removido da base; texto escrito em ${rel}\n${userText.replace(/\n*$/, '')}\n`);
+  }
   files.set(PACK_FILE, gbrainPack(raw));
   return files;
 }
@@ -87,6 +103,7 @@ function removeEmptiedFolders(dir, folders) {
 export function markdownConnector(locator, describe) {
   const dir = locator.path;
   let emptied = new Set();
+  let preserved = [];
   return fileConnector({
     kind: 'markdown', dir, locator, describe,
     load: opts => (existsSync(join(dir, MANIFEST)) ? readVault(dir, opts) : null),
@@ -94,8 +111,10 @@ export function markdownConnector(locator, describe) {
       const files = vaultContents(dir, next, cur);
       // The folders of the pages this apply deletes or moves away: the only ones it may remove once emptied.
       emptied = new Set([...files].filter(([rel, text]) => text === null && ELEMENT_TYPES[rel.split('/')[0]]).map(([rel]) => rel.split('/')[0]));
+      preserved = [...files.keys()].filter(rel => rel.startsWith(REMOVED));
       return files;
     },
     after: () => removeEmptiedFolders(dir, emptied),
+    preserved: () => preserved,
   });
 }

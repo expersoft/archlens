@@ -2,6 +2,8 @@
 id: ss-kafka
 type: system-software
 title: Apache Kafka (MSK)
+aliases:
+  - Apache Kafka (MSK)
 relationships:
   - id: ss-kafka-realization-ts-mensageria
     type: realization

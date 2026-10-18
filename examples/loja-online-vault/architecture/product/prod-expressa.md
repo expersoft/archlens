@@ -2,6 +2,8 @@
 id: prod-expressa
 type: product
 title: Entrega Expressa
+aliases:
+  - Entrega Expressa
 relationships:
   - id: prod-expressa-aggregation-bs-entrega
     type: aggregation

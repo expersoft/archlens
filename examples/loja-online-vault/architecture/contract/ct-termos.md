@@ -2,6 +2,8 @@
 id: ct-termos
 type: contract
 title: Termos de Compra
+aliases:
+  - Termos de Compra
 tags:
   - archlens/contract
 ---

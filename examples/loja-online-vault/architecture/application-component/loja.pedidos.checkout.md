@@ -2,6 +2,8 @@
 id: loja.pedidos.checkout
 type: application-component
 title: Checkout Controller
+aliases:
+  - Checkout Controller
 c4: component
 parent: "[[application-component/loja.pedidos|API de Pedidos]]"
 technology: Spring MVC

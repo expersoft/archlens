@@ -2,6 +2,8 @@
 id: transportadora
 type: application-component
 title: API da Transportadora
+aliases:
+  - API da Transportadora
 c4: softwareSystem
 external: true
 relationships:

@@ -2,6 +2,8 @@
 id: as-faturamento
 type: application-service
 title: Serviço de Faturamento
+aliases:
+  - Serviço de Faturamento
 relationships:
   - id: as-faturamento-serving-bp-faturamento
     type: serving

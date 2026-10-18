@@ -2,6 +2,8 @@
 id: ss-elastic
 type: system-software
 title: Elasticsearch
+aliases:
+  - Elasticsearch
 relationships:
   - id: ss-elastic-serving-loja.catalogo
     type: serving

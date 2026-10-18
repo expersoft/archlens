@@ -2,6 +2,8 @@
 id: as-pagamento
 type: application-service
 title: Serviço de Pagamento
+aliases:
+  - Serviço de Pagamento
 relationships:
   - id: as-pagamento-serving-bp-checkout
     type: serving

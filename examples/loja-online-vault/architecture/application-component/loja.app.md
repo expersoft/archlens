@@ -2,6 +2,8 @@
 id: loja.app
 type: application-component
 title: App Mobile
+aliases:
+  - App Mobile
 c4: container
 parent: "[[application-component/loja|Plataforma de E-commerce]]"
 technology: React Native

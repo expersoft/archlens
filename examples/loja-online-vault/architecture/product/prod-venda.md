@@ -2,6 +2,8 @@
 id: prod-venda
 type: product
 title: Venda Online
+aliases:
+  - Venda Online
 relationships:
   - id: prod-venda-aggregation-bs-compra
     type: aggregation

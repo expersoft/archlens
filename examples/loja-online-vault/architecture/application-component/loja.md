@@ -2,6 +2,8 @@
 id: loja
 type: application-component
 title: Plataforma de E-commerce
+aliases:
+  - Plataforma de E-commerce
 c4: softwareSystem
 group: "[[grouping/plat-vendas|Plataforma de Vendas]]"
 properties:

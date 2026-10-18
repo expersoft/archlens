@@ -2,6 +2,8 @@
 id: plat-vendas
 type: grouping
 title: Plataforma de Vendas
+aliases:
+  - Plataforma de Vendas
 sources:
   - kind: prompt
     ref: agrupamentos

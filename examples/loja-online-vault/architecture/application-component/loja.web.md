@@ -2,6 +2,8 @@
 id: loja.web
 type: application-component
 title: Web Storefront
+aliases:
+  - Web Storefront
 c4: container
 parent: "[[application-component/loja|Plataforma de E-commerce]]"
 technology: Next.js

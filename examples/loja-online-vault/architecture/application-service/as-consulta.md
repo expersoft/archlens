@@ -2,6 +2,8 @@
 id: as-consulta
 type: application-service
 title: Consulta de Pedidos
+aliases:
+  - Consulta de Pedidos
 relationships:
   - id: as-consulta-serving-bp-atendimento
     type: serving

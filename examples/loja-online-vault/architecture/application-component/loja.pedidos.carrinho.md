@@ -2,6 +2,8 @@
 id: loja.pedidos.carrinho
 type: application-component
 title: Carrinho Service
+aliases:
+  - Carrinho Service
 c4: component
 parent: "[[application-component/loja.pedidos|API de Pedidos]]"
 technology: Spring Bean

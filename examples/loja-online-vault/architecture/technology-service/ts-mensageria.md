@@ -2,6 +2,8 @@
 id: ts-mensageria
 type: technology-service
 title: Mensageria
+aliases:
+  - Mensageria
 relationships:
   - id: ts-mensageria-serving-loja.pedidos
     type: serving

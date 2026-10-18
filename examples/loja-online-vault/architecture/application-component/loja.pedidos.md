@@ -2,6 +2,8 @@
 id: loja.pedidos
 type: application-component
 title: API de Pedidos
+aliases:
+  - API de Pedidos
 c4: container
 parent: "[[application-component/loja|Plataforma de E-commerce]]"
 technology: Java / Spring Boot

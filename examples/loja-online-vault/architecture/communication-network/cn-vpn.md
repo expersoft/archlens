@@ -2,6 +2,8 @@
 id: cn-vpn
 type: communication-network
 title: VPN site-to-site
+aliases:
+  - VPN site-to-site
 relationships:
   - id: cn-vpn-serving-erp
     type: serving

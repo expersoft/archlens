@@ -2,6 +2,8 @@
 id: ts-hosting
 type: technology-service
 title: Hospedagem de contêineres
+aliases:
+  - Hospedagem de contêineres
 relationships:
   - id: ts-hosting-serving-loja.pedidos
     type: serving

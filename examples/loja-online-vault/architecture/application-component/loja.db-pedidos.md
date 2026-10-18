@@ -2,6 +2,8 @@
 id: loja.db-pedidos
 type: application-component
 title: DB Pedidos
+aliases:
+  - DB Pedidos
 c4: container
 parent: "[[application-component/loja|Plataforma de E-commerce]]"
 technology: PostgreSQL

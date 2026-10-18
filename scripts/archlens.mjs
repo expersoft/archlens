@@ -18,7 +18,7 @@ import { resolveBase, openStore, frontmatterSource, MANIFEST, assertWritable as 
 import { diffRaw, contentVersion } from './lib/store/ops.mjs';
 import { migrateRaw, reportLines } from './lib/migrate.mjs';
 import { FORMAT, isCanonicalFormat } from './lib/canonical.mjs';
-import { saveFolder, loadFolder } from './lib/store/folder.mjs';
+import { saveFolder, loadFolder, storeKind } from './lib/store/folder.mjs';
 import { convertFolder } from './lib/store/convert.mjs';
 import { scanSource } from './lib/scan/index.mjs';
 import { summarize, formatSummary } from './lib/scan/summary.mjs';
@@ -372,15 +372,18 @@ async function main() {
       let loc;
       try { loc = resolveBase(file); } catch (e) { fail(e.message); }
       if (loc.kind === 'folder' && !loc.exists) fail(`base não encontrada: ${file}`);
-      let loaded;
+      let loaded, kind;
       try {
-        // In place the folder is converted below the contract (origins and layout travel to the copy).
-        loaded = loc.kind === 'folder' ? loadFolder(loc.path, { anyFormat: true }) : openStore(loc).read({ anyFormat: true });
+        // In place a json folder is converted below the contract (origins and layout travel to the copy); a vault is
+        // read by its connector, only to say it needs no migration.
+        kind = loc.kind === 'folder' ? storeKind(readJson(join(loc.path, MANIFEST)), join(loc.path, MANIFEST)) : null;
+        loaded = kind === 'json' ? loadFolder(loc.path, { anyFormat: true }) : openStore(loc).read({ anyFormat: true });
       } catch (e) { fail(e.message); }
       const { raw, notes } = loaded;
       // A 2.0 base still in the old single-file container only changes container.
       const already = isCanonicalFormat(raw?.archlens);
       if (already && loc.kind === 'folder') fail(`${file} já está no formato ${FORMAT}`);
+      if (kind === 'markdown') fail(`${file}: "archlens migrate" converte só bases json; esta base usa o conector markdown`);
       const res = already ? { raw, report: null, errors: validateModel(raw).errors, diffs: [] } : migrateRaw(raw);
       if (res.errors.length) { printIssues(res.errors, 'ERRO'); fail('corrija os erros do modelo antes de migrar; nada foi gravado', 2); }
       if (res.diffs.length) {
@@ -549,12 +552,13 @@ async function main() {
         }
         if (!res.entry) { console.log('= nada mudou; a base não foi regravada'); break; }
         assertDocOwned(store);
-        writeBase(store, baseRaw ? loaded : null, { raw: res.raw, notes }, startVersion);
+        const { preserved = [] } = writeBase(store, baseRaw ? loaded : null, { raw: res.raw, notes }, startVersion);
         const saved = loadBase(store); // the document follows what is on disk (a split model regroups items by file)
         const doc = writeDoc(store, saved.raw, saved.notes);
         const e = res.entry;
         const st = Object.keys(e.status).length;
         console.log(`✓ ${store.describe()} e ${relPath(doc)} (revisão ${res.raw.changelog.length}): +${e.added.length} ~${e.changed.length} −${e.removed.length}${st ? `, ${st} mudança(s) de status` : ''}`);
+        for (const rel of preserved) console.log(`  texto da página removida guardado em ${relPath(join(store.locator.path, rel))}`);
         console.log(`  commit sugerido: git add ${relPath(store.locator.path)} ${relPath(doc)} && git commit -m ${JSON.stringify(`docs(arquitetura): ${e.summary}`)}`);
       } else fail(usage);
       break;

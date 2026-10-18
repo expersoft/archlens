@@ -2,6 +2,8 @@
 id: loja.pedidos.eventos
 type: application-component
 title: Publicador de Eventos
+aliases:
+  - Publicador de Eventos
 c4: component
 parent: "[[application-component/loja.pedidos|API de Pedidos]]"
 technology: Kafka client

@@ -2,6 +2,8 @@
 id: bp-atendimento
 type: business-process
 title: Tratar solicitação
+aliases:
+  - Tratar solicitação
 relationships:
   - id: bp-atendimento-realization-bs-atendimento
     type: realization

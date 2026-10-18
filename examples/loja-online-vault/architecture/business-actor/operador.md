@@ -2,6 +2,8 @@
 id: operador
 type: business-actor
 title: Operador de Logística
+aliases:
+  - Operador de Logística
 c4: person
 relationships:
   - id: operador-assignment-bp-expedicao

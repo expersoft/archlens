@@ -54,9 +54,10 @@ export function subgraphOf(raw, { seeds = [], depth = 1, via } = {}) {
 /**
  * A connector over a base folder. `load(opts)` reads it ({ raw, notes, ctx } or null when there is no base);
  * `contents(next, cur)` lists every file the base should have (relative path → text, null to delete); `after(next)`
- * runs once the files are in place. apply writes only the files whose text changes, all or nothing.
+ * runs once the files are in place; `preserved()` lists the files this apply wrote to keep text people wrote in what it
+ * removed. apply writes only the files whose text changes, all or nothing.
  */
-export function fileConnector({ kind, dir, locator, describe, load, contents, after }) {
+export function fileConnector({ kind, dir, locator, describe, load, contents, after, preserved }) {
   const c = {
     kind, writable: true, locator,
     describe: () => describe,
@@ -81,7 +82,7 @@ export function fileConnector({ kind, dir, locator, describe, load, contents, af
       }
       writeFilesAtomically(dir, changes, { check: () => { const v = contentVersion(load()); if (v !== now) throw conflictError(baseVersion, v); } });
       after?.(next);
-      return { version: contentVersion(next) };
+      return { version: contentVersion(next), preserved: preserved?.() ?? [] };
     },
   };
   return c;

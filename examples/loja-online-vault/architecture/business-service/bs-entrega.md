@@ -2,6 +2,8 @@
 id: bs-entrega
 type: business-service
 title: Entrega do pedido
+aliases:
+  - Entrega do pedido
 tags:
   - archlens/business-service
 ---

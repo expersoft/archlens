@@ -2,6 +2,8 @@
 id: cliente
 type: business-actor
 title: Cliente
+aliases:
+  - Cliente
 c4: person
 relationships:
   - id: cliente-assignment-br-comprador

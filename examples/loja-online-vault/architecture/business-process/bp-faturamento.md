@@ -2,6 +2,8 @@
 id: bp-faturamento
 type: business-process
 title: Faturamento
+aliases:
+  - Faturamento
 relationships:
   - id: bp-faturamento-triggering-bp-expedicao
     type: triggering

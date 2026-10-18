@@ -2,6 +2,8 @@
 id: bp-checkout
 type: business-process
 title: Checkout
+aliases:
+  - Checkout
 relationships:
   - id: bp-checkout-realization-bs-compra
     type: realization

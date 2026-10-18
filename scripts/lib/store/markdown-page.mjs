@@ -29,7 +29,8 @@ export function renderPage(el, { outgoing = [], children = [], info, userText })
   put('id', el.id);
   put('type', el.type);
   put('title', el.name);
-  put('aliases', el.aliases);
+  // The name comes first in aliases (Obsidian and gbrain find the page by it); reading drops it back out.
+  put('aliases', el.name === undefined ? el.aliases : [el.name, ...(Array.isArray(el.aliases) ? el.aliases : [])]);
   put('c4', el.c4?.kind);
   put('parent', el.parent == null ? el.parent : wikilink(el.parent, info));
   put('group', el.group == null ? el.group : wikilink(el.group, info));
@@ -85,6 +86,10 @@ export function parsePage(text, rel) {
   }
   const { id, type, title, c4, parent, group, tags, relationships, ...rest } = fm;
   for (const t of LINK_FIELDS) delete rest[t];
+  if (title !== undefined && Array.isArray(rest.aliases) && rest.aliases[0] === title) {
+    rest.aliases = rest.aliases.slice(1);
+    if (!rest.aliases.length) delete rest.aliases;
+  }
   const element = { id, type, ...(title !== undefined ? { name: title } : {}), ...(description !== undefined ? { description } : {}), ...rest };
   if (c4 != null) element.c4 = { kind: c4 };
   if (parent !== undefined) element.parent = parent === null ? null : unlink(parent);

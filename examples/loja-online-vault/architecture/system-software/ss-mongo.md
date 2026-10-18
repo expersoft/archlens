@@ -2,6 +2,8 @@
 id: ss-mongo
 type: system-software
 title: MongoDB Atlas
+aliases:
+  - MongoDB Atlas
 relationships:
   - id: ss-mongo-serving-loja.catalogo
     type: serving

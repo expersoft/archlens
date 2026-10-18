@@ -2,6 +2,8 @@
 id: loja.pedidos.repo
 type: application-component
 title: Pedido Repository
+aliases:
+  - Pedido Repository
 c4: component
 parent: "[[application-component/loja.pedidos|API de Pedidos]]"
 technology: Spring Data JPA

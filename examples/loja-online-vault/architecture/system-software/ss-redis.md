@@ -2,6 +2,8 @@
 id: ss-redis
 type: system-software
 title: Redis (ElastiCache)
+aliases:
+  - Redis (ElastiCache)
 relationships:
   - id: ss-redis-serving-loja.pedidos
     type: serving

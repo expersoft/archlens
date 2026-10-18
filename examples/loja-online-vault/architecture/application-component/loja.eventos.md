@@ -2,6 +2,8 @@
 id: loja.eventos
 type: application-component
 title: Barramento de Eventos
+aliases:
+  - Barramento de Eventos
 c4: container
 parent: "[[application-component/loja|Plataforma de E-commerce]]"
 technology: Kafka

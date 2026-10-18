@@ -2,6 +2,8 @@
 id: as-catalogo
 type: application-service
 title: Serviço de Catálogo
+aliases:
+  - Serviço de Catálogo
 relationships:
   - id: as-catalogo-serving-bp-checkout
     type: serving

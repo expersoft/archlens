@@ -2,6 +2,8 @@
 id: do-pedido
 type: data-object
 title: Registro de Pedido
+aliases:
+  - Registro de Pedido
 relationships:
   - id: do-pedido-realization-bo-pedido
     type: realization

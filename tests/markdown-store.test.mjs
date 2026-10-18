@@ -142,3 +142,78 @@ test('an empty type folder a person made survives an apply; one the apply emptie
   assert.ok(!existsSync(join(dir, 'system-software')), 'the folder this apply emptied goes away');
   assert.ok(existsSync(join(dir, 'device')));
 });
+
+test('removing an element keeps the text people wrote in its page under notes/removidos/', () => {
+  const { dir, c } = vault();
+  const rel = 'system-software/pg.md';
+  writeFileSync(join(dir, rel), `${page(dir, rel)}\nBackup diário às 3h.\n`);
+  const cur = c().read();
+  const next = structuredClone(cur);
+  next.raw.model.elements = next.raw.model.elements.filter(e => e.id !== 'pg');
+  next.raw.model.relationships = next.raw.model.relationships.filter(r => r.from !== 'pg' && r.to !== 'pg');
+  const res = c().apply(diffRaw(cur, next), { baseVersion: c().version() });
+  assert.ok(!existsSync(join(dir, rel)), 'the page goes away');
+  const kept = 'notes/removidos/system-software/pg.md';
+  assert.deepEqual(res.preserved, [kept]);
+  const text = page(dir, kept);
+  assert.match(text.split('\n')[0], /PostgreSQL 16/);
+  assert.match(text.split('\n')[0], /pg/);
+  assert.match(text, /Backup diário às 3h\./);
+  assert.equal(contentVersion(c().read()), contentVersion(next), 'the kept text is not part of the base');
+  // A later apply neither reads nor removes it.
+  change(c(), raw => { raw.model.elements.find(e => e.id === 'loja.web').technology = 'Remix'; });
+  assert.match(page(dir, kept), /Backup diário às 3h\./);
+  // Back and removed again: the new text goes after the one already kept.
+  change(c(), raw => { raw.model.elements.push({ id: 'pg', type: 'system-software', name: 'PostgreSQL 17' }); });
+  writeFileSync(join(dir, rel), `${page(dir, rel)}\nRéplica em outra zona.\n`);
+  change(c(), raw => { raw.model.elements = raw.model.elements.filter(e => e.id !== 'pg'); });
+  assert.match(page(dir, kept), /Backup diário às 3h\.[\s\S]*PostgreSQL 17[\s\S]*Réplica em outra zona\./);
+});
+
+test('removing an element whose page has no human text leaves nothing behind', () => {
+  const { dir, c } = vault();
+  const cur = c().read();
+  const next = structuredClone(cur);
+  next.raw.model.elements = next.raw.model.elements.filter(e => e.id !== 'pg');
+  next.raw.model.relationships = next.raw.model.relationships.filter(r => r.from !== 'pg' && r.to !== 'pg');
+  const res = c().apply(diffRaw(cur, next), { baseVersion: c().version() });
+  assert.deepEqual(res.preserved, []);
+  assert.ok(!existsSync(join(dir, 'notes', 'removidos')));
+});
+
+test('the json connector reports no preserved files', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'archlens-json-'));
+  writeFileSync(join(dir, 'archlens.json'), JSON.stringify({ archlens: '2.0', name: 'x' }));
+  const c = openStore(resolveBase(dir));
+  const res = c.apply(diffRaw(c.read(), { raw: shop(), notes: {} }), { baseVersion: c.version() });
+  assert.deepEqual(res.preserved, []);
+});
+
+test('the page aliases start with the element name; reading gives back the model aliases as they were', () => {
+  const cases = [undefined, ['orders-service'], ['API', 'api-legada']]; // loja.api is named "API"
+  for (const aliases of cases) {
+    const raw = shop();
+    const el = raw.model.elements.find(e => e.id === 'loja.api');
+    if (aliases) el.aliases = aliases;
+    const { dir, c } = vault({ raw, notes: {} });
+    const rel = 'application-component/loja.api.md';
+    const fm = parseYaml(/^---\n([\s\S]*?)\n---/.exec(page(dir, rel))[1]);
+    assert.equal(fm.aliases[0], 'API', JSON.stringify(aliases));
+    for (const a of aliases ?? []) assert.ok(fm.aliases.includes(a));
+    if (!aliases?.includes('API')) assert.equal(new Set(fm.aliases).size, fm.aliases.length, 'no duplicates');
+    const back = c().read().raw.model.elements.find(e => e.id === 'loja.api');
+    assert.deepEqual(back.aliases, aliases, JSON.stringify(aliases));
+    assert.equal(contentVersion(c().read()), contentVersion({ raw, notes: {} }));
+    const bytes = page(dir, rel);
+    change(c(), () => {});
+    assert.equal(page(dir, rel), bytes, 'same bytes on a second write');
+  }
+});
+
+test('two ids of one type that differ only by letter case are refused (one file on case-insensitive disks)', () => {
+  const { dir, c } = vault();
+  const before = readdirSync(dir).sort();
+  assert.throws(() => change(c(), raw => { raw.model.elements.push({ id: 'n1', type: 'node', name: 'A' }, { id: 'N1', type: 'node', name: 'B' }); }),
+    e => e.code === 'E_STORE_MD_ID' && /"n1"/.test(e.message) && /"N1"/.test(e.message));
+  assert.deepEqual(readdirSync(dir).sort(), before);
+});

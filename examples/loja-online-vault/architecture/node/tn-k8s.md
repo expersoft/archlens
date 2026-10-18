@@ -2,6 +2,8 @@
 id: tn-k8s
 type: node
 title: Cluster Kubernetes (EKS)
+aliases:
+  - Cluster Kubernetes (EKS)
 relationships:
   - id: tn-k8s-realization-ts-hosting
     type: realization

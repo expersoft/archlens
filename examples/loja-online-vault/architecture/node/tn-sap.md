@@ -2,6 +2,8 @@
 id: tn-sap
 type: node
 title: Servidor SAP (on-premises)
+aliases:
+  - Servidor SAP (on-premises)
 relationships:
   - id: tn-sap-serving-erp
     type: serving
