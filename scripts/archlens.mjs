@@ -12,6 +12,7 @@ import { renderHtml } from './lib/render.mjs';
 import { suggestViews } from './lib/suggest.mjs';
 import { inspectHtml } from './lib/deliver.mjs';
 import { planMerge, applyPlan, mergeError, canonicalJson, hashRaw, relationshipIds, PLAN_VERSION } from './lib/merge.mjs';
+import { answersOf } from './lib/api.mjs';
 import { formatPlanReport } from './lib/merge-report.mjs';
 import { previewModel, previewSummary, annotateView } from './lib/preview.mjs';
 import { resolveBase, openStore, frontmatterSource, MANIFEST, assertWritable as storeWritable } from './lib/store/index.mjs';
@@ -257,13 +258,13 @@ function loadPreview(store, args) {
 
 /** key → resolution of the answered items of an earlier plan (for merge --plan --answers). */
 function answersFrom(old, delta) {
-  if (old?.['archlens-plan'] !== PLAN_VERSION || !Array.isArray(old.items)) {
+  let res;
+  try { res = answersOf(old, delta); } catch (e) {
+    if (e.code !== 'E_PLAN_SCHEMA') throw e;
     throw mergeError('E_PLAN_SCHEMA', '--answers precisa de um plano do archlens (gerado por "archlens merge --plan")');
   }
-  if (canonicalJson(old.delta) !== canonicalJson(delta)) {
-    console.warn('  aviso: o plano de --answers foi gerado com outro delta; confira as respostas pré-preenchidas');
-  }
-  return new Map(old.items.filter(i => i.resolution != null).map(i => [i.key, i.resolution]));
+  if (res.otherDelta) console.warn('  aviso: o plano de --answers foi gerado com outro delta; confira as respostas pré-preenchidas');
+  return res.answers;
 }
 
 async function main() {

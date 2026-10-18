@@ -91,6 +91,42 @@
     },
     "errors": {
       "type": "array"
+    },
+    "state": {
+      "enum": [
+        "open",
+        "final"
+      ]
+    },
+    "entry": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "ops": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "op"
+        ],
+        "properties": {
+          "op": {
+            "enum": [
+              "setManifest",
+              "upsertElement",
+              "removeElement",
+              "upsertRelationship",
+              "removeRelationship",
+              "putView",
+              "removeView",
+              "putNote",
+              "appendHistory"
+            ]
+          }
+        }
+      }
     }
   }
 }
