@@ -766,3 +766,19 @@ test('merge --apply takes the plan version from the same read as the content it 
   assert.ok(!/startVersion = store\.version\(\)/.test(src));
   assert.match(src, /startVersion = contentVersion\(loaded\)/);
 });
+
+test('store convert to json refuses a vault with human text after the archlens block, unless --force', () => {
+  const dir = setup();
+  assert.equal(run(['store', 'convert', 'architecture', '--to', 'markdown'], dir).status, 0);
+  const page = join(dir, 'architecture', 'application-component', 'loja.api.md');
+  writeFileSync(page, readFileSync(page, 'utf8') + '\nNOTA HUMANA\n');
+  const before = snapshot(dir);
+  const r = run(['store', 'convert', 'architecture', '--to', 'json'], dir);
+  assert.notEqual(r.status, 0);
+  assert.match(r.stderr, /E_STORE_CONVERT[\s\S]*loja\.api\.md/);
+  assert.deepEqual(snapshot(dir), before, 'nothing written');
+  const f = run(['store', 'convert', 'architecture', '--to', 'json', '--force'], dir);
+  assert.equal(f.status, 0, f.stderr);
+  assert.match(f.stdout + f.stderr, /descartou[\s\S]*loja\.api\.md/);
+  assert.ok(existsSync(join(dir, 'architecture', 'model.json')));
+});

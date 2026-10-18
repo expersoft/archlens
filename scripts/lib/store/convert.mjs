@@ -20,7 +20,12 @@ function ownFiles(dir, kind) {
     .concat(readdirSync(join(dir, model)).filter(f => f.endsWith('.json')).map(f => model + f));
 }
 
-export function convertFolder(locator, to) {
+/** Pages of the vault with text people wrote after the archlens block (the json connector has nowhere to keep it). */
+function pagesWithHumanText(dir) {
+  return [...readVault(dir).ctx.pages.entries()].filter(([, p]) => (p.userText ?? '').trim()).map(([id, p]) => p.rel ?? id);
+}
+
+export function convertFolder(locator, to, { force = false } = {}) {
   if (!['json', 'markdown'].includes(to)) throw storeError('E_STORE_CONVERT', `conector de destino desconhecido "${to}"; use json ou markdown`);
   const source = openStore(locator);
   if (!source.writable) source.apply([]);
@@ -28,6 +33,11 @@ export function convertFolder(locator, to) {
   const cur = source.read();
   if (!cur) throw storeError('E_STORE_NOT_FOUND', `base não encontrada: ${source.describe()}`);
   const before = contentVersion(cur);
+  const dropped = source.kind === 'markdown' && to === 'json' ? pagesWithHumanText(locator.path) : [];
+  if (dropped.length && !force) {
+    const shown = dropped.slice(0, 10).join(', ') + (dropped.length > 10 ? ` e mais ${dropped.length - 10}` : '');
+    throw storeError('E_STORE_CONVERT', `${dropped.length} página(s) têm texto das pessoas depois do bloco do archlens (${shown}) e o conector json não tem onde guardá-lo; nada foi trocado. Copie o texto para architecture/notes/ ou use --force para convertê-las perdendo esse texto`);
+  }
   const dir = locator.path, tmp = `${dir}.convert-${process.pid}`, old = `${dir}.old-${process.pid}`;
   try {
     cpSync(dir, tmp, { recursive: true });
@@ -51,5 +61,5 @@ export function convertFolder(locator, to) {
   }
   let leftover = null;
   try { rmSync(old, { recursive: true, force: true }); } catch { leftover = old; }
-  return { from: source.kind, to, version: before, leftover };
+  return { from: source.kind, to, version: before, leftover, dropped };
 }

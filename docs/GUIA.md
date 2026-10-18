@@ -163,7 +163,7 @@ A pasta passa a ter uma subpasta por tipo ArchiMate e um `.md` por elemento (`ap
 com as relações como wikilinks. Abra `architecture/` como vault no Obsidian; o `gbrain-pack.yaml` da pasta é o schema pack
 para o gbrain (`gbrain schema use`; a verificação num gbrain instalado está pendente). A versão da base não muda, o
 `ARCHITECTURE.md` é regenerado e `notes/`, `diagrams/`, `.obsidian/` e anexos ficam onde estão. Edite à vontade o texto
-depois do bloco `archlens:end` de cada página; o resto é regravado pelo archlens. Exemplo pronto:
+depois do bloco `archlens:end` de cada página; o resto é regravado pelo archlens. Esse texto sobrevive a toda gravação, mas o `json` não tem onde guardá-lo: `store convert --to json` recusa (`E_STORE_CONVERT`, listando as páginas) enquanto houver texto das pessoas, e só com `--force` converte, descartando-o e avisando quais páginas o perderam. Exemplo pronto:
 `examples/loja-online-vault/`.
 
 ## Apresentando

@@ -39,7 +39,7 @@ Comandos
   merge     <base> <delta.json> --plan p.json  compara o delta com a base e grava o plano (decisões pendentes)
             [--answers antigo.json]         reaproveita as respostas de um plano anterior (ex.: duplicata = same)
   merge     <base> --apply p.json               aplica o plano respondido, regrava a base e registra o histórico
-  store convert <base> --to markdown|json   grava a base em outro conector (mesma pasta; versão inalterada)
+  store convert <base> --to markdown|json [--force]   grava a base em outro conector (mesma pasta; versão inalterada)
   views     <base>                           lista as visões definidas e sugere novas
   resolve   <base> --view k | --spec J       imprime o view IR (nós/arestas) de uma visão
   render    <base> --out f.html [seleção]    gera o HTML animado
@@ -560,7 +560,7 @@ async function main() {
       break;
     }
     case 'store': {
-      const usage = 'uso: archlens store convert <base> --to markdown|json';
+      const usage = 'uso: archlens store convert <base> --to markdown|json [--force]';
       if (file !== 'convert' || !args.to || args.to === true) fail(usage);
       const target = args._[2];
       let loc;
@@ -568,12 +568,13 @@ async function main() {
       if (loc.kind !== 'folder' || !loc.exists) fail(`E_STORE_CONVERT: ${target ?? '.'} não é uma pasta de base (migre bases antigas com "archlens migrate")`);
       assertDocOwned(openStore(loc)); // before anything is written
       let res;
-      try { res = convertFolder(loc, String(args.to)); } catch (e) { fail(e.message); }
+      try { res = convertFolder(loc, String(args.to), { force: args.force === true }); } catch (e) { fail(e.message); }
       // The element order of a vault differs from model.json, so the generated document is rewritten.
       const converted = openStore(resolveBase(loc.path));
       const back = loadBase(converted);
       const doc = writeDoc(converted, back.raw, back.notes, loc.docPath);
       console.log(`✓ ${relPath(loc.path)}/ agora usa o conector ${res.to} (era ${res.from}); a versão da base não mudou; ${relPath(doc)} regenerado`);
+      if (res.dropped.length) console.warn(`  aviso: --force descartou o texto das pessoas de ${res.dropped.length} página(s): ${res.dropped.join(', ')}`);
       if (res.leftover) console.warn(`  aviso: não consegui apagar ${relPath(res.leftover)}; remova-o à mão`);
       if (res.to === 'markdown') console.log(`  abra ${relPath(loc.path)}/ como vault no Obsidian; para o gbrain: gbrain schema use com ${relPath(join(loc.path, 'gbrain-pack.yaml'))}`);
       console.log(`  commit sugerido: git add -A ${relPath(loc.path)} && git commit -m "chore(archlens): base no conector ${res.to}"`);

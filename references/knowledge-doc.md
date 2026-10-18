@@ -124,7 +124,7 @@ Texto das pessoas fica aqui e é preservado.
   e é lido como está. Os campos de ligação por tipo de relação (`serving`, `access`, …) e as `tags` são derivados e
   regravados a cada escrita: tags que não sejam `archlens/tag/*` são reescritas na próxima gravação.
 - Tudo entre o título da página e o bloco do archlens é a **descrição**. O bloco `archlens:begin` … `archlens:end` é
-  regenerado. Só o texto **depois** do bloco é das pessoas: é preservado, inclusive se o elemento mudar de tipo (e de pasta).
+  regenerado. Só o texto **depois** do bloco é das pessoas: é preservado por toda gravação do conector markdown, inclusive se o elemento mudar de tipo (e de pasta). Só se perde ao converter para `json`, que não tem onde guardá-lo (veja `store convert`).
 - Wikilinks são sempre `[[<tipo>/<id>|<nome>]]`; renomear um elemento atualiza os links nas outras páginas.
 
 ### `gbrain-pack.yaml`
@@ -144,7 +144,7 @@ validate` e `gbrain import` (commit `a723db6`) não foram executados; o pack foi
 arquivos do conector de origem saem da cópia, o conector novo grava a base, a cópia é relida e a versão conferida
 (`E_STORE_CONVERT` se diferir) e só então a cópia substitui a pasta. A versão não muda e os arquivos que a base não
 possui (`notes/`, `diagrams/`, `.obsidian/`, anexos, `model/README.md`) ficam. O `ARCHITECTURE.md` é regenerado, porque o
-vault lê os elementos em outra ordem. Converter para o conector que a base já usa dá `E_STORE_CONVERT`. Exemplo gerado:
+vault lê os elementos em outra ordem. Converter para o conector que a base já usa dá `E_STORE_CONVERT`. Converter `markdown` → `json` com texto das pessoas depois do bloco do archlens em alguma página também dá `E_STORE_CONVERT` (lista as primeiras 10 páginas e o total) e nada é gravado; `--force` converte mesmo assim, descartando esse texto, e avisa quais páginas o perderam. Exemplo gerado:
 `examples/loja-online-vault/`.
 
 ## Formato antigo (1.x)
