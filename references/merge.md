@@ -185,10 +185,13 @@ posições no delta).
 ## Pré-visualizando (antes do apply)
 
 ```bash
-node scripts/archlens.mjs deliver architecture/ --delta delta.json --out prévia.html   # pendências no padrão do plano
-node scripts/archlens.mjs deliver architecture/ --plan plano.json --out prévia.html    # usa as respostas já dadas
-node scripts/archlens.mjs build architecture/ --delta delta.json                          # diagrams/<delta>-preview.html; nunca o .md
+node scripts/archlens.mjs deliver architecture/ --delta delta.json --out /tmp/prévia.html   # pendências no padrão do plano
+node scripts/archlens.mjs deliver architecture/ --plan plano.json --out /tmp/prévia.html    # usa as respostas já dadas
 ```
+
+O `--out` da prévia vai para fora da pasta da base. O `build` não é prévia: mesmo com `--delta` ele escreve
+`architecture/diagrams/<delta>-preview.html` dentro da base, por isso fica com a skill archlens-apply, nunca com a
+skill archlens-plan.
 
 A prévia roda o mesmo merge do plano e desenha a base com o delta aplicado:
 

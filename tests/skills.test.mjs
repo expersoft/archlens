@@ -119,3 +119,10 @@ test('archlens-plan ends with show and a deliver --plan preview', () => {
 test('the root SKILL.md is gone', () => {
   assert.equal(existsSync(join(ROOT, 'SKILL.md')), false);
 });
+
+test('merge.md previews never run build (it writes inside the base)', () => {
+  const text = read(join(ROOT, 'references', 'merge.md'));
+  const section = text.slice(text.indexOf('## Pré-visualizando'), text.indexOf('\n## ', text.indexOf('## Pré-visualizando') + 1));
+  assert.ok(section.length > 0);
+  for (const line of section.split('\n')) assert.doesNotMatch(line, /archlens(\.mjs)? build /, `prévia com build: "${line.trim()}"`);
+});
