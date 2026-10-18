@@ -1,9 +1,10 @@
 // The operations behind the plan/apply/show/query commands, over a store connector. Pure apart from reading the store.
 import { basename } from 'node:path';
-import { planMerge, applyPlan, openQuestions, canonicalJson, mergeError, PLAN_VERSION } from './merge.mjs';
+import { planMerge, applyPlan, hashRaw, openQuestions, canonicalJson, mergeError, PLAN_VERSION } from './merge.mjs';
 import { diffRaw, contentVersion, applyOps } from './store/ops.mjs';
 import { conflictError, short } from './store/contract.mjs';
 import { storeError } from './store/errors.mjs';
+import { previewModel, diffModels } from './preview.mjs';
 import { validateModel } from './validate.mjs';
 
 const EMPTY = { raw: null, notes: {} };
@@ -54,6 +55,26 @@ export function answersOf(doc, delta) {
     delta: delta ?? doc.delta,
     otherDelta: delta !== undefined && canonicalJson(doc.delta) !== canonicalJson(delta),
   };
+}
+
+/**
+ * The preview of a delta or a plan (open or final) against the store's current base, never written: `{ raw, preview,
+ * warning? }`. A final plan is shown through its ops (what apply would write), an open one with its questions pending.
+ * `warning` is set when the base changed after the plan.
+ */
+export function preview(store, { delta, plan } = {}) {
+  if (!delta === !plan) throw mergeError('E_PREVIEW_INPUT', 'informe um delta ou um plano (e não os dois)');
+  const loaded = store.read() ?? EMPTY;
+  const doc = delta ?? plan;
+  const stale = 'storeVersion' in doc ? doc.storeVersion !== contentVersion(loaded) : doc.baseHash && doc.baseHash !== hashRaw(loaded.raw);
+  const warning = plan && stale ? 'a base mudou depois deste plano; a prévia usa a base atual' : undefined;
+  let p;
+  if (plan && isFinal(plan)) {
+    const raw = applyOps(loaded, plan.ops).raw;
+    p = diffModels(loaded.raw, structuredClone(raw), { deltaViews: plan.delta?.views });
+    p.plan = plan;
+  } else p = previewModel(loaded.raw, delta ? { delta } : { plan });
+  return { raw: p.raw, preview: p, ...(warning ? { warning } : {}) };
 }
 
 /**

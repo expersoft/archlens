@@ -12,9 +12,9 @@ import { renderHtml } from './lib/render.mjs';
 import { suggestViews } from './lib/suggest.mjs';
 import { inspectHtml } from './lib/deliver.mjs';
 import { mergeError, canonicalJson, hashRaw, relationshipIds } from './lib/merge.mjs';
-import { plan as planOf, finalize, apply as applyPlanTo, answersOf, isFinal } from './lib/api.mjs';
+import { plan as planOf, finalize, apply as applyPlanTo, answersOf, isFinal, preview as previewOf } from './lib/api.mjs';
 import { formatPlanReport } from './lib/merge-report.mjs';
-import { previewModel, previewSummary, annotateView } from './lib/preview.mjs';
+import { previewSummary, annotateView } from './lib/preview.mjs';
 import { resolveBase, openStore, frontmatterSource, MANIFEST, assertWritable as storeWritable } from './lib/store/index.mjs';
 import { diffRaw, contentVersion } from './lib/store/ops.mjs';
 import { migrateRaw, reportLines } from './lib/migrate.mjs';
@@ -245,12 +245,14 @@ function loadPreview(store, args) {
   if (args.delta && args.plan) fail('use --delta ou --plan, não os dois');
   const input = args.delta ?? args.plan;
   if (input === true) fail('informe o arquivo: --delta <delta.json> ou --plan <plano.json>');
-  const baseRaw = loadBase(store).raw;
+  loadBase(store);
   const doc = readJson(input);
-  const stale = 'storeVersion' in doc ? doc.storeVersion !== store.version() : doc.baseHash && doc.baseHash !== hashRaw(baseRaw);
-  if (args.plan && stale) console.warn('  aviso: a base mudou depois deste plano; a prévia usa a base atual');
   let p;
-  try { p = previewModel(baseRaw, args.delta ? { delta: doc } : { plan: doc }); } catch (e) {
+  try {
+    const res = previewOf(store, args.delta ? { delta: doc } : { plan: doc });
+    if (res.warning) console.warn(`  aviso: ${res.warning}`);
+    p = res.preview;
+  } catch (e) {
     if (e.errors) printIssues(e.errors.map(x => ({ path: '$', hint: '', ...x })), 'ERRO');
     fail(e.message, 2);
   }

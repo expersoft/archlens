@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { plan, finalize, answersOf, isFinal, apply } from '../scripts/lib/api.mjs';
+import { plan, finalize, answersOf, isFinal, apply, preview } from '../scripts/lib/api.mjs';
 import { planMerge, applyPlan, canonicalJson, relationshipIds } from '../scripts/lib/merge.mjs';
 import { applyOps, contentVersion } from '../scripts/lib/store/ops.mjs';
 import { subgraphOf, conflictError } from '../scripts/lib/store/contract.mjs';
@@ -338,4 +338,19 @@ test('apply words a conflict raised by the connector itself like a stale plan', 
   const { plan: p } = plan(store, addCache(), TODAY);
   const racing = { ...store, apply: () => { throw conflictError(p.storeVersion, 'sha256:abc'); } };
   assert.throws(() => apply(racing, p), e => e.code === 'E_STORE_CONFLICT' && /a base mudou depois do plano \(/.test(e.message));
+});
+
+test('the preview of a final plan has its changes and no pending questions', () => {
+  const store = memStore(shop());
+  const p = finalPlan(store, addCache());
+  assert.ok(isFinal(p));
+  store.calls.length = 0;
+  const res = preview(store, { plan: p });
+  assert.equal(res.preview.pending.size, 0);
+  assert.ok(p.entry.added.length);
+  for (const id of p.entry.added) assert.equal(res.preview.changes.get(id)?.kind, 'added', id);
+  assert.ok(!store.calls.includes('apply'));
+  assert.equal(res.warning, undefined);
+  store.apply(p.ops);
+  assert.match(preview(store, { plan: p }).warning, /base mudou/);
 });

@@ -935,3 +935,25 @@ test('the CLI no longer imports planMerge or applyPlan', () => {
   const src = readFileSync(CLI, 'utf8');
   for (const line of src.split('\n').filter(l => /^import /.test(l))) assert.doesNotMatch(line, /\b(planMerge|applyPlan)\b/);
 });
+
+test('deliver --plan with a final plan writes the preview and never the base', () => {
+  const dir = setup();
+  writeFileSync(join(dir, 'd.json'), JSON.stringify(previewDelta));
+  const pl = run(['plan', 'ARCHITECTURE.md', 'd.json', '--out', 'p.json'], dir);
+  assert.equal(pl.status, 0, pl.stderr);
+  const plan = JSON.parse(readFileSync(join(dir, 'p.json'), 'utf8'));
+  for (const it of plan.items) if ('resolution' in it) it.resolution = it.class === 'op' ? 'yes' : 'take';
+  writeFileSync(join(dir, 'p.json'), JSON.stringify(plan));
+  const fin = run(['plan', 'ARCHITECTURE.md', '--answers', 'p.json', '--out', 'f.json'], dir);
+  assert.equal(fin.status, 0, fin.stderr);
+  assert.equal(JSON.parse(readFileSync(join(dir, 'f.json'), 'utf8')).state, 'final');
+  const before = snapshot(dir);
+  const r = run(['render', 'ARCHITECTURE.md', '--plan', 'f.json', '--out', 'f.html'], dir);
+  assert.equal(r.status, 0, r.stderr);
+  assert.ok(existsSync(join(dir, 'f.html')));
+  assert.deepEqual(snapshot(dir), before);
+});
+
+test('the CLI no longer imports previewModel', () => {
+  assert.ok(!/previewModel/.test(readFileSync(new URL('../scripts/archlens.mjs', import.meta.url), 'utf8')));
+});
