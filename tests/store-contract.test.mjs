@@ -14,10 +14,11 @@ const shop = () => asBase(JSON.parse(readFileSync(new URL('./fixtures/shop.json'
 const sample = () => ({ raw: { ...shop(), changelog: [{ id: '2026-10-01-01', date: '2026-10-01', summary: 'início', added: [], changed: [], status: {}, removed: [], decisions: [] }] },
   notes: { overview: 'Propósito.', notes: 'Riscos.' } });
 
-// Connector factories: an empty folder ready to become a base of that kind. Task 4 adds markdown.
+// Connector factories: an empty folder ready to become a base of that kind.
 export const KINDS = [
   ['json', dir => dir],
   ['json com model/', dir => { writeFileSync(join(dir, 'archlens.json'), JSON.stringify({ archlens: '2.0', name: 'x', layout: { model: 'model/' } })); return dir; }],
+  ['markdown', dir => { writeFileSync(join(dir, 'archlens.json'), JSON.stringify({ archlens: '2.0', name: 'x', store: { kind: 'markdown' } })); return dir; }],
 ];
 const fresh = prepare => { const dir = mkdtempSync(join(tmpdir(), 'archlens-contract-')); prepare(dir); return dir; };
 const connectorAt = dir => checkConnector(openStore(resolveBase(dir, { create: true })));

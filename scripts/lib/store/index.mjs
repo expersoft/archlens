@@ -4,6 +4,7 @@ import { existsSync, statSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve, relative, basename, extname } from 'node:path';
 import { jsonConnector, readJson, storeKind, MANIFEST } from './folder.mjs';
 import { legacyConnector } from './legacy.mjs';
+import { markdownConnector } from './markdown.mjs';
 import { storeError } from './errors.mjs';
 
 export { storeError, MANIFEST };
@@ -74,17 +75,14 @@ const legacyError = locator => () => storeError('E_STORE_LEGACY',
 /** The connector `store.kind` names in the manifest (json when there is no manifest or no store). */
 function folderKind(dir) {
   const p = join(dir, MANIFEST);
-  const kind = existsSync(p) ? storeKind(readJson(p), rel(p)) : 'json';
-  if (kind !== 'json') {
-    throw storeError('E_STORE_UNSUPPORTED', `"store.kind" "${kind}" em ${rel(p)} ainda não é suportado; use "json"`);
-  }
-  return kind;
+  return existsSync(p) ? storeKind(readJson(p), rel(p)) : 'json';
 }
 
 export function openStore(locator) {
   if (locator.kind !== 'folder') return legacyConnector(locator, { describe: `${rel(locator.path)} (formato antigo)`, error: legacyError(locator) });
-  folderKind(locator.path);
-  return jsonConnector(locator, `${rel(locator.path)}/`);
+  return folderKind(locator.path) === 'markdown'
+    ? markdownConnector(locator, `${rel(locator.path)}/ (markdown)`)
+    : jsonConnector(locator, `${rel(locator.path)}/`);
 }
 
 /** Throws the connector's own refusal when it cannot write (the old .md base). */
