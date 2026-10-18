@@ -86,16 +86,22 @@ nova. É o caminho mais prático para quem desenvolve o archlens.
 ### Publicar uma versão
 
 A versão do plugin vem do `package.json`. Nunca edite `.claude-plugin/*.json` à mão: `npm version` regrava os dois
-manifestos e os inclui no commit da versão (o teste `tests/skills.test.mjs` recusa manifestos fora de sincronia).
+manifestos (o teste `tests/skills.test.mjs` recusa manifestos fora de sincronia). A versão sai por PR para `develop-v2`, e a
+tag é criada no commit do merge:
 
 ```bash
-npm version minor            # ou patch / major: package.json, plugin.json e marketplace.json no mesmo commit + tag v<x>
-claude plugin validate .     # manifestos válidos
-git push --follow-tags
+git checkout -b chore/release-<x>
+npm version minor --no-git-tag-version   # ou patch / major: package.json, package-lock.json e .claude-plugin/*.json
+# o npm reformata o package.json: mantenha só a linha da versão (git diff package.json)
+# CHANGELOG.md: "[Não lançado]" vira "[<x>] — pré-release", com o link de comparação no fim
+claude plugin validate .
+npm test
+# PR → develop-v2; depois do merge:
+git tag -a v<x> -m "archlens <x>" <commit do merge> && git push origin v<x>
 ```
 
-Antes, mova as entradas de `[Não lançado]` do `CHANGELOG.md` para a versão nova. `npm run check-plugin` só confere a
-sincronia (sai com 1 se os manifestos não acompanham o `package.json`).
+`npm run check-plugin` só confere a sincronia (sai com 1 se os manifestos não acompanham o `package.json`). Quem instala pelo
+marketplace do GitHub recebe a versão quando ela chega à branch padrão (`main`).
 
 ## Manter o ARCHITECTURE.md em dia
 

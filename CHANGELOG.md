@@ -3,33 +3,33 @@
 Mudanças relevantes do archlens, por versão. Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/);
 versões seguem [SemVer](https://semver.org/lang/pt-BR/).
 
-## [Não lançado]
+## [0.4.0] — pré-release
 
 ### Mudado (incompatível)
 
-- **O `SKILL.md` da raiz saiu**: a skill única virou três (`skills/archlens-plan`, `archlens-apply`, `archlens-query`).
+- **O `SKILL.md` da raiz saiu** (#15): a skill única virou três (`skills/archlens-plan`, `archlens-apply`, `archlens-query`).
   Quem tem `~/.claude/skills/archlens → <repo>` troca o link: instale o plugin ou use
   `ln -s <repo>/skills/archlens-* ~/.claude/skills/`.
-- **Formato canônico 2.0**: a base guarda tipos ArchiMate, o perfil C4 em `c4.kind`, uma lista plana com `parent` e só
+- **Formato canônico 2.0** (#13): a base guarda tipos ArchiMate, o perfil C4 em `c4.kind`, uma lista plana com `parent` e só
   relações ArchiMate. `c4:*`, `uses` e `children` continuam aceitos na entrada (prompt, delta, scan) e são traduzidos.
   Bases 1.x são recusadas com `E_STORE_FORMAT`; `archlens migrate <base>` converte, conferindo que o modelo não muda
   de sentido. Bancos de dados passam a ser `application-component` com a tag `database`.
 
 ### Adicionado
 
-- **`archlens plan` / `apply` / `show`**: `plan` compara o delta com a base e grava um plano (aberto, com perguntas, ou
+- **`archlens plan` / `apply` / `show`** (#15): `plan` compara o delta com a base e grava um plano (aberto, com perguntas, ou
   final); `plan --answers` reaproveita as respostas; `apply` grava um plano final; `show` imprime o relatório. O **plano
   final carrega as operações do store** e a versão da base, e o `apply` recusa se a base mudou. `merge` segue como atalho.
-- **`archlens query`**: responde em markdown (padrão) ou JSON (`--format`) a uma visão ou spec, e `--element <id>` dá o
+- **`archlens query`** (#15): responde em markdown (padrão) ou JSON (`--format`) a uma visão ou spec, e `--element <id>` dá o
   cartão do elemento (pai, filhos, relações, fontes, rodadas; `--depth` inclui o que está em volta).
 - **Prévia de plano final**: `render`/`deliver`/`build`/`resolve`/`views` com `--plan <plano.json>` desenham a base com o plano, aberto ou final, já aplicado. `render` e `deliver` não gravam nada; `build` grava os diagramas em `architecture/diagrams/` (a base não muda).
-- **Plugin com três skills** (`archlens-plan`, `archlens-apply`, `archlens-query`) em `.claude-plugin/`; exemplo em
+- **Plugin com três skills** (#15; `archlens-plan`, `archlens-apply`, `archlens-query`) em `.claude-plugin/`; exemplo em
   `examples/telemedicina/plano-02*.json`.
 - **Versão do plugin sincronizada**: `npm version` regrava `.claude-plugin/plugin.json` e `marketplace.json` a partir do
   `package.json` (`scripts/sync-plugin.mjs`); um teste recusa manifestos fora de sincronia. README com atualização e publicação.
-- **Conector `markdown`**: a base vira um vault (uma pasta por tipo ArchiMate, um `.md` por elemento) que abre no Obsidian;
+- **Conector `markdown`** (#14): a base vira um vault (uma pasta por tipo ArchiMate, um `.md` por elemento) que abre no Obsidian;
   escolhido por `store.kind` no `archlens.json`. Exemplo em `examples/loja-online-vault/`.
-- **Contrato de conector** com gravação por operações atômicas e versão do conteúdo (`E_STORE_CONFLICT` quando a base muda
+- **Contrato de conector** (#14) com gravação por operações atômicas e versão do conteúdo (`E_STORE_CONFLICT` quando a base muda
   entre o plano e o `--apply`); os conectores `json` e `markdown` dão a mesma versão para a mesma base.
 - `archlens store convert <base> --to markdown|json`: troca o conector da base na mesma pasta, sem mudar a versão nem
   apagar arquivos que a base não possui.
@@ -92,6 +92,7 @@ Primeira versão: arquitetura como modelo (ArchiMate 3.2 com perfil C4), diagram
 - Relações explicadas em português, HTML animado num arquivo único, checagem visual com screenshots.
 - `\n` força quebra de linha em nomes; `expand` no schema da visão (#2). Zoom/pan na tela inteira (#3).
 
+[0.4.0]: https://github.com/expersoft/archlens/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/expersoft/archlens/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/expersoft/archlens/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/expersoft/archlens/releases/tag/v0.1.0

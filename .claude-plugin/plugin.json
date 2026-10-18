@@ -1,6 +1,6 @@
 {
   "name": "archlens",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Skill: arquitetura como modelo (ArchiMate + perfil C4), diagramas como consultas, HTML animado para apresentação",
   "author": {
     "name": "expersoft"
