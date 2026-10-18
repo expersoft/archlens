@@ -9,7 +9,7 @@ import { contentVersion, diffRaw } from './ops.mjs';
 import { writeSetOf } from './versions.mjs';
 import { FORMAT } from '../canonical.mjs';
 import { MANIFEST, readJson, loadFolder, jsonConnector } from './folder.mjs';
-import { readVault, markdownConnector } from './markdown.mjs';
+import { readVault, markdownConnector, vaultFiles, REMOVED } from './markdown.mjs';
 import { PACK_FILE } from './gbrain-pack.mjs';
 import { openStore } from './index.mjs';
 import { validateStore, probeGitRepo, ignoreMirror } from './config.mjs';
@@ -35,7 +35,7 @@ export function convertFolder(locator, to, { force = false } = {}) {
   if (!['json', 'markdown'].includes(to)) throw storeError('E_STORE_CONVERT', `conector de destino desconhecido "${to}"; use json ou markdown`);
   const source = openStore(locator);
   if (!source.writable) source.apply([]);
-  if (source.kind === 'gbrain') return convertFromGbrain(locator, to);
+  if (source.kind === 'gbrain') return convertFromGbrain(locator, to, { force });
   if (source.kind === to) throw storeError('E_STORE_CONVERT', `${source.describe()} já usa o conector ${to}`);
   const cur = source.read();
   if (!cur) throw storeError('E_STORE_NOT_FOUND', `base não encontrada: ${source.describe()}`);
@@ -78,6 +78,21 @@ function writeAtomic(path, text) {
   renameSync(tmp, path);
 }
 
+/** notes/removidos/** of a vault (relative path → text): the text of elements that were removed. */
+function removedFiles(dir) {
+  const out = new Map();
+  const walk = rel => {
+    if (!existsSync(join(dir, rel))) return;
+    for (const e of readdirSync(join(dir, rel), { withFileTypes: true })) {
+      const r = `${rel}/${e.name}`;
+      if (e.isDirectory()) walk(r);
+      else if (e.isFile() && e.name.endsWith('.md')) out.set(r, readFileSync(join(dir, r), 'utf8'));
+    }
+  };
+  walk(REMOVED.replace(/\/$/, ''));
+  return out;
+}
+
 /** Removes the folders of `rels` that the removal left empty. */
 function dropEmptied(dir, rels) {
   for (const d of new Set(rels.map(rel => dirname(rel)).filter(d => d !== '.'))) {
@@ -103,10 +118,12 @@ export function convertToGbrain(locator, store) {
   const warnings = probeGitRepo({ ...valid, repo: resolve(dir, valid.repo) });
   const own = [...new Set([...ownFiles(dir, source.kind), 'views.json', 'changelog.json'])];
   const target = gbrainGitConnector(locator, valid);
+  // The text people wrote in the pages of a vault, and the text kept of removed elements, travel with the base.
+  const carry = source.kind === 'markdown' ? { base: readVault(dir), removed: removedFiles(dir) } : undefined;
   const ops = diffRaw(null, cur);
   const expect = Object.fromEntries([...writeSetOf(ops)].map(ref => [ref, null]));
   try {
-    target.apply(ops, { expect });
+    target.apply(ops, { expect, carry });
   } catch (e) {
     if (e.code === 'E_STORE_CONFLICT') {
       throw storeError('E_STORE_EXISTS', `${valid.remote}/${valid.branch} já tem páginas do archlens em ${valid.prefix}/ (${(e.conflicts ?? []).slice(0, 5).map(c => c.ref).join(', ')}); `
@@ -148,7 +165,7 @@ function dropTip(dir, store) {
  * Brings a gbrain (git) base back to the folder as json or markdown: the base is written to a temporary folder, read back
  * and checked, and its files go over the folder (archlens.json last), which keeps its notes/, diagrams/ and other files.
  */
-export function convertFromGbrain(locator, to) {
+export function convertFromGbrain(locator, to, { force = false } = {}) {
   if (!['json', 'markdown'].includes(to)) throw storeError('E_STORE_CONVERT', `conector de destino desconhecido "${to}"; use json ou markdown`);
   const dir = locator.path;
   const source = openStore(locator);
@@ -156,13 +173,35 @@ export function convertFromGbrain(locator, to) {
   const cur = source.read();
   if (!cur) throw storeError('E_STORE_NOT_FOUND', `base não encontrada: ${source.describe()}`);
   const before = contentVersion(cur);
+  const vault = source.vault();
+  // A vault keeps the text people wrote in the pages (and the text of removed elements); the json connector has nowhere to.
+  const dropped = to === 'json' ? [...vault.base.ctx.pages.entries()].filter(([, p]) => (p.userText ?? '').trim()).map(([id]) => id) : [];
+  if (dropped.length && !force) {
+    throw storeError('E_STORE_CONVERT', `${dropped.length} página(s) têm texto das pessoas depois do bloco do archlens (${dropped.slice(0, 10).join(', ')}) e o conector json não tem onde guardá-lo; nada foi trocado. Use --force para convertê-las perdendo esse texto`);
+  }
   const store = validateStore(readJson(join(dir, MANIFEST)).store);
   const tmp = `${dir}.convert-${process.pid}`;
   try {
     mkdirSync(tmp, { recursive: true });
     writeFileSync(join(tmp, MANIFEST), JSON.stringify({ archlens: cur.raw.archlens ?? FORMAT, name: cur.raw.name, ...(to === 'markdown' ? { store: { kind: 'markdown' } } : {}) }, null, 2) + '\n');
-    const target = to === 'markdown' ? markdownConnector({ ...locator, path: tmp }, tmp) : jsonConnector({ ...locator, path: tmp }, tmp);
-    target.apply(diffRaw(target.read(), cur), { baseVersion: target.version() });
+    let target;
+    if (to === 'markdown') {
+      // The vault's pages are rendered over the gbrain's, so what people wrote in them comes along.
+      target = markdownConnector({ ...locator, path: tmp }, tmp);
+      for (const [rel, text] of vaultFiles(cur, vault.base, { read: rel => vault.files.get(rel) })) {
+        if (text === null) continue;
+        mkdirSync(dirname(join(tmp, rel)), { recursive: true });
+        writeFileSync(join(tmp, rel), text);
+      }
+      for (const [rel, text] of vault.files) {
+        if (!rel.startsWith(REMOVED) || existsSync(join(tmp, rel))) continue;
+        mkdirSync(dirname(join(tmp, rel)), { recursive: true });
+        writeFileSync(join(tmp, rel), text);
+      }
+    } else {
+      target = jsonConnector({ ...locator, path: tmp }, tmp);
+      target.apply(diffRaw(target.read(), cur), { baseVersion: target.version() });
+    }
     if (contentVersion(target.read()) !== before) throw storeError('E_STORE_CONVERT', 'a base gravada pelo conector novo não reproduz a original; nada foi trocado');
     const files = filesUnder(tmp).sort((a, b) => (a === MANIFEST ? 1 : b === MANIFEST ? -1 : 0));
     for (const rel of files) {
@@ -173,5 +212,5 @@ export function convertFromGbrain(locator, to) {
     rmSync(tmp, { recursive: true, force: true });
   }
   dropTip(dir, store);
-  return { from: 'gbrain', to, version: before, leftover: null, dropped: [] };
+  return { from: 'gbrain', to, version: before, leftover: null, dropped };
 }

@@ -155,9 +155,12 @@ export function gbrainGitConnector(locator, store, { describe = `${relative(proc
   const read = () => { const { base } = load(); return base && { raw: base.raw, notes: base.notes }; };
 
   /** The files under the prefix for `next` (path → text, null to delete), over the tip as loaded. */
-  function changes(cur, next) {
-    const vault = new Map(cur.flat);
-    for (const [rel, text] of vaultFiles(next, cur.base, { read: rel => cur.flat.get(rel) })) {
+  function changes(cur, next, carry) {
+    // A base written from scratch can bring the human text of another vault (carry: { base, removed }, see convertToGbrain).
+    const prior = cur.base ?? carry?.base;
+    const flat = cur.base ? cur.flat : (carry?.removed ?? new Map());
+    const vault = new Map(flat);
+    for (const [rel, text] of vaultFiles(next, prior, { read: rel => flat.get(rel) })) {
       if (text === null) vault.delete(rel); else vault.set(rel, text);
     }
     const out = new Map();
@@ -169,7 +172,7 @@ export function gbrainGitConnector(locator, store, { describe = `${relative(proc
       return /^views\/[^/]+\.md$/.test(r) || (/^[^/]+\/[^/]+\.md$/.test(r) && ELEMENT_TYPES[r.split('/')[0]]);
     };
     for (const rel of cur.files.keys()) if (owned(rel) && !files.has(rel)) out.set(rel, null);
-    const preserved = [...vault.keys()].filter(rel => rel.startsWith(REMOVED) && cur.flat.get(rel) !== vault.get(rel)).map(rel => join(TIP, prefix, rel));
+    const preserved = [...vault.keys()].filter(rel => rel.startsWith(REMOVED) && flat.get(rel) !== vault.get(rel)).map(rel => join(TIP, prefix, rel));
     return { out, preserved };
   }
 
@@ -201,12 +204,14 @@ export function gbrainGitConnector(locator, store, { describe = `${relative(proc
     version: () => contentVersion(read()),
     objectVersions: (refs, snapshot = read()) => objectVersionsOf(snapshot, refs),
     history: () => read()?.raw.changelog ?? [],
+    /** The tip's base as the vault reads it ({ base: { raw, notes, ctx }, files }), with the text people wrote in the pages; null when none. */
+    vault() { const { base, flat } = load(); return base && { base, files: flat }; },
     /**
      * fetch → check (`expect`, or `baseVersion`, and `recheck(base)`, more conflicts the caller finds) → the ops over the
      * tip → one commit → push; a rejected push starts over from the fetch (up to RETRIES times). Anything that fails
      * before the push leaves the remote as it was and the worktree back at the tip.
      */
-    apply(ops, { expect, baseVersion = null, recheck } = {}) {
+    apply(ops, { expect, baseVersion = null, recheck, carry } = {}) {
       const verify = base => {
         if (expect) {
           const conflicts = [...checkExpect(objectVersionsOf(base, Object.keys(expect)), expect), ...(recheck?.(base) ?? [])];
@@ -223,7 +228,7 @@ export function gbrainGitConnector(locator, store, { describe = `${relative(proc
           verify(cur.base);
           const next = applyOps(cur.base, ops);
           assertGbrainIds(next.raw);
-          const { out, preserved } = changes(cur, next);
+          const { out, preserved } = changes(cur, next, carry);
           const result = { version: contentVersion(next), preserved, entry: appendedEntry(next, ops) };
           if (!out.size) return result;
           for (const [rel, text] of out) {

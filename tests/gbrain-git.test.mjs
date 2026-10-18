@@ -418,3 +418,29 @@ test('the CLI converts to the gbrain and back', () => {
   assert.ok(existsSync(join(dir, 'model.json')));
   cli('validate', dir);
 });
+
+test('text people wrote in vault pages and notes/removidos survive markdown -> gbrain -> markdown byte for byte', () => {
+  const w = world();
+  const { dir, loc, gbrain } = localBase(w, 'loja-online-vault');
+  const page = 'business-actor/cliente.md';
+  const human = '\n## Minhas observações\n\nO cliente ligou ontem.\n';
+  writeFileSync(join(dir, page), readFileSync(join(dir, page), 'utf8').replace(/\n*$/, '\n') + human);
+  const kept = '# Antigo ("antigo")\n\n## Antigo ("antigo"): elemento removido da base; texto escrito em x.md\n\nTexto de quem removeu.\n';
+  mkdirSync(join(dir, 'notes', 'removidos', 'business-actor'), { recursive: true });
+  writeFileSync(join(dir, 'notes', 'removidos', 'business-actor', 'antigo.md'), kept);
+  const pageBefore = readFileSync(join(dir, page), 'utf8');
+
+  const res = convertToGbrain(loc, gbrain);
+  assert.deepEqual(res.dropped, []);
+  assert.match(w.show('archlens/business-actor/cliente.md'), /O cliente ligou ontem\./);
+  assert.match(w.show('archlens/notes/removidos/business-actor/antigo.md'), /Texto de quem removeu\./);
+
+  convertFromGbrain(resolveBase(dir), 'markdown');
+  assert.equal(readFileSync(join(dir, page), 'utf8'), pageBefore);
+  assert.equal(readFileSync(join(dir, 'notes', 'removidos', 'business-actor', 'antigo.md'), 'utf8'), kept);
+
+  // The json connector has nowhere to keep that text: refused without --force.
+  convertToGbrain(resolveBase(dir), { ...gbrain, prefix: 'outro' });
+  refused(() => convertFromGbrain(resolveBase(dir), 'json'), 'E_STORE_CONVERT');
+  assert.equal(JSON.parse(readFileSync(join(dir, 'archlens.json'), 'utf8')).store.kind, 'gbrain');
+});
