@@ -433,8 +433,8 @@ test('archlens remote pull and check through the CLI', () => {
 // ---- apply in MCP mode -------------------------------------------------------------------------------------------
 
 /** A base in the fake gbrain, pulled into the mirror, with the session checked (`ceiling`: the widest tool surface). */
-function ready({ ceiling = 'full', extra = [] } = {}) {
-  const w = world({ ceiling });
+function ready({ ceiling = 'full', extra = [], sourceId } = {}) {
+  const w = world({ ceiling, sourceId });
   w.gbrain.write(pagesOf(base(extra)));
   const store = w.store();
   pull(store, w.gbrain);
@@ -822,6 +822,90 @@ test('a page gbrain filed as a duplicate of another page was not written: it is 
   assert.equal(journal(w.dir, id).pages[slug].duplicateOf, 'outra/application-component/vendas.cache');
   assert.equal(revisions(w.dir)[slug], undefined);
   assert.equal(mirrorFiles(w.dir).has(`${slug}.md`), false);
+});
+
+// gbrain's put_page keeps the tags a page had (it adds the ones sent); the apply takes off what it dropped with remove_tag.
+const legado = { id: 'legado', type: 'application-component', name: 'Sistema Legado', tags: ['legado', 'erp'] };
+const LEGADO = 'archlens/application-component/legado';
+const retag = w => {
+  const el = w.store.read().raw.model.elements.find(e => e.id === 'legado');
+  const entry = { id: '2026-10-18-01', date: '2026-10-18', summary: 'etiquetas', added: [], changed: ['legado'], status: {}, removed: [], decisions: [] };
+  return w.store.apply([{ op: 'upsertElement', element: { ...el, tags: ['erp', 'novo'] } }, { op: 'appendHistory', entry }], { baseVersion: w.store.version() });
+};
+const tagsOfEl = w => w.store.read().raw.model.elements.find(e => e.id === 'legado').tags;
+
+test('a tag an apply drops is taken off gbrain\'s page with remove_tag, after its put and before the history; undo puts it back', () => {
+  const w = ready({ extra: [legado] });
+  const original = contentVersion(w.store.read());
+  const { request: req, apply: id } = retag(w);
+  const tools = req.calls.map(c => c.tool);
+  const at = req.calls.findIndex(c => c.tool === 'remove_tag');
+  assert.ok(at > tools.indexOf('put_pages') && at < req.calls.length - 1, tools.join(', '));
+  assert.deepEqual(req.calls.filter(c => c.tool === 'remove_tag').map(c => c.arguments), [{ slug: LEGADO, tag: 'archlens/tag/legado', request_id: req.calls[at].arguments.request_id }]);
+  assert.equal(journal(w.dir, id).tagOps[req.calls[at].arguments.request_id].state, 'requested');
+  const done = w.store.remote.receipts([w.gbrain.run(req)]);
+  assert.equal(done.state, 'committed');
+  assert.deepEqual(w.gbrain.page(LEGADO).tags, ['archlens', 'archlens/application-component', 'archlens/tag/erp', 'archlens/tag/novo']);
+  assert.equal(revisions(w.dir)[LEGADO], w.gbrain.page(LEGADO).revision); // the revision after remove_tag
+  pull(w.store, w.gbrain);
+  assert.deepEqual(tagsOfEl(w), ['erp', 'novo']);
+
+  const undo = w.store.remote.undo();
+  const ut = undo.request.calls.map(c => `${c.tool}${c.arguments.tag ? ` ${c.arguments.tag}` : ''}`);
+  assert.ok(ut.includes('add_tag archlens/tag/legado') && ut.includes('remove_tag archlens/tag/novo'), ut.join(', '));
+  assert.ok(ut.indexOf('add_tag archlens/tag/legado') > ut.indexOf('put_pages'), ut.join(', '));
+  assert.equal(w.store.remote.receipts([w.gbrain.run(undo.request)]).state, 'undone');
+  assert.deepEqual(w.gbrain.page(LEGADO).tags, ['archlens', 'archlens/application-component', 'archlens/tag/erp', 'archlens/tag/legado']);
+  pull(w.store, w.gbrain);
+  assert.equal(contentVersion(w.store.read()), original);
+});
+
+test('tag calls carry no source_id (gbrain refuses it: they write to the session\'s source)', () => {
+  const w = ready({ extra: [legado], sourceId: 'arquitetura' });
+  const { request: req } = retag(w);
+  assert.ok(req.calls.filter(c => c.tool === 'put_pages').every(c => c.arguments.source_id === 'arquitetura'));
+  const tag = req.calls.find(c => c.tool === 'remove_tag');
+  assert.equal('source_id' in tag.arguments, false);
+  assert.equal(w.store.remote.receipts([w.gbrain.run(req)]).state, 'committed');
+  assert.ok(!w.gbrain.page(LEGADO).tags.includes('archlens/tag/legado'));
+});
+
+test('a remove_tag the agent did not send is sent again by --resume with the same request_id', () => {
+  const w = ready({ extra: [legado] });
+  const { request: req } = retag(w);
+  const at = req.calls.findIndex(c => c.tool === 'remove_tag');
+  const partial = w.store.remote.receipts([w.gbrain.run({ ...req, calls: req.calls.slice(0, at) })]);
+  assert.equal(partial.state, 'partial');
+  assert.ok(partial.pending.includes(`${LEGADO} (remove_tag archlens/tag/legado)`), JSON.stringify(partial.pending));
+  const resumed = w.store.remote.resume();
+  assert.ok(resumed.request.calls.some(c => c.tool === 'remove_tag' && c.arguments.request_id === req.calls[at].arguments.request_id));
+  assert.equal(resumed.request.calls.at(-1).arguments.pages?.[0].slug, 'archlens/changelog');
+  assert.equal(w.store.remote.receipts([w.gbrain.run(resumed.request)]).state, 'committed');
+  pull(w.store, w.gbrain);
+  assert.deepEqual(tagsOfEl(w), ['erp', 'novo']);
+});
+
+test('the CLI says which pages gbrain filed as duplicates, and offers --undo, not --resume', () => {
+  const w = ready();
+  const cwd = join(w.dir, '..');
+  writeFileSync(join(cwd, 'p.json'), JSON.stringify(finalPlan(w, [cache])));
+  let r = cli(['apply', 'architecture', 'p.json'], cwd);
+  assert.equal(r.status, 0, r.stderr);
+  const remote = step => JSON.parse(readFileSync(join(w.dir, '.archlens', 'remote', `${step}-request.json`), 'utf8'));
+  if (/--read-check/.test(r.stdout)) {
+    writeFileSync(join(cwd, 'rc.json'), JSON.stringify(w.gbrain.run(remote('read-check'))));
+    r = cli(['apply', 'architecture', 'p.json', '--read-check', 'rc.json'], cwd);
+    assert.equal(r.status, 0, r.stderr);
+  }
+  const answer = w.gbrain.run(remote('apply'));
+  const slug = 'archlens/application-component/vendas.cache';
+  Object.assign(answer.results.flatMap(x => x.pages ?? []).find(pg => pg.slug === slug), { revision: null, status: 'duplicate', duplicate_of: 'outra/application-component/vendas.cache' });
+  writeFileSync(join(cwd, 'recibos.json'), JSON.stringify(answer));
+  r = cli(['apply', 'architecture', '--receipts', 'recibos.json'], cwd);
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /o gbrain não gravou archlens\/application-component\/vendas\.cache \(cópia de outra\/application-component\/vendas\.cache\)/);
+  assert.doesNotMatch(r.stdout, /--resume/);
+  assert.match(r.stdout, /--undo/);
 });
 
 test('a poll receipt rebuilt from the admitted pages only is read', () => {

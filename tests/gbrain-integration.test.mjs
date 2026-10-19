@@ -320,6 +320,32 @@ describe('gbrain real', { skip }, () => {
     assert.deepEqual(listed('archlens-view'), views);
   });
 
+  // gbrain's managed sync also keeps the tags a page had (src/core/persistence/sync-prepare.ts:717): archlens reads its
+  // base from git and stays right; what gbrain shows for the page is recorded here.
+  test('git mode: a tag taken off an element, as gbrain shows it after the sync', () => {
+    const src = env.addSource('c7');
+    const a = user('a', src);
+    const tagged = base();
+    tagged.raw.model.elements.find(e => e.id === 'rh').tags = ['legado'];
+    seed(a.store(), tagged);
+    env.sync(src.id);
+    const slug = 'archlens/application-component/rh';
+    assert.ok(gbrainPage(src, slug).tags.includes('archlens/tag/legado'));
+    const s = a.store();
+    const { tags, ...untagged } = s.read().raw.model.elements.find(e => e.id === 'rh');
+    s.apply([{ op: 'upsertElement', element: untagged }], { baseVersion: s.version() });
+    assert.equal(a.store().read().raw.model.elements.find(e => e.id === 'rh').tags, undefined); // the base, read from git
+    env.sync(src.id);
+    const after = gbrainPage(src, slug);
+    // gbrain keeps the tag on its page (its tag index goes stale; the base, read from git, does not): to be documented.
+    assert.ok(after.tags.includes('archlens/tag/legado'), JSON.stringify(after.tags));
+    assert.ok(frontmatterOf(after.content).tags.includes('archlens/tag/legado'));
+    // A later apply and sync still go through.
+    apply(a.store(), finalPlan(a.store(), addVendas()));
+    env.sync(src.id);
+    assert.equal(gbrainPage(src, 'archlens/application-component/vendas.cache').title, 'Cache de Pedidos');
+  });
+
   // ---- MCP mode (the test is the agent) ------------------------------------------------------------------------------
 
   test('MCP: a base converted over MCP comes back from gbrain the same, without the keys gbrain stamps, dates as written, people\'s text in place', async () => {
@@ -474,8 +500,8 @@ describe('gbrain real', { skip }, () => {
   });
 
   // gbrain's put_page keeps the tags the page had and adds the ones sent (src/core/persistence/page-prepare.ts:832,
-  // tags = union of the stored and the parsed ones); taking one off needs remove_tag, which archlens does not ask for.
-  test('MCP: a tag taken off an element leaves gbrain\'s page too', { todo: 'gbrain\'s put_page never removes a tag (page-prepare.ts:832); the apply would need remove_tag calls' }, async () => {
+  // tags = union of the stored and the parsed ones): the apply takes off the tags it drops with remove_tag.
+  test('MCP: a tag taken off an element leaves gbrain\'s page too, and --undo puts it back', async () => {
     const src = env.addSource('m7');
     const s = await session(src);
     try {
@@ -485,11 +511,23 @@ describe('gbrain real', { skip }, () => {
       assert.deepEqual(st.read().raw.model.elements.find(e => e.id === 'rh').tags, ['legado']);
       const rh = st.read().raw.model.elements.find(e => e.id === 'rh');
       const { tags, ...untagged } = rh;
+      const original = contentVersion(st.read());
       const req = st.apply([{ op: 'upsertElement', element: untagged }], { baseVersion: st.version() });
-      assert.equal(st.remote.receipts([await agent(s, req.request)]).state, 'committed');
+      assert.ok(req.request.calls.some(c => c.tool === 'remove_tag' && c.arguments.tag === 'archlens/tag/legado'), JSON.stringify(req.request.calls.map(c => c.tool)));
+      const answer = await agent(s, req.request);
+      const got = st.remote.receipts([answer]);
+      assert.equal(got.state, 'committed', `${JSON.stringify(got)}\n${JSON.stringify(answer.results.map(r => r.content?.[0]?.text?.slice(0, 600)))}`);
       assert.equal(st.read().raw.model.elements.find(e => e.id === 'rh').tags, undefined);
+      const page = await value(s, 'get_page', { slug: 'archlens/application-component/rh', source_id: src.id });
+      assert.ok(!page.tags.includes('archlens/tag/legado'), JSON.stringify(page.tags));
       await pull(st, s);
       assert.equal(st.read().raw.model.elements.find(e => e.id === 'rh').tags, undefined);
+      const undo = st.remote.undo();
+      assert.ok(undo.request.calls.some(c => c.tool === 'add_tag' && c.arguments.tag === 'archlens/tag/legado'));
+      assert.equal(st.remote.receipts([await agent(s, undo.request)]).state, 'undone');
+      await pull(st, s);
+      assert.equal(contentVersion(st.read()), original);
+      assert.deepEqual(st.read().raw.model.elements.find(e => e.id === 'rh').tags, ['legado']);
     } finally {
       await s.close();
     }

@@ -8,12 +8,13 @@
 // only on the full tool surface; a remote write stamps `trust_tier: agent_written` and its provenance (ingested_at, source_kind,
 // ingested_via) into the frontmatter; the frontmatter is read as gbrain's js-yaml reads it (unquoted dates are timestamps,
 // kept as ISO strings); without a sentinel, the first "## Timeline" / "## History" section
-// of dated bullets moves to the timeline (splitBody rule 4); a full list_pages page carries a listing_truncated notice.
+// of dated bullets moves to the timeline (splitBody rule 4); a full list_pages page carries a listing_truncated notice; a
+// remote put keeps the tags the page had (union), and remove_tag / add_tag change them.
 // run(request) plays the agent: it executes the calls of an archlens request file and returns the response file.
 import { parse as parseYaml, stringify as stringifyYaml } from '../../scripts/vendor/yaml/index.js';
 
 const SURFACES = ['verbs', 'starter', 'full'];
-const WRITE_TOOLS = new Set(['put_pages', 'delete_page', 'restore_page']);
+const WRITE_TOOLS = new Set(['put_pages', 'delete_page', 'restore_page', 'remove_tag', 'add_tag']);
 const REMOTE_CAP = 100;
 
 // gbrain's error JSON names the code twice: `error` (the frozen wire value) and `code` (the canonical one).
@@ -103,6 +104,8 @@ export function fakeGbrain({ ceiling = 'full', surface = 'starter', sourceId = '
   function write(source, slug, content, ts, { remote = false } = {}) {
     const before = pages.get(key(source, slug));
     const page = { slug, source_id: source, ...parsePage(slug, content), revision: revision(), created_at: before?.created_at ?? ts, updated_at_iso: ts, deleted_at: null };
+    // A put_page keeps the tags the page had and adds the ones sent (page-prepare.ts:832): only remove_tag takes one off.
+    if (remote && before && !before.deleted_at) page.tags = [...new Set([...before.tags, ...page.tags])].sort();
     if (remote) {
       // The lower-only marker a below-owner write stamps, and the provenance of the first write (page-prepare.ts putProvenance).
       const first = before?.frontmatter ?? {};
@@ -153,6 +156,21 @@ export function fakeGbrain({ ceiling = 'full', surface = 'starter', sourceId = '
     if (!poll) return structuredClone(receipt);
     const pages = receipt.pages.map(p => (p.state === 'refused' ? { index: p.index, slug: '', state: 'not_admitted' } : p));
     return recount({ ...structuredClone(receipt), pages: structuredClone(pages) });
+  }
+
+  /** remove_tag / add_tag: idempotent by request_id; no change, no new revision (noop). */
+  function tagOp(args, add) {
+    // The tag tools have no source_id parameter, and a write refuses unknown ones: they write to the session's source.
+    if ('source_id' in args) throw opError('invalid_params', '1 unknown parameter not declared in the tool schema; nothing was written.', { suggestion: 'Unknown parameter "source_id".' });
+    if (receipts.has(args.request_id)) return receipts.get(args.request_id);
+    const source = sourceId;
+    const p = live(source, args.slug);
+    if (!p) throw Object.assign(new Error('page_not_found'), { json: { error: 'page_identity_changed', code: 'page_not_found', message: 'The accepted page no longer exists.' } });
+    const noop = p.tags.includes(args.tag) === add;
+    if (!noop) Object.assign(p, { tags: add ? [...p.tags, args.tag].sort() : p.tags.filter(t => t !== args.tag), revision: revision(), updated_at_iso: now() });
+    const receipt = { tag: args.tag, noop, slug: p.slug, status: 'ok', revision: p.revision, source_id: source, request_id: args.request_id, state: 'committed' };
+    receipts.set(args.request_id, receipt);
+    return receipt;
   }
 
   const tools = {
@@ -235,6 +253,9 @@ export function fakeGbrain({ ceiling = 'full', surface = 'starter', sourceId = '
       receipts.set(args.request_id, receipt);
       return receipt;
     },
+
+    remove_tag: (args = {}) => tagOp(args, false),
+    add_tag: (args = {}) => tagOp(args, true),
 
     restore_page(args = {}) {
       if (receipts.has(args.request_id)) return receipts.get(args.request_id);

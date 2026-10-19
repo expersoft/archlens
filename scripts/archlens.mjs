@@ -389,10 +389,12 @@ function remoteApply(store, flow, args, names, { committed, convert } = {}) {
     handOver(store, res.request, args, receiptsNext);
     return;
   }
-  if (convert) console.log(`  a pasta local continua como estava; ${res.conflicts.length ? 'a criação não sobrescreve páginas que já existem: use outro --prefix (desfaça este com --undo) ou ' : ''}retome com --resume ou desfaça com --undo`);
+  // A page gbrain filed as a duplicate would be filed so again: --resume cannot finish it.
+  const dup = res.duplicates?.length > 0;
+  if (convert) console.log(`  a pasta local continua como estava; ${res.conflicts.length ? 'a criação não sobrescreve páginas que já existem: use outro --prefix (desfaça este com --undo) ou ' : ''}${dup ? 'desfaça com --undo' : 'retome com --resume ou desfaça com --undo'}`);
   if (undoing) console.log(`  próximo: archlens apply ${names.base} --undo ${res.id} (pede o que falta desfazer)`);
   else {
-    if (!res.conflicts.length || res.conflicts.every(s => s.endsWith('/changelog'))) console.log(`  para completar: archlens apply ${names.base} --resume ${res.id}`);
+    if (!dup && (!res.conflicts.length || res.conflicts.every(s => s.endsWith('/changelog')))) console.log(`  para completar: archlens apply ${names.base} --resume ${res.id}`);
     console.log(`  para desfazer o que foi gravado: archlens apply ${names.base} --undo ${res.id}`);
   }
 }

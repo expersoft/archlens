@@ -62,13 +62,14 @@ export const gbrainEnv = {
       git(src, 'remote', 'add', 'origin', GBRAIN_REPO);
       git(src, 'fetch', '-q', '--depth', '1', 'origin', ref);
       git(src, 'checkout', '-q', 'FETCH_HEAD');
-      // Its packages, in the clone only (the postinstall runs gbrain's migrations, which have no brain to work on yet).
-      must(bun, ['install', '--frozen-lockfile'], { cwd: src });
-
       // GBRAIN_HOME is the parent of .gbrain; HOME points there too, so nothing reads or writes the user's files.
       // The self-upgrade check is off.
       const home = join(root, 'home');
       mkdirSync(home);
+      // Its packages, in the clone only, without lifecycle scripts: gbrain's postinstall (scripts/postinstall.ts) runs
+      // `apply-migrations` with whatever `gbrain` is on the PATH, which would migrate the user's own brain. init
+      // creates the schema of the brain here; HOME and GBRAIN_HOME point to the temporary folder all the same.
+      must(bun, ['install', '--frozen-lockfile', '--ignore-scripts'], { cwd: src, env: { HOME: home, GBRAIN_HOME: home } });
       const env = { ...GIT_ENV, GBRAIN_HOME: home, HOME: home, NO_COLOR: '1' };
       const gbrain = (args, { input, cwd = root, timeout } = {}) => run(bun, ['run', join(src, 'src', 'cli.ts'), ...args], { cwd, env, input, timeout });
       const gb = (...args) => {
