@@ -56,6 +56,7 @@ Aplicar (grava a base)
   remote    <base> pull [--out pedido.json]   base gbrain no modo mcp: grava o pedido de chamadas ao MCP (o agente executa)
             <base> pull --ingest resposta.json… [--out pedido.json]   lê as respostas; grava o próximo pedido ou atualiza o espelho local
             <base> check [--out pedido.json] | check --ingest resposta.json   confere a sessão do MCP (whoami) e se gravar está liberado
+            <base local> check --server S [--prefix P] [--out pedido.json]   idem numa base local que vai para o gbrain (store convert --mode mcp)
   store convert <base> --to markdown|json [--force]   grava a base em outro conector (mesma pasta; versão inalterada)
             <base> --to gbrain --mode git --repo R [--remote origin] [--branch main] [--prefix archlens]   leva a base para o gbrain (e de volta com --to json|markdown)
             <base> --to gbrain --mode mcp --server S [--source-id ID] [--prefix archlens]   idem pelo MCP: grava o pedido; o agente cria as páginas; conclui com apply --receipts
@@ -334,6 +335,7 @@ function afterApply(store, res) {
 
 /** Writes a final plan through the connector and reports it; the document is only touched when something changed. */
 function applyCommand(store, plan, names) {
+  if (store.remote) fail(`E_STORE_UNSUPPORTED: ${store.describe()} é uma base gbrain no modo mcp; grave com "archlens apply ${names.base} ${names.plan}"`, 2); // the writes go by requests
   loadBase(store);
   assertWritable(store);
   if (isFinal(plan) && plan.ops?.length) assertDocOwned(store); // before anything is written
@@ -364,7 +366,6 @@ function remoteApply(store, flow, args, names, { committed, convert } = {}) {
   } catch (e) { fail(e.message, 2); }
   if (flow !== 'receipts') {
     handOver(store, res.request, args, receiptsNext);
-    if (res.skipped?.length) console.warn(`  aviso: ${res.skipped.length} página(s) sem recibo final ficam fora do undo: ${res.skipped.join(', ')}`);
     return;
   }
   const list = slugs => slugs.join(', ');
@@ -752,10 +753,16 @@ async function main() {
       if (args.plan && args.plan !== true) {
         if (!args._[2] || !planCommand(store, args._[2], args, args.plan)) fail(usage);
       } else if (args.apply && args.apply !== true) {
+        const names = { base: file ?? relPath(store.locator.path), plan: args.apply };
+        // On the MCP gbrain the agent makes the writes, request by request: only "archlens apply" carries them.
+        if (store.remote) {
+          fail(`E_STORE_UNSUPPORTED: ${store.describe()} é uma base gbrain no modo mcp: "merge --apply" não grava por pedidos ao agente; nada foi gravado. `
+            + `Rode "archlens remote ${names.base} pull", feche o plano com "archlens plan ${names.base} --answers ${names.plan} --out ${withArgs('<novo>', names)}" se ele estiver aberto, `
+            + `e grave com "archlens apply ${names.base} ${names.plan}" (ou o plano novo)`, 2);
+        }
         loadBase(store);
         assertWritable(store);
         const plan = readJson(args.apply);
-        const names = { base: file ?? relPath(store.locator.path), plan: args.apply };
         let final;
         try {
           const before = store.version(); // a plan without storeVersion is pinned to the version it was closed against
@@ -783,7 +790,8 @@ async function main() {
       break;
     }
     case 'remote': {
-      const usage = 'uso: archlens remote <base> pull [--out pedido.json] | pull --ingest <resposta.json…> [--out pedido.json] | check [--out pedido.json] | check --ingest <resposta.json…>';
+      const usage = 'uso: archlens remote <base> pull [--out pedido.json] | pull --ingest <resposta.json…> [--out pedido.json] | check [--out pedido.json] | check --ingest <resposta.json…>\n'
+        + '  base local que vai para o gbrain (store convert --mode mcp): archlens remote <base> check --server S [--prefix P] [--out pedido.json] | check --server S [--prefix P] --ingest <resposta.json…>';
       const action = args._[2];
       if (!file || !['pull', 'check'].includes(action) || args.ingest === true || args.out === true) fail(usage);
       let store = openBase(file);

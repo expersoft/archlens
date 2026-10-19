@@ -444,3 +444,40 @@ test('text people wrote in vault pages and notes/removidos survive markdown -> g
   refused(() => convertFromGbrain(resolveBase(dir), 'json'), 'E_STORE_CONVERT');
   assert.equal(JSON.parse(readFileSync(join(dir, 'archlens.json'), 'utf8')).store.kind, 'gbrain');
 });
+
+test('converting onto a prefix with archlens pages but no manifest is refused, and nothing is written', () => {
+  for (const page of ['application-component/velho.md', 'views/panorama.md', 'notes/overview.md', 'changelog.md']) {
+    const w = world();
+    const { clone } = w.user('outro');
+    mkdirSync(join(clone, 'archlens', page, '..'), { recursive: true });
+    writeFileSync(join(clone, 'archlens', page), '---\ntitle: Antiga\ntags:\n  - archlens\n---\n# Antiga\n');
+    writeFileSync(join(clone, 'LEIAME.md'), 'fora do prefixo\n');
+    sh(clone, 'add', '-A');
+    sh(clone, 'commit', '-qm', 'páginas antigas');
+    sh(clone, 'push', '-q', 'origin', 'HEAD:refs/heads/main');
+    const head = w.head();
+    const b = localBase(w, 'loja-online');
+    const before = readFileSync(join(b.dir, 'archlens.json'), 'utf8');
+    const e = refused(() => convertToGbrain(b.loc, b.gbrain), 'E_STORE_EXISTS');
+    assert.ok(e.message.includes(`archlens/${page}`), e.message);
+    assert.equal(w.head(), head, page);
+    assert.match(w.show(`archlens/${page}`), /Antiga/);
+    assert.equal(readFileSync(join(b.dir, 'archlens.json'), 'utf8'), before);
+    assert.ok(existsSync(join(b.dir, 'model.json')));
+  }
+});
+
+test("converting back to local takes out the tip's worktree only, never the clone's other registrations", () => {
+  const w = world();
+  const { dir, loc, gbrain } = localBase(w, 'loja-online');
+  const clone = join(dir, gbrain.repo);
+  // A worktree of the user's own whose folder is gone: "git worktree prune" would drop its registration.
+  const theirs = join(w.root, 'minha-worktree');
+  sh(clone, 'commit', '-q', '--allow-empty', '-m', 'local');
+  sh(clone, 'worktree', 'add', '-q', '--detach', theirs);
+  rmSync(theirs, { recursive: true, force: true });
+  convertToGbrain(loc, gbrain);
+  convertFromGbrain(resolveBase(dir), 'json');
+  const listed = sh(clone, 'worktree', 'list', '--porcelain').split('\n').filter(l => l.startsWith('worktree ')).map(l => l.slice(9));
+  assert.deepEqual(listed, [clone, theirs]);
+});

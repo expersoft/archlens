@@ -974,3 +974,11 @@ test('deliver --plan with a final plan writes the preview and never the base', (
 test('the CLI no longer imports previewModel', () => {
   assert.ok(!/previewModel/.test(readFileSync(new URL('../scripts/archlens.mjs', import.meta.url), 'utf8')));
 });
+
+test('help and the remote usage name the session check of a local base about to be converted', () => {
+  const r = run(['help']);
+  assert.match(r.stdout, /check --server S \[--prefix P\]/);
+  const u = run(['remote']);
+  assert.notEqual(u.status, 0);
+  assert.match(u.stderr, /check --server S \[--prefix P\]/);
+});

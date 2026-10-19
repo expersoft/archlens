@@ -125,3 +125,26 @@ test('CLI: init json, gbrain git e erros', () => {
   assert.notEqual(r.status, 0);
   assert.match(r.stderr, /uso: archlens init/);
 });
+
+test('validateStore só aceita os conectores e modos conhecidos, nunca nomes herdados de Object', () => {
+  for (const kind of ['constructor', 'toString', '__proto__', 'hasOwnProperty']) throwsCode(() => validateStore({ kind }), 'E_STORE_CONFIG');
+  for (const mode of ['constructor', 'toString', '__proto__']) throwsCode(() => validateStore({ kind: 'gbrain', mode, server: 's', repo: 'r' }), 'E_STORE_CONFIG');
+  const root = tmp();
+  const r = run(['init', join(root, 'a'), '--store', 'constructor'], root);
+  assert.notEqual(r.status, 0);
+  assert.match(r.stderr, /E_STORE_CONFIG/);
+  assert.equal(existsSync(join(root, 'a', 'archlens.json')), false);
+});
+
+test('store.prefix: cada segmento é um slug do gbrain', () => {
+  const mcp = prefix => validateStore({ kind: 'gbrain', mode: 'mcp', server: 's', prefix });
+  assert.equal(mcp('equipe/arquitetura').prefix, 'equipe/arquitetura');
+  assert.equal(mcp('arq_2.0-x').prefix, 'arq_2.0-x');
+  for (const p of ['Arquitetura', 'minha base', 'ação', '../fora', 'a/./b', 'a//b', 'a/b c'])
+    throwsCode(() => mcp(p), 'E_STORE_CONFIG');
+  const root = tmp();
+  const r = run(['init', join(root, 'm'), '--store', 'gbrain', '--mode', 'mcp', '--server', 's', '--prefix', 'Minha Base'], root);
+  assert.notEqual(r.status, 0);
+  assert.match(r.stderr, /E_STORE_CONFIG[^]*prefix/);
+  assert.equal(existsSync(join(root, 'm', 'archlens.json')), false);
+});

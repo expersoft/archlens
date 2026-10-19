@@ -152,7 +152,10 @@ test('date-like strings are quoted for gbrain, whose YAML reader takes them for 
 test('ids that are not gbrain slugs are refused', () => {
   const raw = small().raw;
   raw.model.elements.push({ id: 'Loja.Pedidos', type: 'application-component', name: 'x' }, { id: 'pagamento-crédito', type: 'application-service', name: 'y' });
-  assert.throws(() => assertGbrainIds(raw), e => e.code === 'E_STORE_GBRAIN_SLUG' && e.message.includes('Loja.Pedidos') && e.message.includes('pagamento-crédito'));
+  assert.throws(() => assertGbrainIds(raw), e => e.code === 'E_STORE_GBRAIN_SLUG' && e.message.includes('Loja.Pedidos') && e.message.includes('pagamento-crédito')
+    && !/e espaços/.test(e.message) && /sem acentos[^]*sem espaços/.test(e.message)); // spaces are refused too
+  raw.model.elements.splice(-2, 2, { id: 'loja pedidos', type: 'application-component', name: 'x' });
+  assert.throws(() => assertGbrainIds(raw), e => e.code === 'E_STORE_GBRAIN_SLUG' && e.message.includes('"loja pedidos"'));
   assert.doesNotThrow(() => assertGbrainIds(small().raw));
   for (const name of EXAMPLES) assert.doesNotThrow(() => assertGbrainIds(base(name).raw), name);
 });

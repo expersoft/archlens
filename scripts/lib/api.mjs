@@ -121,7 +121,7 @@ function conflictLabels(conflicts, raw, plan) {
 function conflictLabel(c, element) {
   const at = c.ref.indexOf(':');
   const [kind, id] = at < 0 ? [c.ref, null] : [c.ref.slice(0, at), c.ref.slice(at + 1)];
-  const what = { element: () => element(id), relationship: () => `relação ${id}`, view: () => `visão ${id}`, note: () => `nota ${id}`, manifest: () => 'manifesto da base' }[kind]?.() ?? c.ref;
+  const what = { element: () => element(id), relationship: () => `relação ${id}`, view: () => `visão ${id}`, note: () => `nota ${id}`, manifest: () => 'manifesto da base', page: () => `página ${id}` }[kind]?.() ?? c.ref;
   if (c.reason === 'possible-duplicate') return `${what}: possível duplicata de ${element(c.candidate)}, que não estava na base do plano`;
   return `${what}: ${c.planned == null ? 'criado' : c.current == null ? 'removido' : 'alterado'} depois do plano`;
 }

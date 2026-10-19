@@ -53,13 +53,16 @@ ferramentas do MCP configurado, na ordem, sem decidir nada, gravando o resultado
    repositório do gbrain (`E_STORE_GIT` traz a saída do git); lembre o usuário de que o sync do gbrain indexa as páginas.
 
    **Modo MCP do gbrain**, em passos (cada um imprime o próximo):
-   1. `archlens apply <base> p2.json` grava o pedido de releitura (`get_page` do que o plano leu); faça as chamadas;
+   0. `archlens remote <base> pull` (e os `--ingest` até o espelho estar em dia) **logo antes** do apply: as
+      conferências do apply rodam contra esse espelho e a releitura;
+   1. `archlens apply <base> p2.json` grava o pedido de releitura (`get_page` do que o plano lê e grava); faça as chamadas;
    2. `archlens apply <base> p2.json --read-check resposta.json` confere o que foi relido e grava o pedido de gravação
       (`put_pages`, `delete_page`, o histórico por último) e o registro em `.archlens/applies/<id>.json`; faça as chamadas;
    3. `archlens apply <base> --receipts resposta.json` confere os recibos e atualiza o espelho. Se ele pedir um
       seguimento (tags a tirar ou pôr, `remove_tag`/`add_tag`), faça essas chamadas e rode `--receipts` de novo.
-   4. Apply **parcial**: chamadas sem recibo (a sessão caiu) → `archlens apply <base> --resume <id>`, que repete com os
-      mesmos `request_id` (o gbrain nunca grava duas vezes); página em conflito (mudou no gbrain no meio) ou que o gbrain
+   4. Apply **parcial**: chamadas sem recibo (a sessão caiu, ou um erro do cliente MCP como um timeout: grave o
+      resultado como veio) → `archlens apply <base> --resume <id>`, que repete com os mesmos `request_id` (o gbrain nunca
+      grava duas vezes; o `--undo` espera esses recibos); página em conflito (mudou no gbrain no meio) ou que o gbrain
       marcou como duplicata (`duplicate_of`: use uma fonte do gbrain por base) → `archlens apply <base> --undo <id>`, e
       depois `--receipts` do pedido do undo. A página de histórico apagada no gbrain (`E_STORE_HISTORY_RETRY`): restaure-a
       (`restore_page`) e `--resume <id>`, ou `--undo <id>`. **Pergunte ao usuário antes do undo.**
@@ -70,6 +73,9 @@ ferramentas do MCP configurado, na ordem, sem decidir nada, gravando o resultado
    | `E_PLAN_SCHEMA` | não é um plano (ex.: um delta): skill archlens-plan, `archlens plan` primeiro |
    | `E_STORE_CONFLICT` | um objeto do plano mudou depois dele (outro apply em paralelo), ou um elemento parecido foi criado em paralelo: a mensagem lista os objetos. No modo MCP, `archlens remote <base> pull` antes; refaça com `archlens plan <base> --answers p2.json --out p3.json` (skill archlens-plan), revise e aplique o novo |
    | `E_REMOTE_STALE` | base MCP sem espelho: `archlens remote <base> pull` (acima) |
+   | `E_STORE_APPLY` | modo MCP: `--resume`/`--undo` sem o que retomar ou desfazer, `--resume` com conflito, ou `--undo` com chamadas sem recibo: siga a mensagem (`--receipts` do pedido em aberto, `--resume <id>`, ou `--undo <id>`) |
+   | `E_STORE_GBRAIN_SIZE` | modo MCP: página acima de 8 MB (limite do `put_pages`): reduza a página ou use o modo git |
+   | `E_STORE_UNSUPPORTED` | `merge --apply` numa base MCP: feche com `archlens plan --answers` e use `archlens apply` |
    | `E_STORE_GBRAIN_SLUG` / `E_STORE_GBRAIN_RESERVED` | id que não é slug do gbrain (minúsculas, sem acento) ou nome/campo reservado do gbrain: corrija o delta (skill archlens-plan) |
    | `E_MERGE_INVALID` | o resultado com as respostas é inválido: reveja as respostas (skill archlens-plan) |
    | `E_STORE_FORMAT` | base 1.x: migre (abaixo) e refaça o plano |

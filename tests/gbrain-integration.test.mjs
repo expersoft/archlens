@@ -444,7 +444,7 @@ describe('gbrain real', { skip }, () => {
     }
   });
 
-  test('MCP criterion 4: an apply the agent stopped mid-way is undone by --undo (delete_page, restore_page and put_pages)', async () => {
+  test('MCP criterion 4: an apply the agent stopped mid-way is finished by --resume and undone by --undo (delete_page, restore_page and put_pages)', async () => {
     const src = env.addSource('m5');
     const s = await session(src);
     try {
@@ -461,6 +461,9 @@ describe('gbrain real', { skip }, () => {
       assert.equal(partial.state, 'partial', JSON.stringify(partial));
       assert.ok(partial.committed.includes('archlens/application-component/rh.folha'));
       assert.ok((await s.call('get_page', { slug: 'archlens/application-component/rh.folha', source_id: src.id })).isError);
+      // The history call has no receipt (it may have run): --undo waits for it, --resume sends it again first.
+      assert.throws(() => st.remote.undo(), e => e.code === 'E_STORE_APPLY' && e.message.includes('archlens/changelog'));
+      assert.equal(st.remote.receipts([await agent(s, st.remote.resume().request)]).state, 'committed');
       const undo = st.remote.undo();
       assert.ok(undo.request.calls.some(c => c.tool === 'restore_page'), JSON.stringify(undo.request.calls.map(c => c.tool)));
       const done = st.remote.receipts([await agent(s, undo.request)]);

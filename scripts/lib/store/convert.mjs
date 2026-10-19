@@ -125,11 +125,12 @@ export function convertToGbrain(locator, store) {
   const ops = diffRaw(null, cur);
   const expect = Object.fromEntries([...writeSetOf(ops)].map(ref => [ref, null]));
   try {
-    target.apply(ops, { expect, carry });
+    target.apply(ops, { expect, carry, fresh: true });
   } catch (e) {
-    if (e.code === 'E_STORE_CONFLICT') {
-      throw storeError('E_STORE_EXISTS', `${valid.remote}/${valid.branch} já tem páginas do archlens em ${valid.prefix}/ (${(e.conflicts ?? []).slice(0, 5).map(c => c.ref).join(', ')}); `
-        + 'use outro --prefix ou leia a base de lá com um archlens.json de configuração (archlens init --store gbrain)', { conflicts: e.conflicts });
+    if (e.code === 'E_STORE_CONFLICT' || e.code === 'E_STORE_EXISTS') {
+      const found = e.pages ?? (e.conflicts ?? []).map(c => c.ref);
+      throw storeError('E_STORE_EXISTS', `${valid.remote}/${valid.branch} já tem páginas do archlens em ${valid.prefix}/ (${found.slice(0, 5).join(', ')}${found.length > 5 ? ` e mais ${found.length - 5}` : ''}); nada foi gravado. `
+        + 'Use outro --prefix ou leia a base de lá com um archlens.json de configuração (archlens init --store gbrain)', { conflicts: e.conflicts, pages: e.pages });
     }
     throw e;
   }
@@ -221,6 +222,19 @@ function filesUnder(dir, rel = '') {
   return readdirSync(join(dir, rel), { withFileTypes: true }).flatMap(e => (e.isDirectory() ? filesUnder(dir, join(rel, e.name)) : [join(rel, e.name)]));
 }
 
+/** Removes the clone's registration of the worktree at `path` whose folder is gone (<common dir>/worktrees/<name>, by its gitdir). */
+function dropRegistration(repo, path) {
+  const common = spawnSync('git', ['-C', repo, 'rev-parse', '--git-common-dir'], { encoding: 'utf8' });
+  if (common.status !== 0) return;
+  const admin = join(resolve(repo, common.stdout.trim()), 'worktrees');
+  if (!existsSync(admin)) return;
+  for (const name of readdirSync(admin)) {
+    let gitdir;
+    try { gitdir = readFileSync(join(admin, name, 'gitdir'), 'utf8').trim(); } catch { continue; }
+    if (resolve(dirname(gitdir)) === resolve(path)) rmSync(join(admin, name), { recursive: true, force: true });
+  }
+}
+
 /** Takes the tip worktree (<dir>/.archlens/tip) out of the clone and the folder; the base is local again. */
 function dropTip(dir, store) {
   if (store.mode === 'mcp') {
@@ -233,8 +247,9 @@ function dropTip(dir, store) {
   const tip = join(dir, TIP);
   const repo = resolve(dir, store.repo);
   if (existsSync(repo)) {
-    spawnSync('git', ['-C', repo, 'worktree', 'remove', '--force', tip], { encoding: 'utf8' });
-    spawnSync('git', ['-C', repo, 'worktree', 'prune'], { encoding: 'utf8' });
+    // Only the tip's registration: "git worktree prune" would also drop the user's own stale ones.
+    const removed = spawnSync('git', ['-C', repo, 'worktree', 'remove', '--force', tip], { encoding: 'utf8' });
+    if (removed.status !== 0) dropRegistration(repo, tip);
   }
   rmSync(tip, { recursive: true, force: true });
   const mirror = join(dir, '.archlens');

@@ -60,7 +60,7 @@ export function assertGbrainIds(raw) {
   }
   const bad = ids.filter(id => gbrainSlug(id) !== id);
   if (bad.length) {
-    throw storeError('E_STORE_GBRAIN_SLUG', `ids que o gbrain gravaria com outro nome (só minúsculas, dígitos, ".", "_", "-" e espaços): ${bad.map(i => `"${i}"`).join(', ')}`, { ids: bad });
+    throw storeError('E_STORE_GBRAIN_SLUG', `ids que o gbrain gravaria com outro nome (só letras minúsculas sem acentos, dígitos, ".", "_" e "-", ou letras CJK; sem espaços): ${bad.map(i => `"${i}"`).join(', ')}`, { ids: bad });
   }
 }
 

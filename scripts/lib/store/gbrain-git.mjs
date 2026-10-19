@@ -153,6 +153,12 @@ export function gbrainGitConnector(locator, store, { describe = `${relative(proc
   }
 
   const read = () => { const { base } = load(); return base && { raw: base.raw, notes: base.notes }; };
+  /** A page of the layout under the prefix (manifest, history, views, notes, elements), base or not. */
+  const layoutPage = path => {
+    const r = path.slice(prefix.length + 1);
+    return r === 'manifest.md' || r === 'changelog.md' || /^views\/[^/]+\.md$/.test(r) || /^notes\/.+\.md$/.test(r)
+      || (/^[^/]+\/[^/]+\.md$/.test(r) && !!ELEMENT_TYPES[r.split('/')[0]]);
+  };
 
   /** The files under the prefix for `next` (path → text, null to delete), over the tip as loaded. */
   function changes(cur, next, carry) {
@@ -209,10 +215,15 @@ export function gbrainGitConnector(locator, store, { describe = `${relative(proc
     /**
      * fetch → check (`expect`, or `baseVersion`, and `recheck(base)`, more conflicts the caller finds) → the ops over the
      * tip → one commit → push; a rejected push starts over from the fetch (up to RETRIES times). Anything that fails
-     * before the push leaves the remote as it was and the worktree back at the tip.
+     * before the push leaves the remote as it was and the worktree back at the tip. `fresh` (store convert): the prefix
+     * must hold no page of the layout at all, base or not (E_STORE_EXISTS, `pages` listed).
      */
-    apply(ops, { expect, baseVersion = null, recheck, carry } = {}) {
-      const verify = base => {
+    apply(ops, { expect, baseVersion = null, recheck, carry, fresh = false } = {}) {
+      const verify = (base, files) => {
+        if (fresh) {
+          const found = [...(files?.keys() ?? [])].filter(layoutPage).sort();
+          if (found.length) throw storeError('E_STORE_EXISTS', `${where} já tem páginas do archlens em ${prefix}/: ${found.slice(0, 5).join(', ')}${found.length > 5 ? ` e mais ${found.length - 5}` : ''}`, { pages: found });
+        }
         if (expect) {
           const conflicts = [...checkExpect(objectVersionsOf(base, Object.keys(expect)), expect), ...(recheck?.(base) ?? [])];
           if (conflicts.length) throw objectConflictError(conflicts);
@@ -225,7 +236,7 @@ export function gbrainGitConnector(locator, store, { describe = `${relative(proc
       for (let attempt = 0; attempt <= RETRIES; attempt++) {
         const cur = load({ forWrite: true });
         try {
-          verify(cur.base);
+          verify(cur.base, cur.files);
           const next = applyOps(cur.base, ops);
           assertGbrainIds(next.raw);
           const { out, preserved } = changes(cur, next, carry);

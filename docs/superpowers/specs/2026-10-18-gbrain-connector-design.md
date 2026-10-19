@@ -86,8 +86,8 @@ o gbrain sincroniza) e **MCP** (o agente chama as ferramentas do gbrain; o CLI p
 3. **Modo git atômico:** um apply é um commit; uma falha antes do push não deixa nada no remoto.
 4. **Modo MCP recuperável:** um lote interrompido (`partial`) é completado por `archlens apply --resume` ou desfeito por
    `archlens apply --undo`, a partir do registro local do apply.
-5. **Ida e volta:** `store convert` de uma base local para o gbrain (modo git) e de volta devolve a mesma base (`canonicalJson`),
-   e os três exemplos passam por isso.
+5. **Ida e volta:** `store convert` de uma base local para o gbrain (modo git) e de volta devolve a mesma base (`contentVersion` igual;
+   ordem dos elementos e ids de relação gerados não contam), e os três exemplos passam por isso.
 6. **Legível sem o archlens:** depois do sync do gbrain (modo git), `traverse_graph` a partir de um container devolve os
    vizinhos com os tipos de relação ArchiMate, e as páginas de manifesto, visões, notas e histórico aparecem em `list_pages`.
 7. **Locais intactos:** `json` continua com a versão da base inteira; `markdown` local ganha versão por objeto (por arquivo); os
@@ -257,14 +257,14 @@ O CLI não fala com o MCP. Ele mantém um **espelho local** da base em `<pasta>/
 
 | Passo | CLI | Agente |
 |---|---|---|
-| sincronizar | `archlens remote <base> pull` grava `pull-request.json`: as chamadas `list_pages` (o `list_pages` não filtra por prefixo: filtra por `tag` — toda página do archlens leva a tag `archlens` — com o cursor `updated_after` + `updated_after_slug` desde a última sincronização e `include_deleted: true`, para ver remoções) | executa, grava cada resposta em `pull-response-N.json` |
-| | `archlens remote <base> pull --ingest pull-response-*.json` grava `get-request.json`: as páginas novas ou com revisão diferente | `get_page` com `include_content: true` de cada uma, grava as respostas |
+| sincronizar | `archlens remote <base> pull` grava `pull-request.json`: as chamadas `list_pages` (o `list_pages` não filtra por prefixo: filtra por `tag` — toda página do archlens leva a tag `archlens` — com `include_deleted: true` e `sort: updated_asc`). Todo pull lista os metadados de **todas** as páginas do archlens desde o início, paginando com o cursor `updated_after` + `updated_after_slug` dentro da listagem (um delete não move o `updated_at` no gbrain, e uma gravação carimba a hora em que a sua transação começou, que pode ser anterior a uma listagem feita enquanto ela rodava) | executa, grava cada resposta em `pull-response-N.json` |
+| | `archlens remote <base> pull --ingest pull-response-*.json` grava `get-request.json`: as páginas novas no espelho ou listadas com `updated_at` diferente do da última listagem (guardado por página em `sync.json`); as que não foram listadas vivas saem do espelho | `get_page` com `include_content: true` de cada uma, grava as respostas |
 | | `archlens remote <base> pull --ingest get-response-*.json` atualiza o espelho e o `revisions.json` | — |
 | planejar | `plan`, `show`, `query` e prévias leem o **espelho** (o plano guarda as `revision` como versões) | — |
-| reler o lido | `archlens apply <base> plano.json` (base MCP) grava primeiro `read-check-request.json`: `get_page` de cada página do conjunto de leitura que não está no de escrita | executa, grava as respostas |
-| aplicar | `archlens apply <base> plano.json --read-check read-check-response.json` confere as revisões relidas e o plano contra o espelho (revisão diferente → `E_STORE_CONFLICT`, nada pedido para gravar), valida e grava `apply-request.json`: lotes `put_pages` (≤ 50 páginas / 8 MB) e `delete_page`, cada página com `expected_revision` do plano, um `request_id` por lote, e o histórico por último; abre o **registro do apply** em `.archlens/applies/<id>.json` (conteúdo anterior de cada página, para desfazer) | executa os lotes em ordem e grava os recibos em `apply-response.json` |
+| reler o lido | `archlens apply <base> plano.json` (base MCP) grava primeiro `read-check-request.json`: `get_page` de cada página do conjunto de leitura e de cada página que o plano grava (menos o histórico) | executa, grava as respostas |
+| aplicar | `archlens apply <base> plano.json --read-check read-check-response.json` confere as revisões relidas (página lida ou gravada com revisão diferente → `E_STORE_CONFLICT`, nada pedido para gravar) e o plano contra o espelho atualizado pelo `pull` feito logo antes, valida e grava `apply-request.json`: lotes `put_pages` (≤ 50 páginas / 8 MB) e `delete_page`, cada página com `expected_revision` do plano, um `request_id` por lote, e o histórico por último; abre o **registro do apply** em `.archlens/applies/<id>.json` (conteúdo anterior de cada página, para desfazer) | executa os lotes em ordem e grava os recibos em `apply-response.json` |
 | conferir | `archlens apply <base> --receipts apply-response.json` confere cada página: `committed`, `revision_conflict` ou pendente; atualiza o espelho | — |
-| recuperar | `apply --resume` gera os pedidos que faltam (mesmos `request_id`s para o que ficou pendente; novos para o que não foi enviado); `apply --undo` gera as chamadas que devolvem o conteúdo anterior das páginas já gravadas (com `expected_revision` = a revisão que o apply gravou) | executa |
+| recuperar | `apply --resume` gera os pedidos que faltam (o mesmo `request_id` para toda chamada sem recibo — não enviada, sem resultado, ou com um erro sem o código do gbrain, como um timeout do cliente MCP —, que o gbrain executa uma vez só; um novo só para a página que falhou de vez com um erro do gbrain que não é conflito); `apply --undo` gera as chamadas que devolvem o conteúdo anterior das páginas já gravadas (com `expected_revision` = a revisão que o apply gravou) | executa |
 
 - `revision_conflict` numa página do conjunto de escrita depois de o lote começar (alguém gravou no meio): o apply fica
   `partial`; o CLI informa as páginas gravadas e as em conflito e oferece `--undo` (o resto do plano não é forçado).
@@ -295,7 +295,7 @@ O CLI não fala com o MCP. Ele mantém um **espelho local** da base em `<pasta>/
 - `--to gbrain --mode mcp`: gera o `apply-request.json` de criação (todas as páginas, `expected_revision` omitido = só criar),
   seguido de `--receipts`.
 - `--to json|markdown` a partir do gbrain: lê (git: direto; MCP: espelho) e grava a base local.
-- Ida e volta devolve a mesma base (`canonicalJson`); `E_STORE_CONVERT` se não.
+- Ida e volta devolve a mesma base (`contentVersion` igual; ordem dos elementos e ids de relação gerados não contam); `E_STORE_CONVERT` se não.
 
 ## 7. Testes
 

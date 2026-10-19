@@ -5,6 +5,7 @@ import { spawnSync } from 'node:child_process';
 import { FORMAT } from '../canonical.mjs';
 import { storeError } from './errors.mjs';
 import { MANIFEST } from './folder.mjs';
+import { gbrainSlug } from './gbrain-layout.mjs';
 
 const CREDENTIAL_KEY = /credential|token|password/i;
 /** kind → mode → { required, defaults, optional } fields; "json" and "markdown" take no mode. */
@@ -37,7 +38,7 @@ export function validateStore(store) {
   const secret = credentialKey(store);
   if (secret) throw bad(`"${secret}" não é aceito: o archlens.json não guarda credenciais (use o ambiente do MCP ou do git)`);
   const kind = store.kind ?? 'json';
-  const shape = SHAPES[kind];
+  const shape = typeof kind === 'string' && Object.hasOwn(SHAPES, kind) ? SHAPES[kind] : null;
   if (!shape) throw bad(`"kind" ${JSON.stringify(kind)} desconhecido (use ${Object.keys(SHAPES).join(', ')})`);
   let mode = null;
   let allowed = ['kind'];
@@ -45,7 +46,7 @@ export function validateStore(store) {
   let required = [];
   if (shape.modes) {
     mode = store.mode;
-    const m = shape.modes[mode];
+    const m = typeof mode === 'string' && Object.hasOwn(shape.modes, mode) ? shape.modes[mode] : null;
     if (!m) throw bad(`"mode" é obrigatório em ${kind}: ${Object.keys(shape.modes).join(' ou ')} (recebido ${JSON.stringify(mode)})`);
     ({ required, defaults } = m);
     allowed = ['kind', 'mode', ...required, ...(m.optional ?? []), ...Object.keys(defaults)];
@@ -59,6 +60,13 @@ export function validateStore(store) {
     if (v === undefined) continue;
     if (typeof v !== 'string' || !v) throw bad(`"${k}" deve ser um texto não vazio`);
     out[k] = v;
+  }
+  // Each folder of the prefix is a page slug segment in gbrain: one it would file under another name is refused.
+  if (out.prefix !== undefined) {
+    const segments = out.prefix.replace(/^\/+|\/+$/g, '').split('/');
+    if (segments.some(s => !s || s === '.' || s === '..' || gbrainSlug(s) !== s)) {
+      throw bad(`"prefix" ${JSON.stringify(out.prefix)} inválido: cada pasta deve ser um slug do gbrain (só letras minúsculas sem acentos, dígitos, ".", "_" e "-"), como "archlens" ou "equipe/arquitetura"`);
+    }
   }
   return out;
 }

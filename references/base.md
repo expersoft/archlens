@@ -43,8 +43,9 @@ Procure `architecture/archlens.json` (a CLI também acha sozinha, subindo a part
   `archlens migrate ARCHITECTURE.md`), feito pela skill archlens-apply, e **pergunte antes**. Planos feitos antes da
   migração deixam de valer: gere-os de novo.
 - **Sem base**: pergunte ao usuário o **tipo de repositório** e os parâmetros (tabela abaixo) e crie a base com
-  `archlens init` (skill archlens-apply, a única que grava). Sem preferência do usuário, `json` é o padrão; uma base
-  `json` ou `markdown` também nasce no primeiro `apply` sem `init` (`name` e `description` do delta viram os da base).
+  `archlens init` (skill archlens-apply, a única que grava). Sem preferência do usuário, `json` é o padrão; só uma base
+  `json` nasce no primeiro `apply` sem `init` (`name` e `description` do delta viram os da base); `markdown` e `gbrain`
+  precisam do `init`.
   Se o repositório já tem um `ARCHITECTURE.md` que não foi gerado pelo archlens (sem `source:` no cabeçalho), **pergunte
   antes** ao usuário: movê-lo, ou usar o conteúdo dele como texto livre do primeiro delta. A CLI nunca o sobrescreve
   (`E_STORE_DOC_FOREIGN`).

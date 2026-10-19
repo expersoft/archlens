@@ -484,7 +484,9 @@ test('a full apply round trip through the fake gbrain', () => {
   assert.equal(req['archlens-remote'], '1.0');
   const written = pagesIn(req.calls);
   const page = slug => written.find(pg => pg.slug === slug);
-  assert.ok(reread.every(s => !page(s))); // a page read only is reread, never rewritten
+  assert.ok(!page('archlens/application-component/rh')); // a page read only is reread, never rewritten
+  // The pages written are reread too (but the history, retried on its own).
+  assert.deepEqual(reread, [...written.map(pg => pg.slug).filter(s => s !== 'archlens/changelog'), 'archlens/application-component/rh'].sort());
   assert.equal(page('archlens/application-component/vendas').expected_revision, p.objects['element:vendas']);
   assert.ok(!('expected_revision' in page('archlens/application-component/vendas.cache'))); // new: create only
   assert.deepEqual(req.calls.at(-1).arguments.pages.map(pg => pg.slug), ['archlens/changelog']); // the history goes last
@@ -1305,4 +1307,144 @@ test('a finished convert that came back to json is not in flight: converting aga
   checker.remote.checkIngest([gbrain.run(checker.remote.check())]);
   const again = convertToGbrain(resolveBase(w.dir), { ...MCP, prefix: 'segundo' });
   assert.ok(again.request);
+});
+
+// ---- final review fixes ------------------------------------------------------------------------------------------
+// An MCP client timeout on a call that did run: an error result without gbrain's error JSON.
+const TIMEOUT = { isError: true, content: [{ type: 'text', text: 'MCP error -32001: Request timed out' }] };
+const callOf = (req, slug) => req.calls.findIndex(c => c.arguments.pages?.some(pg => pg.slug === slug));
+
+test('a history put that timed out at the client but committed is replayed with its request_id: the round once', () => {
+  const w = ready();
+  const { request: req } = requestApply(w, finalPlan(w, [cache]));
+  const answer = w.gbrain.run(req); // every call ran in gbrain
+  const k = callOf(req, 'archlens/changelog');
+  answer.results[k] = TIMEOUT;
+  const res = w.store.remote.receipts([answer]);
+  assert.equal(res.state, 'partial');
+  assert.deepEqual(res.pending, ['archlens/changelog']);
+  const resumed = w.store.remote.resume();
+  assert.deepEqual(resumed.request.calls, [req.calls[k]]); // the same call, the same request_id
+  assert.equal(settle(w, resumed.request).at(-1).state, 'committed');
+  pull(w.store, w.gbrain);
+  assert.deepEqual(w.store.read().raw.changelog.map(r => r.id), ['2026-10-01-01', '2026-10-18-01']);
+});
+
+test('an element batch that timed out but committed ends committed by --resume, and --undo reverts it', () => {
+  const w = ready();
+  const original = contentVersion(w.store.read());
+  const { request: req, apply: id } = requestApply(w, finalPlan(w, [cache]));
+  const answer = w.gbrain.run(req);
+  const slug = 'archlens/application-component/vendas.cache';
+  const k = callOf(req, slug);
+  answer.results[k] = TIMEOUT;
+  const res = w.store.remote.receipts([answer]);
+  assert.equal(res.state, 'partial');
+  assert.ok(res.pending.includes(slug));
+  assert.ok(!res.conflicts.length);
+  // The pages may have been written: --undo waits for their receipts.
+  assert.throws(() => w.store.remote.undo(id), e => e.code === 'E_STORE_APPLY' && /--resume/.test(e.message) && e.message.includes(slug));
+  const resumed = w.store.remote.resume();
+  assert.deepEqual(resumed.request.calls, [req.calls[k]]);
+  assert.equal(settle(w, resumed.request).at(-1).state, 'committed');
+  assert.equal(journal(w.dir, id).pages[slug].revision, w.gbrain.page(slug).revision);
+  assert.equal(settle(w, w.store.remote.undo(id).request).at(-1).state, 'undone');
+  pull(w.store, w.gbrain);
+  assert.equal(contentVersion(w.store.read()), original);
+  assert.equal(w.gbrain.page(slug).deleted_at !== null, true);
+});
+
+test('a reread history that already holds the apply\'s round is taken as written, not appended again', () => {
+  const w = ready();
+  const { request: req } = requestApply(w, finalPlan(w, [cache]));
+  const answer = w.gbrain.run(req); // the round reached gbrain...
+  const k = callOf(req, 'archlens/changelog');
+  // ...but the answer kept is a conflict (a replay gbrain no longer matched to its request_id).
+  answer.results[k] = { isError: true, content: [{ type: 'text', text: JSON.stringify({ error: 'revision_conflict', code: 'revision_conflict', current_revision: w.gbrain.page('archlens/changelog').revision }) }] };
+  const first = w.store.remote.receipts([answer]);
+  assert.deepEqual(first.request.calls.map(c => c.tool), ['get_page']);
+  const done = w.store.remote.receipts([w.gbrain.run(first.request)]);
+  assert.equal(done.state, 'committed');
+  assert.equal(done.request, undefined);
+  assert.equal(done.entry.id, '2026-10-18-01');
+  assert.equal(revisions(w.dir)['archlens/changelog'], w.gbrain.page('archlens/changelog').revision);
+  pull(w.store, w.gbrain);
+  assert.deepEqual(w.store.read().raw.changelog.map(r => r.id), ['2026-10-01-01', '2026-10-18-01']);
+});
+
+test('a page committed without revision whose tags the apply drops is read again; its tag calls use that revision only if the page is still the apply\'s', () => {
+  for (const changed of [false, true]) {
+    const w = ready({ extra: [legado] });
+    const { request: req } = retag(w);
+    const answer = w.gbrain.run(req);
+    answer.results.flatMap(r => r.pages ?? []).find(pg => pg.slug === LEGADO).revision = null;
+    const first = w.store.remote.receipts([answer]);
+    assert.equal(first.state, 'partial');
+    assert.deepEqual(first.request.calls.map(c => [c.tool, c.arguments.slug]), [['get_page', LEGADO]]);
+    if (changed) someoneWrites(w, LEGADO);
+    const second = w.store.remote.receipts([w.gbrain.run(first.request)]);
+    if (!changed) {
+      assert.deepEqual(tagCallsIn(second.request).map(c => [c.arguments.tag, c.arguments.expected_revision]), [['archlens/tag/erp', w.gbrain.page(LEGADO).revision]]);
+      assert.equal(settle(w, second.request).at(-1).state, 'committed');
+      assert.deepEqual(w.gbrain.page(LEGADO).tags, ['archlens', 'archlens/application-component', 'archlens/tag/novo']);
+    } else {
+      assert.equal(second.state, 'partial');
+      assert.equal(second.request, undefined);
+      assert.ok(second.conflicts.some(c => c.startsWith(`${LEGADO} (`)), JSON.stringify(second));
+      assert.match(w.gbrain.content(LEGADO), /Nota de outra pessoa/);
+    }
+  }
+});
+
+test('--undo while calls have no receipt yet is refused: --resume (or --receipts) first', () => {
+  const w = ready();
+  const { request: req, apply: id } = requestApply(w, finalPlan(w, [cache]));
+  const answer = w.gbrain.run(req);
+  w.store.remote.receipts([{ ...answer, results: answer.results.slice(0, -1) }]); // the history call left unsent
+  assert.throws(() => w.store.remote.undo(id), e => e.code === 'E_STORE_APPLY' && /--resume/.test(e.message) && e.message.includes('archlens/changelog'));
+  assert.equal(journal(w.dir, id).state, 'partial');
+  assert.equal(settle(w, w.store.remote.resume(id).request).at(-1).state, 'committed');
+  assert.equal(settle(w, w.store.remote.undo(id).request).at(-1).state, 'undone');
+});
+
+test('a page written by the plan that changed in gbrain after the pull is refused at read-check, with nothing written', () => {
+  const w = ready();
+  const p = finalPlan(w, [cache]);
+  const first = apply(w.store, p);
+  assert.equal(first.request.step, 'read-check');
+  const vendas = 'archlens/application-component/vendas';
+  const asked = first.request.calls.map(c => c.arguments.slug);
+  assert.ok(asked.includes(vendas) && asked.includes('archlens/application-component/vendas.cache'), JSON.stringify(asked));
+  assert.ok(!asked.includes('archlens/changelog')); // the history is retried on its own
+  someoneWrites(w, vendas);
+  assert.throws(() => apply(w.store, p, { readCheck: [w.gbrain.run(first.request)] }), e => e.code === 'E_STORE_CONFLICT'
+    && e.conflicts.some(c => c.ref === 'element:vendas' && c.current === w.gbrain.page(vendas).revision));
+  assert.ok(!existsSync(join(w.dir, '.archlens', 'applies')) || !readdirSync(join(w.dir, '.archlens', 'applies')).length);
+  assert.equal(w.gbrain.page('archlens/application-component/vendas.cache'), null);
+  // A page the plan creates that someone created meanwhile: refused too.
+  const v = ready();
+  const q = finalPlan(v, [cache]);
+  const r = apply(v.store, q);
+  v.gbrain.write(new Map([['archlens/application-component/vendas.cache.md', '---\ntitle: Outro\ntags:\n  - archlens\n---\n# Outro\n']]));
+  assert.throws(() => apply(v.store, q, { readCheck: [v.gbrain.run(r.request)] }), e => e.code === 'E_STORE_CONFLICT');
+});
+
+test('merge --apply on an MCP base is refused and points to archlens apply: nothing asked, nothing written', () => {
+  const w = ready();
+  const cwd = join(w.dir, '..');
+  writeFileSync(join(cwd, 'd.json'), JSON.stringify(deltaOf([cache])));
+  let r = cli(['plan', 'architecture', 'd.json', '--out', 'p.json'], cwd);
+  assert.equal(r.status, 0, r.stderr);
+  const doc = join(cwd, 'ARCHITECTURE.md');
+  const docBefore = existsSync(doc) ? readFileSync(doc, 'utf8') : null;
+  const mirrorBefore = mirrorFiles(w.dir);
+  r = cli(['merge', 'architecture', '--apply', 'p.json'], cwd);
+  assert.notEqual(r.status, 0);
+  assert.match(r.stderr, /archlens apply architecture p\.json/);
+  assert.doesNotMatch(r.stdout, /✓|nada mudou/);
+  assert.ok(!existsSync(join(w.dir, '.archlens', 'applies')) || !readdirSync(join(w.dir, '.archlens', 'applies')).length);
+  assert.ok(!existsSync(join(w.dir, '.archlens', 'remote', 'apply-request.json')));
+  assert.equal(existsSync(doc) ? readFileSync(doc, 'utf8') : null, docBefore);
+  assert.deepEqual(mirrorFiles(w.dir), mirrorBefore);
+  assert.equal(w.gbrain.page('archlens/application-component/vendas.cache'), null);
 });
