@@ -256,7 +256,8 @@ export function gbrainMcpConnector(locator, store, { describe = `${rel(locator.p
   const withRevision = r => (r ? { expected_revision: r } : {}); // none: create only
   const putCall = pages => ({ tool: 'put_pages', arguments: { request_id: randomUUID(), pages: pages.map(p => ({ slug: p.slug, content: p.content, ...withRevision(p.expected) })), ...scope }, slugs: pages.map(p => p.slug) });
   const oneCall = (tool, p) => ({ tool, arguments: { slug: p.slug, ...withRevision(p.expected), request_id: randomUUID(), ...scope }, slugs: [p.slug] });
-  const getCall = slug => ({ tool: 'get_page', arguments: { slug, include_content: true, content_only: true, ...scope }, slugs: [slug] });
+  const getCall = (slug, { deleted = false } = {}) => ({ tool: 'get_page', arguments: { slug, include_content: true, content_only: true, ...(deleted ? { include_deleted: true } : {}), ...scope }, slugs: [slug] });
+  const isPoll = call => call.tool === 'put_pages' && !call.arguments.pages;
   const isHistory = call => call.slugs.includes(historySlug);
 
   /**
@@ -281,7 +282,9 @@ export function gbrainMcpConnector(locator, store, { describe = `${rel(locator.p
    * (not a conflict) goes in a new call. The history last.
    */
   function retryCalls(j, pages) {
-    const sent = new Map(j.calls.map(c => [c.arguments.request_id, c]));
+    // The call a request_id was first sent with (the one with its pages; polls reuse the id).
+    const sent = new Map();
+    for (const c of j.calls) if (!sent.has(c.arguments.request_id)) sent.set(c.arguments.request_id, c);
     const slugsOf = c => (c.arguments.pages ? c.arguments.pages.map(p => p.slug) : [c.arguments.slug]);
     const again = new Map();
     const fresh = [];
@@ -294,6 +297,7 @@ export function gbrainMcpConnector(locator, store, { describe = `${rel(locator.p
             : { ...structuredClone(call), slugs: slugsOf(call) });
         }
       } else if (p.state === 'failed') fresh.push(Object.assign(p, { slug }));
+      else if (p.state === 'reread') again.set(`get:${slug}`, getCall(slug, { deleted: p.op === 'restore' }));
     }
     const calls = [...again.values(), ...writeCalls(fresh)];
     return [...calls.filter(c => !isHistory(c)), ...calls.filter(isHistory)];
@@ -335,7 +339,7 @@ export function gbrainMcpConnector(locator, store, { describe = `${rel(locator.p
    */
   function outcomesOf(call, res, i, pages) {
     const where = `resultado ${i + 1} (${call.tool})`;
-    if (call.tool === 'get_page') return [{ slug: historySlug, state: 'reread', page: pageOfResult(res, call, i) }];
+    if (call.tool === 'get_page') return [{ slug: call.arguments.slug, state: 'reread', page: pageOfResult(res, call, i) }];
     const all = state => call.slugs.map(slug => ({ slug, state }));
     if (res.error) {
       const code = codeOf(res.error);
@@ -448,6 +452,27 @@ export function gbrainMcpConnector(locator, store, { describe = `${rel(locator.p
     return { entry: next.raw.changelog.at(-1), content, before: normalized.get(`${historySlug}.md`) };
   }
 
+  /**
+   * Whether `page` (get_page, gbrain's serialization) is still what the apply wrote at `slug`: deleted, for a page the
+   * apply deleted; otherwise the same base and the same text people wrote as the mirror `files` hold with the apply's
+   * bytes (compared as content: gbrain gives nested keys back in another order).
+   */
+  function stillWritten(j, files, slug, page) {
+    if (j.pages[slug].op === 'delete') return !!page.deleted_at;
+    if (page.deleted_at) return false;
+    const view = fs => {
+      const flat = fromGbrainFiles(normalizeMirror(fs, prefix), { prefix });
+      const b = readVaultFiles(flat);
+      return canonicalJson({ version: contentVersion(b), text: [...b.ctx.pages].map(([id, x]) => [id, x.userText ?? '']),
+        removed: [...flat].filter(([k]) => k.startsWith('notes/removidos/')) });
+    };
+    const mine = new Map(files);
+    mine.set(`${slug}.md`, j.pages[slug].content);
+    const theirs = new Map(files);
+    theirs.set(`${slug}.md`, archlensPage(page.content));
+    return view(mine) === view(theirs);
+  }
+
   /** Takes the receipts of the request in flight of an apply (or of its undo) into the mirror and the journal. */
   function receipts(responses) {
     for (const r of responses) if (r?.['archlens-remote'] !== PROTOCOL) throw responseError(`a resposta não é do protocolo archlens-remote ${PROTOCOL}`);
@@ -466,19 +491,21 @@ export function gbrainMcpConnector(locator, store, { describe = `${rel(locator.p
     const undoing = j.request.step === 'undo';
     const pages = undoing ? j.undo.pages : j.pages;
     const outcomes = calls.flatMap((call, i) => (i < results.length ? outcomesOf(call, unwrap(results[i], `resultado ${i + 1} (${call.tool})`), i, pages)
-      : call.slugs.map(slug => ({ slug, state: 'unsent' }))).map(o => ({ ...o, request_id: call.arguments.request_id })));
+      // A lost poll or reread says nothing new: its pages stay as they were (pending, committed, or waiting for the reread).
+      : call.tool === 'get_page' || isPoll(call) ? [] : call.slugs.map(slug => ({ slug, state: 'unsent' }))).map(o => ({ ...o, request_id: call.arguments.request_id })));
     for (const o of outcomes) if (o.state !== 'reread' && !pages[o.slug]) throw responseError(`${o.slug} não faz parte deste ${undoing ? 'undo' : 'apply'}`);
 
     const files = readTree(mirror, prefix);
     const revs = revisions();
     const listed = sync() ?? { pages: {} };
     const changed = new Map();
-    let reread = null;
+    const rereads = new Map();
     let historyConflict = false;
     for (const o of outcomes) {
-      if (o.state === 'reread') { reread = o.page; continue; }
+      if (o.state === 'reread') { rereads.set(o.slug, o.page); continue; }
       const p = pages[o.slug];
       if (p.request_id !== o.request_id) continue; // a call the page has left: it went again in another one
+      if (o.state === 'unsent' && p.state === 'committed') continue;
       p.state = o.state;
       if (o.state === 'revision_conflict') { p.current = o.current; if (o.slug === historySlug) historyConflict = true; }
       if (o.state !== 'committed') continue;
@@ -494,7 +521,20 @@ export function gbrainMcpConnector(locator, store, { describe = `${rel(locator.p
     let next = null;
     let exhausted = false;
     const hist = pages[historySlug];
-    if (!undoing && reread && hist) {
+    const reread = rereads.get(historySlug);
+    if (undoing && rereads.size) {
+      // Undo of pages whose receipt had no revision: put back only a page still as the apply wrote it, with the revision
+      // it has now; one that changed since is left out (a conflict).
+      const ready = [];
+      for (const [slug, page] of rereads) {
+        const u = pages[slug];
+        if (u?.state !== 'reread') continue;
+        if (stillWritten(j, files, slug, page)) ready.push(Object.assign(u, { slug, expected: page.revision }));
+        else Object.assign(u, { state: 'revision_conflict', current: page.revision });
+      }
+      if (ready.length) next = writeCalls(ready);
+      for (const u of ready) delete u.slug;
+    } else if (!undoing && reread && hist) {
       const again = historyAgain(j, files, reread);
       j.entry = again.entry;
       j.before[historySlug] = { content: again.before, revision: reread.revision };
@@ -509,7 +549,8 @@ export function gbrainMcpConnector(locator, store, { describe = `${rel(locator.p
     const done = Object.values(pages).every(p => p.state === 'committed');
     j.state = undoing ? (done ? 'undone' : 'undo-partial') : done ? 'committed' : 'partial';
     j.request = null;
-    const request = next ? issue(j, 'apply', next) : null;
+    if (next && undoing) j.state = 'undoing';
+    const request = next ? issue(j, undoing ? 'undo' : 'apply', next) : null;
     const out = new Map([...changed].map(([path, text]) => [join(MIRROR, path), text]));
     out.set(join(MIRROR, REVISIONS), json(Object.fromEntries(Object.entries(revs).sort(([a], [b]) => (a < b ? -1 : 1)))));
     out.set(join(MIRROR, SYNC), json(listed));
@@ -559,7 +600,11 @@ export function gbrainMcpConnector(locator, store, { describe = `${rel(locator.p
         return { slug, op: 'put', content: b.content, expected: p.revision };
       });
       if (!items.length) throw storeError('E_STORE_APPLY', `o apply ${j.id} não gravou nenhuma página: nada a desfazer`);
-      calls = writeCalls(items);
+      // A page whose receipt had no revision is never written unguarded: it is read again first (see receipts).
+      const known = items.filter(i => i.expected);
+      const unknown = items.filter(i => !i.expected);
+      calls = [...writeCalls(known), ...unknown.map(i => getCall(i.slug, { deleted: i.op === 'restore' }))];
+      for (const i of unknown) i.state = 'reread';
       j.undo = { pages: Object.fromEntries(items.map(({ slug, ...i }) => [slug, i])) };
     }
     if (!calls.length) {

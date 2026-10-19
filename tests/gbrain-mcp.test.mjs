@@ -830,3 +830,62 @@ test('a poll receipt rebuilt from the admitted pages only is read', () => {
   }
   function old(r) { return r.calls.map(c => c.arguments.request_id); }
 });
+
+test('a lost poll result, or a batch still publishing at the poll, is polled again with the same request_id', () => {
+  for (const lost of [true, false]) {
+    const w = ready();
+    const p = finalPlan(w, [cache]);
+    const { request: req } = requestApply(w, p);
+    w.gbrain.failAfter(1, { pending: true });
+    const first = w.store.remote.receipts([w.gbrain.run(req)]);
+    assert.equal(first.committed.length, 1);
+    const polls = w.store.remote.resume().request;
+    let answer;
+    if (lost) answer = { ...w.gbrain.run(polls), results: [] }; // the agent lost every poll result
+    else {
+      answer = w.gbrain.run(polls);
+      for (const r of answer.results) for (const pg of r.pages) if (!first.committed.includes(pg.slug)) { pg.state = 'queued'; delete pg.revision; } // still publishing
+    }
+    const res = w.store.remote.receipts([answer]);
+    assert.equal(res.state, 'partial');
+    assert.deepEqual(res.committed, first.committed); // what was committed stays committed
+    assert.deepEqual(res.pending, first.pending);
+    const again = w.store.remote.resume().request;
+    assert.deepEqual(again.calls, polls.calls, `lost: ${lost}`);
+    assert.equal(w.store.remote.receipts([w.gbrain.run(again)]).state, 'committed', `lost: ${lost}`);
+  }
+});
+
+test('a page committed without revision is read again before --undo puts it back, and left out if it changed', () => {
+  for (const changed of [false, true]) {
+    const w = ready();
+    const original = contentVersion(w.store.read());
+    const { request: req } = requestApply(w, finalPlan(w, [cache]));
+    const answer = w.gbrain.run(req);
+    const slug = answer.results[0].pages[0].slug;
+    answer.results[0].pages[0].revision = null;
+    assert.equal(w.store.remote.receipts([answer]).state, 'committed');
+    const u = w.store.remote.undo();
+    // No unguarded write: the page is read again first.
+    assert.ok(u.request.calls.some(c => c.tool === 'get_page' && c.arguments.slug === slug));
+    assert.ok(!u.request.calls.some(c => c.tool !== 'get_page' && (c.arguments.slug === slug || (c.arguments.pages ?? []).some(pg => pg.slug === slug))));
+    if (changed) w.gbrain.write(new Map([[`${slug}.md`, `${w.gbrain.content(slug)}\nTexto novo de uma pessoa.\n`]]));
+    let res = w.store.remote.receipts([w.gbrain.run(u.request)]);
+    if (!changed) {
+      // Still as the apply wrote it: put back with the revision it has now.
+      const call = res.request.calls[0];
+      const rev = w.gbrain.page(slug).revision;
+      assert.ok(call.tool === 'delete_page' ? call.arguments.expected_revision === rev : call.arguments.pages[0].expected_revision === rev);
+      res = w.store.remote.receipts([w.gbrain.run(res.request)]);
+      assert.equal(res.state, 'undone');
+      pull(w.store, w.gbrain);
+      assert.equal(contentVersion(w.store.read()), original);
+    } else {
+      assert.equal(res.state, 'undo-partial');
+      assert.deepEqual(res.conflicts, [slug]);
+      assert.equal(res.request, undefined);
+      assert.match(w.gbrain.content(slug), /Texto novo/); // never overwritten
+      assert.throws(() => w.store.remote.undo(), e => e.code === 'E_STORE_APPLY' && e.message.includes(slug));
+    }
+  }
+});
