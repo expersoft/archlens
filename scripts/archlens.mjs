@@ -381,6 +381,10 @@ function remoteApply(store, flow, args, names, { committed, convert } = {}) {
   const undoing = res.state === 'undo-partial';
   console.log(`✗ ${undoing ? 'undo' : 'apply'} ${res.id} parcial: ${res.committed.length} página(s) gravada(s)`
     + `${res.conflicts.length ? `; ${convert ? 'já existiam no gbrain' : 'em conflito (mudaram no gbrain)'}: ${list(res.conflicts)}` : ''}${res.pending.length ? `; sem gravar ainda: ${list(res.pending)}` : ''}`);
+  if (res.duplicates?.length) {
+    console.log(`  o gbrain não gravou ${res.duplicates.map(d => `${d.slug} (cópia de ${d.of})`).join(', ')}: na mesma fonte, ele guarda uma página só por id e conteúdo; `
+      + 'use uma fonte do gbrain por base (--source-id) ou remova a outra página');
+  }
   if (res.request) {
     handOver(store, res.request, args, receiptsNext);
     return;

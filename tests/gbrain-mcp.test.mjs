@@ -29,7 +29,7 @@ const base = (extra = []) => ({
       elements: [
         { id: 'vendas', type: 'application-component', name: 'Vendas', c4: { kind: 'softwareSystem' }, properties: { area: 'comercial', tier: 'gold' } }, // in jsonb key order, the order gbrain gives nested keys back in
         { id: 'vendas.api', type: 'application-component', name: 'API de Vendas', parent: 'vendas', c4: { kind: 'container' } },
-        { id: 'rh', type: 'application-component', name: 'Recursos Humanos', c4: { kind: 'softwareSystem' } },
+        { id: 'rh', type: 'application-component', name: 'Recursos Humanos', c4: { kind: 'softwareSystem' }, since: '2026-10-18' }, // gbrain reads an unquoted date as a timestamp
         ...extra,
       ],
       relationships: [{ id: 'r-vendas-rh', from: 'vendas', to: 'rh', type: 'serving' }],
@@ -800,6 +800,28 @@ test('a journal still waiting for its receipts is replayed unchanged, and a rece
   assert.equal(revisions(w.dir)[slug], undefined); // left for the next pull
   assert.ok(getSlugs(pull(w.store, w.gbrain).requests).includes(slug));
   assert.equal(revisions(w.dir)[slug], w.gbrain.page(slug).revision);
+});
+
+test('a page gbrain filed as a duplicate of another page was not written: it is not taken as committed', () => {
+  const w = ready();
+  const p = finalPlan(w, [cache]);
+  const { request: req, apply: id } = requestApply(w, p);
+  const answer = w.gbrain.run(req);
+  const slug = 'archlens/application-component/vendas.cache';
+  const k = req.calls.findIndex(c => c.arguments.pages?.some(pg => pg.slug === slug));
+  const entry = answer.results[k].pages.find(pg => pg.slug === slug);
+  // gbrain's receipt when the content matches another page with the same frontmatter id (src/core/import-identity.ts):
+  // committed, no revision, the page it duplicates.
+  Object.assign(entry, { state: 'committed', revision: null, status: 'duplicate', duplicate_of: 'outra/application-component/vendas.cache' });
+  const res = w.store.remote.receipts([answer]);
+  assert.equal(res.state, 'partial');
+  assert.ok(res.pending.includes(slug));
+  assert.ok(!res.committed.includes(slug));
+  assert.deepEqual(res.duplicates, [{ slug, of: 'outra/application-component/vendas.cache' }]);
+  assert.equal(journal(w.dir, id).pages[slug].state, 'failed');
+  assert.equal(journal(w.dir, id).pages[slug].duplicateOf, 'outra/application-component/vendas.cache');
+  assert.equal(revisions(w.dir)[slug], undefined);
+  assert.equal(mirrorFiles(w.dir).has(`${slug}.md`), false);
 });
 
 test('a poll receipt rebuilt from the admitted pages only is read', () => {

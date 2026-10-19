@@ -123,11 +123,30 @@ test('frontmatter keys gbrain stamps are dropped on reading and refused as eleme
   const v = smallVault();
   const g = toGbrainFiles(v, { prefix: 'archlens' });
   const rel = 'archlens/business-actor/cliente.md';
-  const stamped = new Map(g).set(rel, g.get(rel).replace(/^---\n/, '---\ntrust_tier: agent_written\nembed_skip: true\n'));
+  // What a put_page stamps (src/core/persistence/page-prepare.ts putProvenance, and trust_tier for a remote writer).
+  const provenance = "trust_tier: agent_written\ningested_at: '2026-10-19T10:02:13.230Z'\nsource_kind: mcp:put_page\ningested_via: mcp:put_page\n";
+  const stamped = new Map(g).set(rel, g.get(rel).replace(/^---\n/, `---\n${provenance}embed_skip: true\n`));
   assert.deepEqual(fromGbrainFiles(stamped, { prefix: 'archlens' }), fromGbrainFiles(g, { prefix: 'archlens' }));
-  const raw = small().raw;
-  raw.model.elements[0] = { ...raw.model.elements[0], trust_tier: 'x' };
-  assert.throws(() => assertGbrainIds(raw), e => e.code === 'E_STORE_GBRAIN_RESERVED' && /trust_tier/.test(e.message));
+  for (const key of ['trust_tier', 'source_kind', 'ingested_via']) {
+    const raw = small().raw;
+    raw.model.elements[0] = { ...raw.model.elements[0], [key]: 'x' };
+    assert.throws(() => assertGbrainIds(raw), e => e.code === 'E_STORE_GBRAIN_RESERVED' && e.message.includes(key), key);
+  }
+});
+
+test('date-like strings are quoted for gbrain, whose YAML reader takes them for timestamps; the vault keeps its bytes', () => {
+  const b = small();
+  b.raw.model.elements[2] = { ...b.raw.model.elements[2], since: '2026-10-18', properties: { implantado: '2026-01-05 08:00:00', codigo: '0b101', inicio: '2026-1-5T8:00:00Z', texto: 'normal' } };
+  b.raw.views[0].title = '2026-10-18';
+  const v = vaultOf(b);
+  assert.match(v.get('business-actor/cliente.md'), /^since: 2026-10-18$/m); // the markdown connector writes as before
+  const g = toGbrainFiles(v, { prefix: 'archlens' });
+  const page = g.get('archlens/business-actor/cliente.md');
+  for (const line of ['since: "2026-10-18"', '  implantado: "2026-01-05 08:00:00"', '  codigo: "0b101"', '  inicio: "2026-1-5T8:00:00Z"', '  texto: normal']) {
+    assert.ok(page.split('\n').includes(line), `${line}\n${page}`);
+  }
+  assert.match(g.get('archlens/views/landscape.md'), /^title: "2026-10-18"$/m);
+  assert.deepEqual(fromGbrainFiles(g, { prefix: 'archlens' }), v);
 });
 
 test('ids that are not gbrain slugs are refused', () => {

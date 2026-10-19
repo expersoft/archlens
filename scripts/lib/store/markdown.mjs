@@ -78,9 +78,9 @@ export function vaultContents(dir, base, cur) {
 /**
  * Every file of the vault for `raw` (relative path → text, null for a page that goes). Pure: `exists(rel)` and
  * `read(rel)` stand for the files already there (the lint config, the notes, the file of removed text).
- * `linkPrefix` and `extraTags` shape the pages for another layout (see gbrain-layout.mjs).
+ * `linkPrefix`, `extraTags` and `gbrain` shape the pages for another layout (see gbrain-layout.mjs).
  */
-export function vaultFiles({ raw, notes }, cur, { exists, read = () => undefined, linkPrefix = '', extraTags = [] } = {}) {
+export function vaultFiles({ raw, notes }, cur, { exists, read = () => undefined, linkPrefix = '', extraTags = [], gbrain = false } = {}) {
   exists ??= rel => read(rel) !== undefined;
   const { model, views, changelog, ...top } = raw;
   const files = new Map([[MANIFEST, json({ ...top, store: { kind: 'markdown' } })]]);
@@ -114,7 +114,7 @@ export function vaultFiles({ raw, notes }, cur, { exists, read = () => undefined
     if (typeof el.description === 'string' && (el.description.includes(BEGIN) || el.description.includes(END))) {
       throw storeError('E_STORE_MD', `a descrição de "${el.id}" contém o marcador ${el.description.includes(BEGIN) ? BEGIN : END}, que delimita o bloco do archlens na página`);
     }
-    files.set(pagePath(el), renderPage(el, { outgoing: outgoing.get(el.id), children: children.get(el.id) ?? [], info, userText: old.get(el.id)?.userText, linkPrefix, extraTags }));
+    files.set(pagePath(el), renderPage(el, { outgoing: outgoing.get(el.id), children: children.get(el.id) ?? [], info, userText: old.get(el.id)?.userText, linkPrefix, extraTags, gbrain }));
   }
   for (const { rel } of old.values()) if (!files.has(rel)) files.set(rel, null);
   // The page of a removed element goes; what people wrote in it is kept (a retyped element carries it to its new page).

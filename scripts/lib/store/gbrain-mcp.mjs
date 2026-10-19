@@ -327,7 +327,8 @@ export function gbrainMcpConnector(locator, store, { describe = `${rel(locator.p
     const slugs = Object.keys(pages).sort();
     const by = test => slugs.filter(s => test(pages[s].state));
     return { id: j.id, state: j.state, entry: j.entry, committed: by(s => s === 'committed'), conflicts: by(s => s === 'revision_conflict'),
-      pending: by(s => s !== 'committed' && s !== 'revision_conflict'), ...(request ? { request } : {}) };
+      pending: by(s => s !== 'committed' && s !== 'revision_conflict'),
+      duplicates: slugs.filter(s => pages[s].state === 'failed' && pages[s].duplicateOf).map(s => ({ slug: s, of: pages[s].duplicateOf })), ...(request ? { request } : {}) };
   };
 
   /** The code of a tool error (gbrain's error JSON: `error`, else `code`), or null. */
@@ -369,6 +370,9 @@ export function gbrainMcpConnector(locator, store, { describe = `${rel(locator.p
         return p?.request_id === id && p.state === 'pending' ? [{ slug, state: 'failed' }] : [];
       }
       if (pg?.slug !== slug) throw responseError(`${where}: a página ${k + 1} do recibo deveria ser ${slug} (veio ${JSON.stringify(pg?.slug)})`);
+      // A page whose content matches another page with the same frontmatter id was not written: gbrain answers committed,
+      // without revision, naming that page (src/core/import-identity.ts, src/core/persistence/page-batch.ts pageEntry).
+      if (pg.state === 'committed' && typeof pg.duplicate_of === 'string' && pg.duplicate_of !== slug) return { slug, state: 'failed', duplicateOf: pg.duplicate_of };
       if (pg.state === 'committed') {
         // gbrain reports `revision: null` when the receipt has none: the page then leaves revisions.json, and the next pull fetches it.
         if (typeof pg.revision !== 'string' && pg.revision !== null) throw responseError(`${where}: ${slug} gravada sem "revision"`);
@@ -535,6 +539,7 @@ export function gbrainMcpConnector(locator, store, { describe = `${rel(locator.p
       if (p.request_id !== o.request_id) continue; // a call the page has left: it went again in another one
       if (o.state === 'unsent' && p.state === 'committed') continue;
       p.state = o.state;
+      if (o.duplicateOf) p.duplicateOf = o.duplicateOf; else delete p.duplicateOf;
       if (o.state === 'revision_conflict') { p.current = o.current; if (o.slug === historySlug && !j.convert) historyConflict = true; }
       if (o.state !== 'committed') continue;
       p.revision = o.revision;

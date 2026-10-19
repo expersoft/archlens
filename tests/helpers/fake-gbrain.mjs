@@ -5,7 +5,9 @@
 // the `<!-- timeline -->` sentinel before a timeline); every write gets a new revision; expected_revision guards writes;
 // request_id replays a write; a soft delete keeps updated_at (only a restore or a write moves it); a put_pages batch may
 // end `partial` or `pending` (pages still publishing, settled by a poll); put_pages, delete_page and restore_page are
-// only on the full tool surface; a remote write stamps `trust_tier: agent_written` into the frontmatter; without a sentinel, the first "## Timeline" / "## History" section
+// only on the full tool surface; a remote write stamps `trust_tier: agent_written` and its provenance (ingested_at, source_kind,
+// ingested_via) into the frontmatter; the frontmatter is read as gbrain's js-yaml reads it (unquoted dates are timestamps,
+// kept as ISO strings); without a sentinel, the first "## Timeline" / "## History" section
 // of dated bullets moves to the timeline (splitBody rule 4); a full list_pages page carries a listing_truncated notice.
 // run(request) plays the agent: it executes the calls of an archlens request file and returns the response file.
 import { parse as parseYaml, stringify as stringifyYaml } from '../../scripts/vendor/yaml/index.js';
@@ -55,7 +57,7 @@ function splitBody(body) {
 /** What gbrain keeps of a page it is given: columns, the jsonb frontmatter and the body split at the timeline sentinel. */
 function parsePage(slug, content) {
   const m = /^---\r?\n(?:([\s\S]*?)\r?\n)?---[ \t]*(?:\r?\n|$)/.exec(content);
-  const fm = (m && parseYaml(m[1] ?? '')) || {};
+  const fm = (m && parseYaml(m[1] ?? '', { customTags: ['timestamp'] })) || {};
   const body = m ? content.slice(m[0].length) : content;
   const { type, title, tags, slug: _slug, ...rest } = fm;
   const split = splitBody(body);
@@ -101,7 +103,12 @@ export function fakeGbrain({ ceiling = 'full', surface = 'starter', sourceId = '
   function write(source, slug, content, ts, { remote = false } = {}) {
     const before = pages.get(key(source, slug));
     const page = { slug, source_id: source, ...parsePage(slug, content), revision: revision(), created_at: before?.created_at ?? ts, updated_at_iso: ts, deleted_at: null };
-    if (remote) page.frontmatter.trust_tier = 'agent_written'; // the lower-only marker a below-owner write stamps
+    if (remote) {
+      // The lower-only marker a below-owner write stamps, and the provenance of the first write (page-prepare.ts putProvenance).
+      const first = before?.frontmatter ?? {};
+      Object.assign(page.frontmatter, { trust_tier: 'agent_written', ingested_at: first.ingested_at ?? ts,
+        source_kind: first.source_kind ?? 'mcp:put_page', ingested_via: first.ingested_via ?? 'mcp:put_page' });
+    }
     pages.set(key(source, slug), page);
     return page;
   }

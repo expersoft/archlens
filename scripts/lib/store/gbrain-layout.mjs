@@ -2,21 +2,22 @@
 // toGbrainFiles turns the vault of the markdown connector into it, fromGbrainFiles turns it back. Element pages keep the
 // vault format (wikilinks prefixed, plus the common tag); manifest, views and changelog are pages holding their JSON in an
 // archlens-json block with a readable summary around it; notes are pages with the note text as body.
-import { parse as parseYaml, stringify as stringifyYaml } from '../../vendor/yaml/index.js';
+import { parse as parseYaml } from '../../vendor/yaml/index.js';
 import { ELEMENT_TYPES } from '../registry.mjs';
 import { storeError } from './errors.mjs';
 import { MANIFEST, parseJson } from './folder.mjs';
 import { NOTE_NAMES } from '../doc.mjs';
 import { readVaultFiles, vaultFiles, REMOVED } from './markdown.mjs';
-import { link } from './markdown-page.mjs';
+import { link, yamlText } from './markdown-page.mjs';
 import { gbrainPack, PACK_FILE } from './gbrain-pack.mjs';
 
 export const COMMON_TAG = 'archlens';
 // Frontmatter keys gbrain stamps into the pages it keeps (src/core/utils.ts HASH_EPHEMERAL_FRONTMATTER_KEYS, the
-// gate-owned keys of src/core/write-gate.ts, the extract-atoms markers and the slug stamp): never base content. They
-// are dropped when a page is read, and an element field with one of these names is refused.
+// gate-owned keys of src/core/write-gate.ts, the extract-atoms markers, the slug stamp, and the provenance every
+// put_page stamps: src/core/persistence/page-prepare.ts putProvenance): never base content. They are dropped when a
+// page is read, and an element field with one of these names is refused.
 export const GBRAIN_FRONTMATTER_KEYS = ['slug', 'captured_at', 'ingested_at', 'quarantine', 'quarantine_override', 'content_flag', 'embed_skip',
-  'atoms_scan_hash', 'atoms_fail_hash', 'atoms_fail_count', 'trust_tier'];
+  'atoms_scan_hash', 'atoms_fail_hash', 'atoms_fail_count', 'trust_tier', 'source_kind', 'ingested_via'];
 // gbrain's explicit timeline sentinel (src/core/markdown.ts splitBody). Every page ends with it, so gbrain never moves a
 // "## Timeline" / "## History" section of dated bullets (from a description or people's text) out of its place.
 export const TIMELINE_SENTINEL = '<!-- timeline -->';
@@ -63,7 +64,7 @@ export function assertGbrainIds(raw) {
   }
 }
 
-const frontmatter = fm => `---\n${stringifyYaml(fm, { lineWidth: 0 })}---\n`;
+const frontmatter = fm => `---\n${yamlText(fm, { gbrain: true })}---\n`;
 // "`" is written as \u0060 so the block never holds a fence of its own; JSON reads it back the same.
 const block = value => `${FENCE}${JSON.stringify(value, null, 2).replace(/`/g, '\\u0060')}\n\`\`\`\n`;
 const readBlock = (text, rel) => {
@@ -86,7 +87,7 @@ export function toGbrainFiles(vault, { prefix } = {}) {
   const { raw, ctx } = readVaultFiles(vault, { anyFormat: true });
   const out = new Map();
   // Element pages: rendered again with the prefixed wikilinks and the common tag; what people wrote after the block stays.
-  const pages = vaultFiles({ raw, notes: {} }, { ctx }, { exists: () => true, linkPrefix: p ? `${p}/` : '', extraTags: [COMMON_TAG] });
+  const pages = vaultFiles({ raw, notes: {} }, { ctx }, { exists: () => true, linkPrefix: p ? `${p}/` : '', extraTags: [COMMON_TAG], gbrain: true });
   for (const [rel, text] of pages) if (/^[^/]+\/[^/]+\.md$/.test(rel) && ELEMENT_TYPES[rel.split('/')[0]]) out.set(at(rel), text);
 
   const { model, views, changelog, ...top } = raw;
