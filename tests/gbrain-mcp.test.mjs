@@ -54,9 +54,9 @@ function world({ ceiling, sourceId, prefix } = {}) {
 }
 
 /** pull → the agent runs each request → ingest, until the mirror is up to date; the requests made, in order. */
-function pull(store, gbrain, opts) {
+function pull(store, gbrain) {
   const requests = [];
-  let req = store.remote.pull(opts);
+  let req = store.remote.pull();
   for (;;) {
     requests.push(req);
     const res = store.remote.pullIngest([gbrain.run(req)]);
@@ -139,8 +139,8 @@ test('a second pull only fetches what changed', () => {
   const all = pagesOf(next);
   w.gbrain.write(new Map(changed.map(rel => [rel, all.get(rel)])));
   const { requests } = pull(store, w.gbrain);
-  assert.equal(requests[0].calls[0].arguments.updated_after, w.gbrain.page('archlens/views/landscape').updated_at_iso);
-  assert.ok(requests[0].calls[0].arguments.updated_after_slug);
+  // Every pull lists the metadata from the start; only the pages updated after the last pull are fetched.
+  assert.deepEqual(requests[0].calls, [{ tool: 'list_pages', arguments: { tag: 'archlens', include_deleted: true, sort: 'updated_asc', limit: 100 } }]);
   assert.deepEqual(getSlugs(requests), changed.map(r => r.replace(/\.md$/, '')).sort());
   assert.equal(store.read().raw.model.elements.find(e => e.id === 'rh').name, 'Gente e Gestão');
   assert.equal(revisions(w.dir)['archlens/application-component/rh'], w.gbrain.page('archlens/application-component/rh').revision);
@@ -166,13 +166,16 @@ test('a page deleted in gbrain leaves the mirror', () => {
   assert.ok(!mirrorFiles(w.dir).has('archlens/application-component/legado.md'));
   assert.equal(revisions(w.dir)['archlens/application-component/legado'], undefined);
 
-  // A page deleted by hand, with nothing else changed, is seen by a full pull.
+  // A page deleted by hand, with nothing else changed, leaves the mirror too; nothing is fetched for it.
   w.gbrain.remove('archlens/views/landscape');
   assert.deepEqual(pull(store, w.gbrain).requests.map(r => r.step), ['list']);
-  assert.equal(store.read().raw.views.length, 1);
-  const full = pull(store, w.gbrain, { full: true });
-  assert.equal(full.requests[0].calls[0].arguments.updated_after, undefined);
   assert.equal(store.read().raw.views, undefined);
+  assert.equal(revisions(w.dir)['archlens/views/landscape'], undefined);
+  // Restored, it comes back.
+  w.gbrain.call('request_tools', { surface: 'full' });
+  w.gbrain.call('restore_page', { slug: 'archlens/views/landscape', request_id: 'r-1' });
+  assert.deepEqual(getSlugs(pull(store, w.gbrain).requests), ['archlens/views/landscape']);
+  assert.equal(store.read().raw.views[0].key, 'landscape');
 });
 
 test('pages without the archlens tag are ignored', () => {

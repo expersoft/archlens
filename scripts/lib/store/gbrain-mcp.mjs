@@ -1,6 +1,6 @@
 // The gbrain connector in MCP mode. The CLI cannot call the MCP server (its credentials live in the user's agent), so it
 // keeps a mirror of the base in <base>/.archlens/mirror/ (the pages of gbrain-layout.mjs under the prefix, as archlens
-// writes them; revisions.json, slug → gbrain revision; sync.json, the list cursor) and trades files with the agent: a
+// writes them; revisions.json, slug → gbrain revision; sync.json, where the last pull ended: what was updated after it is fetched again) and trades files with the agent: a
 // request lists the exact tool calls to make, the response holds the raw result of each call, in order. plan, show and
 // query read the mirror; the version of an object is the gbrain revision of its page. Writing (apply) comes next.
 import { existsSync, readFileSync, readdirSync, rmSync } from 'node:fs';
@@ -201,14 +201,14 @@ export function gbrainMcpConnector(locator, store, { describe = `${rel(locator.p
     requestPath: req => join(dir, REMOTE, `${req.step}-request.json`),
 
     /**
-     * The first list request of a pull: the pages updated after the cursor of the last pull (all of them the first time,
-     * or with `full`). A delete does not move a page's updated_at in gbrain, so when something changed (an apply wrote)
-     * the pages are listed again from the start, and those no longer there leave the mirror.
+     * The first list request of a pull. Every pull lists the metadata of all the archlens pages from the start (a delete
+     * does not move a page's updated_at in gbrain, so a listing from the last cursor would miss it); only the pages new
+     * to the mirror or updated after the last pull are fetched, and those not listed alive leave the mirror.
      */
-    pull({ full = false } = {}) {
+    pull() {
       const last = existsSync(join(mirror, SYNC)) ? sync().cursor ?? null : null;
-      const req = request('list', [listCall(full ? null : last)]);
-      keep('pull', { request: req, phase: last && !full ? 'changes' : 'sweep', since: last, cursor: last, changed: [], deleted: [], live: [] });
+      const req = request('list', [listCall(null)]);
+      keep('pull', { request: req, since: last, cursor: last, changed: [], deleted: [], live: [] });
       return req;
     },
 
@@ -230,23 +230,20 @@ export function gbrainMcpConnector(locator, store, { describe = `${rel(locator.p
         if (!cursor || after(row, cursor)) cursor = c;
         if (!row.slug.startsWith(`${prefix}/`)) continue; // another base in the same brain
         if (row.deleted_at) { deleted.add(row.slug); changed.delete(row.slug); continue; }
-        if (state.phase === 'sweep') live.add(row.slug);
+        live.add(row.slug);
         if (!(row.slug in known) || !state.since || after(row, state.since)) changed.add(row.slug);
       }
-      let phase = state.phase;
-      let next = null;
-      if (rows.length >= LIMIT) { const last = rows.at(-1); next = { since: last.updated_at_iso, slug: last.slug }; }
-      else if (phase === 'changes' && (changed.size || deleted.size)) phase = 'sweep';
-      else {
-        const removed = [...new Set([...deleted, ...(phase === 'sweep' ? Object.keys(known).filter(s => !live.has(s)) : [])])].sort();
+      if (rows.length < LIMIT) {
+        const removed = [...new Set([...deleted, ...Object.keys(known).filter(s => !live.has(s))])].sort();
         const get = [...changed].filter(s => !removed.includes(s)).sort();
         if (!get.length) return { done: commit({ fetched: [], removed, cursor }) };
         const req = request('get', get.map(slug => ({ tool: 'get_page', arguments: { slug, include_content: true, content_only: true, ...scope } })));
         keep('pull', { request: req, removed, cursor });
         return { request: req };
       }
-      const req = request('list', [listCall(next)]); // next page of the listing, or the listing from the start
-      keep('pull', { ...state, request: req, phase, cursor, changed: [...changed], deleted: [...deleted], live: [...live] });
+      const last = rows.at(-1);
+      const req = request('list', [listCall({ since: last.updated_at_iso, slug: last.slug })]); // the next page of the listing
+      keep('pull', { ...state, request: req, cursor, changed: [...changed], deleted: [...deleted], live: [...live] });
       return { request: req };
     },
 

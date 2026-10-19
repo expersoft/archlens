@@ -49,7 +49,7 @@ Aplicar (grava a base)
   doc       <base> [--out f.md]            regenera o ARCHITECTURE.md (gerado; edite architecture/notes/*.md)
   build     <base> [--out-dir DIR]           ARCHITECTURE.md + HTML (padrão: architecture/diagrams/)
   migrate   <base 1.x> [--to DIR]           converte uma base 1.x (pasta, .md ou .json) para o formato 2.0
-  remote    <base> pull [--full] [--out pedido.json]   base gbrain no modo mcp: grava o pedido de chamadas ao MCP (o agente executa)
+  remote    <base> pull [--out pedido.json]   base gbrain no modo mcp: grava o pedido de chamadas ao MCP (o agente executa)
             <base> pull --ingest resposta.json… [--out pedido.json]   lê as respostas; grava o próximo pedido ou atualiza o espelho local
             <base> check [--out pedido.json] | check --ingest resposta.json   confere a sessão do MCP (whoami) e se gravar está liberado
   store convert <base> --to markdown|json [--force]   grava a base em outro conector (mesma pasta; versão inalterada)
@@ -676,7 +676,7 @@ async function main() {
       break;
     }
     case 'remote': {
-      const usage = 'uso: archlens remote <base> pull [--full] [--out pedido.json] | pull --ingest <resposta.json…> [--out pedido.json] | check [--out pedido.json] | check --ingest <resposta.json…>';
+      const usage = 'uso: archlens remote <base> pull [--out pedido.json] | pull --ingest <resposta.json…> [--out pedido.json] | check [--out pedido.json] | check --ingest <resposta.json…>';
       const action = args._[2];
       if (!file || !['pull', 'check'].includes(action) || args.ingest === true || args.out === true) fail(usage);
       const store = openBase(file);
@@ -684,7 +684,7 @@ async function main() {
       const responses = args.ingest ? [args.ingest, ...args._.slice(3)].map(readJson) : null;
       let res;
       try {
-        if (action === 'pull') res = responses ? store.remote.pullIngest(responses) : { request: store.remote.pull({ full: args.full === true }) };
+        if (action === 'pull') res = responses ? store.remote.pullIngest(responses) : { request: store.remote.pull() };
         else res = responses ? { session: store.remote.checkIngest(responses) } : { request: store.remote.check() };
       } catch (e) { fail(e.message); }
       if (res.request) {
