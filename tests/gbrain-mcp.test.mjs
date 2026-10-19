@@ -10,9 +10,9 @@ import { initBase } from '../scripts/lib/store/config.mjs';
 import { vaultFiles } from '../scripts/lib/store/markdown.mjs';
 import { toGbrainFiles } from '../scripts/lib/store/gbrain-layout.mjs';
 import { archlensPage, normalizeMirror, MIRROR } from '../scripts/lib/store/gbrain-mcp.mjs';
-import { contentVersion } from '../scripts/lib/store/ops.mjs';
+import { contentVersion, applyOps, diffRaw } from '../scripts/lib/store/ops.mjs';
 import { checkConnector } from '../scripts/lib/store/contract.mjs';
-import { plan } from '../scripts/lib/api.mjs';
+import { plan, apply } from '../scripts/lib/api.mjs';
 import { fakeGbrain } from './helpers/fake-gbrain.mjs';
 
 const CLI = fileURLToPath(new URL('../scripts/archlens.mjs', import.meta.url));
@@ -82,13 +82,13 @@ function mirrorFiles(dir) {
 const revisions = dir => JSON.parse(readFileSync(join(dir, MIRROR, 'revisions.json'), 'utf8'));
 const getSlugs = requests => requests.filter(r => r.step === 'get').flatMap(r => r.calls.map(c => c.arguments.slug)).sort();
 
-test('the connector reads the mirror, declares object versioning and refuses apply until the next task', () => {
+test('the connector reads the mirror, declares object versioning and refuses writing without a checked session', () => {
   const w = world();
   const store = checkConnector(w.store());
   assert.equal(store.kind, 'gbrain');
   assert.equal(store.versioning, 'object');
   assert.match(store.describe(), /gbrain mcp/);
-  assert.throws(() => store.apply([]), /E_STORE_UNSUPPORTED/);
+  assert.throws(() => store.apply([]), /E_STORE_GBRAIN_SURFACE/);
 });
 
 test('pull fills the mirror and plan reads it', () => {
@@ -422,6 +422,332 @@ test('archlens remote pull and check through the CLI', () => {
   const other = mkdtempSync(join(tmpdir(), 'archlens-json-'));
   initBase(join(other, 'architecture'), { name: 'X', store: { kind: 'json' } });
   r = cli(['remote', 'architecture', 'pull'], other);
+  assert.notEqual(r.status, 0);
+  assert.match(r.stderr, /mcp/);
+});
+
+// ---- apply in MCP mode -------------------------------------------------------------------------------------------
+
+/** A base in the fake gbrain, pulled into the mirror, with the session checked (`ceiling`: the widest tool surface). */
+function ready({ ceiling = 'full', extra = [] } = {}) {
+  const w = world({ ceiling });
+  w.gbrain.write(pagesOf(base(extra)));
+  const store = w.store();
+  pull(store, w.gbrain);
+  store.remote.checkIngest([w.gbrain.run(store.remote.check())]);
+  return { ...w, store };
+}
+const deltaOf = (elements, relationships = []) => ({ 'archlens-delta': '1.0', source: { kind: 'prompt', ref: 'r' }, summary: 'cache', model: { elements, relationships } });
+const cache = { id: 'vendas.cache', type: 'application-component', name: 'Cache de Pedidos', parent: 'vendas', c4: { kind: 'container' } };
+const cacheToRh = { id: 'r-cache-rh', from: 'vendas.cache', to: 'rh', type: 'serving' };
+const children = ['fila', 'motor', 'painel', 'relatorios', 'cobranca', 'agenda'].map(id => ({ id: `vendas.${id}`, type: 'application-component', name: `Vendas ${id}`, parent: 'vendas', c4: { kind: 'container' } }));
+
+function finalPlan(w, elements, relationships) {
+  const { plan: p } = plan(w.store, deltaOf(elements, relationships), { today: '2026-10-18' });
+  assert.equal(p.state, 'final');
+  return p;
+}
+/** apply → (read-check) → the apply request: { request, apply }. */
+function requestApply(w, p) {
+  const first = apply(w.store, p);
+  return first.request.step === 'read-check' ? apply(w.store, p, { readCheck: [w.gbrain.run(first.request)] }) : first;
+}
+const journal = (dir, id) => JSON.parse(readFileSync(join(dir, '.archlens', 'applies', `${id}.json`), 'utf8'));
+const pagesIn = calls => calls.filter(c => c.tool === 'put_pages').flatMap(c => c.arguments.pages ?? []);
+const mdOf = files => new Map([...files].filter(([k]) => k.endsWith('.md')));
+/** Another writer records a round in gbrain's history page. */
+function otherRound(w, n) {
+  const b = base();
+  for (let i = 1; i <= n; i++) b.raw.changelog.push({ id: `2026-10-18-${String(i).padStart(2, '0')}`, date: '2026-10-18', summary: `outro apply ${i}`, added: [], changed: [], status: {}, removed: [], decisions: [] });
+  w.gbrain.write(new Map([['archlens/changelog.md', pagesOf(b).get('archlens/changelog.md')]]));
+}
+
+test('a full apply round trip through the fake gbrain', () => {
+  const w = ready();
+  const p = finalPlan(w, [cache], [cacheToRh]);
+  const before = w.store.read();
+  const expected = contentVersion(applyOps(before, p.ops));
+  const first = apply(w.store, p);
+  assert.equal(first.request.step, 'read-check');
+  assert.ok(first.request.calls.every(c => c.tool === 'get_page' && c.arguments.include_content === true && c.arguments.content_only === true));
+  const reread = first.request.calls.map(c => c.arguments.slug);
+  assert.ok(reread.includes('archlens/application-component/rh'));
+  assert.ok(existsSync(join(w.dir, '.archlens', 'remote', 'read-check.json')));
+
+  const second = apply(w.store, p, { readCheck: [w.gbrain.run(first.request)] });
+  const req = second.request;
+  assert.equal(req.step, 'apply');
+  assert.equal(req['archlens-remote'], '1.0');
+  const written = pagesIn(req.calls);
+  const page = slug => written.find(pg => pg.slug === slug);
+  assert.ok(reread.every(s => !page(s))); // a page read only is reread, never rewritten
+  assert.equal(page('archlens/application-component/vendas').expected_revision, p.objects['element:vendas']);
+  assert.ok(!('expected_revision' in page('archlens/application-component/vendas.cache'))); // new: create only
+  assert.deepEqual(req.calls.at(-1).arguments.pages.map(pg => pg.slug), ['archlens/changelog']); // the history goes last
+  assert.equal(req.calls.at(-1).arguments.pages[0].expected_revision, w.gbrain.page('archlens/changelog').revision);
+  assert.equal(new Set(req.calls.map(c => c.arguments.request_id)).size, req.calls.length);
+  const j = journal(w.dir, second.apply);
+  assert.equal(j.state, 'requested');
+  assert.deepEqual(j.plan, p);
+  assert.deepEqual(j.calls, req.calls);
+  assert.deepEqual(j.before['archlens/application-component/vendas'], { content: mirrorFiles(w.dir).get('archlens/application-component/vendas.md'), revision: p.objects['element:vendas'] });
+  assert.deepEqual(j.before['archlens/application-component/vendas.cache'], { content: null, revision: null });
+
+  const done = w.store.remote.receipts([w.gbrain.run(req)]);
+  assert.equal(done.state, 'committed');
+  assert.equal(done.entry.id, '2026-10-18-01');
+  assert.equal(journal(w.dir, second.apply).state, 'committed');
+  assert.equal(contentVersion(w.store.read()), expected);
+  for (const { slug } of written) assert.equal(revisions(w.dir)[slug], w.gbrain.page(slug).revision, slug);
+  // The receipts carry no updated_at: the next pull fetches the pages written once and finds the same base (nested keys,
+  // such as those of "sources", come back in gbrain's jsonb order).
+  const again = pull(w.store, w.gbrain);
+  assert.deepEqual(getSlugs(again.requests), written.map(pg => pg.slug).sort());
+  assert.equal(contentVersion(w.store.read()), expected);
+  assert.deepEqual(pull(w.store, w.gbrain).requests.map(r => r.step), ['list']);
+});
+
+test('a read-set page changed in gbrain after the plan is refused at read-check', () => {
+  const w = ready();
+  const p = finalPlan(w, [cache], [cacheToRh]);
+  const first = apply(w.store, p);
+  const rh = 'archlens/application-component/rh';
+  w.gbrain.write(new Map([[`${rh}.md`, pagesOf(base()).get(`${rh}.md`).replace('Recursos Humanos', 'RH')]]));
+  assert.throws(() => apply(w.store, p, { readCheck: [w.gbrain.run(first.request)] }), e => e.code === 'E_STORE_CONFLICT'
+    && e.conflicts.some(c => c.ref === 'element:rh' && c.planned === p.objects['element:rh'] && c.current === w.gbrain.page(rh).revision)
+    && /Recursos Humanos/.test(e.message) && /--answers/.test(e.message));
+  assert.ok(!existsSync(join(w.dir, '.archlens', 'applies')) || !readdirSync(join(w.dir, '.archlens', 'applies')).length);
+  assert.equal(w.gbrain.page('archlens/application-component/vendas.cache'), null);
+});
+
+test('a partial batch is completed by --resume', () => {
+  for (const pending of [false, true]) {
+    const w = ready();
+    const p = finalPlan(w, children);
+    const expected = contentVersion(applyOps(w.store.read(), p.ops));
+    const { request: req, apply: id } = requestApply(w, p);
+    w.gbrain.failAfter(3, { pending });
+    const res = w.store.remote.receipts([w.gbrain.run(req)]);
+    assert.equal(res.state, 'partial');
+    assert.equal(res.committed.length, 3);
+    assert.ok(res.pending.includes('archlens/changelog'));
+    assert.equal(journal(w.dir, id).state, 'partial');
+    for (const slug of res.committed) assert.equal(revisions(w.dir)[slug], w.gbrain.page(slug).revision); // the mirror has what was written
+    w.gbrain.failAfter(Infinity);
+    const resumed = w.store.remote.resume();
+    assert.equal(resumed.request.step, 'apply');
+    const old = req.calls.map(c => c.arguments.request_id);
+    if (pending) {
+      // Still publishing: the same batches are read again by their request_id, without resending the pages.
+      assert.deepEqual(resumed.request.calls, old.map(rid => ({ tool: 'put_pages', arguments: { request_id: rid } })));
+    } else {
+      // Failed: the pages left are sent again in new batches; the history last.
+      assert.ok(resumed.request.calls.every(c => !old.includes(c.arguments.request_id)));
+      assert.deepEqual(pagesIn(resumed.request.calls).map(pg => pg.slug).sort(), [...res.pending].sort());
+      assert.deepEqual(resumed.request.calls.at(-1).arguments.pages.map(pg => pg.slug), ['archlens/changelog']);
+    }
+    const done = w.store.remote.receipts([w.gbrain.run(resumed.request)]);
+    assert.equal(done.state, 'committed', `pending: ${pending}`);
+    assert.equal(contentVersion(w.store.read()), expected);
+    pull(w.store, w.gbrain);
+    assert.equal(contentVersion(w.store.read()), expected);
+    assert.throws(() => w.store.remote.resume(), /E_STORE_APPLY/); // nothing left
+  }
+});
+
+test('a partial batch is undone by --undo', () => {
+  const w = ready();
+  const original = mdOf(mirrorFiles(w.dir));
+  const p = finalPlan(w, children);
+  const { request: req, apply: id } = requestApply(w, p);
+  w.gbrain.failAfter(3);
+  const res = w.store.remote.receipts([w.gbrain.run(req)]);
+  assert.equal(res.state, 'partial');
+  w.gbrain.failAfter(Infinity);
+  const j = journal(w.dir, id);
+  const undo = w.store.remote.undo();
+  assert.equal(undo.request.step, 'undo');
+  // Each page the apply wrote goes back: its earlier content, or deleted when the apply created it; expected_revision is
+  // the revision the apply wrote.
+  for (const slug of res.committed) {
+    const { content } = j.before[slug];
+    if (content === null) {
+      assert.ok(undo.request.calls.some(c => c.tool === 'delete_page' && c.arguments.slug === slug && c.arguments.expected_revision === j.pages[slug].revision), slug);
+    } else {
+      const pg = pagesIn(undo.request.calls).find(x => x.slug === slug);
+      assert.deepEqual(pg, { slug, content, expected_revision: j.pages[slug].revision });
+    }
+  }
+  assert.equal(pagesIn(undo.request.calls).length + undo.request.calls.filter(c => c.tool === 'delete_page').length, res.committed.length);
+  const done = w.store.remote.receipts([w.gbrain.run(undo.request)]);
+  assert.equal(done.state, 'undone');
+  assert.equal(journal(w.dir, id).state, 'undone');
+  assert.equal(contentVersion(w.store.read()), contentVersion(base()));
+  pull(w.store, w.gbrain);
+  assert.equal(contentVersion(w.store.read()), contentVersion(base()));
+  assert.deepEqual(mdOf(mirrorFiles(w.dir)), original);
+  assert.throws(() => w.store.remote.undo(), /E_STORE_APPLY/);
+});
+
+test('a history revision conflict is retried by rereading', () => {
+  const w = ready();
+  const p = finalPlan(w, [cache]);
+  const { request: req, apply: id } = requestApply(w, p);
+  otherRound(w, 1); // another apply records its round first
+  let res = w.store.remote.receipts([w.gbrain.run(req)]);
+  assert.equal(res.state, 'partial');
+  assert.deepEqual(res.request.calls, [{ tool: 'get_page', arguments: { slug: 'archlens/changelog', include_content: true, content_only: true } }]);
+  res = w.store.remote.receipts([w.gbrain.run(res.request)]);
+  assert.equal(res.request.calls.length, 1);
+  assert.deepEqual(res.request.calls[0].arguments.pages.map(pg => [pg.slug, pg.expected_revision]), [['archlens/changelog', w.gbrain.page('archlens/changelog').revision]]);
+  res = w.store.remote.receipts([w.gbrain.run(res.request)]);
+  assert.equal(res.state, 'committed');
+  assert.equal(res.entry.id, '2026-10-18-02'); // numbered when written, after the other round
+  assert.equal(journal(w.dir, id).entry.id, '2026-10-18-02');
+  pull(w.store, w.gbrain);
+  assert.deepEqual(w.store.read().raw.changelog.map(r => r.id), ['2026-10-01-01', '2026-10-18-01', '2026-10-18-02']);
+  assert.ok(w.store.read().raw.model.elements.some(e => e.id === 'vendas.cache'));
+
+  // Up to 5 rereads; then E_STORE_HISTORY_RETRY, with the rest written and the round kept for --resume.
+  const w2 = ready();
+  const p2 = finalPlan(w2, [cache]);
+  const r2 = requestApply(w2, p2);
+  let n = 1;
+  otherRound(w2, n);
+  res = w2.store.remote.receipts([w2.gbrain.run(r2.request)]);
+  for (let i = 0; i < 5; i++) {
+    res = w2.store.remote.receipts([w2.gbrain.run(res.request)]); // the reread: the history put
+    otherRound(w2, ++n);
+    if (i < 4) res = w2.store.remote.receipts([w2.gbrain.run(res.request)]);
+  }
+  assert.throws(() => w2.store.remote.receipts([w2.gbrain.run(res.request)]), e => e.code === 'E_STORE_HISTORY_RETRY' && /--resume/.test(e.message));
+  assert.equal(journal(w2.dir, r2.apply).state, 'partial');
+  assert.ok(w2.gbrain.page('archlens/application-component/vendas.cache')); // the rest is written
+  const resumed = w2.store.remote.resume();
+  assert.deepEqual(resumed.request.calls.map(c => c.tool), ['get_page']);
+  res = w2.store.remote.receipts([w2.gbrain.run(resumed.request)]);
+  res = w2.store.remote.receipts([w2.gbrain.run(res.request)]);
+  assert.equal(res.state, 'committed');
+  assert.equal(res.entry.id, '2026-10-18-07');
+});
+
+test('writing with the starter surface is refused with E_STORE_GBRAIN_SURFACE', () => {
+  // Never checked.
+  const w = world();
+  w.gbrain.write(pagesOf(base()));
+  const store = w.store();
+  pull(store, w.gbrain);
+  const p = (() => { const { plan: x } = plan(store, deltaOf([cache]), { today: '2026-10-18' }); return x; })();
+  assert.throws(() => apply(store, p), /E_STORE_GBRAIN_SURFACE.*remote .*check/);
+  // Checked, but the server only allows the starter surface.
+  const s = ready({ ceiling: 'starter' });
+  assert.throws(() => apply(s.store, finalPlan(s, [cache])), e => e.code === 'E_STORE_GBRAIN_SURFACE' && /modo git/.test(e.message));
+  assert.ok(!existsSync(join(s.dir, '.archlens', 'remote', 'read-check.json')));
+  // pull, plan and query still work with it.
+  assert.ok(s.store.read().raw);
+});
+
+test('batches respect 50 pages and 8 MB', () => {
+  const w = ready();
+  const cur = w.store.read();
+  const many = Array.from({ length: 120 }, (_, i) => ({ id: `vendas.m${String(i).padStart(3, '0')}`, type: 'application-component', name: `Módulo ${i}`, parent: 'vendas', c4: { kind: 'container' } }));
+  const big = [1, 2, 3].map(i => ({ id: `vendas.big${i}`, type: 'application-component', name: `Grande ${i}`, parent: 'vendas', c4: { kind: 'container' }, description: 'x'.repeat(3 * 1024 * 1024) }));
+  const next = structuredClone(cur.raw);
+  next.model.elements.push(...big.slice(0, 1), ...many, ...big.slice(1));
+  next.changelog.push({ id: '2026-10-18-01', date: '2026-10-18', summary: 'muitos', added: [...many, ...big].map(e => e.id), changed: [], status: {}, removed: [], decisions: [] });
+  const ops = diffRaw(cur, { raw: next, notes: cur.notes });
+  const { request } = w.store.apply(ops, { baseVersion: contentVersion(cur) });
+  const puts = request.calls.filter(c => c.tool === 'put_pages');
+  for (const c of puts) {
+    assert.ok(c.arguments.pages.length <= 50);
+    assert.ok(c.arguments.pages.reduce((n, pg) => n + Buffer.byteLength(pg.content), 0) <= 8 * 1024 * 1024);
+  }
+  assert.ok(puts.some(c => c.arguments.pages.length === 50));
+  assert.ok(puts.slice(0, -1).some(c => c.arguments.pages.length < 50 && c.arguments.pages.some(pg => pg.slug.includes('big')))); // cut by size
+  const slugs = pagesIn(puts).map(pg => pg.slug);
+  assert.equal(new Set(slugs).size, slugs.length);
+  assert.equal(slugs.length, 124 + 1); // the new pages, vendas (its children) and the history
+  assert.deepEqual(puts.at(-1).arguments.pages.map(pg => pg.slug), ['archlens/changelog']);
+  const done = w.store.remote.receipts([w.gbrain.run(request)]);
+  assert.equal(done.state, 'committed');
+  assert.equal(w.store.read().raw.model.elements.length, 3 + 123);
+});
+
+test('receipts for another request are refused', () => {
+  const w = ready();
+  const p = finalPlan(w, [cache], [cacheToRh]);
+  const first = apply(w.store, p);
+  const checked = w.gbrain.run(first.request);
+  assert.throws(() => w.store.remote.receipts([checked]), /E_REMOTE_RESPONSE/); // the read-check is not a receipt
+  const second = apply(w.store, p, { readCheck: [checked] });
+  assert.throws(() => apply(w.store, p, { readCheck: [checked] }), /E_REMOTE_RESPONSE/); // answered already
+  const answer = w.gbrain.run(second.request);
+  const j = journal(w.dir, second.apply);
+  const mirror = mirrorFiles(w.dir);
+  const bad = [
+    { ...answer, request: 'outro-pedido' },
+    { ...answer, 'archlens-remote': '9.9' },
+    { ...answer, results: [...answer.results, answer.results[0]] },
+    (() => { const x = structuredClone(answer); x.results[0].batch_request_id = 'outro-lote'; return x; })(),
+    (() => { const x = structuredClone(answer); x.results[0].pages[0].slug = 'archlens/application-component/outro'; return x; })(),
+    (() => { const x = structuredClone(answer); delete x.results[0].pages[0].revision; return x; })(),
+    (() => { const x = structuredClone(answer); x.results[0] = { nada: true }; return x; })(),
+  ];
+  for (const r of bad) assert.throws(() => w.store.remote.receipts([r]), /E_REMOTE_RESPONSE/);
+  assert.deepEqual(journal(w.dir, second.apply), j);
+  assert.deepEqual(mirrorFiles(w.dir), mirror);
+  assert.equal(w.store.remote.receipts([answer]).state, 'committed');
+  assert.throws(() => w.store.remote.receipts([answer]), /E_REMOTE_RESPONSE/); // nothing in flight any more
+});
+
+test('archlens apply in MCP mode through the CLI: read-check, receipts, resume and undo', () => {
+  const w = world();
+  w.gbrain.write(pagesOf(base()));
+  const cwd = join(w.dir, '..');
+  pull(w.store(), w.gbrain);
+  const { plan: p } = plan(w.store(), deltaOf([cache], [cacheToRh]), { today: '2026-10-18' });
+  writeFileSync(join(cwd, 'p.json'), JSON.stringify(p));
+  let r = cli(['apply', 'architecture', 'p.json'], cwd);
+  assert.notEqual(r.status, 0);
+  assert.match(r.stderr, /E_STORE_GBRAIN_SURFACE/);
+  w.store().remote.checkIngest([w.gbrain.run(w.store().remote.check())]);
+  const remote = step => join(w.dir, '.archlens', 'remote', `${step}-request.json`);
+  const answer = (step, out) => writeFileSync(join(cwd, out), JSON.stringify(w.gbrain.run(JSON.parse(readFileSync(remote(step), 'utf8')))));
+  r = cli(['apply', 'architecture', 'p.json'], cwd);
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /read-check/);
+  assert.match(r.stdout, /--read-check/);
+  answer('read-check', 'rc.json');
+  r = cli(['apply', 'architecture', 'p.json', '--read-check', 'rc.json'], cwd);
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /--receipts/);
+  w.gbrain.failAfter(1);
+  answer('apply', 'recibos.json');
+  r = cli(['apply', 'architecture', '--receipts', 'recibos.json'], cwd);
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /parcial/);
+  assert.match(r.stdout, /--resume/);
+  assert.match(r.stdout, /--undo/);
+  w.gbrain.failAfter(Infinity);
+  r = cli(['apply', 'architecture', '--resume'], cwd);
+  assert.equal(r.status, 0, r.stderr);
+  answer('apply', 'recibos-2.json');
+  r = cli(['apply', 'architecture', '--receipts', 'recibos-2.json'], cwd);
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /rodada 2026-10-18-01/);
+  assert.ok(existsSync(join(cwd, 'ARCHITECTURE.md')));
+  assert.match(readFileSync(join(cwd, 'ARCHITECTURE.md'), 'utf8'), /Cache de Pedidos/);
+  r = cli(['apply', 'architecture', '--undo'], cwd);
+  assert.equal(r.status, 0, r.stderr);
+  answer('undo', 'desfaz.json');
+  r = cli(['apply', 'architecture', '--receipts', 'desfaz.json'], cwd);
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /desfeito/);
+  assert.equal(contentVersion(w.store().read()), contentVersion(base()));
+  // --receipts and friends only apply to a base in gbrain's MCP mode.
+  const other = mkdtempSync(join(tmpdir(), 'archlens-json-'));
+  initBase(join(other, 'architecture'), { name: 'X', store: { kind: 'json' } });
+  r = cli(['apply', 'architecture', '--resume'], other);
   assert.notEqual(r.status, 0);
   assert.match(r.stderr, /mcp/);
 });

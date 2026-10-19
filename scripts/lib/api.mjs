@@ -131,9 +131,11 @@ function conflictLabel(c, element) {
  * connector with per-object versions, the versions of the objects it read or writes (`objects`) and the possible
  * duplicates of what it creates; otherwise (or for a plan without `objects`) the version of the whole base. The merge is
  * not replayed, so a hand-edited plan is only checked for the model it would leave. The entry returned is the round as
- * written, with its final id.
+ * written, with its final id. A connector that cannot write by itself (gbrain MCP: the agent calls the tools) returns the
+ * request to hand to the agent instead (`{ request, apply }`): first the read-check, then, given its response
+ * (`readCheck`), the writes; the receipts go to the connector (archlens apply <base> --receipts).
  */
-export function apply(store, plan) {
+export function apply(store, plan, { readCheck } = {}) {
   if (plan?.['archlens-plan'] !== PLAN_VERSION) {
     throw mergeError('E_PLAN_SCHEMA', 'o arquivo não é um plano do archlens (gere com "archlens plan")');
   }
@@ -147,6 +149,7 @@ export function apply(store, plan) {
         : `o plano está aberto, mas todas as perguntas já têm resposta; feche-o com ${redo}`);
   }
   if (!plan.ops.length) return { version: null, entry: null, preserved: [] };
+  store.assertWrite?.(); // before anything else: a refused plan should not send people to replan for nothing
   const stale = now => storeError('E_STORE_CONFLICT', `a base mudou depois do plano (${short(plan.storeVersion)} → ${short(now)}); `
     + `nada foi gravado. Refaça o plano reaproveitando as respostas: ${redo}`);
   const changed = (conflicts, raw) => storeError('E_STORE_CONFLICT', `a base mudou depois do plano em ${conflicts.length} objeto(s) `
@@ -169,7 +172,9 @@ export function apply(store, plan) {
   }
   try {
     // A connector that redoes the write over a newer base (gbrain git, after a rejected push) checks both again there.
-    const res = store.apply(plan.ops, expect ? { expect, recheck: base => parallelDuplicates(base, plan) } : { baseVersion: plan.storeVersion ?? null });
+    const res = store.apply(plan.ops, { ...(expect ? { expect, recheck: base => parallelDuplicates(base, plan) } : { baseVersion: plan.storeVersion ?? null }),
+      plan, ...(readCheck ? { readCheck } : {}) });
+    if (res.request) return { request: res.request, apply: res.apply ?? null, entry: res.entry ?? null, version: null, preserved: [] };
     return { version: res.version, entry: res.entry ?? appendedEntry(next, plan.ops) ?? plan.entry, preserved: res.preserved };
   } catch (e) {
     if (e.code !== 'E_STORE_CONFLICT') throw e;

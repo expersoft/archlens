@@ -46,6 +46,9 @@ Aplicar (grava a base)
             gbrain --mode git --repo R [--remote origin] [--branch main] [--prefix archlens]   R: clone do repositório do gbrain
             gbrain --mode mcp --server S [--source-id ID] [--prefix archlens]   S: nome do MCP configurado no Claude Code
   apply     <base> p.json                    grava um plano final (se a base mudou, refaça o plano com --answers) e registra o histórico
+            base gbrain no modo mcp: grava o pedido de releitura; com --read-check resposta.json, o pedido de gravação
+            <base> --receipts resposta.json…   confere os recibos do gbrain e atualiza o espelho
+            <base> --resume [id] | --undo [id]   pede o que falta gravar, ou devolve as páginas ao que eram (.archlens/applies/)
   doc       <base> [--out f.md]            regenera o ARCHITECTURE.md (gerado; edite architecture/notes/*.md)
   build     <base> [--out-dir DIR]           ARCHITECTURE.md + HTML (padrão: architecture/diagrams/)
   migrate   <base 1.x> [--to DIR]           converte uma base 1.x (pasta, .md ou .json) para o formato 2.0
@@ -338,6 +341,55 @@ function applyCommand(store, plan, names) {
   afterApply(store, res);
 }
 
+/** Writes a request for the agent (to --out, or under .archlens/remote/) and says what to do with its response. */
+function handOver(store, request, args, next) {
+  const out = typeof args.out === 'string' ? args.out : store.remote.requestPath(request);
+  atomicWrite(out, JSON.stringify(request, null, 2) + '\n');
+  console.log(`✓ pedido "${request.step}" em ${relPath(out)}: ${request.calls.length} chamada(s) ao MCP do gbrain`);
+  console.log(`  próximo: faça as chamadas na ordem e grave o resultado bruto de cada uma em { "archlens-remote": "1.0", "request": "${request.id}", "results": [...] }; `
+    + `depois rode "${next}"`);
+}
+
+/** apply --receipts | --resume | --undo on a gbrain MCP base: the receipts into the mirror, or the next request. */
+function remoteApply(store, flow, args, names) {
+  const receiptsNext = `archlens apply ${names.base} --receipts <resposta.json>`;
+  const id = typeof args[flow] === 'string' && flow !== 'receipts' ? args[flow] : undefined;
+  let res;
+  try {
+    if (flow === 'resume') res = store.remote.resume(id);
+    else if (flow === 'undo') res = store.remote.undo(id);
+    else res = store.remote.receipts([args.receipts, ...args._.slice(2)].map(readJson));
+  } catch (e) { fail(e.message, 2); }
+  if (flow !== 'receipts') {
+    handOver(store, res.request, args, receiptsNext);
+    if (res.skipped?.length) console.warn(`  aviso: ${res.skipped.length} página(s) sem recibo final ficam fora do undo: ${res.skipped.join(', ')}`);
+    return;
+  }
+  const list = slugs => slugs.join(', ');
+  if (res.state === 'committed') {
+    afterApply(store, { entry: res.entry, preserved: [] });
+    return;
+  }
+  if (res.state === 'undone') {
+    const saved = loadBase(store);
+    const doc = saved.raw ? writeDoc(store, saved.raw, saved.notes) : null;
+    console.log(`✓ apply ${res.id} desfeito: ${res.committed.length} página(s) do gbrain de volta ao que eram${doc ? `; ${relPath(doc)} regenerado` : ''}`);
+    return;
+  }
+  const undoing = res.state === 'undo-partial';
+  console.log(`✗ ${undoing ? 'undo' : 'apply'} ${res.id} parcial: ${res.committed.length} página(s) gravada(s)`
+    + `${res.conflicts.length ? `; em conflito (mudaram no gbrain): ${list(res.conflicts)}` : ''}${res.pending.length ? `; sem gravar ainda: ${list(res.pending)}` : ''}`);
+  if (res.request) {
+    handOver(store, res.request, args, receiptsNext);
+    return;
+  }
+  if (undoing) console.log(`  próximo: archlens apply ${names.base} --undo ${res.id} (pede o que falta desfazer)`);
+  else {
+    if (!res.conflicts.length || res.conflicts.every(s => s.endsWith('/changelog'))) console.log(`  para completar: archlens apply ${names.base} --resume ${res.id}`);
+    console.log(`  para desfazer o que foi gravado: archlens apply ${names.base} --undo ${res.id}`);
+  }
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const [cmd, file] = args._;
@@ -622,10 +674,28 @@ async function main() {
       break;
     }
     case 'apply': {
-      const usage = 'uso: archlens apply <base> <plano.json>   (o plano precisa estar final: archlens plan)';
-      if (!args._[2]) fail(usage);
+      const usage = 'uso: archlens apply <base> <plano.json> [--read-check resposta.json…]   (o plano precisa estar final: archlens plan)\n'
+        + '  base gbrain no modo mcp: archlens apply <base> --receipts resposta.json… | --resume [id] | --undo [id]';
+      const names = { base: file ?? relPath(store.locator.path), plan: args._[2] ?? '<plano>' };
+      const flow = ['receipts', 'resume', 'undo'].find(k => args[k] !== undefined);
+      if (flow || args['read-check'] !== undefined) {
+        if (!store.remote) fail(`E_STORE_UNSUPPORTED: ${store.describe()} não é uma base gbrain no modo mcp; --read-check, --receipts, --resume e --undo só valem para ela`);
+        if (args.out === true || ((flow === 'receipts' || !flow) && args[flow ?? 'read-check'] === true)) fail(usage);
+      }
       loadBase(store);
-      applyCommand(store, readJson(args._[2]), { base: file ?? relPath(store.locator.path), plan: args._[2] });
+      if (flow) { remoteApply(store, flow, args, names); break; }
+      if (!args._[2]) fail(usage);
+      const plan = readJson(args._[2]);
+      if (!store.remote) { applyCommand(store, plan, names); break; }
+      assertWritable(store);
+      if (isFinal(plan) && plan.ops?.length) assertDocOwned(store);
+      const readCheck = args['read-check'] ? [args['read-check'], ...args._.slice(3)].map(readJson) : undefined;
+      let res;
+      try { res = applyPlanTo(store, plan, { readCheck }); } catch (e) { failApi(e, names); }
+      if (!res.request) { if (!res.entry) console.log('= nada mudou; a base não foi regravada'); else afterApply(store, res); break; }
+      handOver(store, res.request, args, res.request.step === 'read-check'
+        ? `archlens apply ${names.base} ${names.plan} --read-check <resposta.json>` : `archlens apply ${names.base} --receipts <resposta.json>`);
+      if (res.apply) console.log(`  registro do apply: ${relPath(join(store.locator.path, '.archlens', 'applies', `${res.apply}.json`))} (rodada ${res.entry?.id ?? '-'})`);
       break;
     }
     case 'show': {

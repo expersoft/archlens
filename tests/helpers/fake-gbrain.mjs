@@ -4,8 +4,8 @@
 // order); get_page's `content` is the canonical serialization (type, title, the rest, tags; a blank line; the trimmed body;
 // the `<!-- timeline -->` sentinel before a timeline); every write gets a new revision; expected_revision guards writes;
 // request_id replays a write; a soft delete keeps updated_at (only a restore or a write moves it); a put_pages batch may
-// end `partial`; put_pages, delete_page and restore_page are only on the full tool surface; a remote write stamps
-// `trust_tier: agent_written` into the frontmatter; without a sentinel, the first "## Timeline" / "## History" section
+// end `partial` or `pending` (pages still publishing, settled by a poll); put_pages, delete_page and restore_page are
+// only on the full tool surface; a remote write stamps `trust_tier: agent_written` into the frontmatter; without a sentinel, the first "## Timeline" / "## History" section
 // of dated bullets moves to the timeline (splitBody rule 4); a full list_pages page carries a listing_truncated notice.
 // run(request) plays the agent: it executes the calls of an archlens request file and returns the response file.
 import { parse as parseYaml, stringify as stringifyYaml } from '../../scripts/vendor/yaml/index.js';
@@ -14,7 +14,8 @@ const SURFACES = ['verbs', 'starter', 'full'];
 const WRITE_TOOLS = new Set(['put_pages', 'delete_page', 'restore_page']);
 const REMOTE_CAP = 100;
 
-const opError = (code, message, extra = {}) => Object.assign(new Error(`${code}: ${message}`), { code, json: { code, message, ...extra } });
+// gbrain's error JSON names the code twice: `error` (the frozen wire value) and `code` (the canonical one).
+const opError = (code, message, extra = {}) => Object.assign(new Error(`${code}: ${message}`), { code, json: { error: code, code, message, ...extra } });
 /** jsonb orders object keys by length, then bytewise; at every depth. */
 const jsonbOrder = v => {
   if (Array.isArray(v)) return v.map(jsonbOrder);
@@ -85,9 +86,11 @@ function serialize(page) {
 export function fakeGbrain({ ceiling = 'full', surface = 'starter', sourceId = 'default' } = {}) {
   const pages = new Map(); // `${source}\0${slug}` → page
   const receipts = new Map(); // request_id → receipt (a replay returns it, nothing is written twice)
+  const queued = new Map(); // batch request_id → its pages still publishing (index → { slug, content, expected_revision })
   let clock = 0;
   let revs = 0;
-  let budget = Infinity; // page writes left before the next ones fail (failAfter)
+  let budget = Infinity; // page writes left before the next ones fail, or stay queued (failAfter)
+  let pendMode = false;
   const key = (source, slug) => `${source}\0${slug}`;
   // One timestamp per call: a bulk write stamps one now() across its transaction, as gbrain does.
   const now = () => `2026-10-18T12:00:00.${String(++clock).padStart(6, '0')}Z`;
@@ -110,6 +113,33 @@ export function fakeGbrain({ ceiling = 'full', surface = 'starter', sourceId = '
     if (cur && !expected) return opError('revision_required', `${slug} exists; pass expected_revision`, { current_revision: cur.revision });
     if (cur && expected !== cur.revision) return opError('revision_conflict', `${slug} changed`, { current_revision: cur.revision });
     return null;
+  }
+
+  /** The batch receipt's state and counts from its pages (gbrain's batchReceipt). */
+  function recount(receipt) {
+    const pages = receipt.pages;
+    const committed = pages.filter(p => p.state === 'committed').length;
+    const pending = pages.filter(p => ['queued', 'running', 'recovering'].includes(p.state)).length;
+    const failed = pages.length - committed - pending;
+    return Object.assign(receipt, { state: pending ? 'pending' : !failed ? 'committed' : committed ? 'partial' : 'failed', terminal: !pending,
+      counts: { total: pages.length, committed, pending, failed } });
+  }
+
+  /** The receipt of a batch read again: the pages that were still publishing commit now (each checked as it lands). */
+  function settle(id) {
+    const receipt = receipts.get(id);
+    const q = queued.get(id);
+    if (q) {
+      const ts = now();
+      for (const [index, { slug, content, expected_revision }] of q.pages) {
+        const refused = guard(q.source, slug, expected_revision);
+        receipt.pages[index] = refused ? { index, slug, state: 'failed', error: refused.json }
+          : { index, slug, request_id: `${id}:${index}`, state: 'committed', revision: write(q.source, slug, content, ts, { remote: true }).revision, status: 'written' };
+      }
+      queued.delete(id);
+      recount(receipt);
+    }
+    return structuredClone(receipt);
   }
 
   const tools = {
@@ -155,23 +185,29 @@ export function fakeGbrain({ ceiling = 'full', surface = 'starter', sourceId = '
     },
 
     put_pages(args = {}) {
-      if (receipts.has(args.request_id)) return receipts.get(args.request_id);
+      if (receipts.has(args.request_id)) return settle(args.request_id); // a replay, or a poll (only request_id)
+      if (args.pages === undefined) throw opError('not_found', 'No accessible put_pages batch has that request_id.');
       if (!Array.isArray(args.pages) || !args.pages.length || args.pages.length > 50) throw opError('invalid_params', 'pages: 1-50 pages');
+      const bytes = args.pages.reduce((n, p) => n + Buffer.byteLength(p.content ?? ''), 0);
+      if (bytes > 8 * 1024 * 1024) throw opError('invalid_params', `This batch carries ${bytes} bytes of content; the limit is 8388608 bytes per put_pages call. Nothing was written.`);
       const source = sourceOf(args);
       const ts = now();
+      const later = new Map();
       const out = args.pages.map(({ slug, content, expected_revision }, index) => {
         const refused = guard(source, slug, expected_revision);
         if (refused) return { index, slug, state: 'refused', error: refused.json };
-        if (budget <= 0) return { index, slug, state: 'failed', error: { code: 'interrupted', message: 'the batch was interrupted' } };
+        if (budget <= 0) {
+          if (!pendMode) return { index, slug, state: 'failed', error: { error: 'interrupted', code: 'interrupted', message: 'the batch was interrupted' } };
+          later.set(index, { slug, content, expected_revision });
+          return { index, slug, request_id: `${args.request_id}:${index}`, state: 'queued' };
+        }
         budget--;
-        return { index, slug, state: 'committed', revision: write(source, slug, content, ts, { remote: true }).revision, status: 'written' };
+        return { index, slug, request_id: `${args.request_id}:${index}`, state: 'committed', revision: write(source, slug, content, ts, { remote: true }).revision, status: 'written' };
       });
-      const committed = out.filter(p => p.state === 'committed').length;
-      const failed = out.length - committed;
-      const receipt = { batch_request_id: args.request_id, source_id: source, state: !failed ? 'committed' : committed ? 'partial' : 'failed', terminal: true,
-        counts: { total: out.length, committed, pending: 0, failed }, pages: out };
-      receipts.set(args.request_id, receipt);
-      return receipt;
+      const receipt = { batch_request_id: args.request_id, source_id: source, pages: out };
+      receipts.set(args.request_id, recount(receipt));
+      if (later.size) queued.set(args.request_id, { source, pages: later });
+      return structuredClone(receipt);
     },
 
     delete_page(args = {}) {
@@ -239,8 +275,11 @@ export function fakeGbrain({ ceiling = 'full', surface = 'starter', sourceId = '
     },
     page: (slug, { source = sourceId } = {}) => pages.get(key(source, slug)) ?? null,
     content: (slug, { source = sourceId } = {}) => serialize(pages.get(key(source, slug))),
-    /** The next `n` page writes go through; the ones after fail (a batch ends `partial`). */
-    failAfter(n) { budget = n; },
+    /**
+     * The next `n` page writes go through; the ones after fail (a batch ends `partial`), or, with `pending`, stay queued
+     * (the batch ends `pending`) and commit when the batch is read again (put_pages with its request_id).
+     */
+    failAfter(n, { pending = false } = {}) { budget = n; pendMode = pending; },
     get surface() { return surface; },
   };
 }
