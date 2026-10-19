@@ -275,8 +275,10 @@ export function gbrainMcpConnector(locator, store, { describe = `${rel(locator.p
 
   /**
    * The calls for the pages of `pages` (slug → page of the journal) not written yet: a batch still publishing is read
-   * again by its request_id, a call never answered is sent again as it was (same request_id: gbrain never writes it twice),
-   * a page that failed or was not sent goes in a new call. The history last.
+   * again by its request_id; a call without a receipt (never answered, or not sent: the response cannot tell a call that
+   * did not run from one that ran before the agent stopped) is sent again exactly as it was, same request_id, which gbrain
+   * executes once (it runs if it never ran, it returns its first receipt if it did); only a page that failed for good
+   * (not a conflict) goes in a new call. The history last.
    */
   function retryCalls(j, pages) {
     const sent = new Map(j.calls.map(c => [c.arguments.request_id, c]));
@@ -284,14 +286,14 @@ export function gbrainMcpConnector(locator, store, { describe = `${rel(locator.p
     const again = new Map();
     const fresh = [];
     for (const [slug, p] of Object.entries(pages)) {
-      if (p.state === 'pending' || p.state === 'requested') {
+      if (p.state === 'pending' || p.state === 'requested' || p.state === 'unsent') {
         const call = sent.get(p.request_id);
         if (!again.has(p.request_id)) {
           again.set(p.request_id, p.state === 'pending' && call.tool === 'put_pages'
             ? { tool: 'put_pages', arguments: { request_id: p.request_id, ...scope }, slugs: slugsOf(call) }
             : { ...structuredClone(call), slugs: slugsOf(call) });
         }
-      } else if (p.state === 'failed' || p.state === 'unsent') fresh.push(Object.assign(p, { slug }));
+      } else if (p.state === 'failed') fresh.push(Object.assign(p, { slug }));
     }
     const calls = [...again.values(), ...writeCalls(fresh)];
     return [...calls.filter(c => !isHistory(c)), ...calls.filter(isHistory)];
@@ -327,8 +329,11 @@ export function gbrainMcpConnector(locator, store, { describe = `${rel(locator.p
   /** The code of a tool error (gbrain's error JSON: `error`, else `code`), or null. */
   const codeOf = text => { try { const e = JSON.parse(text); return e?.error ?? e?.code ?? null; } catch { return null; } };
 
-  /** What a call's result says of each page it writes: [{ slug, state, revision?, current? }] (E_REMOTE_RESPONSE when it is not its receipt). */
-  function outcomesOf(call, res, i) {
+  /**
+   * What a call's result says of each page it writes: [{ slug, state, revision?, current? }] (E_REMOTE_RESPONSE when it is
+   * not its receipt). `pages`: the journal's pages, for a poll's receipt, which gbrain rebuilds from the admitted pages only.
+   */
+  function outcomesOf(call, res, i, pages) {
     const where = `resultado ${i + 1} (${call.tool})`;
     if (call.tool === 'get_page') return [{ slug: historySlug, state: 'reread', page: pageOfResult(res, call, i) }];
     const all = state => call.slugs.map(slug => ({ slug, state }));
@@ -347,11 +352,18 @@ export function gbrainMcpConnector(locator, store, { describe = `${rel(locator.p
     if (!v || !Array.isArray(v.pages)) throw responseError(`${where}: não é o recibo de um lote (falta "pages")`);
     if (v.batch_request_id !== id && v.client_request_id !== id) throw responseError(`${where}: o recibo é do lote ${JSON.stringify(v.batch_request_id)}, não do lote ${id}`);
     if (v.pages.length !== call.slugs.length) throw responseError(`${where}: o lote tem ${call.slugs.length} página(s) e o recibo traz ${v.pages.length}`);
-    return v.pages.map((pg, k) => {
+    const poll = !call.arguments.pages;
+    return v.pages.flatMap((pg, k) => {
       const slug = call.slugs[k];
+      if (poll && pg?.state === 'not_admitted' && !pg.slug) {
+        // Refused before admission, so no row: no news of a page that has left this batch or is not waiting on it.
+        const p = pages[slug];
+        return p?.request_id === id && p.state === 'pending' ? [{ slug, state: 'failed' }] : [];
+      }
       if (pg?.slug !== slug) throw responseError(`${where}: a página ${k + 1} do recibo deveria ser ${slug} (veio ${JSON.stringify(pg?.slug)})`);
       if (pg.state === 'committed') {
-        if (typeof pg.revision !== 'string') throw responseError(`${where}: ${slug} gravada sem "revision"`);
+        // gbrain reports `revision: null` when the receipt has none: the page then leaves revisions.json, and the next pull fetches it.
+        if (typeof pg.revision !== 'string' && pg.revision !== null) throw responseError(`${where}: ${slug} gravada sem "revision"`);
         return { slug, state: 'committed', revision: pg.revision };
       }
       const code = pg.error?.error ?? pg.error?.code ?? null;
@@ -451,10 +463,10 @@ export function gbrainMcpConnector(locator, store, { describe = `${rel(locator.p
     const calls = j.request.calls;
     if (results.length > calls.length) throw responseError(`o pedido ${id} tem ${calls.length} chamada(s) e a resposta traz ${results.length} resultado(s)`);
     // A call without a result was not sent (the agent stopped before it).
-    const outcomes = calls.flatMap((call, i) => (i < results.length ? outcomesOf(call, unwrap(results[i], `resultado ${i + 1} (${call.tool})`), i)
-      : call.slugs.map(slug => ({ slug, state: 'unsent' }))).map(o => ({ ...o, request_id: call.arguments.request_id })));
     const undoing = j.request.step === 'undo';
     const pages = undoing ? j.undo.pages : j.pages;
+    const outcomes = calls.flatMap((call, i) => (i < results.length ? outcomesOf(call, unwrap(results[i], `resultado ${i + 1} (${call.tool})`), i, pages)
+      : call.slugs.map(slug => ({ slug, state: 'unsent' }))).map(o => ({ ...o, request_id: call.arguments.request_id })));
     for (const o of outcomes) if (o.state !== 'reread' && !pages[o.slug]) throw responseError(`${o.slug} não faz parte deste ${undoing ? 'undo' : 'apply'}`);
 
     const files = readTree(mirror, prefix);
@@ -550,7 +562,11 @@ export function gbrainMcpConnector(locator, store, { describe = `${rel(locator.p
       calls = writeCalls(items);
       j.undo = { pages: Object.fromEntries(items.map(({ slug, ...i }) => [slug, i])) };
     }
-    const skipped = Object.keys(j.pages).filter(s => ['pending', 'requested'].includes(j.pages[s].state)).sort();
+    if (!calls.length) {
+      const stuck = Object.keys(j.undo.pages).filter(s => j.undo.pages[s].state === 'revision_conflict').sort();
+      throw storeError('E_STORE_APPLY', `o undo do apply ${j.id} não tem mais o que pedir: ${stuck.length ? `as página(s) ${stuck.join(', ')} mudaram no gbrain depois do apply e não são forçadas` : 'nada ficou por desfazer'}`);
+    }
+    const skipped = Object.keys(j.pages).filter(s => ['pending', 'requested', 'unsent'].includes(j.pages[s].state)).sort();
     j.state = 'undoing';
     const request = issue(j, 'undo', calls);
     saveJournal(j);

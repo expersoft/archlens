@@ -587,6 +587,18 @@ test('a partial batch is undone by --undo', () => {
   assert.equal(contentVersion(w.store.read()), contentVersion(base()));
   assert.deepEqual(mdOf(mirrorFiles(w.dir)), original);
   assert.throws(() => w.store.remote.undo(), /E_STORE_APPLY/);
+
+  // An undo whose page changed in gbrain after the apply stops there, and says so.
+  const v = ready();
+  const { request: r2 } = requestApply(v, finalPlan(v, [cache]));
+  assert.equal(v.store.remote.receipts([v.gbrain.run(r2)]).state, 'committed');
+  const vendas = 'archlens/application-component/vendas';
+  v.gbrain.write(new Map([[`${vendas}.md`, v.gbrain.content(vendas).replace('# Vendas', '# Vendas (editado)')]]));
+  const u = v.store.remote.undo();
+  const partial = v.store.remote.receipts([v.gbrain.run(u.request)]);
+  assert.equal(partial.state, 'undo-partial');
+  assert.deepEqual(partial.conflicts, [vendas]);
+  assert.throws(() => v.store.remote.undo(), e => e.code === 'E_STORE_APPLY' && e.message.includes(vendas));
 });
 
 test('a history revision conflict is retried by rereading', () => {
@@ -750,4 +762,71 @@ test('archlens apply in MCP mode through the CLI: read-check, receipts, resume a
   r = cli(['apply', 'architecture', '--resume'], other);
   assert.notEqual(r.status, 0);
   assert.match(r.stderr, /mcp/);
+});
+
+test('a call without a result, whether it ran or not, is replayed with the same request_id by --resume', () => {
+  for (const ran of [true, false]) {
+    const w = ready();
+    const p = finalPlan(w, [cache]);
+    const { request: req } = requestApply(w, p);
+    // The agent stopped before recording the last result: the call ran (lost result), or it was never sent.
+    const answer = ran ? w.gbrain.run(req) : w.gbrain.run({ ...req, calls: req.calls.slice(0, -1) });
+    const res = w.store.remote.receipts([{ ...answer, results: answer.results.slice(0, req.calls.length - 1) }]);
+    assert.equal(res.state, 'partial');
+    assert.deepEqual(res.pending, ['archlens/changelog']);
+    const resumed = w.store.remote.resume();
+    assert.deepEqual(resumed.request.calls, [req.calls.at(-1)], `ran: ${ran}`); // the same call, the same request_id
+    const done = w.store.remote.receipts([w.gbrain.run(resumed.request)]);
+    assert.equal(done.state, 'committed', `ran: ${ran}`);
+    pull(w.store, w.gbrain);
+    assert.deepEqual(w.store.read().raw.changelog.map(r => r.id), ['2026-10-01-01', '2026-10-18-01']); // the round once
+  }
+});
+
+test('a journal still waiting for its receipts is replayed unchanged, and a receipt without revision is taken', () => {
+  const w = ready();
+  const p = finalPlan(w, [cache]);
+  const { request: req } = requestApply(w, p);
+  const resumed = w.store.remote.resume();
+  assert.deepEqual(resumed.request.calls, req.calls);
+  const answer = w.gbrain.run(resumed.request);
+  const slug = answer.results[0].pages[0].slug;
+  answer.results[0].pages[0].revision = null; // gbrain's receipt had none
+  assert.equal(w.store.remote.receipts([answer]).state, 'committed');
+  assert.equal(revisions(w.dir)[slug], undefined); // left for the next pull
+  assert.ok(getSlugs(pull(w.store, w.gbrain).requests).includes(slug));
+  assert.equal(revisions(w.dir)[slug], w.gbrain.page(slug).revision);
+});
+
+test('a poll receipt rebuilt from the admitted pages only is read', () => {
+  // The fake polls as gbrain does: a page refused before admission comes back without slug, not_admitted.
+  const g = fakeGbrain({ surface: 'full' });
+  g.write(new Map([['x/a.md', '---\ntitle: A\n---\nA\n']]));
+  g.call('put_pages', { request_id: 'lote', pages: [{ slug: 'x/a', content: '---\ntitle: A\n---\nB\n' }, { slug: 'x/b', content: '---\ntitle: B\n---\nB\n' }] });
+  assert.deepEqual(g.call('put_pages', { request_id: 'lote' }).pages[0], { index: 0, slug: '', state: 'not_admitted' });
+
+  for (const at of [0, 1]) {
+    const w = ready();
+    const p = finalPlan(w, [cache]);
+    const { request: req } = requestApply(w, p);
+    w.gbrain.failAfter(1, { pending: true });
+    let res = w.store.remote.receipts([w.gbrain.run(req)]);
+    const resumed = w.store.remote.resume();
+    assert.ok(resumed.request.calls.every(c => !c.arguments.pages));
+    const answer = w.gbrain.run(resumed.request);
+    const page = answer.results[0].pages[at];
+    answer.results[0].pages[at] = { index: at, slug: '', state: 'not_admitted' };
+    res = w.store.remote.receipts([answer]);
+    if (at === 0) {
+      // A page already committed, no longer waiting on the batch: nothing new about it.
+      assert.equal(res.state, 'committed');
+    } else {
+      // A page that was waiting on the batch and has no row: it failed, and goes again in a new call.
+      assert.equal(res.state, 'partial');
+      assert.deepEqual(res.pending, [page.slug]);
+      const again = w.store.remote.resume();
+      assert.ok(!old(req).includes(again.request.calls[0].arguments.request_id));
+    }
+  }
+  function old(r) { return r.calls.map(c => c.arguments.request_id); }
 });

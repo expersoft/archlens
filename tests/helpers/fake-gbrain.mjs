@@ -125,8 +125,12 @@ export function fakeGbrain({ ceiling = 'full', surface = 'starter', sourceId = '
       counts: { total: pages.length, committed, pending, failed } });
   }
 
-  /** The receipt of a batch read again: the pages that were still publishing commit now (each checked as it lands). */
-  function settle(id) {
+  /**
+   * The receipt of a batch read again: the pages that were still publishing commit now (each checked as it lands). A poll
+   * rebuilds it from the admitted rows only, as gbrain does: a page refused before admission has no row and comes back as
+   * { slug: '', state: 'not_admitted' }.
+   */
+  function settle(id, { poll = false } = {}) {
     const receipt = receipts.get(id);
     const q = queued.get(id);
     if (q) {
@@ -139,7 +143,9 @@ export function fakeGbrain({ ceiling = 'full', surface = 'starter', sourceId = '
       queued.delete(id);
       recount(receipt);
     }
-    return structuredClone(receipt);
+    if (!poll) return structuredClone(receipt);
+    const pages = receipt.pages.map(p => (p.state === 'refused' ? { index: p.index, slug: '', state: 'not_admitted' } : p));
+    return recount({ ...structuredClone(receipt), pages: structuredClone(pages) });
   }
 
   const tools = {
@@ -185,7 +191,7 @@ export function fakeGbrain({ ceiling = 'full', surface = 'starter', sourceId = '
     },
 
     put_pages(args = {}) {
-      if (receipts.has(args.request_id)) return settle(args.request_id); // a replay, or a poll (only request_id)
+      if (receipts.has(args.request_id)) return settle(args.request_id, { poll: args.pages === undefined }); // a replay, or a poll (only request_id)
       if (args.pages === undefined) throw opError('not_found', 'No accessible put_pages batch has that request_id.');
       if (!Array.isArray(args.pages) || !args.pages.length || args.pages.length > 50) throw opError('invalid_params', 'pages: 1-50 pages');
       const bytes = args.pages.reduce((n, p) => n + Buffer.byteLength(p.content ?? ''), 0);
