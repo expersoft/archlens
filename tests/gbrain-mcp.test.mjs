@@ -14,7 +14,7 @@ import { contentVersion, applyOps, diffRaw } from '../scripts/lib/store/ops.mjs'
 import { checkConnector } from '../scripts/lib/store/contract.mjs';
 import { plan, apply } from '../scripts/lib/api.mjs';
 import { fakeGbrain } from './helpers/fake-gbrain.mjs';
-import { convertToGbrain, convertFromGbrain, convertFolder, finishConvertToMcp } from '../scripts/lib/store/convert.mjs';
+import { convertToGbrain, convertFromGbrain, convertFolder, finishConvertToMcp, pendingConvertToMcp } from '../scripts/lib/store/convert.mjs';
 import { gbrainMcpConnector } from '../scripts/lib/store/gbrain-mcp.mjs';
 import { canonicalJson } from '../scripts/lib/merge.mjs';
 import { cpSync, mkdirSync, rmSync } from 'node:fs';
@@ -1114,4 +1114,22 @@ test('the CLI reports a partial convert and how to --resume or --undo; the sessi
   assert.equal(r.status, 0, r.stderr);
   assert.match(r.stdout, /agora usa o conector gbrain/);
   assert.equal(existsSync(join(w.dir, 'model.json')), false);
+});
+
+test('a finished convert that came back to json is not in flight: converting again works and --receipts ignores the old journal', () => {
+  const w = convWorld('loja-online');
+  const cwd = join(w.dir, '..');
+  finish(w, convertToGbrain(w.loc, w.store));
+  finishConvertToMcp(w.loc);
+  convertFromGbrain(resolveBase(w.dir), 'json');
+  assert.equal(pendingConvertToMcp(resolveBase(w.dir)), null);
+  const r = cli(['apply', 'architecture', '--receipts', 'nada.json'], cwd);
+  assert.notEqual(r.status, 0);
+  assert.match(r.stderr, /mcp/);
+  // The session was dropped with the mirror: check again, then convert onto another prefix.
+  const gbrain = w.gbrain;
+  const checker = gbrainMcpConnector(w.loc, { ...MCP, prefix: 'segundo' });
+  checker.remote.checkIngest([gbrain.run(checker.remote.check())]);
+  const again = convertToGbrain(resolveBase(w.dir), { ...MCP, prefix: 'segundo' });
+  assert.ok(again.request);
 });

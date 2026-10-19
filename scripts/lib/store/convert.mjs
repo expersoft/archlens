@@ -154,12 +154,11 @@ function appliesOf(dir) {
 
 /**
  * The convert to a gbrain in MCP mode waiting for its receipts, if any: { id, state, store, connector } for the last
- * journal that carries a `convert` while archlens.json is still the local one; null otherwise (a finished convert leaves
- * the gbrain manifest behind it). Its connector runs --receipts, --resume and --undo.
+ * journal that carries a `convert` and was not closed (finishedAt) while archlens.json is still the local one; null otherwise. Its connector runs --receipts, --resume and --undo.
  */
 export function pendingConvertToMcp(locator) {
   if (openStore(locator).kind === 'gbrain') return null;
-  const j = appliesOf(locator.path).filter(x => x.convert && x.state !== 'undone').at(-1);
+  const j = appliesOf(locator.path).filter(x => x.convert && x.state !== 'undone' && !x.finishedAt).at(-1);
   if (!j) return null;
   return { id: j.id, state: j.state, store: j.convert.store, connector: gbrainMcpConnector(locator, j.convert.store) };
 }
@@ -212,6 +211,8 @@ export function finishConvertToMcp(locator) {
   ignoreMirror(dir);
   for (const rel of j.convert.own) rmSync(join(dir, rel), { force: true });
   dropEmptied(dir, j.convert.own);
+  // The journal stays (undo information) but is closed: a later conversion back to local does not make it pending again.
+  writeAtomic(join(dir, APPLIES, `${j.id}.json`), JSON.stringify({ ...j, finishedAt: new Date().toISOString() }, null, 2) + '\n');
   return { pages: Object.keys(j.pages).length, from: j.convert.from, to: 'gbrain', version: j.convert.version, leftover: null, dropped: [] };
 }
 
