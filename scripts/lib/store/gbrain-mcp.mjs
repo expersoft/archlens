@@ -260,9 +260,11 @@ export function gbrainMcpConnector(locator, store, { describe = `${rel(locator.p
   const isPoll = call => call.tool === 'put_pages' && !call.arguments.pages;
   const isHistory = call => call.slugs.includes(historySlug);
   // gbrain's put_page keeps the tags a page had and adds the ones sent (src/core/persistence/page-prepare.ts:832): a
-  // tag the apply drops is taken off with remove_tag (src/core/ops/tags.ts), one call per tag after the page's put; the
-  // undo calls the inverse. Tag calls are idempotent by request_id and carry no revision; the journal keeps them in
-  // tagOps (request_id → { slug, tag, op: remove | add, state }).
+  // tag the apply drops is taken off with remove_tag (src/core/ops/tags.ts), the undo calls the inverse. Tag calls never
+  // go with the page writes: once a page's put committed, its receipts ask for the first tag call of the page, guarded
+  // by the revision that put gave, and each tag receipt for the next one, guarded by the revision the tag call gave. The
+  // journal keeps them per page in tagOps: slug → { queue: [{ tag, op }], done, state, request_id?, call? }, state
+  // waiting | requested | unsent | pending | failed | revision_conflict | done.
   const TAG_TOOLS = { remove: 'remove_tag', add: 'add_tag' };
   const isTagCall = call => call.tool === 'remove_tag' || call.tool === 'add_tag';
   const tagsOf = content => {
@@ -271,16 +273,23 @@ export function gbrainMcpConnector(locator, store, { describe = `${rel(locator.p
     try { fm = m ? parseYaml(m[1] ?? '') : null; } catch { /* the layout reports the page */ }
     return Array.isArray(fm?.tags) ? fm.tags.filter(t => typeof t === 'string') : [];
   };
-  /** The tag calls for `ops` ([{ slug, tag, op }]), each recorded as requested in `tagOps`. */
-  function tagCalls(ops, tagOps) {
-    return ops.map(t => {
-      // No source_id: the tag tools do not take it (a write refuses unknown parameters); they write to the session's source.
-      const call = { tool: TAG_TOOLS[t.op], arguments: { slug: t.slug, tag: t.tag, request_id: randomUUID() }, slugs: [t.slug] };
-      tagOps[call.arguments.request_id] = { slug: t.slug, tag: t.tag, op: t.op, state: 'requested' };
-      return call;
-    });
+  /** tagOps for `ops` ([{ slug, tag, op }]): one queue per page, waiting for the page's write. */
+  const tagQueues = ops => {
+    const out = {};
+    for (const { slug, tag, op } of ops) (out[slug] ??= { queue: [], done: [], state: 'waiting' }).queue.push({ tag, op });
+    return out;
+  };
+  /** The next tag call of `slug`, guarded by `expected` (no source_id: the tag tools refuse it and write to the session's source). */
+  function tagCall(slug, t, expected) {
+    const { tag, op } = t.queue[0];
+    const call = { tool: TAG_TOOLS[op], arguments: { slug, tag, expected_revision: expected, request_id: randomUUID() }, slugs: [slug] };
+    Object.assign(t, { state: 'requested', request_id: call.arguments.request_id, call: strip([call])[0] });
+    return call;
   }
-  const beforeHistory = calls => [...calls.filter(c => !isHistory(c)), ...calls.filter(isHistory)];
+  /** The tag calls ready to go: pages committed in this apply (or undo), with a revision to guard them. */
+  const readyTagCalls = (pages, tagOps) => Object.entries(tagOps)
+    .filter(([slug, t]) => t.state === 'waiting' && t.queue.length && pages[slug]?.state === 'committed' && typeof pages[slug].revision === 'string')
+    .map(([slug, t]) => tagCall(slug, t, pages[slug].revision));
 
   /**
    * The calls that write `items` ({ slug, op: put | delete | restore, content?, expected? }): put batches, deletes,
@@ -321,12 +330,15 @@ export function gbrainMcpConnector(locator, store, { describe = `${rel(locator.p
       } else if (p.state === 'failed') fresh.push(Object.assign(p, { slug }));
       else if (p.state === 'reread') again.set(`get:${slug}`, getCall(slug, { deleted: p.op === 'restore' }));
     }
-    const failedTags = [];
-    for (const [rid, t] of Object.entries(tagOps)) {
-      if (['pending', 'requested', 'unsent'].includes(t.state)) { if (!again.has(rid)) again.set(rid, { ...structuredClone(sent.get(rid)), slugs: [t.slug] }); }
-      else if (t.state === 'failed') { failedTags.push(t); delete tagOps[rid]; }
+    const calls = [...again.values(), ...writeCalls(fresh)];
+    // Tag calls: one without a receipt goes again as it was (same request_id and guard); one that failed for good is
+    // asked again with a new request_id and the page's revision; a page committed earlier is waited on no more.
+    const tags = [];
+    for (const [slug, t] of Object.entries(tagOps)) {
+      if (['pending', 'requested', 'unsent'].includes(t.state)) { tags.push({ ...structuredClone(t.call), slugs: [slug] }); t.state = 'requested'; }
+      else if (t.state === 'failed') t.state = 'waiting';
     }
-    return beforeHistory([...again.values(), ...writeCalls(fresh), ...tagCalls(failedTags, tagOps)]);
+    return [...calls.filter(c => !isHistory(c)), ...calls.filter(isHistory), ...tags, ...readyTagCalls(pages, tagOps)];
   }
 
   const readJournal = id => {
@@ -350,12 +362,13 @@ export function gbrainMcpConnector(locator, store, { describe = `${rel(locator.p
   const UNDO_STATES = ['undoing', 'undone', 'undo-partial'];
   const summary = (j, request) => {
     const pages = UNDO_STATES.includes(j.state) ? j.undo.pages : j.pages;
-    const tags = Object.values((UNDO_STATES.includes(j.state) ? j.undo : j).tagOps ?? {}).filter(t => t.state !== 'committed')
-      .map(t => `${t.slug} (${TAG_TOOLS[t.op]} ${t.tag})`).sort();
+    const tagOps = Object.entries((UNDO_STATES.includes(j.state) ? j.undo : j).tagOps ?? {});
+    const tagged = test => tagOps.filter(([, t]) => test(t.state)).flatMap(([slug, t]) => t.queue.map(q => `${slug} (${TAG_TOOLS[q.op]} ${q.tag})`)).sort();
     const slugs = Object.keys(pages).sort();
     const by = test => slugs.filter(s => test(pages[s].state));
-    return { id: j.id, state: j.state, entry: j.entry, committed: by(s => s === 'committed'), conflicts: by(s => s === 'revision_conflict'),
-      pending: [...by(s => s !== 'committed' && s !== 'revision_conflict'), ...tags],
+    return { id: j.id, state: j.state, entry: j.entry, committed: by(s => s === 'committed'),
+      conflicts: [...by(s => s === 'revision_conflict'), ...tagged(s => s === 'revision_conflict')],
+      pending: [...by(s => s !== 'committed' && s !== 'revision_conflict'), ...tagged(s => s !== 'done' && s !== 'revision_conflict')],
       duplicates: slugs.filter(s => pages[s].state === 'failed' && pages[s].duplicateOf).map(s => ({ slug: s, of: pages[s].duplicateOf })), ...(request ? { request } : {}) };
   };
 
@@ -375,7 +388,13 @@ export function gbrainMcpConnector(locator, store, { describe = `${rel(locator.p
     }
     if (isTagCall(call)) {
       const slug = call.slugs[0];
-      if (res.error) return [{ kind: 'tag', slug, state: codeOf(res.error) === 'write_pending' ? 'pending' : 'failed' }];
+      if (res.error) {
+        const code = codeOf(res.error);
+        let current = null;
+        try { current = JSON.parse(res.error).current_revision ?? null; } catch { /* not gbrain's error JSON */ }
+        // A page gone (gbrain: page_identity_changed) changed too.
+        return [{ kind: 'tag', slug, state: code === 'write_pending' ? 'pending' : CONFLICT_CODES.has(code) || code === 'page_identity_changed' ? 'revision_conflict' : 'failed', current }];
+      }
       const v = res.value;
       if (!v || typeof v !== 'object' || (v.slug !== undefined && v.slug !== slug) || (v.request_id !== undefined && v.request_id !== call.arguments.request_id)) {
         throw responseError(`${where}: não é o recibo de ${call.tool} em ${slug} (request_id ${call.arguments.request_id})`);
@@ -481,8 +500,8 @@ export function gbrainMcpConnector(locator, store, { describe = `${rel(locator.p
       const now = new Set(tagsOf(w.content));
       return tagsOf(before[w.slug].content).filter(tag => !now.has(tag)).map(tag => ({ slug: w.slug, tag, op: 'remove' }));
     });
-    const tagOps = {};
-    const calls = beforeHistory([...writeCalls(Object.values(pages)), ...tagCalls(dropped, tagOps)]);
+    const tagOps = tagQueues(dropped);
+    const calls = writeCalls(Object.values(pages));
     for (const p of Object.values(pages)) delete p.slug;
     const j = { 'archlens-apply': PROTOCOL, id: randomUUID(), createdAt: new Date().toISOString(), plan: plan ?? null, ...(plan ? {} : { ops }),
       entry, before, pages, tagOps, history: { tries: 0 }, calls: [], state: 'requested' };
@@ -580,14 +599,16 @@ export function gbrainMcpConnector(locator, store, { describe = `${rel(locator.p
     for (const o of outcomes) {
       if (o.state === 'reread') { rereads.set(o.slug, o.page); continue; }
       if (o.kind === 'tag') {
-        const t = tagOps[o.request_id];
-        if (!t || (o.state === 'unsent' && t.state === 'committed')) continue;
-        t.state = o.state;
-        // The tag call is the page's last write: its revision is the page's now.
-        if (o.state === 'committed' && o.revision) {
-          if (revs[t.slug]) revs[t.slug] = o.revision;
-          if (pages[t.slug]?.state === 'committed') pages[t.slug].revision = o.revision;
-        }
+        const t = tagOps[o.slug];
+        if (!t || t.request_id !== o.request_id) continue; // a call the page has left
+        if (o.state !== 'committed') { t.state = o.state; if (o.state === 'revision_conflict') t.current = o.current; continue; }
+        t.done.push(t.queue.shift());
+        Object.assign(t, { state: t.queue.length ? 'waiting' : 'done' });
+        delete t.request_id;
+        delete t.call;
+        // The tag call is the last write of a page this apply wrote: its revision is the page's now (the guard of the next one).
+        const p = pages[o.slug];
+        if (p?.state === 'committed' && o.revision) { p.revision = o.revision; if (p.op !== 'delete') revs[o.slug] = o.revision; }
         continue;
       }
       const p = pages[o.slug];
@@ -639,7 +660,9 @@ export function gbrainMcpConnector(locator, store, { describe = `${rel(locator.p
       if (j.history.tries >= HISTORY_RETRIES) exhausted = true;
       else { j.history.tries++; next = [getCall(historySlug)]; }
     }
-    const done = Object.values(pages).every(p => p.state === 'committed') && Object.values(tagOps).every(t => t.state === 'committed');
+    const tagsNext = readyTagCalls(pages, tagOps);
+    if (tagsNext.length) next = [...(next ?? []), ...tagsNext];
+    const done = Object.values(pages).every(p => p.state === 'committed') && Object.values(tagOps).every(t => t.state === 'done');
     j.state = undoing ? (done ? 'undone' : 'undo-partial') : done ? 'committed' : 'partial';
     j.request = null;
     if (next && undoing) j.state = 'undoing';
@@ -666,7 +689,8 @@ export function gbrainMcpConnector(locator, store, { describe = `${rel(locator.p
     const j = id ? readJournal(id) : journals().filter(x => open.includes(x.state)).at(-1);
     if (!j) throw storeError('E_STORE_APPLY', `nenhum apply para retomar em ${rel(join(dir, APPLIES))}`);
     if (!open.includes(j.state)) throw storeError('E_STORE_APPLY', `o apply ${j.id} está "${j.state}": não há o que retomar`);
-    const conflicts = Object.keys(j.pages).filter(s => (j.convert || s !== historySlug) && j.pages[s].state === 'revision_conflict');
+    const conflicts = [...Object.keys(j.pages).filter(s => (j.convert || s !== historySlug) && j.pages[s].state === 'revision_conflict'),
+      ...Object.keys(j.tagOps ?? {}).filter(s => j.tagOps[s].state === 'revision_conflict')];
     if (conflicts.length) {
       throw storeError('E_STORE_APPLY', `o apply ${j.id} tem página(s) que mudaram no gbrain depois do plano (${conflicts.join(', ')}); o resto do plano não é forçado. `
         + `Desfaça com "archlens apply ${rel(dir)} --undo ${j.id}" e refaça o plano`);
@@ -700,17 +724,18 @@ export function gbrainMcpConnector(locator, store, { describe = `${rel(locator.p
       // A page whose receipt had no revision is never written unguarded: it is read again first (see receipts).
       const known = items.filter(i => i.expected);
       const unknown = items.filter(i => !i.expected);
-      // The tags back as they were, after the content: the ones the apply took off, and off the ones it added.
-      const inverse = Object.values(j.tagOps ?? {}).filter(t => t.state === 'committed').map(t => ({ slug: t.slug, tag: t.tag, op: t.op === 'remove' ? 'add' : 'remove' }));
+      // The tags back as they were, once a page's content is back (its receipts ask for them): on the ones the apply took
+      // off, off the ones it added. Only pages the apply wrote, whose tag calls did not conflict.
+      const inverse = [];
       for (const [slug, p] of Object.entries(j.pages)) {
-        if (p.state !== 'committed' || p.op !== 'put' || j.before[slug].content === null) continue;
+        if (p.state !== 'committed' || p.op !== 'put' || j.before[slug].content === null || j.tagOps?.[slug]?.state === 'revision_conflict') continue;
+        for (const { tag, op } of j.tagOps?.[slug]?.done ?? []) inverse.push({ slug, tag, op: op === 'remove' ? 'add' : 'remove' });
         const was = new Set(tagsOf(j.before[slug].content));
         for (const tag of tagsOf(p.content)) if (!was.has(tag)) inverse.push({ slug, tag, op: 'remove' });
       }
-      const tagOps = {};
-      calls = [...writeCalls(known), ...unknown.map(i => getCall(i.slug, { deleted: i.op === 'restore' })), ...tagCalls(inverse, tagOps)];
+      calls = [...writeCalls(known), ...unknown.map(i => getCall(i.slug, { deleted: i.op === 'restore' }))];
       for (const i of unknown) i.state = 'reread';
-      j.undo = { pages: Object.fromEntries(items.map(({ slug, ...i }) => [slug, i])), tagOps };
+      j.undo = { pages: Object.fromEntries(items.map(({ slug, ...i }) => [slug, i])), tagOps: tagQueues(inverse) };
     }
     if (!calls.length) {
       const stuck = Object.keys(j.undo.pages).filter(s => j.undo.pages[s].state === 'revision_conflict').sort();

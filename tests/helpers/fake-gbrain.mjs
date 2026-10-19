@@ -158,7 +158,7 @@ export function fakeGbrain({ ceiling = 'full', surface = 'starter', sourceId = '
     return recount({ ...structuredClone(receipt), pages: structuredClone(pages) });
   }
 
-  /** remove_tag / add_tag: idempotent by request_id; no change, no new revision (noop). */
+  /** remove_tag / add_tag: idempotent by request_id, guarded by expected_revision; no change, no new revision (noop). */
   function tagOp(args, add) {
     // The tag tools have no source_id parameter, and a write refuses unknown ones: they write to the session's source.
     if ('source_id' in args) throw opError('invalid_params', '1 unknown parameter not declared in the tool schema; nothing was written.', { suggestion: 'Unknown parameter "source_id".' });
@@ -166,6 +166,7 @@ export function fakeGbrain({ ceiling = 'full', surface = 'starter', sourceId = '
     const source = sourceId;
     const p = live(source, args.slug);
     if (!p) throw Object.assign(new Error('page_not_found'), { json: { error: 'page_identity_changed', code: 'page_not_found', message: 'The accepted page no longer exists.' } });
+    if (args.expected_revision !== undefined && args.expected_revision !== p.revision) throw opError('revision_conflict', `${args.slug} changed`, { current_revision: p.revision });
     const noop = p.tags.includes(args.tag) === add;
     if (!noop) Object.assign(p, { tags: add ? [...p.tags, args.tag].sort() : p.tags.filter(t => t !== args.tag), revision: revision(), updated_at_iso: now() });
     const receipt = { tag: args.tag, noop, slug: p.slug, status: 'ok', revision: p.revision, source_id: source, request_id: args.request_id, state: 'committed' };

@@ -501,33 +501,48 @@ describe('gbrain real', { skip }, () => {
 
   // gbrain's put_page keeps the tags the page had and adds the ones sent (src/core/persistence/page-prepare.ts:832,
   // tags = union of the stored and the parsed ones): the apply takes off the tags it drops with remove_tag.
-  test('MCP: a tag taken off an element leaves gbrain\'s page too, and --undo puts it back', async () => {
+  test('MCP: a tag taken off an element leaves gbrain\'s page too (a guarded remove_tag after the put), and --undo puts it back', async () => {
     const src = env.addSource('m7');
     const s = await session(src);
+    const tagCalls = req => (req?.calls ?? []).filter(c => c.tool === 'remove_tag' || c.tool === 'add_tag');
+    /** --receipts of the agent's answer to `req`, then of each follow-up request: the summaries. */
+    const settle = async (st, req) => { const out = []; for (let r = req; r;) { const res = st.remote.receipts([await agent(s, r)]); out.push(res); r = res.request; } return out; };
+    const rhTags = st => [...(st.read().raw.model.elements.find(e => e.id === 'rh').tags ?? [])].sort(); // gbrain gives them back sorted
+    const RH = 'archlens/application-component/rh';
     try {
       const tagged = base();
-      tagged.raw.model.elements.find(e => e.id === 'rh').tags = ['legado'];
+      tagged.raw.model.elements.find(e => e.id === 'rh').tags = ['legado', 'erp'];
       const st = (await mcpBase(s, src, tagged)).store();
-      assert.deepEqual(st.read().raw.model.elements.find(e => e.id === 'rh').tags, ['legado']);
-      const rh = st.read().raw.model.elements.find(e => e.id === 'rh');
-      const { tags, ...untagged } = rh;
+      assert.deepEqual(rhTags(st), ['erp', 'legado']);
       const original = contentVersion(st.read());
-      const req = st.apply([{ op: 'upsertElement', element: untagged }], { baseVersion: st.version() });
-      assert.ok(req.request.calls.some(c => c.tool === 'remove_tag' && c.arguments.tag === 'archlens/tag/legado'), JSON.stringify(req.request.calls.map(c => c.tool)));
-      const answer = await agent(s, req.request);
-      const got = st.remote.receipts([answer]);
-      assert.equal(got.state, 'committed', `${JSON.stringify(got)}\n${JSON.stringify(answer.results.map(r => r.content?.[0]?.text?.slice(0, 600)))}`);
-      assert.equal(st.read().raw.model.elements.find(e => e.id === 'rh').tags, undefined);
-      const page = await value(s, 'get_page', { slug: 'archlens/application-component/rh', source_id: src.id });
+      const retag = tags => st.apply([{ op: 'upsertElement', element: { ...st.read().raw.model.elements.find(e => e.id === 'rh'), tags } }], { baseVersion: st.version() });
+      const req = retag(['erp']);
+      assert.deepEqual(tagCalls(req.request), []); // never with the page writes
+      const steps = await settle(st, req.request);
+      assert.equal(steps.at(-1).state, 'committed', JSON.stringify(steps));
+      assert.deepEqual(tagCalls(steps[0].request).map(c => c.arguments.tag), ['archlens/tag/legado']);
+      const page = await value(s, 'get_page', { slug: RH, source_id: src.id });
       assert.ok(!page.tags.includes('archlens/tag/legado'), JSON.stringify(page.tags));
       await pull(st, s);
-      assert.equal(st.read().raw.model.elements.find(e => e.id === 'rh').tags, undefined);
-      const undo = st.remote.undo();
-      assert.ok(undo.request.calls.some(c => c.tool === 'add_tag' && c.arguments.tag === 'archlens/tag/legado'));
-      assert.equal(st.remote.receipts([await agent(s, undo.request)]).state, 'undone');
+      assert.deepEqual(rhTags(st), ['erp']);
+      const undoSteps = await settle(st, st.remote.undo().request);
+      assert.equal(undoSteps.at(-1).state, 'undone', JSON.stringify(undoSteps));
       await pull(st, s);
       assert.equal(contentVersion(st.read()), original);
-      assert.deepEqual(st.read().raw.model.elements.find(e => e.id === 'rh').tags, ['legado']);
+      assert.deepEqual(rhTags(st), ['erp', 'legado']);
+
+      // Someone writes the page between archlens's put and its remove_tag: gbrain refuses the guarded call.
+      const race = retag(['legado']);
+      const first = st.remote.receipts([await agent(s, race.request)]);
+      assert.equal(tagCalls(first.request).length, 1);
+      const cur = await value(s, 'get_page', { slug: RH, include_content: true, content_only: true, source_id: src.id });
+      const edit = await value(s, 'put_pages', { request_id: randomUUID(), source_id: src.id, pages: [{ slug: RH, expected_revision: cur.revision,
+        content: cur.content.replace(/\n$/, '\n\nNota de outra pessoa.\n') }] });
+      assert.equal(edit.state, 'committed', JSON.stringify(edit));
+      const res = st.remote.receipts([await agent(s, first.request)]);
+      assert.equal(res.state, 'partial', JSON.stringify(res));
+      assert.ok(res.conflicts.includes(`${RH} (remove_tag archlens/tag/erp)`), JSON.stringify(res));
+      assert.ok((await value(s, 'get_page', { slug: RH, source_id: src.id })).tags.includes('archlens/tag/erp'));
     } finally {
       await s.close();
     }

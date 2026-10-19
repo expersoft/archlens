@@ -824,65 +824,132 @@ test('a page gbrain filed as a duplicate of another page was not written: it is 
   assert.equal(mirrorFiles(w.dir).has(`${slug}.md`), false);
 });
 
-// gbrain's put_page keeps the tags a page had (it adds the ones sent); the apply takes off what it dropped with remove_tag.
+// gbrain's put_page keeps the tags a page had (it adds the ones sent): the tags an apply drops are taken off with
+// remove_tag in a follow-up request, once the page's put committed, each guarded by the revision the last write gave.
 const legado = { id: 'legado', type: 'application-component', name: 'Sistema Legado', tags: ['legado', 'erp'] };
 const LEGADO = 'archlens/application-component/legado';
-const retag = w => {
+const retag = (w, tags = ['novo']) => {
   const el = w.store.read().raw.model.elements.find(e => e.id === 'legado');
   const entry = { id: '2026-10-18-01', date: '2026-10-18', summary: 'etiquetas', added: [], changed: ['legado'], status: {}, removed: [], decisions: [] };
-  return w.store.apply([{ op: 'upsertElement', element: { ...el, tags: ['erp', 'novo'] } }, { op: 'appendHistory', entry }], { baseVersion: w.store.version() });
+  return w.store.apply([{ op: 'upsertElement', element: { ...el, tags } }, { op: 'appendHistory', entry }], { baseVersion: w.store.version() });
 };
 const tagsOfEl = w => w.store.read().raw.model.elements.find(e => e.id === 'legado').tags;
+const tagCallsIn = req => (req?.calls ?? []).filter(c => c.tool === 'remove_tag' || c.tool === 'add_tag');
+/** --receipts of `req`, then of each follow-up request, until none: the summaries, in order. */
+function settle(w, req) {
+  const out = [];
+  for (let r = req; r;) { const res = w.store.remote.receipts([w.gbrain.run(r)]); out.push(res); r = res.request; }
+  return out;
+}
+/** A write by someone else to `slug` in the fake (its content with one more line of people's text). */
+const someoneWrites = (w, slug) => w.gbrain.write(new Map([[`${slug}.md`, w.gbrain.content(slug).replace(/\n$/, '\nNota de outra pessoa.\n')]]));
 
-test('a tag an apply drops is taken off gbrain\'s page with remove_tag, after its put and before the history; undo puts it back', () => {
+test('the tags an apply drops are taken off after the put committed, one guarded remove_tag at a time; undo puts them back', () => {
   const w = ready({ extra: [legado] });
   const original = contentVersion(w.store.read());
-  const { request: req, apply: id } = retag(w);
-  const tools = req.calls.map(c => c.tool);
-  const at = req.calls.findIndex(c => c.tool === 'remove_tag');
-  assert.ok(at > tools.indexOf('put_pages') && at < req.calls.length - 1, tools.join(', '));
-  assert.deepEqual(req.calls.filter(c => c.tool === 'remove_tag').map(c => c.arguments), [{ slug: LEGADO, tag: 'archlens/tag/legado', request_id: req.calls[at].arguments.request_id }]);
-  assert.equal(journal(w.dir, id).tagOps[req.calls[at].arguments.request_id].state, 'requested');
-  const done = w.store.remote.receipts([w.gbrain.run(req)]);
-  assert.equal(done.state, 'committed');
-  assert.deepEqual(w.gbrain.page(LEGADO).tags, ['archlens', 'archlens/application-component', 'archlens/tag/erp', 'archlens/tag/novo']);
-  assert.equal(revisions(w.dir)[LEGADO], w.gbrain.page(LEGADO).revision); // the revision after remove_tag
+  const { request: req } = retag(w);
+  assert.deepEqual(tagCallsIn(req), []); // never with the page writes
+  const first = w.store.remote.receipts([w.gbrain.run(req)]);
+  assert.equal(first.state, 'partial');
+  const putRevision = w.gbrain.page(LEGADO).revision;
+  assert.deepEqual(tagCallsIn(first.request).map(c => ({ ...c.arguments, request_id: undefined })),
+    [{ slug: LEGADO, tag: 'archlens/tag/erp', expected_revision: putRevision, request_id: undefined }]);
+  const second = w.store.remote.receipts([w.gbrain.run(first.request)]);
+  const afterFirst = w.gbrain.page(LEGADO).revision;
+  assert.notEqual(afterFirst, putRevision);
+  assert.deepEqual(tagCallsIn(second.request).map(c => [c.arguments.tag, c.arguments.expected_revision]), [['archlens/tag/legado', afterFirst]]); // chained
+  assert.equal(w.store.remote.receipts([w.gbrain.run(second.request)]).state, 'committed');
+  assert.deepEqual(w.gbrain.page(LEGADO).tags, ['archlens', 'archlens/application-component', 'archlens/tag/novo']);
+  assert.equal(revisions(w.dir)[LEGADO], w.gbrain.page(LEGADO).revision);
   pull(w.store, w.gbrain);
-  assert.deepEqual(tagsOfEl(w), ['erp', 'novo']);
+  assert.deepEqual(tagsOfEl(w), ['novo']);
 
   const undo = w.store.remote.undo();
-  const ut = undo.request.calls.map(c => `${c.tool}${c.arguments.tag ? ` ${c.arguments.tag}` : ''}`);
-  assert.ok(ut.includes('add_tag archlens/tag/legado') && ut.includes('remove_tag archlens/tag/novo'), ut.join(', '));
-  assert.ok(ut.indexOf('add_tag archlens/tag/legado') > ut.indexOf('put_pages'), ut.join(', '));
-  assert.equal(w.store.remote.receipts([w.gbrain.run(undo.request)]).state, 'undone');
+  assert.deepEqual(tagCallsIn(undo.request), []);
+  const steps = settle(w, undo.request);
+  assert.equal(steps.at(-1).state, 'undone', JSON.stringify(steps.at(-1)));
   assert.deepEqual(w.gbrain.page(LEGADO).tags, ['archlens', 'archlens/application-component', 'archlens/tag/erp', 'archlens/tag/legado']);
   pull(w.store, w.gbrain);
   assert.equal(contentVersion(w.store.read()), original);
+});
+
+test('a page someone changed before the apply ran: its put is refused and no tag call is made', () => {
+  const w = ready({ extra: [legado] });
+  const before = revisions(w.dir)[LEGADO];
+  const { request: req } = retag(w);
+  someoneWrites(w, LEGADO);
+  const theirs = w.gbrain.page(LEGADO);
+  const res = w.store.remote.receipts([w.gbrain.run(req)]);
+  assert.equal(res.state, 'partial');
+  assert.ok(res.conflicts.includes(LEGADO));
+  assert.deepEqual(tagCallsIn(res.request), []);
+  assert.deepEqual(w.gbrain.page(LEGADO).tags, theirs.tags);
+  assert.equal(w.gbrain.page(LEGADO).revision, theirs.revision);
+  assert.equal(revisions(w.dir)[LEGADO], before);
+  const undo = w.store.remote.undo();
+  assert.deepEqual(tagCallsIn(undo.request), []); // nothing to put back on a page the apply did not write
+});
+
+test('a page someone changed between the committed put and its remove_tag: the tag call is refused and reported', () => {
+  const w = ready({ extra: [legado] });
+  const { request: req } = retag(w, ['erp', 'novo']);
+  const first = w.store.remote.receipts([w.gbrain.run(req)]);
+  const putRevision = w.gbrain.page(LEGADO).revision;
+  assert.equal(tagCallsIn(first.request).length, 1);
+  someoneWrites(w, LEGADO);
+  const theirs = w.gbrain.page(LEGADO);
+  const res = w.store.remote.receipts([w.gbrain.run(first.request)]);
+  assert.equal(res.state, 'partial');
+  assert.ok(res.conflicts.includes(`${LEGADO} (remove_tag archlens/tag/legado)`), JSON.stringify(res));
+  assert.equal(res.request, undefined);
+  assert.deepEqual(w.gbrain.page(LEGADO).tags, theirs.tags);
+  assert.equal(revisions(w.dir)[LEGADO], putRevision); // never the other writer's revision
+  assert.throws(() => w.store.remote.resume(), e => e.code === 'E_STORE_APPLY' && e.message.includes(LEGADO));
+  // The undo cannot put the page back either (it changed): a conflict, and no tag call for it.
+  const steps = settle(w, w.store.remote.undo().request);
+  assert.equal(steps.at(-1).state, 'undo-partial');
+  assert.ok(steps.at(-1).conflicts.includes(LEGADO));
+  assert.ok(steps.every(r => !tagCallsIn(r.request).some(c => c.arguments.slug === LEGADO)));
+});
+
+test('undo: a page someone changed between the put that restores it and its add_tag is left as they wrote it', () => {
+  const w = ready({ extra: [legado] });
+  assert.equal(settle(w, retag(w, ['erp', 'novo']).request).at(-1).state, 'committed');
+  const first = w.store.remote.receipts([w.gbrain.run(w.store.remote.undo().request)]);
+  assert.equal(tagCallsIn(first.request).length, 1, JSON.stringify(first));
+  const restored = w.gbrain.page(LEGADO).revision;
+  someoneWrites(w, LEGADO);
+  const theirs = w.gbrain.page(LEGADO);
+  const res = w.store.remote.receipts([w.gbrain.run(first.request)]);
+  assert.equal(res.state, 'undo-partial');
+  assert.ok(res.conflicts.some(c => c.startsWith(`${LEGADO} (`)), JSON.stringify(res));
+  assert.deepEqual(w.gbrain.page(LEGADO).tags, theirs.tags);
+  assert.equal(revisions(w.dir)[LEGADO], restored);
+});
+
+test('a tag call the agent did not run is sent again by --resume with the same request_id and guard', () => {
+  const w = ready({ extra: [legado] });
+  const { request: req } = retag(w, ['erp', 'novo']);
+  const first = w.store.remote.receipts([w.gbrain.run(req)]);
+  const call = tagCallsIn(first.request)[0];
+  const lost = w.store.remote.receipts([{ 'archlens-remote': '1.0', request: first.request.id, results: [] }]);
+  assert.equal(lost.state, 'partial');
+  assert.ok(lost.pending.includes(`${LEGADO} (remove_tag archlens/tag/legado)`), JSON.stringify(lost.pending));
+  const resumed = w.store.remote.resume();
+  assert.deepEqual(tagCallsIn(resumed.request).map(c => c.arguments), [call.arguments]);
+  assert.equal(w.store.remote.receipts([w.gbrain.run(resumed.request)]).state, 'committed');
+  pull(w.store, w.gbrain);
+  assert.deepEqual(tagsOfEl(w), ['erp', 'novo']);
 });
 
 test('tag calls carry no source_id (gbrain refuses it: they write to the session\'s source)', () => {
   const w = ready({ extra: [legado], sourceId: 'arquitetura' });
   const { request: req } = retag(w);
   assert.ok(req.calls.filter(c => c.tool === 'put_pages').every(c => c.arguments.source_id === 'arquitetura'));
-  const tag = req.calls.find(c => c.tool === 'remove_tag');
-  assert.equal('source_id' in tag.arguments, false);
-  assert.equal(w.store.remote.receipts([w.gbrain.run(req)]).state, 'committed');
-  assert.ok(!w.gbrain.page(LEGADO).tags.includes('archlens/tag/legado'));
-});
-
-test('a remove_tag the agent did not send is sent again by --resume with the same request_id', () => {
-  const w = ready({ extra: [legado] });
-  const { request: req } = retag(w);
-  const at = req.calls.findIndex(c => c.tool === 'remove_tag');
-  const partial = w.store.remote.receipts([w.gbrain.run({ ...req, calls: req.calls.slice(0, at) })]);
-  assert.equal(partial.state, 'partial');
-  assert.ok(partial.pending.includes(`${LEGADO} (remove_tag archlens/tag/legado)`), JSON.stringify(partial.pending));
-  const resumed = w.store.remote.resume();
-  assert.ok(resumed.request.calls.some(c => c.tool === 'remove_tag' && c.arguments.request_id === req.calls[at].arguments.request_id));
-  assert.equal(resumed.request.calls.at(-1).arguments.pages?.[0].slug, 'archlens/changelog');
-  assert.equal(w.store.remote.receipts([w.gbrain.run(resumed.request)]).state, 'committed');
-  pull(w.store, w.gbrain);
-  assert.deepEqual(tagsOfEl(w), ['erp', 'novo']);
+  const steps = settle(w, req);
+  assert.equal(steps.at(-1).state, 'committed');
+  assert.ok(steps.every(r => tagCallsIn(r.request).every(c => !('source_id' in c.arguments))));
+  assert.deepEqual(w.gbrain.page(LEGADO).tags, ['archlens', 'archlens/application-component', 'archlens/tag/novo']);
 });
 
 test('the CLI says which pages gbrain filed as duplicates, and offers --undo, not --resume', () => {
