@@ -12,6 +12,18 @@ import { link } from './markdown-page.mjs';
 import { gbrainPack, PACK_FILE } from './gbrain-pack.mjs';
 
 export const COMMON_TAG = 'archlens';
+// Frontmatter keys gbrain stamps into the pages it keeps (src/core/utils.ts HASH_EPHEMERAL_FRONTMATTER_KEYS, the
+// gate-owned keys of src/core/write-gate.ts, the extract-atoms markers and the slug stamp): never base content. They
+// are dropped when a page is read, and an element field with one of these names is refused.
+export const GBRAIN_FRONTMATTER_KEYS = ['slug', 'captured_at', 'ingested_at', 'quarantine', 'quarantine_override', 'content_flag', 'embed_skip',
+  'atoms_scan_hash', 'atoms_fail_hash', 'atoms_fail_count', 'trust_tier'];
+// gbrain's explicit timeline sentinel (src/core/markdown.ts splitBody). Every page ends with it, so gbrain never moves a
+// "## Timeline" / "## History" section of dated bullets (from a description or people's text) out of its place.
+export const TIMELINE_SENTINEL = '<!-- timeline -->';
+const SEAL = `\n${TIMELINE_SENTINEL}\n`;
+const seal = text => `${text}${text.endsWith('\n') ? '' : '\n'}${SEAL}`;
+/** The page without the sentinel that ends it (only there: one inside the page is people's text). */
+export const unseal = text => (text.endsWith(`\n${SEAL}`) ? text.slice(0, -SEAL.length) : text);
 // File names the gbrain keeps for itself (compared in lower case, without extension).
 const RESERVED = new Set(['readme', 'index', 'schema', 'log', 'resolver']);
 const FENCE = '```archlens-json\n';
@@ -39,6 +51,11 @@ export function assertGbrainIds(raw) {
   const reserved = ids.filter(id => RESERVED.has(id.toLowerCase()));
   if (reserved.length) {
     throw storeError('E_STORE_GBRAIN_RESERVED', `${reserved.map(i => `"${i}"`).join(', ')}: nome reservado do gbrain (${[...RESERVED].join(', ')}); renomeie o id`, { ids: reserved });
+  }
+  const stamped = (raw.model?.elements ?? []).filter(e => e && GBRAIN_FRONTMATTER_KEYS.some(k => Object.hasOwn(e, k)));
+  if (stamped.length) {
+    const names = stamped.map(e => `"${e.id}" (${GBRAIN_FRONTMATTER_KEYS.filter(k => Object.hasOwn(e, k)).join(', ')})`);
+    throw storeError('E_STORE_GBRAIN_RESERVED', `campo(s) reservado(s) do gbrain em ${names.join(', ')}: o gbrain grava esses campos no cabeçalho da página por conta própria; renomeie o campo`, { ids: stamped.map(e => e.id) });
   }
   const bad = ids.filter(id => gbrainSlug(id) !== id);
   if (bad.length) {
@@ -96,8 +113,17 @@ export function toGbrainFiles(vault, { prefix } = {}) {
   for (const [rel, text] of vault) {
     if (rel.startsWith(REMOVED) && rel.endsWith('.md') && text != null) out.set(at(rel), `${frontmatter({ type: 'archlens-note', title: rel.slice(REMOVED.length, -3), tags: [COMMON_TAG] })}${text}`);
   }
+  for (const [rel, text] of out) out.set(rel, seal(text));
   out.set(at(PACK_FILE), gbrainPack(raw, { prefix: p, gbrain: true }));
   return out;
+}
+
+/** An element page without the frontmatter keys gbrain stamped (the text as it is when there are none). */
+export function withoutGbrainKeys(text, rel) {
+  const { fm, body } = readFrontmatter(text, rel);
+  if (!fm || typeof fm !== 'object' || !GBRAIN_FRONTMATTER_KEYS.some(k => Object.hasOwn(fm, k))) return text;
+  for (const k of GBRAIN_FRONTMATTER_KEYS) delete fm[k];
+  return `${frontmatter(fm)}${body}`;
 }
 
 /** The inverse: the vault from the files of the gbrain under `prefix` (anything outside it, or foreign inside, is ignored). */
@@ -105,7 +131,7 @@ export function fromGbrainFiles(files, { prefix, anyFormat = false } = {}) {
   const p = norm(prefix);
   const under = p ? `${p}/` : '';
   const mine = new Map();
-  for (const [rel, text] of files) if (rel.startsWith(under) && text != null) mine.set(rel.slice(under.length), text);
+  for (const [rel, text] of files) if (rel.startsWith(under) && text != null) mine.set(rel.slice(under.length), unseal(text));
   const flat = new Map(); // the vault files the pages stand for
   const viewPages = [];
   for (const [rel, text] of mine) {
@@ -114,7 +140,7 @@ export function fromGbrainFiles(files, { prefix, anyFormat = false } = {}) {
     else if (/^views\/[^/]+\.md$/.test(rel)) viewPages.push({ position: readFrontmatter(text, rel).fm.position, key: rel.slice(6, -3), view: readBlock(text, rel) });
     else if (rel.startsWith(REMOVED) && rel.endsWith('.md')) flat.set(rel, readFrontmatter(text, rel).body);
     else if (/^notes\/[^/]+\.md$/.test(rel) && NOTE_NAMES.includes(rel.slice(6, -3))) flat.set(rel, readFrontmatter(text, rel).body);
-    else if (/^[^/]+\/[^/]+\.md$/.test(rel) && ELEMENT_TYPES[rel.split('/')[0]]) flat.set(rel, text);
+    else if (/^[^/]+\/[^/]+\.md$/.test(rel) && ELEMENT_TYPES[rel.split('/')[0]]) flat.set(rel, withoutGbrainKeys(text, rel));
   }
   if (viewPages.length) {
     const pos = v => (Number.isInteger(v.position) ? v.position : Infinity);

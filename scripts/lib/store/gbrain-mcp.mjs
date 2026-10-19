@@ -1,6 +1,6 @@
 // The gbrain connector in MCP mode. The CLI cannot call the MCP server (its credentials live in the user's agent), so it
 // keeps a mirror of the base in <base>/.archlens/mirror/ (the pages of gbrain-layout.mjs under the prefix, as archlens
-// writes them; revisions.json, slug → gbrain revision; sync.json, where the last pull ended: what was updated after it is fetched again) and trades files with the agent: a
+// writes them; revisions.json, slug → gbrain revision; sync.json, the updated_at of each page as last listed: a page listed with another one is fetched again) and trades files with the agent: a
 // request lists the exact tool calls to make, the response holds the raw result of each call, in order. plan, show and
 // query read the mirror; the version of an object is the gbrain revision of its page. Writing (apply) comes next.
 import { existsSync, readFileSync, readdirSync, rmSync } from 'node:fs';
@@ -12,7 +12,7 @@ import { subgraphOf } from './contract.mjs';
 import { writeFilesAtomically } from './atomic.mjs';
 import { storeError } from './errors.mjs';
 import { readVaultFiles } from './markdown.mjs';
-import { toGbrainFiles, fromGbrainFiles, COMMON_TAG } from './gbrain-layout.mjs';
+import { toGbrainFiles, fromGbrainFiles, unseal, COMMON_TAG, GBRAIN_FRONTMATTER_KEYS } from './gbrain-layout.mjs';
 import { prefixOf } from './gbrain-git.mjs';
 
 export const MIRROR = join('.archlens', 'mirror');
@@ -22,10 +22,6 @@ const REVISIONS = 'revisions.json';
 const SYNC = 'sync.json';
 const PROTOCOL = '1.0';
 const LIMIT = 100; // list_pages rows per call (gbrain's cap for remote callers)
-// Frontmatter keys gbrain adds to the pages it serves: the slug stamp, the content-quality markers, its own identity.
-const GBRAIN_KEYS = ['slug', 'source_id', 'content_flag', 'quarantine'];
-// What gbrain's serializer puts between the body and a timeline it split off (a "## Timeline" of dated bullets).
-const TIMELINE = '\n\n<!-- timeline -->\n\n';
 const FRONTMATTER = /^---\r?\n(?:([\s\S]*?)\r?\n)?---[ \t]*(?:\r?\n|$)/;
 const json = v => JSON.stringify(v, null, 2) + '\n';
 const rel = p => relative(process.cwd(), p) || '.';
@@ -33,8 +29,9 @@ const responseError = why => storeError('E_REMOTE_RESPONSE', `${why}; nada foi g
 
 /**
  * A page as get_page gives it back (gbrain's canonical serialization: type and title first, the rest of the frontmatter
- * in its storage order, tags last, a blank line, the trimmed body, the timeline sentinel) as the page text the layout
- * reads: the keys gbrain added, the blank line and the sentinel go; the text after the archlens block stays.
+ * in its storage order, tags last, a blank line, the trimmed body) as the page text the layout reads: the keys gbrain
+ * stamped, the blank line and a sentinel ending the page go; the text after the archlens block stays. The layout ends
+ * every page with the sentinel, so gbrain never splits a timeline off it.
  */
 export function archlensPage(content) {
   const m = FRONTMATTER.exec(content);
@@ -42,8 +39,8 @@ export function archlensPage(content) {
   let fm;
   try { fm = parseYaml(m[1] ?? ''); } catch { return content; } // the layout reports the page
   if (!fm || typeof fm !== 'object' || Array.isArray(fm)) return content;
-  for (const k of GBRAIN_KEYS) delete fm[k];
-  const body = content.slice(m[0].length).replace(/^\r?\n/, '').replace(TIMELINE, '\n\n');
+  for (const k of GBRAIN_FRONTMATTER_KEYS) delete fm[k];
+  const body = unseal(content.slice(m[0].length).replace(/^\r?\n/, ''));
   return `---\n${stringifyYaml(fm, { lineWidth: 0 })}---\n${body}`;
 }
 
@@ -72,16 +69,14 @@ function readTree(root, sub) {
 }
 
 const readJsonFile = (path, fallback) => (existsSync(path) ? JSON.parse(readFileSync(path, 'utf8')) : fallback);
-/** (updated_at_iso, slug) of `row` comes after `cursor` ({ since, slug }): the order of gbrain's list keyset. */
-const after = (row, cursor) => row.updated_at_iso > cursor.since || (row.updated_at_iso === cursor.since && row.slug > cursor.slug);
 
 /**
- * The raw result of a call: as the tool returned it, or as the MCP tool result that carries it ({ content: [{ type:
- * "text", text }] } or structuredContent). { error } when the tool failed.
+ * The raw result of a call: as the tool returned it, or as the MCP tool result that carries it (structuredContent, or
+ * the JSON in content[0]; gbrain adds one text block per notice after it). { error } when the tool failed.
  */
 function unwrap(result, where) {
   const envelope = result && typeof result === 'object' && !Array.isArray(result) && Array.isArray(result.content);
-  const text = envelope ? result.content.filter(c => c?.type === 'text').map(c => c.text).join('') : null;
+  const text = envelope && result.content[0]?.type === 'text' ? result.content[0].text : null;
   if (result?.isError) return { error: text || JSON.stringify(result) };
   if (!envelope) return { value: result };
   if (result.structuredContent !== undefined) return { value: result.structuredContent };
@@ -159,9 +154,9 @@ export function gbrainMcpConnector(locator, store, { describe = `${rel(locator.p
 
   /**
    * Writes what a pull found: the pages fetched (archlens bytes again), without the ones gone; their revisions; the
-   * cursor. All or nothing.
+   * updated_at of each page listed. All or nothing.
    */
-  function commit({ fetched, removed, cursor }) {
+  function commit({ fetched, removed, listed }) {
     const cur = existsSync(join(mirror, SYNC)) ? readTree(mirror, prefix) : new Map();
     const revs = revisions();
     const files = new Map(cur);
@@ -171,7 +166,7 @@ export function gbrainMcpConnector(locator, store, { describe = `${rel(locator.p
     const changes = new Map();
     for (const path of new Set([...cur.keys(), ...next.keys()])) if (cur.get(path) !== next.get(path)) changes.set(path, next.get(path) ?? null);
     changes.set(REVISIONS, json(Object.fromEntries(Object.entries(revs).sort(([a], [b]) => (a < b ? -1 : 1)))));
-    changes.set(SYNC, json({ cursor, pulledAt: new Date().toISOString() }));
+    changes.set(SYNC, json({ pages: listed, pulledAt: new Date().toISOString() }));
     writeFilesAtomically(mirror, changes);
     rmSync(pendingPath('pull'), { force: true });
     return { fetched: fetched.map(f => f.slug), removed };
@@ -201,14 +196,14 @@ export function gbrainMcpConnector(locator, store, { describe = `${rel(locator.p
     requestPath: req => join(dir, REMOTE, `${req.step}-request.json`),
 
     /**
-     * The first list request of a pull. Every pull lists the metadata of all the archlens pages from the start (a delete
-     * does not move a page's updated_at in gbrain, so a listing from the last cursor would miss it); only the pages new
-     * to the mirror or updated after the last pull are fetched, and those not listed alive leave the mirror.
+     * The first list request of a pull. Every pull lists the metadata of all the archlens pages from the start: a delete
+     * does not move a page's updated_at in gbrain, and a write stamps the time its transaction started, which may come
+     * before a listing made while it ran. A page is fetched when it is new to the mirror or listed with another
+     * updated_at than the last time; the pages not listed alive leave the mirror.
      */
     pull() {
-      const last = existsSync(join(mirror, SYNC)) ? sync().cursor ?? null : null;
       const req = request('list', [listCall(null)]);
-      keep('pull', { request: req, since: last, cursor: last, changed: [], deleted: [], live: [] });
+      keep('pull', { request: req, listed: {}, deleted: [] });
       return req;
     },
 
@@ -219,31 +214,30 @@ export function gbrainMcpConnector(locator, store, { describe = `${rel(locator.p
         const fetched = results.map((r, i) => pageOfResult(r, state.request.calls[i], i))
           .map(p => ({ slug: p.slug, revision: p.revision, content: p.content, gone: !!p.deleted_at }));
         const gone = fetched.filter(p => p.gone).map(p => p.slug);
-        return { done: commit({ fetched: fetched.filter(p => !p.gone), removed: [...state.removed, ...gone], cursor: state.cursor }) };
+        const listed = Object.fromEntries(Object.entries(state.listed).filter(([slug]) => !gone.includes(slug)));
+        return { done: commit({ fetched: fetched.filter(p => !p.gone), removed: [...state.removed, ...gone], listed }) };
       }
       const rows = rowsOf(results[0], 0);
-      const known = revisions();
-      const changed = new Set(state.changed), deleted = new Set(state.deleted), live = new Set(state.live);
-      let cursor = state.cursor;
+      const listed = { ...state.listed };
+      const deleted = new Set(state.deleted);
       for (const row of rows) {
-        const c = { since: row.updated_at_iso, slug: row.slug };
-        if (!cursor || after(row, cursor)) cursor = c;
         if (!row.slug.startsWith(`${prefix}/`)) continue; // another base in the same brain
-        if (row.deleted_at) { deleted.add(row.slug); changed.delete(row.slug); continue; }
-        live.add(row.slug);
-        if (!(row.slug in known) || !state.since || after(row, state.since)) changed.add(row.slug);
+        if (row.deleted_at) { deleted.add(row.slug); delete listed[row.slug]; } else { listed[row.slug] = row.updated_at_iso; deleted.delete(row.slug); }
       }
-      if (rows.length < LIMIT) {
-        const removed = [...new Set([...deleted, ...Object.keys(known).filter(s => !live.has(s))])].sort();
-        const get = [...changed].filter(s => !removed.includes(s)).sort();
-        if (!get.length) return { done: commit({ fetched: [], removed, cursor }) };
-        const req = request('get', get.map(slug => ({ tool: 'get_page', arguments: { slug, include_content: true, content_only: true, ...scope } })));
-        keep('pull', { request: req, removed, cursor });
+      if (rows.length >= LIMIT) {
+        const last = rows.at(-1);
+        const req = request('list', [listCall({ since: last.updated_at_iso, slug: last.slug })]); // the next page of the listing
+        keep('pull', { request: req, listed, deleted: [...deleted] });
         return { request: req };
       }
-      const last = rows.at(-1);
-      const req = request('list', [listCall({ since: last.updated_at_iso, slug: last.slug })]); // the next page of the listing
-      keep('pull', { ...state, request: req, cursor, changed: [...changed], deleted: [...deleted], live: [...live] });
+      const before = sync()?.pages ?? {};
+      const revs = revisions();
+      const known = new Set([...Object.keys(before), ...Object.keys(revs)]);
+      const removed = [...new Set([...deleted, ...[...known].filter(s => !(s in listed))])].filter(s => known.has(s)).sort();
+      const get = Object.keys(listed).filter(s => before[s] !== listed[s] || !(s in revs)).sort();
+      if (!get.length) return { done: commit({ fetched: [], removed, listed }) };
+      const req = request('get', get.map(slug => ({ tool: 'get_page', arguments: { slug, include_content: true, content_only: true, ...scope } })));
+      keep('pull', { request: req, removed, listed });
       return { request: req };
     },
 

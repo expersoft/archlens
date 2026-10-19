@@ -137,12 +137,18 @@ test('a second pull only fetches what changed', () => {
   next.raw.changelog.push({ id: '2026-10-18-01', date: '2026-10-18', summary: 'rh renomeado', added: [], changed: ['rh'], status: {}, removed: [], decisions: [] });
   const changed = ['archlens/application-component/rh.md', 'archlens/changelog.md', 'archlens/application-component/vendas.md'];
   const all = pagesOf(next);
-  w.gbrain.write(new Map(changed.map(rel => [rel, all.get(rel)])));
+  w.gbrain.call('request_tools', { surface: 'full' });
+  const put = w.gbrain.call('put_pages', { request_id: 'outro-apply', pages: changed.map(rel => ({
+    slug: rel.replace(/\.md$/, ''), content: all.get(rel), expected_revision: w.gbrain.page(rel.replace(/\.md$/, '')).revision })) });
+  assert.equal(put.state, 'committed');
+  assert.equal(w.gbrain.page('archlens/application-component/rh').frontmatter.trust_tier, 'agent_written');
   const { requests } = pull(store, w.gbrain);
   // Every pull lists the metadata from the start; only the pages updated after the last pull are fetched.
   assert.deepEqual(requests[0].calls, [{ tool: 'list_pages', arguments: { tag: 'archlens', include_deleted: true, sort: 'updated_asc', limit: 100 } }]);
   assert.deepEqual(getSlugs(requests), changed.map(r => r.replace(/\.md$/, '')).sort());
   assert.equal(store.read().raw.model.elements.find(e => e.id === 'rh').name, 'Gente e Gestão');
+  assert.ok(store.read().raw.model.elements.every(e => !('trust_tier' in e))); // gbrain's stamp is not an element field
+  assert.equal(mirrorFiles(w.dir).get('archlens/application-component/rh.md'), all.get('archlens/application-component/rh.md'));
   assert.equal(revisions(w.dir)['archlens/application-component/rh'], w.gbrain.page('archlens/application-component/rh').revision);
   // Nothing changed since: one list call, nothing fetched.
   const again = pull(store, w.gbrain);
@@ -259,15 +265,49 @@ test('a response to another request is refused with E_REMOTE_RESPONSE and the mi
   assert.equal(store.read().raw.model.elements.find(e => e.id === 'rh').name, 'RH');
 });
 
-test('results recorded as the MCP tool result (content as text) are read too', () => {
+test('results recorded as the MCP tool result are read from content[0], past gbrain\'s notice blocks', () => {
+  const w = world();
+  const many = Array.from({ length: 105 }, (_, i) => ({ id: `app-${String(i).padStart(3, '0')}`, type: 'application-component', name: `App ${i}` }));
+  w.gbrain.write(pagesOf(base(many)));
+  const store = w.store();
+  const first = w.gbrain.run(store.remote.pull(), { wrapped: true });
+  assert.equal(first.results[0].content.length, 2); // a full page of rows comes with a listing_truncated notice
+  let res = store.remote.pullIngest([first]);
+  while (res.request) res = store.remote.pullIngest([w.gbrain.run(res.request, { wrapped: true })]);
+  assert.equal(store.read().raw.model.elements.length, 108);
+});
+
+test('a write stamped before the last listing (its transaction started earlier) is still fetched', () => {
   const w = world();
   w.gbrain.write(pagesOf(base()));
   const store = w.store();
-  const wrap = res => ({ ...res, results: res.results.map(r => ({ content: [{ type: 'text', text: JSON.stringify(r) }] })) });
-  let res = store.remote.pullIngest([wrap(w.gbrain.run(store.remote.pull()))]);
-  res = store.remote.pullIngest([wrap(w.gbrain.run(res.request))]);
-  assert.equal(res.request, undefined);
-  assert.equal(contentVersion(store.read()), contentVersion(base()));
+  pull(store, w.gbrain);
+  const rh = pagesOf(base()).get('archlens/application-component/rh.md').replace('Recursos Humanos', 'RH');
+  w.gbrain.write(new Map([['archlens/application-component/rh.md', rh]]), { at: '2026-10-18T11:59:59.000000Z' });
+  assert.deepEqual(getSlugs(pull(store, w.gbrain).requests), ['archlens/application-component/rh']);
+  assert.equal(store.read().raw.model.elements.find(e => e.id === 'rh').name, 'RH');
+  assert.equal(revisions(w.dir)['archlens/application-component/rh'], w.gbrain.page('archlens/application-component/rh').revision);
+});
+
+test('a "## History" of dated bullets in a description or in people\'s text stays where it was', () => {
+  const w = world();
+  const history = '## History\n\n- 2026-10-01: criado\n- 2026-10-10: revisto';
+  const b = base();
+  const description = `Área de pessoas.\n\n${history}\n\n## Contexto\n\nTexto.`;
+  b.raw.model.elements[2].description = description;
+  const pages = pagesOf(b, { userText: `\nNotas.\n\n${history}\n` });
+  // Without the sentinel that ends every page, gbrain would move the section to its timeline.
+  const rel = 'archlens/application-component/rh.md';
+  const g = fakeGbrain();
+  g.write(new Map([[rel, pages.get(rel).replace(/\n<!-- timeline -->\n$/, '')]]));
+  assert.match(g.content('archlens/application-component/rh'), /<!-- timeline -->\n\n## History/);
+  w.gbrain.write(pages);
+  const store = w.store();
+  pull(store, w.gbrain);
+  assert.ok(!w.gbrain.content('archlens/application-component/rh').includes('<!-- timeline -->'));
+  assert.equal(store.read().raw.model.elements.find(e => e.id === 'rh').description, description);
+  assert.equal(store.vault().base.ctx.pages.get('vendas').userText, `\n\nNotas.\n\n${history}\n`);
+  for (const [r, text] of pages) assert.equal(mirrorFiles(w.dir).get(r), text, r);
 });
 
 test('check records whether writing is allowed (starter vs full)', () => {
@@ -289,9 +329,11 @@ test('check records whether writing is allowed (starter vs full)', () => {
 
 test('gbrain\'s canonical content is read back as the archlens page', () => {
   const pages = pagesOf(base(), { userText: '\nNotas da equipe.\n\n## Timeline\n\n- 2026-10-01: criado\n' });
+  assert.ok(pages.get('archlens/application-component/vendas.md').endsWith('criado\n\n<!-- timeline -->\n'));
   const rel = 'archlens/application-component/vendas.md';
-  // What get_page returns for that page: type and title first, the jsonb order, tags last (sorted), a slug stamp and a
-  // content flag gbrain added, a blank line after the frontmatter, the trimmed body and the timeline sentinel.
+  // What get_page returns for that page: type and title first, the jsonb order, tags last (sorted), keys gbrain stamped
+  // (slug, trust_tier, content_flag), a blank line after the frontmatter and the trimmed body; the sentinel that ended
+  // the page split off an empty timeline, so it is not served back.
   const canonical = [
     '---',
     'type: application-component',
@@ -299,6 +341,7 @@ test('gbrain\'s canonical content is read back as the archlens page', () => {
     'c4: softwareSystem',
     'id: vendas',
     'slug: archlens/application-component/vendas',
+    'trust_tier: agent_written',
     'aliases:',
     '  - Vendas',
     'serving:',
@@ -335,16 +378,15 @@ test('gbrain\'s canonical content is read back as the archlens page', () => {
     '',
     'Notas da equipe.',
     '',
-    '<!-- timeline -->',
-    '',
     '## Timeline',
     '',
     '- 2026-10-01: criado',
     '',
   ].join('\n');
   const page = archlensPage(canonical);
-  assert.ok(!/^slug:|^content_flag:/m.test(page));
-  assert.ok(!page.includes('<!-- timeline -->'));
+  assert.ok(!/^(slug|content_flag|trust_tier):/m.test(page));
+  assert.ok(page.endsWith('<!-- archlens:end -->\n\nNotas da equipe.\n\n## Timeline\n\n- 2026-10-01: criado\n'));
+  assert.equal(archlensPage(`${canonical}\n<!-- timeline -->\n`), page); // a sentinel ending the page goes too
   const files = new Map([...pages].map(([r, t]) => [r, r === rel ? page : t]));
   assert.equal(normalizeMirror(files, 'archlens').get(rel), pages.get(rel));
 });

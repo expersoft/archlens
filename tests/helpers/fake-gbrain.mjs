@@ -4,7 +4,9 @@
 // order); get_page's `content` is the canonical serialization (type, title, the rest, tags; a blank line; the trimmed body;
 // the `<!-- timeline -->` sentinel before a timeline); every write gets a new revision; expected_revision guards writes;
 // request_id replays a write; a soft delete keeps updated_at (only a restore or a write moves it); a put_pages batch may
-// end `partial`; put_pages, delete_page and restore_page are only on the full tool surface.
+// end `partial`; put_pages, delete_page and restore_page are only on the full tool surface; a remote write stamps
+// `trust_tier: agent_written` into the frontmatter; without a sentinel, the first "## Timeline" / "## History" section
+// of dated bullets moves to the timeline (splitBody rule 4); a full list_pages page carries a listing_truncated notice.
 // run(request) plays the agent: it executes the calls of an archlens request file and returns the response file.
 import { parse as parseYaml, stringify as stringifyYaml } from '../../scripts/vendor/yaml/index.js';
 
@@ -21,16 +23,43 @@ const jsonbOrder = v => {
   return Object.fromEntries(keys.map(k => [k, jsonbOrder(v[k])]));
 };
 
+const DATED = /^\s*[-*+]\s+\**\d{4}\b/;
+/** Lines outside fenced code blocks (``` or ~~~). */
+const unfenced = lines => { let open = false; return lines.map(l => { const fence = /^\s*(`{3,}|~{3,})/.test(l); const out = !open && !fence; if (fence) open = !open; return out; }); };
+
+/** splitBody: at the first `<!-- timeline -->` line, or (rule 4) around the first bare timeline section of dated bullets. */
+function splitBody(body) {
+  const lines = body.split('\n');
+  const free = unfenced(lines);
+  const at = lines.findIndex((l, i) => free[i] && l.trim() === '<!-- timeline -->');
+  if (at >= 0) return { compiled: lines.slice(0, at).join('\n'), timeline: lines.slice(at + 1).join('\n') };
+  const first = lines.findIndex(l => l.trim());
+  for (let i = first + 1; i > 0 && i < lines.length; i++) {
+    if (!free[i] || !/^##\s+(timeline|history)\b/i.test(lines[i].trim())) continue;
+    let end = lines.length, bullets = 0, shaped = true;
+    for (let j = i + 1; j < lines.length; j++) {
+      const t = lines[j].trim();
+      if (/^##\s+\S/.test(t)) { end = j; break; }
+      if (!t) continue;
+      if (DATED.test(lines[j])) { bullets++; continue; }
+      if (bullets && /^\s{2,}\S/.test(lines[j])) continue;
+      shaped = false;
+      break;
+    }
+    if (shaped && bullets) return { compiled: [...lines.slice(0, i), ...lines.slice(end)].join('\n'), timeline: lines.slice(i, end).join('\n') };
+  }
+  return { compiled: body, timeline: '' };
+}
+
 /** What gbrain keeps of a page it is given: columns, the jsonb frontmatter and the body split at the timeline sentinel. */
 function parsePage(slug, content) {
   const m = /^---\r?\n(?:([\s\S]*?)\r?\n)?---[ \t]*(?:\r?\n|$)/.exec(content);
   const fm = (m && parseYaml(m[1] ?? '')) || {};
   const body = m ? content.slice(m[0].length) : content;
   const { type, title, tags, slug: _slug, ...rest } = fm;
-  const lines = body.split('\n');
-  const at = lines.findIndex(l => l.trim() === '<!-- timeline -->');
-  const compiled = (at < 0 ? body : lines.slice(0, at).join('\n')).trim();
-  const timeline = at < 0 ? '' : lines.slice(at + 1).join('\n').trim();
+  const split = splitBody(body);
+  const compiled = split.compiled.trim();
+  const timeline = split.timeline.trim();
   const h1 = /^# (.+)$/m.exec(compiled)?.[1];
   return {
     type: typeof type === 'string' && type ? type : 'note',
@@ -66,9 +95,10 @@ export function fakeGbrain({ ceiling = 'full', surface = 'starter', sourceId = '
   const sourceOf = args => args?.source_id ?? sourceId;
   const live = (source, slug) => { const p = pages.get(key(source, slug)); return p && !p.deleted_at ? p : null; };
 
-  function write(source, slug, content, ts) {
+  function write(source, slug, content, ts, { remote = false } = {}) {
     const before = pages.get(key(source, slug));
     const page = { slug, source_id: source, ...parsePage(slug, content), revision: revision(), created_at: before?.created_at ?? ts, updated_at_iso: ts, deleted_at: null };
+    if (remote) page.frontmatter.trust_tier = 'agent_written'; // the lower-only marker a below-owner write stamps
     pages.set(key(source, slug), page);
     return page;
   }
@@ -134,7 +164,7 @@ export function fakeGbrain({ ceiling = 'full', surface = 'starter', sourceId = '
         if (refused) return { index, slug, state: 'refused', error: refused.json };
         if (budget <= 0) return { index, slug, state: 'failed', error: { code: 'interrupted', message: 'the batch was interrupted' } };
         budget--;
-        return { index, slug, state: 'committed', revision: write(source, slug, content, ts).revision, status: 'written' };
+        return { index, slug, state: 'committed', revision: write(source, slug, content, ts, { remote: true }).revision, status: 'written' };
       });
       const committed = out.filter(p => p.state === 'committed').length;
       const failed = out.length - committed;
@@ -178,16 +208,26 @@ export function fakeGbrain({ ceiling = 'full', surface = 'starter', sourceId = '
 
   return {
     call,
-    /** Plays the agent: every call of the request, in order; a tool error is recorded as MCP reports it. */
-    run(request) {
+    /**
+     * Plays the agent: every call of the request, in order; a tool error is recorded as MCP reports it. `wrapped`: each
+     * result recorded as the MCP tool result (the JSON in content[0], one more text block per notice).
+     */
+    run(request, { wrapped = false } = {}) {
       const results = request.calls.map(({ tool, arguments: args }) => {
-        try { return call(tool, args); } catch (e) { return { isError: true, content: [{ type: 'text', text: JSON.stringify(e.json ?? { message: e.message }) }] }; }
+        let value;
+        try { value = call(tool, args); } catch (e) { return { isError: true, content: [{ type: 'text', text: JSON.stringify(e.json ?? { message: e.message }) }] }; }
+        if (!wrapped) return value;
+        const full = tool === 'list_pages' && value.length >= Math.min(args?.limit ?? 50, REMOTE_CAP);
+        return { content: [{ type: 'text', text: JSON.stringify(value) }, ...(full ? [{ type: 'text', text: '[notice listing_truncated] More rows may follow: page with updated_after + updated_after_slug.' }] : [])] };
       });
       return { 'archlens-remote': '1.0', request: request.id, results };
     },
-    /** Writes pages as a trusted local writer would (no surface, no revision check): path `<slug>.md` → content. */
-    write(files, { source = sourceId } = {}) {
-      const ts = now();
+    /**
+     * Writes pages as a trusted local writer would (no surface, no revision check): path `<slug>.md` → content. `at`: the
+     * updated_at to stamp (a transaction that started before a listing and committed after it).
+     */
+    write(files, { source = sourceId, at } = {}) {
+      const ts = at ?? now();
       for (const [path, content] of files) write(source, path.replace(/\.md$/, ''), content, ts);
     },
     /** Soft-deletes a page directly, as delete_page does. */

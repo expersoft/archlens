@@ -106,8 +106,28 @@ test('text written after the archlens block survives the round trip', () => {
   const rel = 'business-actor/cliente.md';
   v.set(rel, `${v.get(rel).replace(/\n$/, '')}\n\nAnotação humana.\n`);
   const g = toGbrainFiles(v, { prefix: 'archlens' });
-  assert.match(g.get(`archlens/${rel}`), /Anotação humana\.\n$/);
+  assert.match(g.get(`archlens/${rel}`), /Anotação humana\.\n\n<!-- timeline -->\n$/);
   assert.equal(fromGbrainFiles(g, { prefix: 'archlens' }).get(rel), v.get(rel));
+});
+
+test('every page ends with gbrain\'s timeline sentinel, and only that one is taken off on reading', () => {
+  const v = smallVault();
+  const rel = 'business-actor/cliente.md';
+  v.set(rel, `${v.get(rel).replace(/\n$/, '')}\n\n## History\n\n- 2026-10-01: criado\n\n<!-- timeline -->\n`);
+  const g = toGbrainFiles(v, { prefix: 'archlens' });
+  for (const [path, text] of g) if (path.endsWith('.md')) assert.ok(text.endsWith('\n\n<!-- timeline -->\n'), path);
+  assert.equal(fromGbrainFiles(g, { prefix: 'archlens' }).get(rel), v.get(rel)); // the one people wrote stays
+});
+
+test('frontmatter keys gbrain stamps are dropped on reading and refused as element fields', () => {
+  const v = smallVault();
+  const g = toGbrainFiles(v, { prefix: 'archlens' });
+  const rel = 'archlens/business-actor/cliente.md';
+  const stamped = new Map(g).set(rel, g.get(rel).replace(/^---\n/, '---\ntrust_tier: agent_written\nembed_skip: true\n'));
+  assert.deepEqual(fromGbrainFiles(stamped, { prefix: 'archlens' }), fromGbrainFiles(g, { prefix: 'archlens' }));
+  const raw = small().raw;
+  raw.model.elements[0] = { ...raw.model.elements[0], trust_tier: 'x' };
+  assert.throws(() => assertGbrainIds(raw), e => e.code === 'E_STORE_GBRAIN_RESERVED' && /trust_tier/.test(e.message));
 });
 
 test('ids that are not gbrain slugs are refused', () => {
