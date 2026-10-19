@@ -45,7 +45,7 @@ function gitOut(cwd, args, what, opts) {
 }
 
 /** The prefix as a relative folder ("archlens"); one that leaves the repository is refused. */
-function prefixOf(prefix) {
+export function prefixOf(prefix) {
   const p = String(prefix).replace(/^\/+|\/+$/g, '');
   if (!p || p.split('/').some(s => s === '..' || s === '.' || s === '')) throw storeError('E_STORE_CONFIG', `"store.prefix" inválido: ${JSON.stringify(prefix)} (use uma pasta relativa, como "archlens")`);
   return p;

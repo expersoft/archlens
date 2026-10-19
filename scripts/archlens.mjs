@@ -49,6 +49,9 @@ Aplicar (grava a base)
   doc       <base> [--out f.md]            regenera o ARCHITECTURE.md (gerado; edite architecture/notes/*.md)
   build     <base> [--out-dir DIR]           ARCHITECTURE.md + HTML (padrão: architecture/diagrams/)
   migrate   <base 1.x> [--to DIR]           converte uma base 1.x (pasta, .md ou .json) para o formato 2.0
+  remote    <base> pull [--full] [--out pedido.json]   base gbrain no modo mcp: grava o pedido de chamadas ao MCP (o agente executa)
+            <base> pull --ingest resposta.json… [--out pedido.json]   lê as respostas; grava o próximo pedido ou atualiza o espelho local
+            <base> check [--out pedido.json] | check --ingest resposta.json   confere a sessão do MCP (whoami) e se gravar está liberado
   store convert <base> --to markdown|json [--force]   grava a base em outro conector (mesma pasta; versão inalterada)
             <base> --to gbrain --mode git --repo R [--remote origin] [--branch main] [--prefix archlens]   leva a base para o gbrain (e de volta com --to json|markdown)
 
@@ -670,6 +673,33 @@ async function main() {
       try { path = initBase(dir, { name, store, warn: w => console.warn(`  aviso: ${w}`) }); } catch (e) { fail(e.message); }
       console.log(`✓ ${relPath(path)} criado (conector ${args.store}${store.mode ? `, modo ${store.mode}` : ''})`);
       console.log(`  próximo: planeje o conteúdo com a skill archlens-plan e grave com archlens-apply`);
+      break;
+    }
+    case 'remote': {
+      const usage = 'uso: archlens remote <base> pull [--full] [--out pedido.json] | pull --ingest <resposta.json…> [--out pedido.json] | check [--out pedido.json] | check --ingest <resposta.json…>';
+      const action = args._[2];
+      if (!file || !['pull', 'check'].includes(action) || args.ingest === true || args.out === true) fail(usage);
+      const store = openBase(file);
+      if (!store.remote) fail(`E_STORE_UNSUPPORTED: ${store.describe()} não é uma base gbrain no modo mcp; "archlens remote" só vale para ela`);
+      const responses = args.ingest ? [args.ingest, ...args._.slice(3)].map(readJson) : null;
+      let res;
+      try {
+        if (action === 'pull') res = responses ? store.remote.pullIngest(responses) : { request: store.remote.pull({ full: args.full === true }) };
+        else res = responses ? { session: store.remote.checkIngest(responses) } : { request: store.remote.check() };
+      } catch (e) { fail(e.message); }
+      if (res.request) {
+        const out = typeof args.out === 'string' ? args.out : store.remote.requestPath(res.request);
+        atomicWrite(out, JSON.stringify(res.request, null, 2) + '\n');
+        console.log(`✓ pedido "${res.request.step}" em ${relPath(out)}: ${res.request.calls.length} chamada(s) ao MCP do gbrain`);
+        console.log(`  próximo: faça as chamadas na ordem e grave o resultado bruto de cada uma em { "archlens-remote": "1.0", "request": "${res.request.id}", "results": [...] }; `
+          + `depois rode "archlens remote ${file} ${action} --ingest <resposta.json>"`);
+      } else if (res.done) {
+        console.log(`✓ espelho de ${store.describe()} em dia: ${res.done.fetched.length} página(s) lidas, ${res.done.removed.length} removida(s)`);
+      } else {
+        const s = res.session;
+        console.log(`✓ sessão do MCP conferida (${s.identity.transport}); gravar pelo MCP ${s.write ? 'liberado (conjunto completo de ferramentas)'
+          : `não liberado (${s.reason}): pull, plan, show e query funcionam; para gravar, o servidor precisa permitir o conjunto completo, ou use o modo git`}`);
+      }
       break;
     }
     case 'store': {

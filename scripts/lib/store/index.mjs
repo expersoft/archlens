@@ -6,6 +6,7 @@ import { jsonConnector, readJson, storeKind, MANIFEST } from './folder.mjs';
 import { legacyConnector } from './legacy.mjs';
 import { markdownConnector } from './markdown.mjs';
 import { gbrainGitConnector } from './gbrain-git.mjs';
+import { gbrainMcpConnector } from './gbrain-mcp.mjs';
 import { storeError } from './errors.mjs';
 import { validateStore } from './config.mjs';
 
@@ -87,13 +88,10 @@ export function openStore(locator) {
   if (kind === 'gbrain') {
     const store = validateStore(readJson(join(locator.path, MANIFEST)).store);
     const describe = `${rel(locator.path)}/ (gbrain ${store.mode})`;
-    return store.mode === 'mcp' ? gbrainMcpConnector(locator, describe) : gbrainGitConnector(locator, store, { describe });
+    return store.mode === 'mcp' ? gbrainMcpConnector(locator, store, { describe }) : gbrainGitConnector(locator, store, { describe });
   }
   return jsonConnector(locator, `${rel(locator.path)}/`);
 }
-
-// Stub until the gbrain MCP connector lands (Task 7).
-const gbrainMcpConnector = () => { throw storeError('E_STORE_UNSUPPORTED', 'o conector gbrain (modo mcp) ainda não está disponível'); };
 
 /** Throws the connector's own refusal when it cannot write (the old .md base). */
 export function assertWritable(store) {
