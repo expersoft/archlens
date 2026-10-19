@@ -889,3 +889,37 @@ test('a page committed without revision is read again before --undo puts it back
     }
   }
 });
+
+test('a page gone from gbrain at a reread is an answer: undo leaves it out, the apply stops on a deleted history', () => {
+  // Undo: a page committed without revision is deleted in gbrain before the reread; the other undo writes are recorded.
+  const w = ready();
+  const { request: req } = requestApply(w, finalPlan(w, [cache]));
+  const answer = w.gbrain.run(req);
+  const slug = answer.results[0].pages[0].slug;
+  answer.results[0].pages[0].revision = null;
+  w.store.remote.receipts([answer]);
+  const u = w.store.remote.undo();
+  w.gbrain.remove(slug);
+  const res = w.store.remote.receipts([w.gbrain.run(u.request)]);
+  assert.equal(res.state, 'undo-partial');
+  assert.deepEqual(res.conflicts, [slug]);
+  assert.ok(res.committed.length >= 1); // the other pages went back
+  assert.throws(() => w.store.remote.undo(), e => e.code === 'E_STORE_APPLY' && e.message.includes(slug));
+
+  // Apply: the history page is deleted between the conflict and its reread.
+  const v = ready();
+  const r = requestApply(v, finalPlan(v, [cache]));
+  otherRound(v, 1);
+  const get = v.store.remote.receipts([v.gbrain.run(r.request)]).request;
+  v.gbrain.remove('archlens/changelog');
+  assert.throws(() => v.store.remote.receipts([v.gbrain.run(get)]), e => e.code === 'E_STORE_HISTORY_RETRY' && e.message.includes('archlens/changelog'));
+  const j = journal(v.dir, r.apply);
+  assert.equal(j.state, 'partial');
+  assert.equal(j.request, null); // nothing left in flight: --resume or --undo can start
+  assert.ok(v.gbrain.page('archlens/application-component/vendas.cache'));
+  // Restored, --resume finishes.
+  v.gbrain.call('restore_page', { slug: 'archlens/changelog', request_id: 'restaura' });
+  let res2 = v.store.remote.receipts([v.gbrain.run(v.store.remote.resume().request)]);
+  res2 = v.store.remote.receipts([v.gbrain.run(res2.request)]);
+  assert.equal(res2.state, 'committed');
+});

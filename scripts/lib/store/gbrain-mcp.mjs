@@ -339,7 +339,11 @@ export function gbrainMcpConnector(locator, store, { describe = `${rel(locator.p
    */
   function outcomesOf(call, res, i, pages) {
     const where = `resultado ${i + 1} (${call.tool})`;
-    if (call.tool === 'get_page') return [{ slug: call.arguments.slug, state: 'reread', page: pageOfResult(res, call, i) }];
+    if (call.tool === 'get_page') {
+      // A page gone from gbrain (deleted, or a soft delete purged) is an answer too: page null.
+      const gone = res.error && codeOf(res.error) === 'page_not_found';
+      return [{ slug: call.arguments.slug, state: 'reread', page: gone ? null : pageOfResult(res, call, i) }];
+    }
     const all = state => call.slugs.map(slug => ({ slug, state }));
     if (res.error) {
       const code = codeOf(res.error);
@@ -520,6 +524,7 @@ export function gbrainMcpConnector(locator, store, { describe = `${rel(locator.p
 
     let next = null;
     let exhausted = false;
+    let historyGone = false;
     const hist = pages[historySlug];
     const reread = rereads.get(historySlug);
     if (undoing && rereads.size) {
@@ -529,11 +534,15 @@ export function gbrainMcpConnector(locator, store, { describe = `${rel(locator.p
       for (const [slug, page] of rereads) {
         const u = pages[slug];
         if (u?.state !== 'reread') continue;
-        if (stillWritten(j, files, slug, page)) ready.push(Object.assign(u, { slug, expected: page.revision }));
-        else Object.assign(u, { state: 'revision_conflict', current: page.revision });
+        if (page && stillWritten(j, files, slug, page)) ready.push(Object.assign(u, { slug, expected: page.revision }));
+        else Object.assign(u, { state: 'revision_conflict', current: page?.revision ?? null });
       }
       if (ready.length) next = writeCalls(ready);
       for (const u of ready) delete u.slug;
+    } else if (!undoing && hist && rereads.has(historySlug) && !reread) {
+      // Someone deleted the history page: the apply stops there rather than write a history of its own over it.
+      Object.assign(hist, { state: 'revision_conflict', current: null });
+      historyGone = true;
     } else if (!undoing && reread && hist) {
       const again = historyAgain(j, files, reread);
       j.entry = again.entry;
@@ -556,6 +565,10 @@ export function gbrainMcpConnector(locator, store, { describe = `${rel(locator.p
     out.set(join(MIRROR, SYNC), json(listed));
     out.set(...journalFile(j));
     writeFilesAtomically(dir, out);
+    if (historyGone) {
+      throw storeError('E_STORE_HISTORY_RETRY', `a página de histórico ${historySlug} sumiu do gbrain (removida por alguém) enquanto este apply gravava a rodada; as outras páginas já gravadas ficam, `
+        + `e a rodada está guardada em ${rel(join(dir, journalRel(j.id)))}. Restaure a página (restore_page) e rode "archlens apply ${rel(dir)} --resume ${j.id}", ou desfaça com --undo ${j.id}`);
+    }
     if (exhausted) {
       throw storeError('E_STORE_HISTORY_RETRY', `o histórico do gbrain mudou ${HISTORY_RETRIES + 1} vezes enquanto este apply gravava a rodada; as outras páginas já gravadas ficam, `
         + `e a rodada está guardada em ${rel(join(dir, journalRel(j.id)))}. Rode "archlens apply ${rel(dir)} --resume ${j.id}" para tentar de novo`);
