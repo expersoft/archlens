@@ -12,12 +12,21 @@ simbólico da instalação; sem ele, o `..` sai pelo `~/.claude` e não acha o r
 `archlens <comando>`). `$OUT` = uma pasta **fora** da base (ex.: `/tmp/archlens`).
 
 Esta skill **nunca grava a base**: usa só `scan`, `plan`, `show` e a prévia `deliver --delta/--plan`, com a saída
-em `$OUT`. Gravar é da skill archlens-apply, e só com o plano final que esta skill entrega.
+em `$OUT` (`remote pull`/`check` só atualizam o espelho local de uma base gbrain no modo MCP). Gravar é da skill archlens-apply, e só com o plano final que esta skill entrega.
 
 ## Fluxo
 
 1. **Localize a base** (`references/base.md`). Base 1.x: proponha a migração (skill archlens-apply, com o ok do
-   usuário) antes de planejar. Sem base, o primeiro delta a cria; `ARCHITECTURE.md` alheio: pergunte antes.
+   usuário) antes de planejar. `ARCHITECTURE.md` alheio: pergunte antes.
+   - **Sem base**: pergunte ao usuário o tipo de repositório (`json` local, `markdown`/Obsidian, gbrain no modo git ou
+     no modo MCP) e os parâmetros dele (`references/base.md`, *Repositórios da base*);
+     quem cria a base com `archlens init` é a skill archlens-apply. Sem preferência, uma base `json` também nasce no
+     primeiro apply.
+   - **Base gbrain no modo MCP** (`store.mode: "mcp"`): uma vez por sessão, confira o MCP com `archlens remote <base> check`
+     (siga o pedido e rode `check --ingest`). Antes de ler a base (`scan --base`, `plan`, `show`, prévias), atualize o
+     espelho: `archlens remote <base> pull`, faça as chamadas do pedido nas ferramentas do MCP (na ordem, gravando o
+     resultado bruto) e `archlens remote <base> pull --ingest resposta.json` até a CLI dizer que o espelho está em dia.
+     Bases grandes ficam bem mais baratas no modo git.
 2. **Traduza a informação nova em delta** (`references/merge.md`):
    - **texto livre**: siga `references/free-text.md` (`source` com o trecho, `inferred` + `confidence`,
      `assumptions`). Pergunte ao usuário **só** o que bloqueia;
@@ -91,6 +100,10 @@ em `$OUT`. Gravar é da skill archlens-apply, e só com o plano final que esta s
 - **Elemento dentro do `grouping`**: não aninhe membros em `children` (nem use `parent`) de um agrupamento; use
   `"group": "<agrupamento>"`. Aninhado, ele é lido como membro com o aviso `W_GROUP_CHILD`.
 - **Prévia dentro da base**: o `--out` da prévia e do `show` vai para fora da pasta `architecture/`.
+- **Base no gbrain**: ids precisam ser slugs do gbrain (minúsculas, dígitos, `.`, `_`, `-`, sem acento;
+  `E_STORE_GBRAIN_SLUG`), e campos com nomes que o gbrain reserva (`slug`, `trust_tier`, `source_kind`, …) são
+  recusados (`E_STORE_GBRAIN_RESERVED`). Apply recusado com `E_STORE_CONFLICT` (outro arquiteto gravou um objeto do
+  plano): no modo MCP, rode o `pull` antes de refazer o plano com `--answers`.
 
 ## Referências
 

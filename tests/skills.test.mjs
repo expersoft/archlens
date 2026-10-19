@@ -96,8 +96,8 @@ test('no section of the old SKILL.md is lost', () => {
   for (const t of titles) assert.ok(headings.some(h => h.startsWith(t)), `seção "${t}" sumiu`);
 });
 
-test('only archlens-apply runs apply, build, doc, migrate or store convert', () => {
-  const writes = /archlens (apply|build|doc|migrate|store convert)\b/;
+test('only archlens-apply runs init, apply, build, doc, migrate or store convert', () => {
+  const writes = /archlens (init|apply|build|doc|migrate|store convert)\b/;
   const others = skills().filter(s => s.name !== 'archlens-apply');
   assert.equal(others.length, 2);
   for (const { name, text } of others) {
@@ -105,6 +105,41 @@ test('only archlens-apply runs apply, build, doc, migrate or store convert', () 
       if (writes.test(line)) assert.match(line, /skill archlens-apply/, `${name}: "${line.trim()}" roda um comando que grava a base`);
     }
   }
+});
+
+test('archlens-apply runs init; without a base, plan and query ask the repository type and hand init over to it', () => {
+  assert.match(read(skillPath('archlens-apply')), /archlens init <pasta> --store json\|markdown\|gbrain/);
+  for (const name of ['archlens-plan', 'archlens-query']) {
+    const line = read(skillPath(name)).split('\n').find(l => /archlens init\b/.test(l));
+    assert.ok(line, `${name}: encaminha o archlens init`);
+    assert.match(line, /skill archlens-apply/, `${name}: o init é da skill archlens-apply`);
+    assert.match(read(skillPath(name)), /tipo de repositório/, `${name}: pergunta o tipo de repositório`);
+  }
+});
+
+test('the three skills pull an MCP base before reading it and check the MCP session once per session', () => {
+  for (const name of SKILLS) {
+    const text = read(skillPath(name));
+    assert.ok(text.includes('archlens remote <base> pull'), `${name}: cita archlens remote <base> pull`);
+    const check = text.split('\n').find(l => l.includes('archlens remote <base> check'));
+    assert.ok(check, `${name}: cita archlens remote <base> check`);
+    assert.match(check, /uma vez por sessão/i, `${name}: check uma vez por sessão`);
+  }
+  // plan and query read the base in their flow: the pull comes first
+  for (const [name, reader] of [['archlens-plan', 'archlens plan '], ['archlens-query', 'archlens views ']]) {
+    const flow = read(skillPath(name)).slice(read(skillPath(name)).indexOf('## Fluxo'));
+    const pull = flow.indexOf('archlens remote <base> pull');
+    assert.ok(pull >= 0 && pull < flow.indexOf(reader), `${name}: o pull vem antes de ${reader.trim()}`);
+  }
+});
+
+test('archlens-apply conducts the MCP apply: --read-check, --receipts, --resume, --undo', () => {
+  const text = read(skillPath('archlens-apply'));
+  for (const flag of ['--read-check', '--receipts', '--resume', '--undo']) {
+    assert.match(text, new RegExp(`archlens apply <base> [^\\n\`]*${flag}`), `archlens-apply: cita archlens apply … ${flag}`);
+  }
+  assert.match(text, /archlens store convert <base> --to gbrain --mode git/);
+  assert.match(text, /archlens store convert <base> --to gbrain --mode mcp/);
 });
 
 test('archlens-apply runs build after apply', () => {
