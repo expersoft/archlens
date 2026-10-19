@@ -14,6 +14,10 @@ import { contentVersion, applyOps, diffRaw } from '../scripts/lib/store/ops.mjs'
 import { checkConnector } from '../scripts/lib/store/contract.mjs';
 import { plan, apply } from '../scripts/lib/api.mjs';
 import { fakeGbrain } from './helpers/fake-gbrain.mjs';
+import { convertToGbrain, convertFromGbrain, convertFolder, finishConvertToMcp } from '../scripts/lib/store/convert.mjs';
+import { gbrainMcpConnector } from '../scripts/lib/store/gbrain-mcp.mjs';
+import { canonicalJson } from '../scripts/lib/merge.mjs';
+import { cpSync, mkdirSync, rmSync } from 'node:fs';
 
 const CLI = fileURLToPath(new URL('../scripts/archlens.mjs', import.meta.url));
 const cli = (args, cwd) => spawnSync(process.execPath, [CLI, ...args], { cwd, encoding: 'utf8' });
@@ -922,4 +926,192 @@ test('a page gone from gbrain at a reread is an answer: undo leaves it out, the 
   let res2 = v.store.remote.receipts([v.gbrain.run(v.store.remote.resume().request)]);
   res2 = v.store.remote.receipts([v.gbrain.run(res2.request)]);
   assert.equal(res2.state, 'committed');
+});
+
+// store convert in MCP mode: a local base goes to the gbrain as one create-only apply, and comes back from the mirror.
+// The vault reads elements by id and gives each relationship an id; the json base keeps file order and bare ones.
+const norm = ({ raw }) => {
+  const key = r => `${r.from}|${r.type}|${r.to}|${r.description ?? ''}`;
+  return canonicalJson({
+    ...raw,
+    model: {
+      elements: [...raw.model.elements].sort((x, y) => (x.id < y.id ? -1 : 1)),
+      relationships: raw.model.relationships.map(({ id, ...r }) => r).sort((x, y) => (key(x) < key(y) ? -1 : 1)),
+    },
+  });
+};
+const EXAMPLES = fileURLToPath(new URL('../examples/', import.meta.url));
+const MCP = { kind: 'gbrain', mode: 'mcp', server: 'gbrain' };
+
+/** A copy of examples/<ex>/architecture with a file of its own, a fake gbrain and a checked session (writing allowed). */
+function convWorld(ex, { prefix } = {}) {
+  const dir = join(mkdtempSync(join(tmpdir(), 'archlens-mconvert-')), 'architecture');
+  cpSync(join(EXAMPLES, ex, 'architecture'), dir, { recursive: true });
+  writeFileSync(join(dir, 'minha-nota.txt'), 'meu\n');
+  const gbrain = fakeGbrain();
+  const loc = resolveBase(dir);
+  const store = { ...MCP, ...(prefix ? { prefix } : {}) };
+  const checker = gbrainMcpConnector(loc, { ...store, prefix: prefix ?? 'archlens' });
+  checker.remote.checkIngest([gbrain.run(checker.remote.check())]);
+  return { dir, loc, gbrain, store };
+}
+const finish = (w, res) => {
+  const conn = gbrainMcpConnector(w.loc, { ...MCP, prefix: 'archlens', ...w.store });
+  let out = conn.remote.receipts([w.gbrain.run(res.request)]);
+  return { conn, out };
+};
+
+for (const [ex, back] of [['loja-online', 'json'], ['telemedicina', 'json'], ['repos', 'markdown']]) {
+  test(`a local base goes to the fake gbrain and back unchanged (${ex})`, () => {
+    const w = convWorld(ex);
+    const before = openStore(w.loc).read();
+    const manifestBefore = readFileSync(join(w.dir, 'archlens.json'), 'utf8');
+    const res = convertToGbrain(w.loc, w.store);
+    assert.equal(res.request.step, 'apply');
+    assert.ok(res.pages > 1);
+    // Every page is create-only, the history last, and no read-check precedes it.
+    const sent = res.request.calls.flatMap(c => c.arguments.pages ?? []);
+    assert.equal(sent.length, res.pages);
+    assert.ok(sent.every(p => p.expected_revision === undefined));
+    assert.equal(sent.at(-1).slug, 'archlens/changelog');
+    // Nothing local changes before the receipts.
+    assert.equal(readFileSync(join(w.dir, 'archlens.json'), 'utf8'), manifestBefore);
+
+    const { conn, out } = finish(w, res);
+    assert.equal(out.state, 'committed');
+    finishConvertToMcp(w.loc);
+    assert.deepEqual(JSON.parse(readFileSync(join(w.dir, 'archlens.json'), 'utf8')),
+      { archlens: '2.0', name: before.raw.name, store: { ...MCP, prefix: 'archlens' } });
+    for (const f of ['model.json', 'views.json', 'changelog.json', 'gbrain-pack.yaml', 'business-actor']) assert.equal(existsSync(join(w.dir, f)), false, f);
+    assert.equal(readFileSync(join(w.dir, 'minha-nota.txt'), 'utf8'), 'meu\n');
+    const there = openStore(resolveBase(w.dir)).read();
+    assert.equal(norm(there), norm(before));
+    assert.equal(contentVersion(there), contentVersion(before));
+    assert.deepEqual(there.notes, before.notes);
+    assert.ok(conn);
+
+    const done = convertFromGbrain(resolveBase(w.dir), back);
+    assert.equal(done.to, back);
+    const after = openStore(resolveBase(w.dir));
+    assert.equal(after.kind, back);
+    assert.equal(norm(after.read()), norm(before));
+    assert.equal(contentVersion(after.read()), contentVersion(before));
+    assert.deepEqual(after.read().notes, before.notes);
+    assert.equal(readFileSync(join(w.dir, 'minha-nota.txt'), 'utf8'), 'meu\n');
+    assert.equal(existsSync(join(w.dir, '.archlens', 'mirror')), false);
+  });
+}
+
+test('pages already present make creation fail per page and the convert reports them', () => {
+  const w = convWorld('loja-online');
+  const before = readFileSync(join(w.dir, 'archlens.json'), 'utf8');
+  const res = convertToGbrain(w.loc, w.store);
+  const slugs = res.request.calls.flatMap(c => c.arguments.pages).map(p => p.slug);
+  const taken = slugs.find(s => s !== 'archlens/changelog' && s !== 'archlens/manifest');
+  w.gbrain.write(new Map([[`${taken}.md`, '---\ntype: note\ntitle: Alheia\n---\n\nnão é do archlens\n']]));
+  const { conn, out } = finish(w, res);
+  assert.equal(out.state, 'partial');
+  assert.deepEqual(out.conflicts, [taken]);
+  assert.throws(() => finishConvertToMcp(w.loc), e => e.code === 'E_STORE_CONVERT');
+  assert.equal(readFileSync(join(w.dir, 'archlens.json'), 'utf8'), before); // nothing local changed
+  assert.ok(existsSync(join(w.dir, 'model.json')));
+  // --resume does not force the page; --undo takes down only what the convert created.
+  assert.throws(() => conn.remote.resume(), e => e.code === 'E_STORE_APPLY' && e.message.includes(taken));
+  const undone = conn.remote.receipts([w.gbrain.run(conn.remote.undo().request)]);
+  assert.equal(undone.state, 'undone');
+  assert.match(w.gbrain.content(taken), /não é do archlens/);
+  assert.equal(w.gbrain.page(slugs.find(s => s !== taken && s !== 'archlens/changelog')).deleted_at !== null, true);
+});
+
+test('a convert to MCP is refused without a checked session, and ids are checked before any request', () => {
+  const w = convWorld('loja-online');
+  rmSync(join(w.dir, '.archlens', 'session.json'));
+  assert.throws(() => convertToGbrain(w.loc, w.store), e => e.code === 'E_STORE_GBRAIN_SURFACE');
+  const v = convWorld('loja-online');
+  const model = JSON.parse(readFileSync(join(v.dir, 'model.json'), 'utf8'));
+  model.elements[0].id = 'Loja Online';
+  writeFileSync(join(v.dir, 'model.json'), JSON.stringify(model, null, 2));
+  assert.throws(() => convertToGbrain(v.loc, v.store), e => e.code === 'E_STORE_GBRAIN_SLUG');
+  assert.equal(existsSync(join(v.dir, '.archlens', 'applies')), false);
+});
+
+test('converting an MCP base to json or markdown without a mirror fails with E_REMOTE_STALE', () => {
+  const w = world();
+  assert.throws(() => convertFolder(resolveBase(w.dir), 'json'), e => e.code === 'E_REMOTE_STALE');
+});
+
+test('human text and notes/removidos of a vault survive markdown -> gbrain (MCP) -> markdown byte for byte', () => {
+  const w = convWorld('loja-online-vault');
+  const page = 'business-actor/cliente.md';
+  const human = '\n## Minhas observações\n\nO cliente ligou ontem.\n';
+  writeFileSync(join(w.dir, page), readFileSync(join(w.dir, page), 'utf8').replace(/\n*$/, '\n') + human);
+  const kept = '# Antigo ("antigo")\n\n## Antigo ("antigo"): elemento removido da base; texto escrito em x.md\n\nTexto de quem removeu.\n';
+  mkdirSync(join(w.dir, 'notes', 'removidos', 'business-actor'), { recursive: true });
+  writeFileSync(join(w.dir, 'notes', 'removidos', 'business-actor', 'antigo.md'), kept);
+  const pageBefore = readFileSync(join(w.dir, page), 'utf8');
+  const res = convertToGbrain(w.loc, w.store);
+  assert.deepEqual(res.dropped, []);
+  const { out } = finish(w, res);
+  assert.equal(out.state, 'committed');
+  assert.match(w.gbrain.content('archlens/business-actor/cliente'), /O cliente ligou ontem\./);
+  assert.match(w.gbrain.content('archlens/notes/removidos/business-actor/antigo'), /Texto de quem removeu\./);
+  finishConvertToMcp(w.loc);
+  convertFromGbrain(resolveBase(w.dir), 'markdown');
+  assert.equal(readFileSync(join(w.dir, page), 'utf8'), pageBefore);
+  assert.equal(readFileSync(join(w.dir, 'notes', 'removidos', 'business-actor', 'antigo.md'), 'utf8'), kept);
+});
+
+test('the CLI converts to the gbrain in MCP mode, completes with --receipts and converts back', () => {
+  const w = convWorld('loja-online');
+  const cwd = join(w.dir, '..');
+  const r = cli(['store', 'convert', 'architecture', '--to', 'gbrain', '--mode', 'mcp', '--server', 'gbrain'], cwd);
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /apply-request\.json/);
+  assert.match(r.stdout, /archlens apply architecture --receipts/);
+  assert.equal(JSON.parse(readFileSync(join(w.dir, 'archlens.json'), 'utf8')).store, undefined); // still local
+  const req = JSON.parse(readFileSync(join(w.dir, '.archlens', 'remote', 'apply-request.json'), 'utf8'));
+  writeFileSync(join(cwd, 'recibos.json'), JSON.stringify(w.gbrain.run(req)));
+  const done = cli(['apply', 'architecture', '--receipts', 'recibos.json'], cwd);
+  assert.equal(done.status, 0, done.stderr);
+  assert.match(done.stdout, /agora usa o conector gbrain/);
+  assert.deepEqual(JSON.parse(readFileSync(join(w.dir, 'archlens.json'), 'utf8')).store, { ...MCP, prefix: 'archlens' });
+  assert.ok(existsSync(join(cwd, 'ARCHITECTURE.md')));
+  const back = cli(['store', 'convert', 'architecture', '--to', 'json'], cwd);
+  assert.equal(back.status, 0, back.stderr);
+  assert.ok(existsSync(join(w.dir, 'model.json')));
+  assert.equal(cli(['validate', 'architecture'], cwd).status, 0);
+});
+
+test('the CLI reports a partial convert and how to --resume or --undo; the session check works on a local base', () => {
+  const w = convWorld('loja-online');
+  rmSync(join(w.dir, '.archlens', 'session.json'));
+  const cwd = join(w.dir, '..');
+  let r = cli(['store', 'convert', 'architecture', '--to', 'gbrain', '--mode', 'mcp', '--server', 'gbrain'], cwd);
+  assert.notEqual(r.status, 0);
+  assert.match(r.stderr, /E_STORE_GBRAIN_SURFACE/);
+  assert.match(r.stderr, /remote architecture check --server gbrain/);
+  r = cli(['remote', 'architecture', 'check', '--server', 'gbrain'], cwd);
+  assert.equal(r.status, 0, r.stderr);
+  writeFileSync(join(cwd, 'sessao.json'), JSON.stringify(w.gbrain.run(JSON.parse(readFileSync(join(w.dir, '.archlens', 'remote', 'tools-request.json'), 'utf8')))));
+  r = cli(['remote', 'architecture', 'check', '--server', 'gbrain', '--ingest', 'sessao.json'], cwd);
+  assert.equal(r.status, 0, r.stderr);
+  r = cli(['store', 'convert', 'architecture', '--to', 'gbrain', '--mode', 'mcp', '--server', 'gbrain'], cwd);
+  assert.equal(r.status, 0, r.stderr);
+  const req = JSON.parse(readFileSync(join(w.dir, '.archlens', 'remote', 'apply-request.json'), 'utf8'));
+  w.gbrain.failAfter(3);
+  writeFileSync(join(cwd, 'recibos.json'), JSON.stringify(w.gbrain.run(req)));
+  r = cli(['apply', 'architecture', '--receipts', 'recibos.json'], cwd);
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /parcial/);
+  assert.match(r.stdout, /--resume/);
+  assert.match(r.stdout, /--undo/);
+  assert.ok(existsSync(join(w.dir, 'model.json'))); // nothing local changed
+  w.gbrain.failAfter(Infinity);
+  r = cli(['apply', 'architecture', '--resume'], cwd);
+  assert.equal(r.status, 0, r.stderr);
+  writeFileSync(join(cwd, 'recibos-2.json'), JSON.stringify(w.gbrain.run(JSON.parse(readFileSync(join(w.dir, '.archlens', 'remote', 'apply-request.json'), 'utf8')))));
+  r = cli(['apply', 'architecture', '--receipts', 'recibos-2.json'], cwd);
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /agora usa o conector gbrain/);
+  assert.equal(existsSync(join(w.dir, 'model.json')), false);
 });

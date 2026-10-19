@@ -217,12 +217,12 @@ export function gbrainMcpConnector(locator, store, { describe = `${rel(locator.p
   const opsOf = j => j.plan?.ops ?? j.ops;
 
   /** Writing needs a session checked by "remote check" with gbrain's full tool surface; E_STORE_GBRAIN_SURFACE otherwise. */
-  function assertWrite() {
+  function assertWrite(checkArgs = '') {
     const s = readJsonFile(join(dir, SESSION), null);
     if (s?.write === true && s.server === store.server) return;
     const why = s?.server === store.server ? `a sessão conferida não tem esse conjunto (${s.reason ?? s.surface})` : 'a sessão do MCP ainda não foi conferida';
     throw storeError('E_STORE_GBRAIN_SURFACE', `${describe}: gravar pelo MCP exige o conjunto completo de ferramentas do gbrain (put_pages, delete_page, restore_page) e ${why}. `
-      + `Rode "archlens remote ${rel(dir)} check" e siga o pedido; se o servidor não liberar o conjunto completo, use o modo git`);
+      + `Rode "archlens remote ${rel(dir)} check${checkArgs}" e siga o pedido; se o servidor não liberar o conjunto completo, use o modo git`);
   }
 
   /** The pages `next` changes over the mirror `cur` ({ files, flat, base }): [{ slug, op: 'put', content } | { slug, op: 'delete' }]. */
@@ -444,6 +444,30 @@ export function gbrainMcpConnector(locator, store, { describe = `${rel(locator.p
     return { request: req, apply: j.id, entry };
   }
 
+  /**
+   * The apply that creates the whole base `cur` ({ raw, notes }) in an empty prefix (store convert): every page create-only
+   * (no expected_revision), the history last, no read-check; `carry` ({ base, removed }) brings the text people wrote in
+   * the pages of a vault and the text kept of removed elements; `convert` is kept in the journal (see convert.mjs). A page
+   * that already exists fails create-only on its own. { request, apply: journal id, pages: count }.
+   */
+  function create(cur, { carry, convert } = {}) {
+    assertWrite(` --server ${store.server}`); // the base is still a local one: the check is told the server
+    assertGbrainIds(cur.raw); // before any request
+    const flat = carry?.removed ?? new Map();
+    const vault = new Map(flat);
+    for (const [r, text] of vaultFiles(cur, carry?.base ?? null, { read: r => flat.get(r) })) { if (text === null) vault.delete(r); else vault.set(r, text); }
+    const writes = [...toGbrainFiles(vault, { prefix })].filter(([path]) => path.endsWith('.md')).map(([path, content]) => ({ slug: path.slice(0, -3), op: 'put', content }));
+    const pages = Object.fromEntries(writes.map(w => [w.slug, { ...w, expected: null }]));
+    const calls = writeCalls(Object.values(pages));
+    for (const p of Object.values(pages)) delete p.slug;
+    const j = { 'archlens-apply': PROTOCOL, id: randomUUID(), createdAt: new Date().toISOString(), plan: null, convert,
+      entry: cur.raw.changelog?.at(-1) ?? null, before: Object.fromEntries(writes.map(w => [w.slug, { content: null, revision: null }])), pages,
+      history: { tries: 0 }, calls: [], state: 'requested' };
+    const req = issue(j, 'apply', calls);
+    saveJournal(j);
+    return { request: req, apply: j.id, pages: writes.length };
+  }
+
   /** The history page with the apply's round appended again to `page` (gbrain's history now), over the mirror `files`. */
   function historyAgain(j, files, page) {
     const all = new Map(files);
@@ -511,7 +535,7 @@ export function gbrainMcpConnector(locator, store, { describe = `${rel(locator.p
       if (p.request_id !== o.request_id) continue; // a call the page has left: it went again in another one
       if (o.state === 'unsent' && p.state === 'committed') continue;
       p.state = o.state;
-      if (o.state === 'revision_conflict') { p.current = o.current; if (o.slug === historySlug) historyConflict = true; }
+      if (o.state === 'revision_conflict') { p.current = o.current; if (o.slug === historySlug && !j.convert) historyConflict = true; }
       if (o.state !== 'committed') continue;
       p.revision = o.revision;
       const content = p.op === 'delete' ? null : p.content;
@@ -582,7 +606,7 @@ export function gbrainMcpConnector(locator, store, { describe = `${rel(locator.p
     const j = id ? readJournal(id) : journals().filter(x => open.includes(x.state)).at(-1);
     if (!j) throw storeError('E_STORE_APPLY', `nenhum apply para retomar em ${rel(join(dir, APPLIES))}`);
     if (!open.includes(j.state)) throw storeError('E_STORE_APPLY', `o apply ${j.id} está "${j.state}": não há o que retomar`);
-    const conflicts = Object.keys(j.pages).filter(s => s !== historySlug && j.pages[s].state === 'revision_conflict');
+    const conflicts = Object.keys(j.pages).filter(s => (j.convert || s !== historySlug) && j.pages[s].state === 'revision_conflict');
     if (conflicts.length) {
       throw storeError('E_STORE_APPLY', `o apply ${j.id} tem página(s) que mudaram no gbrain depois do plano (${conflicts.join(', ')}); o resto do plano não é forçado. `
         + `Desfaça com "archlens apply ${rel(dir)} --undo ${j.id}" e refaça o plano`);
@@ -728,8 +752,9 @@ export function gbrainMcpConnector(locator, store, { describe = `${rel(locator.p
     history: () => read()?.raw.changelog ?? [],
     /** The mirror's base as the vault reads it ({ base: { raw, notes, ctx }, files }), with the text people wrote; null when none. */
     vault() { const { base, flat } = load(); return base && { base, files: flat }; },
-    assertWrite,
+    assertWrite: () => assertWrite(),
     apply,
+    create,
   };
   return c;
 }

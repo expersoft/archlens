@@ -3,7 +3,7 @@
 // checked, then swapped in. Files the base does not own stay.
 import { cpSync, renameSync, rmSync, existsSync, readdirSync, writeFileSync, mkdirSync, copyFileSync, readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
-import { join, dirname, resolve } from 'node:path';
+import { join, dirname, resolve, relative } from 'node:path';
 import { storeError } from './errors.mjs';
 import { contentVersion, diffRaw } from './ops.mjs';
 import { writeSetOf } from './versions.mjs';
@@ -14,6 +14,7 @@ import { PACK_FILE } from './gbrain-pack.mjs';
 import { openStore } from './index.mjs';
 import { validateStore, probeGitRepo, ignoreMirror } from './config.mjs';
 import { gbrainGitConnector, TIP } from './gbrain-git.mjs';
+import { gbrainMcpConnector, APPLIES, MIRROR, REMOTE, SESSION } from './gbrain-mcp.mjs';
 import { assertGbrainIds } from './gbrain-layout.mjs';
 
 /** The files of `kind` in `dir` that are the base itself (not notes, views or changelog, which every connector shares). */
@@ -107,7 +108,8 @@ function dropEmptied(dir, rels) {
  */
 export function convertToGbrain(locator, store) {
   const valid = validateStore(store);
-  if (valid.kind !== 'gbrain' || valid.mode !== 'git') throw storeError('E_STORE_CONVERT', 'só o gbrain em modo git é destino de "store convert" por enquanto (--to gbrain --mode git --repo R)');
+  if (valid.kind !== 'gbrain') throw storeError('E_STORE_CONVERT', 'o destino de "store convert" para o gbrain é --to gbrain --mode git --repo R ou --mode mcp --server S');
+  if (valid.mode === 'mcp') return convertToGbrainMcp(locator, valid);
   const dir = locator.path;
   const source = openStore(locator);
   if (source.kind === 'gbrain') throw storeError('E_STORE_CONVERT', `${source.describe()} já usa o conector gbrain`);
@@ -143,6 +145,76 @@ export function convertToGbrain(locator, store) {
   return { pages: listed.length, commit, warnings, from: source.kind, to: 'gbrain', version: contentVersion(cur), leftover: null, dropped: [] };
 }
 
+/** The journals of the applies in `dir` (oldest first). */
+function appliesOf(dir) {
+  const d = join(dir, APPLIES);
+  return existsSync(d) ? readdirSync(d).filter(f => f.endsWith('.json')).map(f => JSON.parse(readFileSync(join(d, f), 'utf8')))
+    .sort((a, b) => (a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : 0)) : [];
+}
+
+/**
+ * The convert to a gbrain in MCP mode waiting for its receipts, if any: { id, state, store, connector } for the last
+ * journal that carries a `convert` while archlens.json is still the local one; null otherwise (a finished convert leaves
+ * the gbrain manifest behind it). Its connector runs --receipts, --resume and --undo.
+ */
+export function pendingConvertToMcp(locator) {
+  if (openStore(locator).kind === 'gbrain') return null;
+  const j = appliesOf(locator.path).filter(x => x.convert && x.state !== 'undone').at(-1);
+  if (!j) return null;
+  return { id: j.id, state: j.state, store: j.convert.store, connector: gbrainMcpConnector(locator, j.convert.store) };
+}
+
+/**
+ * Moves a local base into the gbrain in MCP mode: the agent makes the writes. Asks for one create-only apply with every
+ * page (the prefix has to be empty: a page already there fails on its own and shows up in the receipts) and keeps a
+ * journal; nothing local changes until finishConvertToMcp, after all the receipts are in. The text people wrote in the
+ * pages of a vault, and notes/removidos/**, travel in the pages like in git mode.
+ */
+function convertToGbrainMcp(locator, valid) {
+  const dir = locator.path;
+  const source = openStore(locator);
+  if (source.kind === 'gbrain') throw storeError('E_STORE_CONVERT', `${source.describe()} já usa o conector gbrain`);
+  if (!source.writable) source.apply([]);
+  const cur = source.read();
+  if (!cur) throw storeError('E_STORE_NOT_FOUND', `base não encontrada: ${source.describe()}`);
+  const open = pendingConvertToMcp(locator);
+  if (open && ['requested', 'partial', 'committed'].includes(open.state)) {
+    throw storeError('E_STORE_CONVERT', `já há uma conversão para o gbrain em andamento (apply ${open.id}); conclua com "archlens apply ${relative(process.cwd(), dir) || '.'} --receipts <resposta.json>", `
+      + `retome com --resume ou desfaça com --undo ${open.id}`);
+  }
+  const connector = gbrainMcpConnector(locator, valid);
+  const carry = source.kind === 'markdown' ? { base: readVault(dir), removed: removedFiles(dir) } : undefined;
+  const own = [...new Set([...ownFiles(dir, source.kind), 'views.json', 'changelog.json'])];
+  const made = connector.create(cur, { carry, convert: { store: valid, from: source.kind, version: contentVersion(cur), own } });
+  return { ...made, mode: 'mcp', connector, from: source.kind, to: 'gbrain', version: contentVersion(cur), dropped: [] };
+}
+
+/**
+ * Closes a convert to the MCP gbrain once its journal is committed: the mirror (what the receipts wrote) has to read back
+ * as the original base, which has to be the one the request was made from; only then archlens.json becomes the
+ * configuration one and the model files go (notes/, diagrams/ and files the base does not own stay).
+ */
+export function finishConvertToMcp(locator) {
+  const dir = locator.path;
+  const pend = pendingConvertToMcp(locator);
+  const j = pend && appliesOf(dir).find(x => x.id === pend.id);
+  if (!j || j.state !== 'committed') {
+    throw storeError('E_STORE_CONVERT', `a conversão para o gbrain ainda não terminou (${j ? `apply ${j.id} "${j.state}"` : 'nenhum pedido'}); a pasta local não foi alterada`);
+  }
+  const there = pend.connector.read();
+  if (!there || contentVersion(there) !== j.convert.version) throw storeError('E_STORE_CONVERT', 'a base lida do espelho não reproduz a original; a pasta local não foi alterada (confira as páginas gravadas no gbrain)');
+  const source = openStore(locator);
+  const cur = source.read();
+  if (contentVersion(cur) !== j.convert.version) {
+    throw storeError('E_STORE_CONVERT', 'a base local mudou depois do pedido de conversão; a pasta local não foi alterada. Desfaça o apply com --undo e converta de novo');
+  }
+  writeAtomic(join(dir, MANIFEST), JSON.stringify({ archlens: cur.raw.archlens ?? FORMAT, name: cur.raw.name, store: j.convert.store }, null, 2) + '\n');
+  ignoreMirror(dir);
+  for (const rel of j.convert.own) rmSync(join(dir, rel), { force: true });
+  dropEmptied(dir, j.convert.own);
+  return { pages: Object.keys(j.pages).length, from: j.convert.from, to: 'gbrain', version: j.convert.version, leftover: null, dropped: [] };
+}
+
 /** Every file under `dir` as a path relative to it. */
 function filesUnder(dir, rel = '') {
   return readdirSync(join(dir, rel), { withFileTypes: true }).flatMap(e => (e.isDirectory() ? filesUnder(dir, join(rel, e.name)) : [join(rel, e.name)]));
@@ -150,6 +222,13 @@ function filesUnder(dir, rel = '') {
 
 /** Takes the tip worktree (<dir>/.archlens/tip) out of the clone and the folder; the base is local again. */
 function dropTip(dir, store) {
+  if (store.mode === 'mcp') {
+    // The mirror and the requests belong to the gbrain base; the journals stay.
+    for (const sub of [MIRROR, REMOTE, SESSION]) rmSync(join(dir, sub), { recursive: true, force: true });
+    const left = join(dir, '.archlens');
+    if (existsSync(left) && !readdirSync(left).length) rmSync(left, { recursive: true });
+    return;
+  }
   const tip = join(dir, TIP);
   const repo = resolve(dir, store.repo);
   if (existsSync(repo)) {
@@ -212,5 +291,5 @@ export function convertFromGbrain(locator, to, { force = false } = {}) {
     rmSync(tmp, { recursive: true, force: true });
   }
   dropTip(dir, store);
-  return { from: 'gbrain', to, version: before, leftover: null, dropped };
+  return { from: 'gbrain', to, version: before, leftover: null, dropped, mirror: store.mode === 'mcp' };
 }

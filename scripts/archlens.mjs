@@ -20,8 +20,9 @@ import { diffRaw, contentVersion } from './lib/store/ops.mjs';
 import { migrateRaw, reportLines } from './lib/migrate.mjs';
 import { FORMAT, isCanonicalFormat } from './lib/canonical.mjs';
 import { saveFolder, loadFolder, storeKind } from './lib/store/folder.mjs';
-import { initBase } from './lib/store/config.mjs';
-import { convertFolder, convertToGbrain } from './lib/store/convert.mjs';
+import { initBase, validateStore } from './lib/store/config.mjs';
+import { gbrainMcpConnector } from './lib/store/gbrain-mcp.mjs';
+import { convertFolder, convertToGbrain, pendingConvertToMcp, finishConvertToMcp } from './lib/store/convert.mjs';
 import { scanSource } from './lib/scan/index.mjs';
 import { summarize, formatSummary } from './lib/scan/summary.mjs';
 import { toDelta } from './lib/scan/to-delta.mjs';
@@ -57,6 +58,7 @@ Aplicar (grava a base)
             <base> check [--out pedido.json] | check --ingest resposta.json   confere a sessão do MCP (whoami) e se gravar está liberado
   store convert <base> --to markdown|json [--force]   grava a base em outro conector (mesma pasta; versão inalterada)
             <base> --to gbrain --mode git --repo R [--remote origin] [--branch main] [--prefix archlens]   leva a base para o gbrain (e de volta com --to json|markdown)
+            <base> --to gbrain --mode mcp --server S [--source-id ID] [--prefix archlens]   idem pelo MCP: grava o pedido; o agente cria as páginas; conclui com apply --receipts
 
 Consultar (nunca grava a base)
   views     <base>                           lista as visões definidas e sugere novas
@@ -351,7 +353,7 @@ function handOver(store, request, args, next) {
 }
 
 /** apply --receipts | --resume | --undo on a gbrain MCP base: the receipts into the mirror, or the next request. */
-function remoteApply(store, flow, args, names) {
+function remoteApply(store, flow, args, names, { committed, convert } = {}) {
   const receiptsNext = `archlens apply ${names.base} --receipts <resposta.json>`;
   const id = typeof args[flow] === 'string' && flow !== 'receipts' ? args[flow] : undefined;
   let res;
@@ -367,7 +369,7 @@ function remoteApply(store, flow, args, names) {
   }
   const list = slugs => slugs.join(', ');
   if (res.state === 'committed') {
-    afterApply(store, { entry: res.entry, preserved: [] });
+    if (committed) committed(res); else afterApply(store, { entry: res.entry, preserved: [] });
     return;
   }
   if (res.state === 'undone') {
@@ -378,16 +380,32 @@ function remoteApply(store, flow, args, names) {
   }
   const undoing = res.state === 'undo-partial';
   console.log(`✗ ${undoing ? 'undo' : 'apply'} ${res.id} parcial: ${res.committed.length} página(s) gravada(s)`
-    + `${res.conflicts.length ? `; em conflito (mudaram no gbrain): ${list(res.conflicts)}` : ''}${res.pending.length ? `; sem gravar ainda: ${list(res.pending)}` : ''}`);
+    + `${res.conflicts.length ? `; ${convert ? 'já existiam no gbrain' : 'em conflito (mudaram no gbrain)'}: ${list(res.conflicts)}` : ''}${res.pending.length ? `; sem gravar ainda: ${list(res.pending)}` : ''}`);
   if (res.request) {
     handOver(store, res.request, args, receiptsNext);
     return;
   }
+  if (convert) console.log(`  a pasta local continua como estava; ${res.conflicts.length ? 'a criação não sobrescreve páginas que já existem: use outro --prefix (desfaça este com --undo) ou ' : ''}retome com --resume ou desfaça com --undo`);
   if (undoing) console.log(`  próximo: archlens apply ${names.base} --undo ${res.id} (pede o que falta desfazer)`);
   else {
     if (!res.conflicts.length || res.conflicts.every(s => s.endsWith('/changelog'))) console.log(`  para completar: archlens apply ${names.base} --resume ${res.id}`);
     console.log(`  para desfazer o que foi gravado: archlens apply ${names.base} --undo ${res.id}`);
   }
+}
+
+/** After a convert changed the folder's connector: the document is rewritten (a vault's element order differs from model.json) and the result said. */
+function afterConvert(loc, res) {
+  const converted = openStore(resolveBase(loc.path));
+  const back = loadBase(converted);
+  const doc = writeDoc(converted, back.raw, back.notes, loc.docPath);
+  console.log(`✓ ${relPath(loc.path)}/ agora usa o conector ${res.to} (era ${res.from}); a versão da base não mudou; ${relPath(doc)} regenerado`);
+  if (res.to === 'gbrain' && res.commit) console.log(`  ${res.pages} página(s) gravadas no commit ${res.commit.slice(0, 12)} (push feito); rode o sync do gbrain para indexá-las`);
+  if (res.to === 'gbrain' && !res.commit) console.log(`  ${res.pages} página(s) criadas no gbrain pelo MCP; o espelho local está em ${relPath(join(loc.path, '.archlens', 'mirror'))}`);
+  if (res.dropped.length) console.warn(`  aviso: --force descartou o texto das pessoas de ${res.dropped.length} página(s): ${res.dropped.join(', ')}`);
+  if (res.leftover) console.warn(`  aviso: não consegui apagar ${relPath(res.leftover)}; remova-o à mão`);
+  if (res.to === 'markdown') console.log(`  abra ${relPath(loc.path)}/ como vault no Obsidian; para o gbrain: gbrain schema use com ${relPath(join(loc.path, 'gbrain-pack.yaml'))}`);
+  if (res.mirror) console.log('  a base veio do espelho local: se o gbrain mudou depois do último pull, essas mudanças não vieram (rode "archlens remote <base> pull" antes de converter)');
+  console.log(`  commit sugerido: git add -A ${relPath(loc.path)} && git commit -m "chore(archlens): base no conector ${res.to}"`);
 }
 
 async function main() {
@@ -678,11 +696,24 @@ async function main() {
         + '  base gbrain no modo mcp: archlens apply <base> --receipts resposta.json… | --resume [id] | --undo [id]';
       const names = { base: file ?? relPath(store.locator.path), plan: args._[2] ?? '<plano>' };
       const flow = ['receipts', 'resume', 'undo'].find(k => args[k] !== undefined);
+      // A convert to the MCP gbrain in flight: its receipts, resume and undo run on the connector it asked for.
+      const pend = flow && !store.remote ? pendingConvertToMcp(store.locator) : null;
       if (flow || args['read-check'] !== undefined) {
-        if (!store.remote) fail(`E_STORE_UNSUPPORTED: ${store.describe()} não é uma base gbrain no modo mcp; --read-check, --receipts, --resume e --undo só valem para ela`);
+        if (!store.remote && !pend) fail(`E_STORE_UNSUPPORTED: ${store.describe()} não é uma base gbrain no modo mcp; --read-check, --receipts, --resume e --undo só valem para ela`);
         if (args.out === true || ((flow === 'receipts' || !flow) && args[flow ?? 'read-check'] === true)) fail(usage);
       }
       loadBase(store);
+      if (pend) {
+        remoteApply({ remote: pend.connector.remote, describe: pend.connector.describe, locator: store.locator }, flow, args, names, {
+          convert: true,
+          committed: () => {
+            let done;
+            try { done = finishConvertToMcp(store.locator); } catch (e) { fail(e.message, 2); }
+            afterConvert(store.locator, done);
+          },
+        });
+        break;
+      }
       if (flow) { remoteApply(store, flow, args, names); break; }
       if (!args._[2]) fail(usage);
       const plan = readJson(args._[2]);
@@ -749,7 +780,11 @@ async function main() {
       const usage = 'uso: archlens remote <base> pull [--out pedido.json] | pull --ingest <resposta.json…> [--out pedido.json] | check [--out pedido.json] | check --ingest <resposta.json…>';
       const action = args._[2];
       if (!file || !['pull', 'check'].includes(action) || args.ingest === true || args.out === true) fail(usage);
-      const store = openBase(file);
+      let store = openBase(file);
+      // The session check also works on a local base about to be converted: --server names the MCP server.
+      if (!store.remote && action === 'check' && typeof args.server === 'string' && store.kind !== 'gbrain') {
+        store = gbrainMcpConnector(store.locator, validateStore({ kind: 'gbrain', mode: 'mcp', server: args.server, ...(typeof args.prefix === 'string' ? { prefix: args.prefix } : {}) }));
+      }
       if (!store.remote) fail(`E_STORE_UNSUPPORTED: ${store.describe()} não é uma base gbrain no modo mcp; "archlens remote" só vale para ela`);
       const responses = args.ingest ? [args.ingest, ...args._.slice(3)].map(readJson) : null;
       let res;
@@ -773,7 +808,8 @@ async function main() {
       break;
     }
     case 'store': {
-      const usage = 'uso: archlens store convert <base> --to markdown|json [--force] | --to gbrain --mode git --repo R [--remote origin] [--branch main] [--prefix archlens]';
+      const usage = 'uso: archlens store convert <base> --to markdown|json [--force] | --to gbrain --mode git --repo R [--remote origin] [--branch main] [--prefix archlens]\n'
+        + '  | --to gbrain --mode mcp --server S [--source-id ID] [--prefix archlens]   (o agente faz as gravações; veja "archlens remote <base> check --server S")';
       if (file !== 'convert' || !args.to || args.to === true) fail(usage);
       const target = args._[2];
       let loc;
@@ -786,21 +822,22 @@ async function main() {
           const opt = k => (typeof args[k] === 'string' ? args[k] : undefined);
           // The manifest keeps `repo` relative to the base folder, so the base and the clone move together.
           const repo = opt('repo') && relative(loc.path, resolve(opt('repo')));
-          const store = Object.fromEntries(Object.entries({ kind: 'gbrain', mode: opt('mode'), remote: opt('remote'), branch: opt('branch'), prefix: opt('prefix'), repo }).filter(([, v]) => v !== undefined));
+          const store = Object.fromEntries(Object.entries({ kind: 'gbrain', mode: opt('mode'), remote: opt('remote'), branch: opt('branch'), prefix: opt('prefix'), repo, server: opt('server'), sourceId: opt('source-id') }).filter(([, v]) => v !== undefined));
           res = convertToGbrain(loc, store);
+          if (res.request) {
+            // MCP mode: the agent makes the writes; the folder changes with the last receipt.
+            const out = typeof args.out === 'string' ? args.out : res.connector.remote.requestPath(res.request);
+            atomicWrite(out, JSON.stringify(res.request, null, 2) + '\n');
+            console.log(`✓ pedido "apply" em ${relPath(out)}: ${res.request.calls.length} chamada(s) ao MCP do gbrain, ${res.pages} página(s) (só criação; o prefixo precisa estar vazio)`);
+            console.log(`  próximo: faça as chamadas na ordem e grave o resultado bruto de cada uma em { "archlens-remote": "1.0", "request": "${res.request.id}", "results": [...] }; `
+              + `depois rode "archlens apply ${target ?? '.'} --receipts <resposta.json>" (a pasta local só muda com o último recibo)`);
+            console.log(`  registro: ${relPath(join(loc.path, '.archlens', 'applies', `${res.apply}.json`))}`);
+            break;
+          }
           for (const w of res.warnings) console.warn(`  aviso: ${w}`);
         } else res = convertFolder(loc, String(args.to), { force: args.force === true });
       } catch (e) { fail(e.message); }
-      // The element order of a vault differs from model.json, so the generated document is rewritten.
-      const converted = openStore(resolveBase(loc.path));
-      const back = loadBase(converted);
-      const doc = writeDoc(converted, back.raw, back.notes, loc.docPath);
-      console.log(`✓ ${relPath(loc.path)}/ agora usa o conector ${res.to} (era ${res.from}); a versão da base não mudou; ${relPath(doc)} regenerado`);
-      if (res.to === 'gbrain') console.log(`  ${res.pages} página(s) gravadas no commit ${res.commit.slice(0, 12)} (push feito); rode o sync do gbrain para indexá-las`);
-      if (res.dropped.length) console.warn(`  aviso: --force descartou o texto das pessoas de ${res.dropped.length} página(s): ${res.dropped.join(', ')}`);
-      if (res.leftover) console.warn(`  aviso: não consegui apagar ${relPath(res.leftover)}; remova-o à mão`);
-      if (res.to === 'markdown') console.log(`  abra ${relPath(loc.path)}/ como vault no Obsidian; para o gbrain: gbrain schema use com ${relPath(join(loc.path, 'gbrain-pack.yaml'))}`);
-      console.log(`  commit sugerido: git add -A ${relPath(loc.path)} && git commit -m "chore(archlens): base no conector ${res.to}"`);
+      afterConvert(loc, res);
       break;
     }
     default:
