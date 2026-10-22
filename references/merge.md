@@ -164,7 +164,7 @@ itens, e o plano e o `apply` já trabalham em 2.0. A base nunca guarda `c4:*`, `
 | Entrada | Saída 2.0 |
 |---|---|
 | `c4:person` | `business-actor` + `c4.kind: person` |
-| `c4:softwareSystem` / `c4:container` / `c4:component` | `application-component` + o kind (a tag `database` não muda o tipo) |
+| `c4:softwareSystem` / `c4:container` / `c4:component` | `application-component` + o kind (a tag `database` não muda o tipo); um container de tópico pode levar `archimate: application-event` |
 | `c4:deploymentNode` / `c4:infrastructureNode` | `node` + o kind |
 | `archimate:X` ou `X` | `X` |
 | `archimate: Y` num elemento `c4:*` | `type: Y` e o kind C4 mantido; combinação inválida: `E_C4_TYPE` |

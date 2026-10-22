@@ -31,6 +31,9 @@ versões seguem [SemVer](https://semver.org/lang/pt-BR/).
 
 ### Mudado
 
+- **Container de tópico como evento**: `c4.kind: container` aceita também `application-event`, para um tópico aparecer
+  como evento nas visões ArchiMate e como fila/tópico no C4 (antes, `E_C4_TYPE`; a migração de bases 1.x com o override
+  `archimate: application-event` em `c4:container` era recusada).
 - **Rodada do histórico numerada ao gravar**: o id `<data>-<seq>` é atribuído pelo `apply`, contando as rodadas que já estão
   no histórico; o `entry.id` do plano é provisório. Acrescentar a rodada nunca causa conflito.
 
