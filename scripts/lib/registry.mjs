@@ -113,7 +113,7 @@ export const C4_LABELS = {
 export const C4_KIND_TYPES = {
   person: ['business-actor', 'business-role'],
   softwareSystem: ['application-component'],
-  container: ['application-component'],
+  container: ['application-component', 'application-event'],
   component: ['application-component'],
   deploymentNode: ['node', 'device', 'system-software', 'technology-service', 'communication-network'],
   infrastructureNode: ['node', 'device', 'system-software', 'technology-service', 'communication-network'],

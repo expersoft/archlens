@@ -142,7 +142,8 @@ normalizada pelo gbrain.
 A base guarda **só** tipos ArchiMate (sem prefixo), o perfil C4 em `c4.kind` (`person`, `softwareSystem`, `container`,
 `component`, `deploymentNode`, `infrastructureNode`; cada kind vale para certos tipos, senão `E_C4_TYPE`), uma lista
 plana com `parent` (sem `children`) e as 11 relações ArchiMate (sem `uses`). Banco de dados é `application-component`
-com `c4.kind: container` e tag `database`. O vocabulário livre (`c4:*`, `uses`, `children`, `archimate:*`, o campo
+com `c4.kind: container` e tag `database`; tópico é container com tag `topic`, como `application-component` ou
+`application-event`. O vocabulário livre (`c4:*`, `uses`, `children`, `archimate:*`, o campo
 `archimate`) continua aceito **na entrada** (deltas, prompts, `scan`) e é traduzido antes de qualquer coisa ser
 gravada; por isso você pode escrever o delta como sempre (`references/merge.md`, `references/notation.md`).
 

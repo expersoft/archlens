@@ -67,6 +67,13 @@ test('c4.kind must fit the ArchiMate type', () => {
   }
 });
 
+test('a topic container may keep the application-event type', () => {
+  const r = raw();
+  r.model.elements.push({ id: 'loja.pedidos', type: 'application-event', name: 'Pedidos', parent: 'loja', tags: ['topic'], c4: { kind: 'container' } });
+  const codes = validateModel(r).errors.map(e => e.code);
+  assert.ok(!codes.includes('E_C4_TYPE') && !codes.includes('E_C4_HIERARCHY'), `${codes}`);
+});
+
 test('validation reports stable codes', () => {
   const r = raw();
   r.model.elements.push({ id: 'cliente', type: 'business-actor', name: 'dup' });
