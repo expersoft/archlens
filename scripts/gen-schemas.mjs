@@ -142,6 +142,10 @@ export function buildSchemas() {
       // Only a final plan carries the store operations that apply it (the last one is appendHistory).
       state: { enum: ['open', 'final'] }, entry: { type: ['object', 'null'] },
       ops: { type: 'array', items: { type: 'object', required: ['op'], properties: { op: { enum: OPS } } } },
+      // ref ("element:<id>", "relationship:<id>", "view:<key>", "note:<name>", "manifest") → version read (null: absent).
+      objects: { type: 'object', additionalProperties: { type: ['string', 'null'] } },
+      // New element id → the possible duplicates found for it when the plan was made.
+      knownCandidates: { type: 'object', additionalProperties: { type: 'array', items: str } },
     },
   };
   return { model, view, delta, plan };

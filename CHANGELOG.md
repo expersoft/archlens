@@ -5,6 +5,35 @@ versões seguem [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Não lançado]
 
+### Adicionado
+
+- **Versão por objeto**: o plano final guarda em `objects` a versão de cada objeto que altera e de cada objeto em que suas
+  decisões se apoiaram; o `apply` só recusa (`E_STORE_CONFLICT`, com os objetos pelo nome e o `plan --answers`) se algum
+  deles mudou. Applies de domínios que não se cruzam passam em paralelo. `markdown` e `gbrain` versionam por objeto; `json`
+  continua com a versão da base inteira.
+- **Duplicata criada em paralelo**: o `apply` refaz a busca de possíveis duplicatas para os elementos que o plano cria; um
+  candidato que não estava na base do plano é conflito (`reason: "possible-duplicate"`).
+- **`archlens init <pasta> --store json|markdown|gbrain`**: cria a base com o repositório escolhido no `archlens.json`
+  (sem credenciais) e o `.gitignore` de `.archlens/`.
+- **Conector `gbrain`**, com a base inteira (elementos, manifesto, visões, notas e histórico) em páginas legíveis sob um
+  `prefix`: **modo git** (o CLI lê a ponta remota numa worktree destacada e grava um commit com push por apply; o clone do
+  usuário não muda) e **modo MCP** (o agente chama as ferramentas do gbrain a partir de pedidos do CLI, que mantém um
+  espelho local em `.archlens/mirror/`).
+- **`archlens remote <base> pull`** (sincroniza o espelho do modo MCP, vendo também páginas removidas) e **`remote <base>
+  check`** (confere a sessão do MCP e se gravar está liberado).
+- **`apply` no modo MCP**: releitura do conjunto de leitura (`--read-check`), gravação com `expected_revision` e
+  `request_id`, conferência dos recibos (`--receipts`, com o pedido de seguimento das tags), `--resume` e `--undo` a partir
+  do registro do apply em `.archlens/applies/`.
+- **`store convert` para o gbrain** (`--to gbrain --mode git|mcp`) e de volta (`--to json|markdown`), levando o texto das
+  pessoas e `notes/removidos/`.
+- **`npm run test:gbrain`**: integração com um gbrain real (0.60.304) num ambiente temporário (PGLite, sem embeddings, nada
+  global), fora do `npm test`.
+
+### Mudado
+
+- **Rodada do histórico numerada ao gravar**: o id `<data>-<seq>` é atribuído pelo `apply`, contando as rodadas que já estão
+  no histórico; o `entry.id` do plano é provisório. Acrescentar a rodada nunca causa conflito.
+
 ### Corrigido
 
 - **Skills instaladas por link simbólico** (`ln -s <repo>/skills/archlens-* ~/.claude/skills/`): o CLI e as referências

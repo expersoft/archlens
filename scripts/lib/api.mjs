@@ -1,8 +1,9 @@
 // The operations behind the plan/apply/show/query commands, over a store connector. Pure apart from reading the store.
 import { basename } from 'node:path';
-import { planMerge, applyPlan, hashRaw, openQuestions, canonicalJson, mergeError, PLAN_VERSION } from './merge.mjs';
+import { planMerge, applyPlan, hashRaw, openQuestions, canonicalJson, mergeError, describe, PLAN_VERSION } from './merge.mjs';
 import { diffRaw, contentVersion, applyOps } from './store/ops.mjs';
-import { conflictError, short } from './store/contract.mjs';
+import { writeSetOf, objectVersionsOf, checkExpect } from './store/versions.mjs';
+import { conflictError, short, appendedEntry } from './store/contract.mjs';
 import { storeError } from './store/errors.mjs';
 import { previewModel, diffModels } from './preview.mjs';
 import { validateModel } from './validate.mjs';
@@ -11,6 +12,7 @@ import { viewAnswer, formatViewAnswer, elementCard, formatElementCard } from './
 import { findCandidates } from './match.mjs';
 import { normalizeModel } from './model.mjs';
 import { suggestViews } from './suggest.mjs';
+import { indexTree } from './raw-tree.mjs';
 
 const EMPTY = { raw: null, notes: {} };
 
@@ -20,11 +22,16 @@ export const isFinal = doc => doc?.['archlens-plan'] === PLAN_VERSION && doc.sta
 /**
  * `plan` with its store operations: applies the (fully answered) plan to the loaded base and adds `entry` and `ops`
  * (the last op is appendHistory; a plan that changes nothing has no ops and no entry). applyPlan's errors surface as they are.
+ * Also `objects`, the version in `loaded` of each object the merge read or the ops write (what apply checks), and
+ * `knownCandidates`, the possible duplicates each new element already had.
  */
-function finish(loaded, plan, today) {
+function finish(store, loaded, plan, today) {
   const res = applyPlan(loaded.raw, plan, { today });
   const ops = res.entry ? diffRaw(loaded.raw ? loaded : null, { raw: res.raw, notes: loaded.notes }) : [];
-  return { ...plan, state: 'final', entry: res.entry, ops };
+  const refs = [...new Set([...res.read, ...writeSetOf(ops, loaded)])].sort();
+  const versions = store.objectVersions?.(refs, loaded) ?? objectVersionsOf(loaded, refs);
+  const sorted = obj => Object.fromEntries(Object.entries(obj).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
+  return { ...plan, state: 'final', entry: res.entry, ops, objects: sorted(Object.fromEntries(versions)), knownCandidates: sorted(res.candidates) };
 }
 
 /**
@@ -36,7 +43,7 @@ export function plan(store, delta, { answers, today } = {}) {
   const storeVersion = contentVersion(loaded); // same read as the content, so the plan's version matches it
   const planned = planMerge(loaded.raw, delta, { base: basename(store.locator.path), answers, storeVersion, today });
   if (planned.blocked || openQuestions(planned).length) return { plan: { ...planned, state: 'open' } };
-  return { plan: finish(loaded, planned, today) };
+  return { plan: finish(store, loaded, planned, today) };
 }
 
 /**
@@ -47,7 +54,7 @@ export function finalize(store, plan, { today } = {}) {
   const loaded = store.read() ?? EMPTY;
   const version = contentVersion(loaded);
   if ('storeVersion' in plan && plan.storeVersion !== version) throw conflictError(plan.storeVersion, version);
-  return { plan: finish(loaded, plan, today) };
+  return { plan: finish(store, loaded, plan, today) };
 }
 
 /** key → resolution of the answered items of a plan (open or final) and the delta they were given for. */
@@ -83,10 +90,52 @@ export function preview(store, { delta, plan } = {}) {
 }
 
 /**
- * Writes a final plan through the connector, nothing else: the plan's ops, checked against the store version it was made
- * for. The merge is not replayed, so a hand-edited plan is only checked for the model it would leave.
+ * Possible duplicates of the elements `plan` creates that it did not know (an element created, or renamed, in parallel):
+ * findCandidates, as the plan ran it, against `loaded`, leaving out the candidates the plan already had.
  */
-export function apply(store, plan) {
+function parallelDuplicates(loaded, plan) {
+  const added = plan.entry?.added ?? [];
+  if (!plan.knownCandidates || !added.length || !loaded?.raw) return [];
+  const created = new Map(plan.ops.filter(o => o.op === 'upsertElement' && added.includes(o.element.id)).map(o => [o.element.id, o.element]));
+  const removed = new Set(plan.ops.filter(o => o.op === 'removeElement').map(o => o.id));
+  // An id the plan creates that exists now is already a conflict of its own (its version was null).
+  const pool = [...indexTree(loaded.raw)].filter(([id]) => !removed.has(id) && !created.has(id)).map(([, { el, parent }]) => describe(el, parent));
+  const out = [];
+  for (const [id, el] of created) {
+    const known = new Set(plan.knownCandidates[id] ?? []);
+    for (const c of findCandidates(describe(el, el.parent ?? null), pool)) {
+      if (!known.has(c.id)) out.push({ ref: `element:${id}`, reason: 'possible-duplicate', candidate: c.id });
+    }
+  }
+  return out;
+}
+
+/** The conflicts for people: each object with its name (from `raw`, else from the plan's ops) and what happened to it. */
+function conflictLabels(conflicts, raw, plan) {
+  const names = new Map((raw?.model?.elements ?? []).filter(e => e && typeof e.id === 'string').map(e => [e.id, e.name ?? e.id]));
+  for (const o of plan.ops) if (o.op === 'upsertElement' && !names.has(o.element.id)) names.set(o.element.id, o.element.name ?? o.element.id);
+  const element = id => (names.has(id) ? `"${names.get(id)}" (${id})` : id);
+  return conflicts.map(c => conflictLabel(c, element)).join('; ');
+}
+
+function conflictLabel(c, element) {
+  const at = c.ref.indexOf(':');
+  const [kind, id] = at < 0 ? [c.ref, null] : [c.ref.slice(0, at), c.ref.slice(at + 1)];
+  const what = { element: () => element(id), relationship: () => `relação ${id}`, view: () => `visão ${id}`, note: () => `nota ${id}`, manifest: () => 'manifesto da base', page: () => `página ${id}` }[kind]?.() ?? c.ref;
+  if (c.reason === 'possible-duplicate') return `${what}: possível duplicata de ${element(c.candidate)}, que não estava na base do plano`;
+  return `${what}: ${c.planned == null ? 'criado' : c.current == null ? 'removido' : 'alterado'} depois do plano`;
+}
+
+/**
+ * Writes a final plan through the connector, nothing else: the plan's ops, checked against what it was made for: on a
+ * connector with per-object versions, the versions of the objects it read or writes (`objects`) and the possible
+ * duplicates of what it creates; otherwise (or for a plan without `objects`) the version of the whole base. The merge is
+ * not replayed, so a hand-edited plan is only checked for the model it would leave. The entry returned is the round as
+ * written, with its final id. A connector that cannot write by itself (gbrain MCP: the agent calls the tools) returns the
+ * request to hand to the agent instead (`{ request, apply }`): first the read-check, then, given its response
+ * (`readCheck`), the writes; the receipts go to the connector (archlens apply <base> --receipts).
+ */
+export function apply(store, plan, { readCheck } = {}) {
   if (plan?.['archlens-plan'] !== PLAN_VERSION) {
     throw mergeError('E_PLAN_SCHEMA', 'o arquivo não é um plano do archlens (gere com "archlens plan")');
   }
@@ -100,20 +149,36 @@ export function apply(store, plan) {
         : `o plano está aberto, mas todas as perguntas já têm resposta; feche-o com ${redo}`);
   }
   if (!plan.ops.length) return { version: null, entry: null, preserved: [] };
+  store.assertWrite?.(); // before anything else: a refused plan should not send people to replan for nothing
   const stale = now => storeError('E_STORE_CONFLICT', `a base mudou depois do plano (${short(plan.storeVersion)} → ${short(now)}); `
     + `nada foi gravado. Refaça o plano reaproveitando as respostas: ${redo}`);
+  const changed = (conflicts, raw) => storeError('E_STORE_CONFLICT', `a base mudou depois do plano em ${conflicts.length} objeto(s) `
+    + `que ele lê ou grava: ${conflictLabels(conflicts, raw, plan)}; nada foi gravado. `
+    + `Refaça o plano reaproveitando as respostas: ${redo}`, { conflicts });
   const loaded = store.read();
-  const version = contentVersion(loaded); // checked here too: against another base the model errors below would mislead
-  if (version !== (plan.storeVersion ?? null)) throw stale(version);
-  const errors = validateModel(applyOps(loaded, plan.ops).raw).errors;
+  // Checked here too: against another base the model errors below would mislead.
+  const expect = store.versioning === 'object' && plan.objects ? plan.objects : null;
+  if (expect) {
+    const conflicts = [...checkExpect(store.objectVersions(Object.keys(expect), loaded), expect), ...parallelDuplicates(loaded, plan)];
+    if (conflicts.length) throw changed(conflicts, loaded?.raw);
+  } else {
+    const version = contentVersion(loaded);
+    if (version !== (plan.storeVersion ?? null)) throw stale(version);
+  }
+  const next = applyOps(loaded, plan.ops);
+  const errors = validateModel(next.raw).errors;
   if (errors.length) {
     throw mergeError('E_MERGE_INVALID', `o resultado do plano é inválido (${errors.length} erro(s)); nada foi gravado`, { errors });
   }
   try {
-    const { version: written, preserved } = store.apply(plan.ops, { baseVersion: plan.storeVersion ?? null });
-    return { version: written, entry: plan.entry, preserved };
+    // A connector that redoes the write over a newer base (gbrain git, after a rejected push) checks both again there.
+    const res = store.apply(plan.ops, { ...(expect ? { expect, recheck: base => parallelDuplicates(base, plan) } : { baseVersion: plan.storeVersion ?? null }),
+      plan, ...(readCheck ? { readCheck } : {}) });
+    if (res.request) return { request: res.request, apply: res.apply ?? null, entry: res.entry ?? null, version: null, preserved: [] };
+    return { version: res.version, entry: res.entry ?? appendedEntry(next, plan.ops) ?? plan.entry, preserved: res.preserved };
   } catch (e) {
-    throw e.code === 'E_STORE_CONFLICT' ? stale(store.version()) : e; // changed between the read and the write
+    if (e.code !== 'E_STORE_CONFLICT') throw e;
+    throw e.conflicts ? changed(e.conflicts, store.read()?.raw) : stale(store.version()); // changed between the read and the write
   }
 }
 

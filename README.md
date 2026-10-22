@@ -8,6 +8,11 @@ Plugin para Claude Code com três skills (`archlens-plan`, `archlens-apply`, `ar
 - Mantém a base em **`architecture/`** e gera dela o **`ARCHITECTURE.md`**, de onde se
   extraem visões novas a qualquer momento. A base grava um **formato único (2.0)**: tipos ArchiMate, perfil C4 em
   `c4.kind`, hierarquia por `parent`; `c4:*`, `uses` e `children` valem só na entrada. Base 1.x: `archlens migrate`.
+- **Base compartilhada no gbrain:** `archlens init` escolhe onde a base mora: `model.json`, um vault markdown (Obsidian)
+  ou um [gbrain](https://github.com/garrytan/gbrain), no **modo git** (o CLI grava um commit por apply no repositório que
+  o gbrain sincroniza) ou no **modo MCP** (o agente chama as ferramentas do gbrain; o CLI prepara os pedidos e confere os
+  recibos, com `--resume` e `--undo` para applies parciais). Times aplicam em paralelo: o plano guarda a versão de cada
+  objeto que altera ou em que se apoiou, e só o que se cruza é recusado.
 - **Base que evolui:** cada informação nova vira um delta; `archlens plan` casa entidades (id, alias, nome parecido),
   pergunta conflitos e duplicatas, e registra proveniência, ciclo de vida (as-is/to-be) e histórico.
 - **Lê repositórios** (compose, k8s/Helm, Terraform, OpenAPI/AsyncAPI, graphify) e gera deltas com proveniência (`archlens scan`).
@@ -35,6 +40,7 @@ node scripts/archlens.mjs build examples/loja-online/architecture
 | DSL | [references/notation.md](references/notation.md) |
 | Visões | [references/views.md](references/views.md) |
 | Evolução da base (merge) | [references/merge.md](references/merge.md) |
+| Repositórios da base (gbrain) | [references/base.md](references/base.md), [references/knowledge-doc.md](references/knowledge-doc.md) |
 | Exemplos | [examples/loja-online](examples/loja-online), [examples/telemedicina](examples/telemedicina) |
 | Plano de implementação | [docs/plans/](docs/plans/) |
 
@@ -43,10 +49,11 @@ node scripts/archlens.mjs build examples/loja-online/architecture
 | Skill | Faz | Grava a base? |
 |---|---|---|
 | `archlens-plan` | transforma informação nova (texto, documento, DSL JSON, repositório) em delta, pergunta cada decisão e termina com um plano final revisado e uma prévia em HTML (`plan`, `plan --answers`, `show`) | não |
-| `archlens-apply` | grava o plano final, regenera o `ARCHITECTURE.md` e os diagramas, escreve as notas; também `check`, `migrate` e `store convert` (`apply`, `build`) | sim |
+| `archlens-apply` | cria a base (`init`), grava o plano final, regenera o `ARCHITECTURE.md` e os diagramas, escreve as notas; também `check`, `migrate` e `store convert` (`apply`, `build`; no modo MCP, `--read-check`, `--receipts`, `--resume`, `--undo`) | sim |
 | `archlens-query` | responde com diagramas (C4, ArchiMate) ou markdown/JSON, incluindo o cartão de um elemento (`query`, `render`, `deliver`) | não |
 
-O fluxo: `plan` → responder os itens → `plan --answers` → `apply` → `build`. Exemplo pronto em
+O fluxo: (`init`) → `plan` → responder os itens → `plan --answers` → `apply` → `build`. Numa base gbrain no modo MCP, as
+três skills rodam antes `remote pull` (o espelho local) e, uma vez por sessão, `remote check` (a sessão do MCP). Exemplo pronto em
 `examples/telemedicina/` (`plano-02.json` aberto, `plano-02-final.json` final, `plano-02-final.md` relatório).
 
 ### Instalação
@@ -96,6 +103,7 @@ npm version minor --no-git-tag-version   # ou patch / major: package.json, packa
 # CHANGELOG.md: "[Não lançado]" vira "[<x>] — pré-release", com o link de comparação no fim
 claude plugin validate .
 npm test
+npm run test:gbrain   # opcional: integração com um gbrain real (precisa do bun e de rede; ambiente temporário, nada global)
 # PR → develop-v2; depois do merge:
 git tag -a v<x> -m "archlens <x>" <commit do merge> && git push origin v<x>
 ```

@@ -10,7 +10,12 @@ const INVERSE = {
   specialization: 'generalization_of', association: 'association',
 };
 
-export function gbrainPack(raw) {
+// The page types of the pages that are not elements (gbrain layout only), with their path under the prefix.
+const EXTRA_TYPES = [['archlens-manifest', 'manifest.md'], ['archlens-view', 'views/'], ['archlens-note', 'notes/'], ['archlens-changelog', 'changelog.md']];
+
+/** `gbrain` (on with a `prefix` like "archlens/") is the layout of the gbrain: the four extra page types, folders under the prefix. */
+export function gbrainPack(raw, { prefix, gbrain = Boolean(prefix) } = {}) {
+  const at = prefix ? `${prefix.replace(/^\/+|\/+$/g, '')}/` : '';
   const els = (raw.model?.elements ?? []).filter(e => e && typeof e.type === 'string');
   const typeOf = new Map(els.map(e => [e.id, e.type]));
   const rels = (raw.model?.relationships ?? []).filter(r => r && typeOf.has(r.from));
@@ -27,7 +32,10 @@ export function gbrainPack(raw) {
     name: 'archlens',
     version: '2.0.0',
     description: 'Arquitetura (ArchiMate 3.2 + perfil C4) mantida pelo archlens. Gerado pelo archlens; não edite.',
-    page_types: types.map(t => ({ name: t, primitive: 'entity', path_prefixes: [`${t}/`], aliases: [], extractable: false, expert_routing: false })),
+    page_types: [
+      ...types.map(t => ({ name: t, primitive: 'entity', path_prefixes: [`${at}${t}/`], aliases: [], extractable: false, expert_routing: false })),
+      ...(gbrain ? EXTRA_TYPES.map(([name, path]) => ({ name, primitive: 'entity', path_prefixes: [`${at}${path}`], aliases: [], extractable: false, expert_routing: false })) : []),
+    ],
     link_types: [
       ...relTypes.map(r => ({ name: r, inverse: INVERSE[r] })),
       ...(els.some(e => e.parent != null) ? [{ name: 'part_of', inverse: 'composed_of' }] : []),

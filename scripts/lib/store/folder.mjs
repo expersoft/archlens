@@ -12,24 +12,33 @@ import { fileConnector } from './contract.mjs';
 export const MANIFEST = 'archlens.json';
 const json = v => JSON.stringify(v, null, 2) + '\n';
 
-export function readJson(path) {
-  try { return JSON.parse(readFileSync(path, 'utf8')); } catch (e) {
+/** Parses `text` as JSON; `path` names it in the error. */
+export function parseJson(text, path) {
+  try { return JSON.parse(text); } catch (e) {
     throw storeError('E_STORE_JSON', `${path}: JSON inválido: ${e.message}`, { file: path });
   }
 }
 
+export function readJson(path) {
+  let text;
+  try { text = readFileSync(path, 'utf8'); } catch (e) {
+    throw storeError('E_STORE_JSON', `${path}: JSON inválido: ${e.message}`, { file: path });
+  }
+  return parseJson(text, path);
+}
+
 /**
- * The connector the manifest's `store` names: "json" when it is absent or has no kind, "markdown", or
+ * The connector the manifest's `store` names: "json" when it is absent or has no kind, "markdown", "gbrain", or
  * E_STORE_UNSUPPORTED for anything else (a non-object `store`, another kind).
  */
 export function storeKind(manifest, file = MANIFEST) {
   const { store } = manifest ?? {};
   if (store === undefined) return 'json';
   const kind = store && typeof store === 'object' && !Array.isArray(store) ? store.kind ?? 'json' : null;
-  if (kind === 'json' || kind === 'markdown') return kind;
+  if (kind === 'json' || kind === 'markdown' || kind === 'gbrain') return kind;
   throw storeError('E_STORE_UNSUPPORTED', kind === null
     ? `"store" em ${file} deve ser um objeto como { "kind": "json" } (recebido ${JSON.stringify(store)})`
-    : `"store.kind" ${JSON.stringify(kind)} em ${file} não é suportado ("store" aceita "json" ou "markdown")`);
+    : `"store.kind" ${JSON.stringify(kind)} em ${file} não é suportado ("store" aceita "json", "markdown" ou "gbrain")`);
 }
 
 /** Writes through a temp file and rename; leaves the file alone when the content is the same. */
@@ -135,14 +144,16 @@ export function readNotes(dir) {
   return notes;
 }
 
-/** Note files for `notes`; a note file without its trailing newline that already holds the note stays as written. */
-export function noteFiles(dir, notes = {}) {
+/**
+ * Note files for `notes`; a note file without its trailing newline that already holds the note stays as written.
+ * `read(rel)` gives the current text of a file (undefined when absent); by default it reads from `dir`.
+ */
+export function noteFiles(dir, notes = {}, read = rel => (existsSync(join(dir, rel)) ? readFileSync(join(dir, rel), 'utf8') : undefined)) {
   const files = new Map();
   for (const name of NOTE_NAMES) {
     if (notes[name] == null) continue;
     const rel = `notes/${name}.md`;
-    const p = join(dir, rel);
-    files.set(rel, existsSync(p) && readFileSync(p, 'utf8') === notes[name] ? notes[name] : `${notes[name]}\n`);
+    files.set(rel, read(rel) === notes[name] ? notes[name] : `${notes[name]}\n`);
   }
   return files;
 }
@@ -206,7 +217,7 @@ export function jsonConnector(locator, describe) {
   const dir = locator.path;
   const load = opts => (existsSync(join(dir, MANIFEST)) ? toBase(loadFolder(dir, opts)) : null);
   return fileConnector({
-    kind: 'json', dir, locator, describe, load,
+    kind: 'json', dir, locator, describe, load, versioning: 'base',
     contents: (next, cur) => folderContents(dir, next.raw, { notes: next.notes, ...cur?.ctx }),
   });
 }

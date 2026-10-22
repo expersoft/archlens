@@ -12,11 +12,18 @@ simbólico da instalação; sem ele, o `..` sai pelo `~/.claude` e não acha o r
 `archlens <comando>`). `$OUT` = uma pasta **fora** da base (ex.: `/tmp/archlens`).
 
 Esta skill **nunca grava a base**: `views`, `query`, `resolve`, `render` e `deliver --view/--spec`, com a saída em
-`$OUT`. Informação nova para a base, ou "como fica se…": skill archlens-plan.
+`$OUT` (`remote pull`/`check` só atualizam o espelho local de uma base gbrain no modo MCP). Informação nova para a base, ou "como fica se…": skill archlens-plan.
 
 ## Fluxo
 
-1. **Localize a base** (`references/base.md`). Sem base, nada a consultar: a skill archlens-plan cria a primeira.
+1. **Localize a base** (`references/base.md`). Sem base, nada a consultar: pergunte ao usuário se quer criar uma,
+   o tipo de repositório e os parâmetros (`references/base.md`, *Repositórios da base*);
+   o `archlens init` é da skill archlens-apply, e o conteúdo vem pela skill archlens-plan.
+   **Base gbrain no modo MCP** (`store.mode: "mcp"`): uma vez por sessão, confira o MCP com `archlens remote <base> check`
+   (siga o pedido e rode `check --ingest`). Antes de ler a base, atualize o espelho: `archlens remote <base> pull`, faça
+   as chamadas do pedido nas ferramentas do MCP (na ordem, gravando o resultado bruto) e
+   `archlens remote <base> pull --ingest resposta.json` até a CLI dizer que o espelho está em dia. As consultas leem o
+   espelho; quem quiser o estado de agora roda o `pull` de novo.
 2. **Veja o que existe**: `archlens views <base>` lista as visões definidas e sugere outras.
 3. **Traduza cada pedido em view spec** (tabela abaixo; detalhes em `references/views.md`). Visão salva: `--view
    <key>`; consulta avulsa: `--spec '<json>'`.

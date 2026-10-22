@@ -46,6 +46,7 @@ for (const [kind, prepare] of KINDS) {
   test(`[${kind}] the connector offers the contract`, () => {
     const c = connectorAt(fresh(prepare));
     for (const m of CONNECTOR_METHODS) assert.equal(typeof c[m], 'function', m);
+    assert.equal(c.versioning, kind === 'markdown' ? 'object' : 'base');
   });
 
   test(`[${kind}] read after apply returns the base, for a new base and for a merge`, () => {
@@ -116,6 +117,15 @@ for (const [kind, prepare] of KINDS) {
     for (const f of ['diagrams/a.html', '.obsidian/app.json', 'solto.md']) assert.ok(existsSync(join(dir, f)), f);
   });
 }
+
+test('checkConnector requires versioning and objectVersions', () => {
+  const c = openStore(resolveBase(fresh(dir => dir), { create: true }));
+  assert.ok(CONNECTOR_METHODS.includes('objectVersions'));
+  assert.throws(() => checkConnector({ ...c, versioning: undefined }), /versioning/);
+  assert.throws(() => checkConnector({ ...c, versioning: 'page' }), /versioning/);
+  assert.throws(() => checkConnector({ ...c, objectVersions: undefined }), /objectVersions/);
+  assert.doesNotThrow(() => checkConnector(c));
+});
 
 test('a manifest with an unknown store kind is refused', () => {
   const dir = fresh(d => writeFileSync(join(d, 'archlens.json'), JSON.stringify({ archlens: '2.0', name: 'x', store: { kind: 'neo4j' } })));

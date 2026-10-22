@@ -20,7 +20,9 @@ import { diffRaw, contentVersion } from './lib/store/ops.mjs';
 import { migrateRaw, reportLines } from './lib/migrate.mjs';
 import { FORMAT, isCanonicalFormat } from './lib/canonical.mjs';
 import { saveFolder, loadFolder, storeKind } from './lib/store/folder.mjs';
-import { convertFolder } from './lib/store/convert.mjs';
+import { initBase, validateStore } from './lib/store/config.mjs';
+import { gbrainMcpConnector } from './lib/store/gbrain-mcp.mjs';
+import { convertFolder, convertToGbrain, pendingConvertToMcp, finishConvertToMcp } from './lib/store/convert.mjs';
 import { scanSource } from './lib/scan/index.mjs';
 import { summarize, formatSummary } from './lib/scan/summary.mjs';
 import { toDelta } from './lib/scan/to-delta.mjs';
@@ -41,11 +43,23 @@ Planejar (nunca grava a base)
             <pasta|url> --as system|service [--system id] [--id id] --delta d.json [--from inv.json]   monta o delta
 
 Aplicar (grava a base)
+  init      <pasta> --store json|markdown|gbrain [--name N]   cria a base (archlens.json) com o repositório escolhido
+            gbrain --mode git --repo R [--remote origin] [--branch main] [--prefix archlens]   R: clone do repositório do gbrain
+            gbrain --mode mcp --server S [--source-id ID] [--prefix archlens]   S: nome do MCP configurado no Claude Code
   apply     <base> p.json                    grava um plano final (se a base mudou, refaça o plano com --answers) e registra o histórico
+            base gbrain no modo mcp: grava o pedido de releitura; com --read-check resposta.json, o pedido de gravação
+            <base> --receipts resposta.json…   confere os recibos do gbrain e atualiza o espelho
+            <base> --resume [id] | --undo [id]   pede o que falta gravar, ou devolve as páginas ao que eram (.archlens/applies/)
   doc       <base> [--out f.md]            regenera o ARCHITECTURE.md (gerado; edite architecture/notes/*.md)
   build     <base> [--out-dir DIR]           ARCHITECTURE.md + HTML (padrão: architecture/diagrams/)
   migrate   <base 1.x> [--to DIR]           converte uma base 1.x (pasta, .md ou .json) para o formato 2.0
+  remote    <base> pull [--out pedido.json]   base gbrain no modo mcp: grava o pedido de chamadas ao MCP (o agente executa)
+            <base> pull --ingest resposta.json… [--out pedido.json]   lê as respostas; grava o próximo pedido ou atualiza o espelho local
+            <base> check [--out pedido.json] | check --ingest resposta.json   confere a sessão do MCP (whoami) e se gravar está liberado
+            <base local> check --server S [--prefix P] [--out pedido.json]   idem numa base local que vai para o gbrain (store convert --mode mcp)
   store convert <base> --to markdown|json [--force]   grava a base em outro conector (mesma pasta; versão inalterada)
+            <base> --to gbrain --mode git --repo R [--remote origin] [--branch main] [--prefix archlens]   leva a base para o gbrain (e de volta com --to json|markdown)
+            <base> --to gbrain --mode mcp --server S [--source-id ID] [--prefix archlens]   idem pelo MCP: grava o pedido; o agente cria as páginas; conclui com apply --receipts
 
 Consultar (nunca grava a base)
   views     <base>                           lista as visões definidas e sugere novas
@@ -314,13 +328,14 @@ function afterApply(store, res) {
   const doc = writeDoc(store, saved.raw, saved.notes);
   const e = res.entry;
   const st = Object.keys(e.status).length;
-  console.log(`✓ ${store.describe()} e ${relPath(doc)} (revisão ${saved.raw.changelog.length}): +${e.added.length} ~${e.changed.length} −${e.removed.length}${st ? `, ${st} mudança(s) de status` : ''}`);
+  console.log(`✓ ${store.describe()} e ${relPath(doc)} (revisão ${saved.raw.changelog.length}, rodada ${e.id}): +${e.added.length} ~${e.changed.length} −${e.removed.length}${st ? `, ${st} mudança(s) de status` : ''}`);
   for (const rel of res.preserved) console.log(`  texto da página removida guardado em ${relPath(join(store.locator.path, rel))}`);
   console.log(`  commit sugerido: git add ${relPath(store.locator.path)} ${relPath(doc)} && git commit -m ${JSON.stringify(`docs(arquitetura): ${e.summary}`)}`);
 }
 
 /** Writes a final plan through the connector and reports it; the document is only touched when something changed. */
 function applyCommand(store, plan, names) {
+  if (store.remote) fail(`E_STORE_UNSUPPORTED: ${store.describe()} é uma base gbrain no modo mcp; grave com "archlens apply ${names.base} ${names.plan}"`, 2); // the writes go by requests
   loadBase(store);
   assertWritable(store);
   if (isFinal(plan) && plan.ops?.length) assertDocOwned(store); // before anything is written
@@ -328,6 +343,76 @@ function applyCommand(store, plan, names) {
   try { res = applyPlanTo(store, plan); } catch (e) { failApi(e, names); }
   if (!res.entry) { console.log('= nada mudou; a base não foi regravada'); return; }
   afterApply(store, res);
+}
+
+/** Writes a request for the agent (to --out, or under .archlens/remote/) and says what to do with its response. */
+function handOver(store, request, args, next) {
+  const out = typeof args.out === 'string' ? args.out : store.remote.requestPath(request);
+  atomicWrite(out, JSON.stringify(request, null, 2) + '\n');
+  console.log(`✓ pedido "${request.step}" em ${relPath(out)}: ${request.calls.length} chamada(s) ao MCP do gbrain`);
+  console.log(`  próximo: faça as chamadas na ordem e grave o resultado bruto de cada uma em { "archlens-remote": "1.0", "request": "${request.id}", "results": [...] }; `
+    + `depois rode "${next}"`);
+}
+
+/** apply --receipts | --resume | --undo on a gbrain MCP base: the receipts into the mirror, or the next request. */
+function remoteApply(store, flow, args, names, { committed, convert } = {}) {
+  const receiptsNext = `archlens apply ${names.base} --receipts <resposta.json>`;
+  const id = typeof args[flow] === 'string' && flow !== 'receipts' ? args[flow] : undefined;
+  let res;
+  try {
+    if (flow === 'resume') res = store.remote.resume(id);
+    else if (flow === 'undo') res = store.remote.undo(id);
+    else res = store.remote.receipts([args.receipts, ...args._.slice(2)].map(readJson));
+  } catch (e) { fail(e.message, 2); }
+  if (flow !== 'receipts') {
+    handOver(store, res.request, args, receiptsNext);
+    return;
+  }
+  const list = slugs => slugs.join(', ');
+  if (res.state === 'committed') {
+    if (committed) committed(res); else afterApply(store, { entry: res.entry, preserved: [] });
+    return;
+  }
+  if (res.state === 'undone') {
+    const saved = loadBase(store);
+    const doc = saved.raw ? writeDoc(store, saved.raw, saved.notes) : null;
+    console.log(`✓ apply ${res.id} desfeito: ${res.committed.length} página(s) do gbrain de volta ao que eram${doc ? `; ${relPath(doc)} regenerado` : ''}`);
+    return;
+  }
+  const undoing = res.state === 'undo-partial';
+  console.log(`✗ ${undoing ? 'undo' : 'apply'} ${res.id} parcial: ${res.committed.length} página(s) gravada(s)`
+    + `${res.conflicts.length ? `; ${convert ? 'já existiam no gbrain' : 'em conflito (mudaram no gbrain)'}: ${list(res.conflicts)}` : ''}${res.pending.length ? `; sem gravar ainda: ${list(res.pending)}` : ''}`);
+  if (res.duplicates?.length) {
+    console.log(`  o gbrain não gravou ${res.duplicates.map(d => `${d.slug} (cópia de ${d.of})`).join(', ')}: na mesma fonte, ele guarda uma página só por id e conteúdo; `
+      + 'use uma fonte do gbrain por base (--source-id) ou remova a outra página');
+  }
+  if (res.request) {
+    handOver(store, res.request, args, receiptsNext);
+    return;
+  }
+  // A page gbrain filed as a duplicate would be filed so again: --resume cannot finish it.
+  const dup = res.duplicates?.length > 0;
+  if (convert) console.log(`  a pasta local continua como estava; ${res.conflicts.length ? 'a criação não sobrescreve páginas que já existem: use outro --prefix (desfaça este com --undo) ou ' : ''}${dup ? 'desfaça com --undo' : 'retome com --resume ou desfaça com --undo'}`);
+  if (undoing) console.log(`  próximo: archlens apply ${names.base} --undo ${res.id} (pede o que falta desfazer)`);
+  else {
+    if (!dup && (!res.conflicts.length || res.conflicts.every(s => s.endsWith('/changelog')))) console.log(`  para completar: archlens apply ${names.base} --resume ${res.id}`);
+    console.log(`  para desfazer o que foi gravado: archlens apply ${names.base} --undo ${res.id}`);
+  }
+}
+
+/** After a convert changed the folder's connector: the document is rewritten (a vault's element order differs from model.json) and the result said. */
+function afterConvert(loc, res) {
+  const converted = openStore(resolveBase(loc.path));
+  const back = loadBase(converted);
+  const doc = writeDoc(converted, back.raw, back.notes, loc.docPath);
+  console.log(`✓ ${relPath(loc.path)}/ agora usa o conector ${res.to} (era ${res.from}); a versão da base não mudou; ${relPath(doc)} regenerado`);
+  if (res.to === 'gbrain' && res.commit) console.log(`  ${res.pages} página(s) gravadas no commit ${res.commit.slice(0, 12)} (push feito); rode o sync do gbrain para indexá-las`);
+  if (res.to === 'gbrain' && !res.commit) console.log(`  ${res.pages} página(s) criadas no gbrain pelo MCP; o espelho local está em ${relPath(join(loc.path, '.archlens', 'mirror'))}`);
+  if (res.dropped.length) console.warn(`  aviso: --force descartou o texto das pessoas de ${res.dropped.length} página(s): ${res.dropped.join(', ')}`);
+  if (res.leftover) console.warn(`  aviso: não consegui apagar ${relPath(res.leftover)}; remova-o à mão`);
+  if (res.to === 'markdown') console.log(`  abra ${relPath(loc.path)}/ como vault no Obsidian; para o gbrain: gbrain schema use com ${relPath(join(loc.path, 'gbrain-pack.yaml'))}`);
+  if (res.mirror) console.log('  a base veio do espelho local: se o gbrain mudou depois do último pull, essas mudanças não vieram (rode "archlens remote <base> pull" antes de converter)');
+  console.log(`  commit sugerido: git add -A ${relPath(loc.path)} && git commit -m "chore(archlens): base no conector ${res.to}"`);
 }
 
 async function main() {
@@ -614,10 +699,41 @@ async function main() {
       break;
     }
     case 'apply': {
-      const usage = 'uso: archlens apply <base> <plano.json>   (o plano precisa estar final: archlens plan)';
-      if (!args._[2]) fail(usage);
+      const usage = 'uso: archlens apply <base> <plano.json> [--read-check resposta.json…]   (o plano precisa estar final: archlens plan)\n'
+        + '  base gbrain no modo mcp: archlens apply <base> --receipts resposta.json… | --resume [id] | --undo [id]';
+      const names = { base: file ?? relPath(store.locator.path), plan: args._[2] ?? '<plano>' };
+      const flow = ['receipts', 'resume', 'undo'].find(k => args[k] !== undefined);
+      // A convert to the MCP gbrain in flight: its receipts, resume and undo run on the connector it asked for.
+      const pend = flow && !store.remote ? pendingConvertToMcp(store.locator) : null;
+      if (flow || args['read-check'] !== undefined) {
+        if (!store.remote && !pend) fail(`E_STORE_UNSUPPORTED: ${store.describe()} não é uma base gbrain no modo mcp; --read-check, --receipts, --resume e --undo só valem para ela`);
+        if (args.out === true || ((flow === 'receipts' || !flow) && args[flow ?? 'read-check'] === true)) fail(usage);
+      }
       loadBase(store);
-      applyCommand(store, readJson(args._[2]), { base: file ?? relPath(store.locator.path), plan: args._[2] });
+      if (pend) {
+        remoteApply({ remote: pend.connector.remote, describe: pend.connector.describe, locator: store.locator }, flow, args, names, {
+          convert: true,
+          committed: () => {
+            let done;
+            try { done = finishConvertToMcp(store.locator); } catch (e) { fail(e.message, 2); }
+            afterConvert(store.locator, done);
+          },
+        });
+        break;
+      }
+      if (flow) { remoteApply(store, flow, args, names); break; }
+      if (!args._[2]) fail(usage);
+      const plan = readJson(args._[2]);
+      if (!store.remote) { applyCommand(store, plan, names); break; }
+      assertWritable(store);
+      if (isFinal(plan) && plan.ops?.length) assertDocOwned(store);
+      const readCheck = args['read-check'] ? [args['read-check'], ...args._.slice(3)].map(readJson) : undefined;
+      let res;
+      try { res = applyPlanTo(store, plan, { readCheck }); } catch (e) { failApi(e, names); }
+      if (!res.request) { if (!res.entry) console.log('= nada mudou; a base não foi regravada'); else afterApply(store, res); break; }
+      handOver(store, res.request, args, res.request.step === 'read-check'
+        ? `archlens apply ${names.base} ${names.plan} --read-check <resposta.json>` : `archlens apply ${names.base} --receipts <resposta.json>`);
+      if (res.apply) console.log(`  registro do apply: ${relPath(join(store.locator.path, '.archlens', 'applies', `${res.apply}.json`))} (rodada ${res.entry?.id ?? '-'})`);
       break;
     }
     case 'show': {
@@ -637,10 +753,16 @@ async function main() {
       if (args.plan && args.plan !== true) {
         if (!args._[2] || !planCommand(store, args._[2], args, args.plan)) fail(usage);
       } else if (args.apply && args.apply !== true) {
+        const names = { base: file ?? relPath(store.locator.path), plan: args.apply };
+        // On the MCP gbrain the agent makes the writes, request by request: only "archlens apply" carries them.
+        if (store.remote) {
+          fail(`E_STORE_UNSUPPORTED: ${store.describe()} é uma base gbrain no modo mcp: "merge --apply" não grava por pedidos ao agente; nada foi gravado. `
+            + `Rode "archlens remote ${names.base} pull", feche o plano com "archlens plan ${names.base} --answers ${names.plan} --out ${withArgs('<novo>', names)}" se ele estiver aberto, `
+            + `e grave com "archlens apply ${names.base} ${names.plan}" (ou o plano novo)`, 2);
+        }
         loadBase(store);
         assertWritable(store);
         const plan = readJson(args.apply);
-        const names = { base: file ?? relPath(store.locator.path), plan: args.apply };
         let final;
         try {
           const before = store.version(); // a plan without storeVersion is pinned to the version it was closed against
@@ -651,8 +773,57 @@ async function main() {
       } else fail(usage);
       break;
     }
+    case 'init': {
+      const usage = 'uso: archlens init <pasta> --store json|markdown|gbrain [--name N] [--mode git|mcp] [--repo R] [--remote origin] [--branch main] [--server S] [--source-id ID] [--prefix archlens]';
+      if (!file || !args.store || args.store === true) fail(usage);
+      const dir = resolve(file);
+      const opt = k => (typeof args[k] === 'string' ? args[k] : undefined);
+      const fields = { mode: opt('mode'), remote: opt('remote'), branch: opt('branch'), server: opt('server'), sourceId: opt('source-id'), prefix: opt('prefix') };
+      // The manifest keeps `repo` relative to the base folder, so the base and the clone move together.
+      const repo = opt('repo') && relative(dir, resolve(opt('repo')));
+      const store = Object.fromEntries(Object.entries({ kind: args.store, ...fields, repo }).filter(([, v]) => v !== undefined));
+      const name = opt('name') ?? (basename(dirname(dir)) || 'Arquitetura');
+      let path;
+      try { path = initBase(dir, { name, store, warn: w => console.warn(`  aviso: ${w}`) }); } catch (e) { fail(e.message); }
+      console.log(`✓ ${relPath(path)} criado (conector ${args.store}${store.mode ? `, modo ${store.mode}` : ''})`);
+      console.log(`  próximo: planeje o conteúdo com a skill archlens-plan e grave com archlens-apply`);
+      break;
+    }
+    case 'remote': {
+      const usage = 'uso: archlens remote <base> pull [--out pedido.json] | pull --ingest <resposta.json…> [--out pedido.json] | check [--out pedido.json] | check --ingest <resposta.json…>\n'
+        + '  base local que vai para o gbrain (store convert --mode mcp): archlens remote <base> check --server S [--prefix P] [--out pedido.json] | check --server S [--prefix P] --ingest <resposta.json…>';
+      const action = args._[2];
+      if (!file || !['pull', 'check'].includes(action) || args.ingest === true || args.out === true) fail(usage);
+      let store = openBase(file);
+      // The session check also works on a local base about to be converted: --server names the MCP server.
+      if (!store.remote && action === 'check' && typeof args.server === 'string' && store.kind !== 'gbrain') {
+        store = gbrainMcpConnector(store.locator, validateStore({ kind: 'gbrain', mode: 'mcp', server: args.server, ...(typeof args.prefix === 'string' ? { prefix: args.prefix } : {}) }));
+      }
+      if (!store.remote) fail(`E_STORE_UNSUPPORTED: ${store.describe()} não é uma base gbrain no modo mcp; "archlens remote" só vale para ela`);
+      const responses = args.ingest ? [args.ingest, ...args._.slice(3)].map(readJson) : null;
+      let res;
+      try {
+        if (action === 'pull') res = responses ? store.remote.pullIngest(responses) : { request: store.remote.pull() };
+        else res = responses ? { session: store.remote.checkIngest(responses) } : { request: store.remote.check() };
+      } catch (e) { fail(e.message); }
+      if (res.request) {
+        const out = typeof args.out === 'string' ? args.out : store.remote.requestPath(res.request);
+        atomicWrite(out, JSON.stringify(res.request, null, 2) + '\n');
+        console.log(`✓ pedido "${res.request.step}" em ${relPath(out)}: ${res.request.calls.length} chamada(s) ao MCP do gbrain`);
+        console.log(`  próximo: faça as chamadas na ordem e grave o resultado bruto de cada uma em { "archlens-remote": "1.0", "request": "${res.request.id}", "results": [...] }; `
+          + `depois rode "archlens remote ${file} ${action} --ingest <resposta.json>"`);
+      } else if (res.done) {
+        console.log(`✓ espelho de ${store.describe()} em dia: ${res.done.fetched.length} página(s) lidas, ${res.done.removed.length} removida(s)`);
+      } else {
+        const s = res.session;
+        console.log(`✓ sessão do MCP conferida (${s.identity.transport}); gravar pelo MCP ${s.write ? 'liberado (conjunto completo de ferramentas)'
+          : `não liberado (${s.reason}): pull, plan, show e query funcionam; para gravar, o servidor precisa permitir o conjunto completo, ou use o modo git`}`);
+      }
+      break;
+    }
     case 'store': {
-      const usage = 'uso: archlens store convert <base> --to markdown|json [--force]';
+      const usage = 'uso: archlens store convert <base> --to markdown|json [--force] | --to gbrain --mode git --repo R [--remote origin] [--branch main] [--prefix archlens]\n'
+        + '  | --to gbrain --mode mcp --server S [--source-id ID] [--prefix archlens]   (o agente faz as gravações; veja "archlens remote <base> check --server S")';
       if (file !== 'convert' || !args.to || args.to === true) fail(usage);
       const target = args._[2];
       let loc;
@@ -660,16 +831,27 @@ async function main() {
       if (loc.kind !== 'folder' || !loc.exists) fail(`E_STORE_CONVERT: ${target ?? '.'} não é uma pasta de base (migre bases antigas com "archlens migrate")`);
       assertDocOwned(openStore(loc)); // before anything is written
       let res;
-      try { res = convertFolder(loc, String(args.to), { force: args.force === true }); } catch (e) { fail(e.message); }
-      // The element order of a vault differs from model.json, so the generated document is rewritten.
-      const converted = openStore(resolveBase(loc.path));
-      const back = loadBase(converted);
-      const doc = writeDoc(converted, back.raw, back.notes, loc.docPath);
-      console.log(`✓ ${relPath(loc.path)}/ agora usa o conector ${res.to} (era ${res.from}); a versão da base não mudou; ${relPath(doc)} regenerado`);
-      if (res.dropped.length) console.warn(`  aviso: --force descartou o texto das pessoas de ${res.dropped.length} página(s): ${res.dropped.join(', ')}`);
-      if (res.leftover) console.warn(`  aviso: não consegui apagar ${relPath(res.leftover)}; remova-o à mão`);
-      if (res.to === 'markdown') console.log(`  abra ${relPath(loc.path)}/ como vault no Obsidian; para o gbrain: gbrain schema use com ${relPath(join(loc.path, 'gbrain-pack.yaml'))}`);
-      console.log(`  commit sugerido: git add -A ${relPath(loc.path)} && git commit -m "chore(archlens): base no conector ${res.to}"`);
+      try {
+        if (args.to === 'gbrain') {
+          const opt = k => (typeof args[k] === 'string' ? args[k] : undefined);
+          // The manifest keeps `repo` relative to the base folder, so the base and the clone move together.
+          const repo = opt('repo') && relative(loc.path, resolve(opt('repo')));
+          const store = Object.fromEntries(Object.entries({ kind: 'gbrain', mode: opt('mode'), remote: opt('remote'), branch: opt('branch'), prefix: opt('prefix'), repo, server: opt('server'), sourceId: opt('source-id') }).filter(([, v]) => v !== undefined));
+          res = convertToGbrain(loc, store);
+          if (res.request) {
+            // MCP mode: the agent makes the writes; the folder changes with the last receipt.
+            const out = typeof args.out === 'string' ? args.out : res.connector.remote.requestPath(res.request);
+            atomicWrite(out, JSON.stringify(res.request, null, 2) + '\n');
+            console.log(`✓ pedido "apply" em ${relPath(out)}: ${res.request.calls.length} chamada(s) ao MCP do gbrain, ${res.pages} página(s) (só criação; o prefixo precisa estar vazio)`);
+            console.log(`  próximo: faça as chamadas na ordem e grave o resultado bruto de cada uma em { "archlens-remote": "1.0", "request": "${res.request.id}", "results": [...] }; `
+              + `depois rode "archlens apply ${target ?? '.'} --receipts <resposta.json>" (a pasta local só muda com o último recibo)`);
+            console.log(`  registro: ${relPath(join(loc.path, '.archlens', 'applies', `${res.apply}.json`))}`);
+            break;
+          }
+          for (const w of res.warnings) console.warn(`  aviso: ${w}`);
+        } else res = convertFolder(loc, String(args.to), { force: args.force === true });
+      } catch (e) { fail(e.message); }
+      afterConvert(loc, res);
       break;
     }
     default:

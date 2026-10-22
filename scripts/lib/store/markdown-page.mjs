@@ -1,7 +1,7 @@
 // One element as an Obsidian/gbrain page: YAML frontmatter (the element, its outgoing relationships, derived link fields
 // and tags), a title, the description, an archlens block (relationships and children as wikilinks) and, after it, the
 // text people write, kept as is.
-import { parse as parseYaml, stringify as stringifyYaml } from '../../vendor/yaml/index.js';
+import { parse as parseYaml, stringify as stringifyYaml, Document, visit } from '../../vendor/yaml/index.js';
 import { RELATIONSHIP_TYPES } from '../registry.mjs';
 import { storeError } from './errors.mjs';
 
@@ -15,15 +15,27 @@ const display = s => String(s).replace(/[[\]|\n\r]/g, ' ').replace(/\s+/g, ' ').
 
 export const pagePath = el => `${el.type}/${el.id}.md`;
 
-/** `[[type/id|name]]` for an element id; the bare id when the element is unknown. */
-const wikilink = (id, info) => { const t = info(id); return t ? `[[${t.type}/${id}|${display(t.name ?? id)}]]` : id; };
-/** The id inside `[[type/id|name]]` (or the value itself when it is not a wikilink). */
+// Strings gbrain's YAML reader (js-yaml's default schema: YAML 1.1 timestamps, 0b integers) takes for something else.
+const LOOSE = /^(?:\d{4}-\d\d?-\d\d?(?:(?:[Tt]|[ \t]+)\d\d?:\d\d:\d\d(?:\.\d*)?(?:[ \t]*(?:Z|[-+]\d\d?(?::\d\d)?))?)?|[-+]?0b[01_]+)$/;
+/** YAML text of `value`; for the gbrain (`gbrain`), with those strings quoted, so gbrain reads them back as strings. */
+export function yamlText(value, { gbrain = false } = {}) {
+  if (!gbrain) return stringifyYaml(value, { lineWidth: 0 });
+  const doc = new Document(value);
+  visit(doc, { Scalar(_, node) { if (typeof node.value === 'string' && LOOSE.test(node.value)) node.type = 'QUOTE_DOUBLE'; } });
+  return doc.toString({ lineWidth: 0 });
+}
+
+/** `[[<prefix>type/id|name]]` for an element id; the bare id when the element is unknown. */
+export const link = (id, info, prefix = '') => { const t = info(id); return t ? `[[${prefix}${t.type}/${id}|${display(t.name ?? id)}]]` : id; };
+/** The id inside `[[<folders>/id|name]]` (or the value itself when it is not a wikilink). */
 const unlink = v => {
-  const m = typeof v === 'string' && /^\[\[(?:[^/|\]]+\/)?([^|\]]+)(?:\|[^\]]*)?\]\]$/.exec(v.trim());
+  const m = typeof v === 'string' && /^\[\[(?:[^|\]]+\/)?([^|\]]+)(?:\|[^\]]*)?\]\]$/.exec(v.trim());
   return m ? m[1] : v;
 };
 
-export function renderPage(el, { outgoing = [], children = [], info, userText }) {
+/** `linkPrefix` ("archlens/") goes before the type folder of each wikilink; `extraTags` lead the tags; `gbrain`: see yamlText. */
+export function renderPage(el, { outgoing = [], children = [], info, userText, linkPrefix = '', extraTags = [], gbrain = false }) {
+  const wikilink = (id, info) => link(id, info, linkPrefix);
   const fm = {};
   const put = (k, v) => { if (v !== undefined) fm[k] = v; };
   put('id', el.id);
@@ -43,7 +55,7 @@ export function renderPage(el, { outgoing = [], children = [], info, userText })
     const tos = [...new Set(outgoing.filter(r => r.type === t).map(r => wikilink(r.to, info)))];
     if (tos.length) fm[t] = tos;
   }
-  fm.tags = [`${TAG}${el.type}`, ...(el.c4?.kind ? [`${TAG}c4/${el.c4.kind}`] : []), ...(el.tags ?? []).map(t => `${TAG}tag/${t}`)];
+  fm.tags = [...extraTags, `${TAG}${el.type}`, ...(el.c4?.kind ? [`${TAG}c4/${el.c4.kind}`] : []), ...(el.tags ?? []).map(t => `${TAG}tag/${t}`)];
   // Every heading and list sits between blank lines (markdownlint MD022/MD032).
   const block = [BEGIN, ''];
   if (outgoing.length) {
@@ -56,7 +68,7 @@ export function renderPage(el, { outgoing = [], children = [], info, userText })
   if (children.length) block.push('## Contém', '', ...children.map(id => `- ${wikilink(id, info)}`), '');
   block.push(END);
   const description = el.description != null && el.description !== '' ? `${el.description}\n\n` : '';
-  return `---\n${stringifyYaml(fm, { lineWidth: 0 })}---\n# ${display(el.name ?? el.id)}\n\n${description}${block.join('\n')}${userText ?? '\n'}`;
+  return `---\n${yamlText(fm, { gbrain })}---\n# ${display(el.name ?? el.id)}\n\n${description}${block.join('\n')}${userText ?? '\n'}`;
 }
 
 export function parsePage(text, rel) {

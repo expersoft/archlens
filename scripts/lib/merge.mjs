@@ -85,10 +85,12 @@ export function applyPlan(baseRaw, plan, { today } = {}) {
   const ctx = runMerge(baseRaw, plan.delta, { mode: 'apply', resolutions });
   const errors = [...ctx.errors, ...validateModel(ctx.raw).errors];
   if (errors.length) throw mergeError('E_MERGE_INVALID', `o resultado do merge é inválido (${errors.length} erro(s)); nada foi gravado`, { errors });
-  if (baseRaw && canonicalJson(ctx.raw) === canonicalJson(baseRaw)) return { raw: baseRaw, entry: null };
+  // What the merge's decisions relied on, and the possible duplicates of each new element (answered or not).
+  const seen = { read: ctx.read, candidates: Object.fromEntries(ctx.candidates) };
+  if (baseRaw && canonicalJson(ctx.raw) === canonicalJson(baseRaw)) return { raw: baseRaw, entry: null, ...seen };
   const entry = changelogEntry(ctx, date);
   ctx.raw.changelog = [...(ctx.raw.changelog || []), entry];
-  return { raw: ctx.raw, entry };
+  return { raw: ctx.raw, entry, ...seen };
 }
 
 /** The questions of a plan that apply given its own answers (a `when` item only exists under its parent's answer). */
@@ -136,7 +138,10 @@ function runMerge(baseRaw, delta, { mode, resolutions = new Map() }) {
     raw, delta, mode, resolutions, items: [], errors: [],
     tree: indexTree(raw), aliases: new Map(), idMap: new Map(), fresh: new Set(), freshSources: new WeakSet(),
     log: { added: [], changed: new Set(), status: {}, removed: [], decisions: [] },
+    read: new Set(), candidates: new Map(),
   };
+  // The base's own objects, so that only they enter the read set (not what this delta adds).
+  ctx.inBase = { elements: new Set(ctx.tree.keys()), relationships: new Set(raw.model.relationships), views: new Set((raw.views || []).map(v => v?.key)) };
   // Fuzzy pool frozen before any merge, so simulated answers in plan mode cannot change what apply sees.
   ctx.pool = [...ctx.tree].map(([, { el, parent }]) => describe(el, parent));
   for (const [id, { el }] of ctx.tree) for (const a of aliasesOf(el)) if (!ctx.aliases.has(aliasKey(a))) ctx.aliases.set(aliasKey(a), id);
@@ -185,31 +190,49 @@ function note(ctx, item) {
   ctx.items.push(item);
 }
 
+/** The tree entry of element `id`; a base element consulted for a decision enters the read set. */
+function readElement(ctx, id) {
+  if (ctx.inBase.elements.has(id)) ctx.read.add(`element:${id}`);
+  return ctx.tree.get(id);
+}
+
+function readRelationship(ctx, r, id) {
+  if (ctx.inBase.relationships.has(r)) ctx.read.add(`relationship:${id}`);
+}
+
+function readView(ctx, key) {
+  if (ctx.inBase.views.has(key)) ctx.read.add(`view:${key}`);
+}
+
 /** Delta reference → canonical base id (delta id already merged, base id, or base alias). */
 function resolveRef(ctx, ref) {
   if (ref == null) return ref;
-  if (ctx.idMap.has(ref)) return ctx.idMap.get(ref);
-  if (ctx.tree.has(ref)) return ref;
-  return ctx.aliases.get(aliasKey(ref)) ?? ref;
+  const id = ctx.idMap.has(ref) ? ctx.idMap.get(ref) : ctx.tree.has(ref) ? ref : ctx.aliases.get(aliasKey(ref)) ?? ref;
+  readElement(ctx, id);
+  return id;
 }
 
-const describe = (el, parent) => ({
+/** An element as findCandidates compares it (apply rechecks the elements a plan creates with it). */
+export const describe = (el, parent) => ({
   id: el.id, names: [el.name ?? el.id, ...aliasesOf(el)], parent: parent ?? null, technology: el.technology,
   type: el.type ?? null,
 });
 
+/** The base element `el` is (`id`), or the possible duplicates found for it (`candidates`, best first; the best asked about). */
 function findMatch(ctx, el, parentId) {
-  if (ctx.tree.has(el.id)) return { id: el.id };
+  const matched = id => { readElement(ctx, id); return { id }; };
+  if (ctx.tree.has(el.id)) return matched(el.id);
   // An element this delta removes (e.g. a placeholder a repository reading replaces) is never the match.
   const removed = id => ctx.removing.has(id);
   for (const k of [el.id, el.name, ...aliasesOf(el)]) {
     const id = k == null ? null : ctx.aliases.get(aliasKey(k));
-    if (id && !removed(id)) return { id };
+    if (id && !removed(id)) return matched(id);
   }
-  for (const a of aliasesOf(el)) if (ctx.tree.has(a) && !removed(a)) return { id: a };
+  for (const a of aliasesOf(el)) if (ctx.tree.has(a) && !removed(a)) return matched(a);
   const pool = ctx.pool.filter(p => !ctx.fresh.has(p.id) && !removed(p.id));
-  const [best] = findCandidates(describe(el, parentId), pool);
-  return best ? { candidate: best } : {};
+  const found = findCandidates(describe(el, parentId), pool);
+  if (found[0]) readElement(ctx, found[0].id); // "same" and "different" both depend on the candidate as it is
+  return { candidate: found[0], candidates: found.map(c => c.id) };
 }
 
 function mergeElements(ctx) {
@@ -241,6 +264,7 @@ function mergeElements(ctx) {
       }
       if (ctx.mode === 'apply') ctx.log.decisions.push(`duplicata descartada: ${el.id} ≠ ${c.id}`);
     }
+    ctx.candidates.set(el.id, match.candidates);
     insertElement(ctx, el, parentId);
   }
 }
@@ -336,7 +360,7 @@ function moveElement(ctx, baseId, newParent) {
 }
 
 function mergeElementInto(ctx, baseId, el, parentId, { dry = false, when, aliases = [] } = {}) {
-  const entry = ctx.tree.get(baseId);
+  const entry = readElement(ctx, baseId);
   const target = entry.el;
   // A delta name that is already an alias of the element is not a conflict (the user answered it before).
   const knownName = el.name != null && aliasesOf(target).some(a => aliasKey(a) === aliasKey(el.name));
@@ -344,6 +368,7 @@ function mergeElementInto(ctx, baseId, el, parentId, { dry = false, when, aliase
   const inferredKind = ctx.inferredKinds?.has(el.id);
   const fields = fieldsOf(target, el, ELEMENT_FIELDS).filter(([f]) => !(f === 'name' && knownName) && !(f === 'c4' && inferredKind));
   if (parentId != null && parentId !== entry.parent) {
+    readElement(ctx, entry.parent); // the old parent: the move is decided against it
     fields.push(['parent', entry.parent ?? undefined, parentId, v => moveElement(ctx, baseId, resolveRef(ctx, v))]);
   }
   const { filled, changed } = reconcile(ctx, { fields, keyPrefix: `el:${el.id}`, kind: 'element', target: baseId, dry, when });
@@ -434,7 +459,11 @@ function mergeRelationships(ctx) {
     const r = canonicalRelationship(ends, ctx.typeOf) ?? ends; // an unknown type stays, so validation reports it
     const k = relKey(ctx, r);
     const base = (r.id && byId.get(r.id)) || (k && sameRelationship(byKey.get(k) ?? [], r, fresh));
-    if (base) { mergeRelInto(ctx, base, ids.get(base), r, i); return; }
+    if (base) {
+      readRelationship(ctx, base, ids.get(base));
+      mergeRelInto(ctx, base, ids.get(base), r, i);
+      return;
+    }
     const { source, sources, ...rest } = r;
     const generated = relId(ctx, { ...r, id: undefined });
     let id = r.id ?? generated;
@@ -487,6 +516,7 @@ function mergeViews(ctx) {
     const v = rewriteView(ctx, dv);
     const key = `view:${v.key}`;
     const i = ctx.raw.views.findIndex(x => x.key === v.key);
+    readView(ctx, v.key);
     if (i < 0) {
       ctx.raw.views.push(v);
       ctx.log.added.push(key);
@@ -530,6 +560,7 @@ function runOps(ctx) {
     const rel = el ? null : findRelationship(ctx, op.id);
     if (!el && !rel) return opError('E_UNKNOWN_REF', `"${op.id}" não existe`, 'use o id (ou alias) de um elemento, ou o id de uma relação');
     const id = el ? elId : relIds(ctx).get(rel);
+    if (rel) readRelationship(ctx, rel, id);
     const target = el ?? rel;
     switch (op.op) {
       case 'rename': {
@@ -564,6 +595,10 @@ function runOps(ctx) {
       }
       case 'remove': {
         const { cascade, rels } = el ? removalCascade(ctx, id) : { cascade: { elements: [], relationships: [id], views: [] }, rels: [rel] };
+        // Everything the cascade reaches is read (cascade.relationships holds the ids of rels, in order).
+        for (const x of [...cascade.elements, ...(cascade.members || [])]) readElement(ctx, x);
+        rels.forEach((r, k) => readRelationship(ctx, r, cascade.relationships[k]));
+        for (const v of cascade.views) readView(ctx, v.key);
         if (decide(ctx, { key, class: 'op', op: 'remove', target: id, cascade }, 'yes') !== 'yes') {
           ctx.log.decisions.push(`remover ${id}: recusado`);
           return undefined;

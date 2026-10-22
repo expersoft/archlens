@@ -8,6 +8,7 @@ feitos para apresentação em tela cheia.
 - [Usando com o Claude](#usando-com-o-claude)
 - [Evoluindo a base](#evoluindo-a-base)
 - [Usando pela linha de comando](#usando-pela-linha-de-comando)
+- [Base compartilhada no gbrain](#base-compartilhada-no-gbrain)
 - [Apresentando](#apresentando)
 - [Os cenários, com exemplos](#os-cenários-com-exemplos)
 - [Problemas comuns](#problemas-comuns)
@@ -44,6 +45,10 @@ autoral vai em `architecture/notes/*.md`. `archlens check` confere se o document
 A base guarda o **formato 2.0** (tipos ArchiMate, perfil C4 em `c4.kind`, hierarquia por `parent`, só relações
 ArchiMate); uma base 1.x é recusada por todos os comandos com `E_STORE_FORMAT` até ser migrada. Deltas e prompts
 continuam usando `c4:*`, `uses` e `children`: a entrada é traduzida.
+
+**Onde criar a base.** Na primeira conversa sem base, o Claude pergunta onde ela vai morar: `model.json` (padrão), um
+vault markdown (Obsidian) ou um gbrain compartilhado pelo time (veja [Base compartilhada no gbrain](#base-compartilhada-no-gbrain)),
+e cria o `archlens.json` com `archlens init`.
 
 Há **três skills**, cada uma com um papel:
 
@@ -185,6 +190,8 @@ $A resolve  architecture/ --view containers --json        # IR da visão (nós e
 | `render` | HTML, sem checagem |
 | `deliver` | HTML + screenshots 1920×1080 e 1280×720 + checagem de largura (≥ 90%) e fonte (≥ 14px). `--strict` não substitui a saída se falhar |
 | `build` | `doc` + `deliver` de todas as visões |
+| `init` | cria a base (`archlens.json`) no repositório escolhido: `--store json\|markdown\|gbrain` |
+| `remote … pull` / `remote … check` | base gbrain no modo MCP: atualiza o espelho local / confere a sessão do MCP (o Claude faz as chamadas) |
 | `merge … --plan p.json [--answers antigo.json]` | compara um delta com a base e grava o plano com as perguntas; `--answers` reaproveita as respostas de um plano anterior |
 | `merge … --apply p.json` | aplica o plano respondido: valida, grava `architecture/`, regenera o `ARCHITECTURE.md` e registra o histórico |
 
@@ -202,10 +209,46 @@ node scripts/archlens.mjs store convert architecture --to markdown   # volta com
 
 A pasta passa a ter uma subpasta por tipo ArchiMate e um `.md` por elemento (`application-component/loja.pedidos.md`),
 com as relações como wikilinks. Abra `architecture/` como vault no Obsidian; o `gbrain-pack.yaml` da pasta é o schema pack
-para o gbrain (`gbrain schema use`; a verificação num gbrain instalado está pendente). A versão da base não muda, o
+para o gbrain (`gbrain schema use`). A versão da base não muda, o
 `ARCHITECTURE.md` é regenerado e `notes/`, `diagrams/`, `.obsidian/` e anexos ficam onde estão. Edite à vontade o texto
 depois do bloco `archlens:end` de cada página; o resto é regravado pelo archlens. Esse texto sobrevive a toda gravação (se o elemento sai da base, a página sai e o texto vai para `notes/removidos/<tipo>/<id>.md`, e o `merge --apply` mostra o caminho), mas o `json` não tem onde guardá-lo: `store convert --to json` recusa (`E_STORE_CONVERT`, listando as páginas) enquanto houver texto das pessoas, e só com `--force` converte, descartando-o e avisando quais páginas o perderam. Exemplo pronto:
 `examples/loja-online-vault/`.
+
+## Base compartilhada no gbrain
+
+Para um time de arquitetura, a base pode morar num [gbrain](https://github.com/garrytan/gbrain): arquitetos planejam e
+aplicam pelo archlens, muitas vezes em domínios paralelos, e stakeholders consultam pelo plugin ou direto no gbrain (a IA
+corporativa lê as páginas). Cada elemento vira uma página, com as relações como ligações tipadas; manifesto, visões, notas e
+histórico também viram páginas legíveis.
+
+```bash
+# modo git: o CLI grava um commit por apply num clone do repositório que o gbrain sincroniza
+$A init architecture --store gbrain --mode git --repo ../gbrain-arquitetura [--remote origin] [--branch main] [--prefix archlens]
+# modo MCP: o Claude chama as ferramentas do MCP do gbrain configurado no Claude Code; o CLI prepara e confere
+$A init architecture --store gbrain --mode mcp --server gbrain-corp [--source-id arquitetura] [--prefix archlens]
+# uma base local que já existe vai para o gbrain (e volta com --to json|markdown)
+$A store convert architecture --to gbrain --mode git --repo ../gbrain-arquitetura
+```
+
+A pasta `architecture/` fica só com a configuração, o `ARCHITECTURE.md`, as notas e os diagramas: ponha-a no repositório
+do time, e quem clona já aponta para a mesma base. O `archlens.json` não guarda credenciais; o acesso ao git e o MCP
+são configurados por cada um no próprio ambiente.
+
+- **Em paralelo:** o plano guarda a versão de cada objeto que altera ou em que se apoiou. Dois planos que não se cruzam
+  passam um depois do outro; se o segundo mexe ou se apoia no que o primeiro mudou, o apply recusa
+  (`E_STORE_CONFLICT`, com os objetos) e você refaz com `plan --answers`. Um elemento parecido criado em paralelo também
+  vira a pergunta de duplicata.
+- **Modo git:** cada apply é um commit com push; o clone e a branch de quem roda não mudam. Rode o sync do gbrain para
+  indexar.
+- **Modo MCP:** o Claude faz as chamadas que o CLI pede e devolve os resultados. Antes de ler a base, ele roda
+  `remote <base> pull` (o espelho local); uma vez por sessão, `remote <base> check`. O apply tem passos (releitura do que o
+  plano leu, gravação, recibos); um apply interrompido é completado por `apply <base> --resume` ou desfeito por
+  `apply <base> --undo`. Cada página lida ou gravada passa pelo contexto do Claude: bases grandes são mais baratas no modo
+  git. Para a IA corporativa ver os tipos ArchiMate no grafo, o servidor precisa rodar `gbrain sweep`.
+- **Uma base por fonte do gbrain**, um só caminho de gravação (git ou MCP), ids em minúsculas e sem acento. Dá para
+  editar direto no gbrain só o texto depois de `<!-- archlens:end -->` de cada página.
+
+Detalhes e limites conhecidos em `references/base.md`, `references/merge.md` e `references/knowledge-doc.md`.
 
 ## Apresentando
 
@@ -305,6 +348,10 @@ uma numa moldura. A visão `plataformas` traz o panorama C4 com as molduras.
 | visão de suporte para no negócio | faltam `realization`/`serving` ligando containers a application services e estes a processos |
 | visão C4 vazia ou só com o sistema | os elementos não têm `c4.kind`, ou as relações ligam só intermediários (serviços, interfaces) sem dono com `c4.kind` (o dono realiza, compõe ou recebe a atribuição do intermediário) |
 | `E_STORE_FORMAT` | base no formato 1.x: rode `archlens migrate <base>` |
+| `E_STORE_CONFLICT` no apply | outro apply mudou um objeto do plano (ou criou um elemento parecido): refaça com `plan --answers` (no modo MCP, `remote pull` antes) |
+| `E_REMOTE_STALE` | base gbrain no modo MCP sem espelho: `archlens remote <base> pull` |
+| `E_STORE_GBRAIN_SURFACE` | o MCP do gbrain não liberou as ferramentas de gravação: `remote <base> check`, ou use o modo git |
+| `E_STORE_GBRAIN_SLUG` | id com maiúscula ou acento numa base gbrain: use minúsculas sem acento |
 | `W_REL_DIRECTION` | serving/realization invertido (quem serve é a origem) |
 | texto pequeno no telão | visão grande demais: use `focus`, `granularity:"container"`, `collapse` ou divida em várias visões |
 | checagem visual pulada | faltam `npm install` e `npx playwright install chromium` |

@@ -17,7 +17,7 @@ const elementsById = raw => new Map((raw?.model?.elements ?? []).filter(e => e &
 const viewsByKey = raw => new Map((raw?.views ?? []).filter(v => v && v.key != null).map(v => [v.key, v]));
 
 /** id → relationship, generated ids filled in (as normalizeModel names them). */
-function relationshipsById(raw) {
+export function relationshipsById(raw) {
   const ids = relationshipIds(raw ?? {});
   const out = new Map();
   for (const r of raw?.model?.relationships ?? []) {
@@ -53,6 +53,20 @@ export function diffRaw(before, after) {
   }
   for (const entry of hb.slice(ha.length)) ops.push({ op: 'appendHistory', entry });
   return ops;
+}
+
+/**
+ * The round as appended to `history`: a plan's id is provisional, so one that a round already has (a parallel apply took
+ * it) becomes "<date>-NN", NN = the day's highest sequence + 1. A free id stays, so a copied history keeps its ids.
+ */
+function numbered(entry, history) {
+  const e = structuredClone(entry);
+  if (typeof e.date !== 'string' || !history.some(x => x?.id === e.id)) return e;
+  const prefix = `${e.date}-`;
+  const seqs = history.map(x => x?.id).filter(id => typeof id === 'string' && id.startsWith(prefix) && /^\d+$/.test(id.slice(prefix.length)))
+    .map(id => Number(id.slice(prefix.length)));
+  e.id = prefix + String(Math.max(0, ...seqs) + 1).padStart(2, '0');
+  return e;
 }
 
 /** Reference implementation: `base` ({ raw, notes } or null) with `ops` applied, in order. E_STORE_OP on a bad op. */
@@ -108,7 +122,7 @@ export function applyOps(base, ops) {
         break;
       case 'appendHistory':
         if (!op.entry || typeof op.entry !== 'object') throw bad(i, '"entry" precisa ser uma rodada do changelog');
-        changelog = [...(changelog ?? []), structuredClone(op.entry)];
+        changelog = [...(changelog ?? []), numbered(op.entry, changelog ?? [])];
         break;
       default:
         throw bad(i, `operação desconhecida; use ${OPS.join(' | ')}`);

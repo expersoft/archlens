@@ -474,5 +474,23 @@
         ]
       }
     }
-  ]
+  ],
+  "objects": {
+    "element:sms": "sha256:a6a5d2d0620045ff8a81cec95d4729cb2f42f46bea47a8883f9b5dd14c56b39e",
+    "element:tele": "sha256:a6a5d2d0620045ff8a81cec95d4729cb2f42f46bea47a8883f9b5dd14c56b39e",
+    "element:tele.api": "sha256:a6a5d2d0620045ff8a81cec95d4729cb2f42f46bea47a8883f9b5dd14c56b39e",
+    "element:tele.chatbot": "sha256:a6a5d2d0620045ff8a81cec95d4729cb2f42f46bea47a8883f9b5dd14c56b39e",
+    "element:tele.fila": "sha256:a6a5d2d0620045ff8a81cec95d4729cb2f42f46bea47a8883f9b5dd14c56b39e",
+    "element:tele.notificador": "sha256:a6a5d2d0620045ff8a81cec95d4729cb2f42f46bea47a8883f9b5dd14c56b39e",
+    "element:whatsapp": "sha256:a6a5d2d0620045ff8a81cec95d4729cb2f42f46bea47a8883f9b5dd14c56b39e",
+    "relationship:sms-serving-tele.notificador": "sha256:a6a5d2d0620045ff8a81cec95d4729cb2f42f46bea47a8883f9b5dd14c56b39e",
+    "relationship:tele.fila-serving-tele.api": "sha256:a6a5d2d0620045ff8a81cec95d4729cb2f42f46bea47a8883f9b5dd14c56b39e",
+    "relationship:tele.fila-serving-tele.notificador": "sha256:a6a5d2d0620045ff8a81cec95d4729cb2f42f46bea47a8883f9b5dd14c56b39e",
+    "relationship:whatsapp-serving-tele.notificador": "sha256:a6a5d2d0620045ff8a81cec95d4729cb2f42f46bea47a8883f9b5dd14c56b39e"
+  },
+  "knownCandidates": {
+    "sms": [],
+    "tele.chatbot": [],
+    "tele.fila": []
+  }
 }

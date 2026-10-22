@@ -6,7 +6,8 @@ import { join } from 'node:path';
 import { ELEMENT_TYPES } from '../registry.mjs';
 import { sortParentsFirst, isCanonicalFormat, FORMAT } from '../canonical.mjs';
 import { storeError } from './errors.mjs';
-import { MANIFEST, readJson, readNotes, noteFiles } from './folder.mjs';
+import { MANIFEST, parseJson, noteFiles } from './folder.mjs';
+import { NOTE_NAMES } from '../doc.mjs';
 import { renderPage, parsePage, pagePath, BEGIN, END } from './markdown-page.mjs';
 import { gbrainPack, PACK_FILE } from './gbrain-pack.mjs';
 import { fileConnector } from './contract.mjs';
@@ -20,43 +21,75 @@ export const REMOVED = 'notes/removidos/';
 const LINT_FILE = '.markdownlint.json';
 const typeFolders = dir => readdirSync(dir).filter(n => ELEMENT_TYPES[n] && statSync(join(dir, n)).isDirectory()).sort();
 
+/** Reads the vault from `dir` into a file map (the files of the format only) and parses it. */
 export function readVault(dir, { anyFormat = false } = {}) {
-  const { store, layout, ...top } = readJson(join(dir, MANIFEST));
+  const files = new Map();
+  const take = rel => { if (existsSync(join(dir, rel))) files.set(rel, readFileSync(join(dir, rel), 'utf8')); };
+  take(MANIFEST); // a missing manifest is reported by the parse, as an unreadable JSON
+  take('views.json');
+  take('changelog.json');
+  for (const name of NOTE_NAMES) take(`notes/${name}.md`);
+  if (existsSync(join(dir, MANIFEST))) {
+    for (const type of typeFolders(dir)) for (const file of readdirSync(join(dir, type)).filter(f => f.endsWith('.md'))) take(`${type}/${file}`);
+  }
+  return readVaultFiles(files, { anyFormat, where: dir });
+}
+
+/** The vault in a file map (relative path → text): what readVault reads, without the file system. */
+export function readVaultFiles(files, { anyFormat = false, where = '' } = {}) {
+  const at = rel => (where ? join(where, rel) : rel);
+  const json = rel => {
+    if (!files.has(rel)) throw storeError('E_STORE_JSON', `${at(rel)}: JSON inválido: arquivo ausente`, { file: at(rel) });
+    return parseJson(files.get(rel), at(rel));
+  };
+  const { store, layout, ...top } = json(MANIFEST);
   if (!anyFormat && !isCanonicalFormat(top.archlens)) {
-    throw storeError('E_STORE_FORMAT', `${dir} está no formato ${top.archlens ?? '1.x'}; o archlens lê só o formato ${FORMAT}`);
+    throw storeError('E_STORE_FORMAT', `${where || 'a base'} está no formato ${top.archlens ?? '1.x'}; o archlens lê só o formato ${FORMAT}`);
   }
   const pages = new Map();
   const elements = [];
   const outgoing = new Map();
-  for (const type of typeFolders(dir)) {
-    for (const file of readdirSync(join(dir, type)).filter(f => f.endsWith('.md')).sort()) {
-      const rel = `${type}/${file}`;
-      const { element, relationships, userText } = parsePage(readFileSync(join(dir, rel), 'utf8'), rel);
-      if (element.type !== type || `${element.id}.md` !== file) {
-        throw storeError('E_STORE_MD_PATH', `${rel}: o elemento "${element.id}" (${element.type}) deveria estar em ${pagePath(element)}`, { file: rel });
-      }
-      if (pages.has(element.id)) throw storeError('E_STORE_DUP_ID', `elemento "${element.id}" aparece em ${pages.get(element.id).rel} e em ${rel}`);
-      pages.set(element.id, { rel, userText, name: element.name });
-      elements.push(element);
-      outgoing.set(element.id, relationships);
+  for (const rel of [...files.keys()].filter(r => /^[^/]+\/[^/]+\.md$/.test(r) && ELEMENT_TYPES[r.split('/')[0]]).sort()) {
+    const [type, file] = rel.split('/');
+    const { element, relationships, userText } = parsePage(files.get(rel), rel);
+    if (element.type !== type || `${element.id}.md` !== file) {
+      throw storeError('E_STORE_MD_PATH', `${rel}: o elemento "${element.id}" (${element.type}) deveria estar em ${pagePath(element)}`, { file: rel });
     }
+    if (pages.has(element.id)) throw storeError('E_STORE_DUP_ID', `elemento "${element.id}" aparece em ${pages.get(element.id).rel} e em ${rel}`);
+    pages.set(element.id, { rel, userText, name: element.name });
+    elements.push(element);
+    outgoing.set(element.id, relationships);
   }
   const ordered = sortParentsFirst(elements.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)));
   const raw = { ...top, model: { elements: ordered, relationships: ordered.flatMap(e => outgoing.get(e.id)) } };
-  if (existsSync(join(dir, 'views.json'))) raw.views = readJson(join(dir, 'views.json'));
-  if (existsSync(join(dir, 'changelog.json'))) raw.changelog = readJson(join(dir, 'changelog.json'));
-  return { raw, notes: readNotes(dir), ctx: { pages } };
+  if (files.has('views.json')) raw.views = json('views.json');
+  if (files.has('changelog.json')) raw.changelog = json('changelog.json');
+  const notes = {};
+  for (const name of NOTE_NAMES) if (files.has(`notes/${name}.md`)) notes[name] = files.get(`notes/${name}.md`).replace(/\n$/, '');
+  return { raw, notes, ctx: { pages } };
 }
 
-export function vaultContents(dir, { raw, notes }, cur) {
+/** The files of the vault for `raw`, from the file system of `dir`; see vaultFiles. */
+export function vaultContents(dir, base, cur) {
+  const read = rel => (existsSync(join(dir, rel)) ? readFileSync(join(dir, rel), 'utf8') : undefined);
+  return vaultFiles(base, cur, { exists: rel => existsSync(join(dir, rel)), read });
+}
+
+/**
+ * Every file of the vault for `raw` (relative path → text, null for a page that goes). Pure: `exists(rel)` and
+ * `read(rel)` stand for the files already there (the lint config, the notes, the file of removed text).
+ * `linkPrefix`, `extraTags` and `gbrain` shape the pages for another layout (see gbrain-layout.mjs).
+ */
+export function vaultFiles({ raw, notes }, cur, { exists, read = () => undefined, linkPrefix = '', extraTags = [], gbrain = false } = {}) {
+  exists ??= rel => read(rel) !== undefined;
   const { model, views, changelog, ...top } = raw;
   const files = new Map([[MANIFEST, json({ ...top, store: { kind: 'markdown' } })]]);
   if (views !== undefined) files.set('views.json', json(views));
   if (changelog !== undefined) files.set('changelog.json', json(changelog));
-  for (const [rel, text] of noteFiles(dir, notes)) files.set(rel, text);
+  for (const [rel, text] of noteFiles(null, notes, read)) files.set(rel, text);
   // The frontmatter title is the page name, the "# Name" heading is for readers: markdownlint must not count two H1.
   // Written once; a config the people of the vault adjusted stays.
-  if (!existsSync(join(dir, LINT_FILE))) files.set(LINT_FILE, json({ MD025: { front_matter_title: '' } }));
+  if (!exists(LINT_FILE)) files.set(LINT_FILE, json({ MD025: { front_matter_title: '' } }));
   const els = (model?.elements ?? []).filter(e => e && typeof e.id === 'string');
   const byId = new Map(els.map(e => [e.id, e]));
   const info = id => { const e = byId.get(id); return e && { type: e.type, name: e.name }; };
@@ -81,7 +114,7 @@ export function vaultContents(dir, { raw, notes }, cur) {
     if (typeof el.description === 'string' && (el.description.includes(BEGIN) || el.description.includes(END))) {
       throw storeError('E_STORE_MD', `a descrição de "${el.id}" contém o marcador ${el.description.includes(BEGIN) ? BEGIN : END}, que delimita o bloco do archlens na página`);
     }
-    files.set(pagePath(el), renderPage(el, { outgoing: outgoing.get(el.id), children: children.get(el.id) ?? [], info, userText: old.get(el.id)?.userText }));
+    files.set(pagePath(el), renderPage(el, { outgoing: outgoing.get(el.id), children: children.get(el.id) ?? [], info, userText: old.get(el.id)?.userText, linkPrefix, extraTags, gbrain }));
   }
   for (const { rel } of old.values()) if (!files.has(rel)) files.set(rel, null);
   // The page of a removed element goes; what people wrote in it is kept (a retyped element carries it to its new page).
@@ -90,7 +123,7 @@ export function vaultContents(dir, { raw, notes }, cur) {
     const keep = `${REMOVED}${rel}`;
     const label = String(name ?? id).replace(/\s+/g, ' ').trim();
     // One H1 per file; each removal is a section of its own (markdownlint MD022/MD025).
-    const before = existsSync(join(dir, keep)) ? `${readFileSync(join(dir, keep), 'utf8').replace(/\n*$/, '')}\n\n` : `# ${label} ("${id}")\n\n`;
+    const before = exists(keep) ? `${read(keep).replace(/\n*$/, '')}\n\n` : `# ${label} ("${id}")\n\n`;
     files.set(keep, `${before}## ${label} ("${id}"): elemento removido da base; texto escrito em ${rel}\n\n${userText.replace(/^\n+/, '').replace(/\n*$/, '')}\n`);
   }
   files.set(PACK_FILE, gbrainPack(raw));
@@ -110,7 +143,7 @@ export function markdownConnector(locator, describe) {
   let emptied = new Set();
   let preserved = [];
   return fileConnector({
-    kind: 'markdown', dir, locator, describe,
+    kind: 'markdown', dir, locator, describe, versioning: 'object', // a page per element: its relationships live in it
     load: opts => (existsSync(join(dir, MANIFEST)) ? readVault(dir, opts) : null),
     contents: (next, cur) => {
       const files = vaultContents(dir, next, cur);

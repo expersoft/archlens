@@ -5,7 +5,10 @@ import { dirname, join, resolve, relative, basename, extname } from 'node:path';
 import { jsonConnector, readJson, storeKind, MANIFEST } from './folder.mjs';
 import { legacyConnector } from './legacy.mjs';
 import { markdownConnector } from './markdown.mjs';
+import { gbrainGitConnector } from './gbrain-git.mjs';
+import { gbrainMcpConnector } from './gbrain-mcp.mjs';
 import { storeError } from './errors.mjs';
+import { validateStore } from './config.mjs';
 
 export { storeError, MANIFEST };
 
@@ -80,9 +83,14 @@ function folderKind(dir) {
 
 export function openStore(locator) {
   if (locator.kind !== 'folder') return legacyConnector(locator, { describe: `${rel(locator.path)} (formato antigo)`, error: legacyError(locator) });
-  return folderKind(locator.path) === 'markdown'
-    ? markdownConnector(locator, `${rel(locator.path)}/ (markdown)`)
-    : jsonConnector(locator, `${rel(locator.path)}/`);
+  const kind = folderKind(locator.path);
+  if (kind === 'markdown') return markdownConnector(locator, `${rel(locator.path)}/ (markdown)`);
+  if (kind === 'gbrain') {
+    const store = validateStore(readJson(join(locator.path, MANIFEST)).store);
+    const describe = `${rel(locator.path)}/ (gbrain ${store.mode})`;
+    return store.mode === 'mcp' ? gbrainMcpConnector(locator, store, { describe }) : gbrainGitConnector(locator, store, { describe });
+  }
+  return jsonConnector(locator, `${rel(locator.path)}/`);
 }
 
 /** Throws the connector's own refusal when it cannot write (the old .md base). */

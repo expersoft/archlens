@@ -32,8 +32,8 @@ qualquer caso, gere o plano de novo.
 | `open` | alguma pergunta aplicável sem resposta válida, ou plano bloqueado | responder em `"resolution"` e rodar `plan <base> --answers p.json --out p2.json` |
 | `final` | tudo respondido | revisar (`show`, prévia) e rodar `apply <base> p.json` |
 
-- O plano guarda `storeVersion` (a versão da base lida pelo `plan`; `null` se a base ainda não existe) e o `delta` de
-  origem: por isso `plan <base> --answers p.json --out p2.json` refaz o plano sem informar o delta de novo. Com o
+- O plano guarda `storeVersion` (a versão da base lida pelo `plan`; `null` se a base ainda não existe), `objects` (a
+  versão de cada objeto que ele altera ou em que se apoiou; veja *Versão por objeto*) e o `delta` de origem: por isso `plan <base> --answers p.json --out p2.json` refaz o plano sem informar o delta de novo. Com o
   delta, a CLI avisa se for outro.
 - `--answers` aceita qualquer plano (aberto ou final). Respostas que não casam mais com o plano novo (item sumiu,
   resposta inválida para a pergunta nova) são ignoradas sem erro.
@@ -56,9 +56,77 @@ O `apply` recusa, sem gravar nada:
 
 - plano **aberto**: `E_PLAN_OPEN` com os itens sem resposta; responda e rode `plan <base> --answers p.json --out p2.json`;
 - um **delta** (ou outro arquivo) no lugar do plano: `E_PLAN_SCHEMA`; rode `plan` primeiro;
-- base que **mudou** depois do plano (outra rodada aplicada, edição, `migrate`, ou o próprio plano já aplicado):
-  `E_STORE_CONFLICT`. Refaça o plano sobre a base atual reaproveitando as respostas:
+- um objeto do plano que **mudou** depois dele (outra rodada aplicada, edição, `migrate`, ou o próprio plano já aplicado):
+  `E_STORE_CONFLICT`, com a lista dos objetos em conflito. Refaça o plano sobre a base atual reaproveitando as respostas:
   `plan <base> --answers p.json --out p3.json`; confira as perguntas novas, revise e aplique o plano novo.
+
+### Versão por objeto: applies em paralelo
+
+Um **objeto** é um elemento (por `id`), uma relação, uma visão (por `key`), uma nota ou o manifesto. O plano final guarda
+em `objects` a versão lida de cada um (`null`: não existia) em dois conjuntos:
+
+- **escrita**: todo objeto que as `ops` criam, alteram ou removem;
+- **leitura**: todo objeto em que uma decisão se apoiou: o elemento casado por id, alias ou duplicata (`same` e
+  `different`), o pai de cada elemento novo ou movido, o `group` de cada membro, as duas pontas de cada relação nova ou
+  alterada, o alvo de cada `op` e tudo que a cascata de uma remoção alcança, e as visões que o merge reescreveu.
+
+O `apply` relê essas versões: se alguma mudou, `E_STORE_CONFLICT` (nada gravado) com os objetos em conflito pelo nome e o
+`plan --answers` para refazer. Planos de domínios que não se tocam, feitos sobre a mesma versão, passam um depois do
+outro sem refazer. A versão de um objeto depende do conector:
+
+| Conector | Versão por | Versão de um objeto |
+|---|---|---|
+| `json` | base inteira | a versão da base: qualquer mudança recusa o plano (como antes) |
+| `markdown` | objeto | hash do conteúdo canônico do objeto |
+| `gbrain` modo git | objeto | o mesmo hash, sobre a ponta remota depois do `fetch` |
+| `gbrain` modo MCP | objeto | a `revision` da página no gbrain |
+
+As relações moram na página do elemento de origem: a versão de uma relação é a dessa página. Planos antigos (só
+`storeVersion`) continuam aceitos, com a regra da base inteira.
+
+**Duplicata criada em paralelo.** O conjunto de leitura só cobre o que existe: se dois arquitetos criam o mesmo conceito
+com ids diferentes, nenhum vê o do outro. Por isso o `apply` refaz a busca de possíveis duplicatas só para os elementos
+que o plano cria, contra a base atual: um candidato que não estava na base do plano é conflito
+(`E_STORE_CONFLICT`, `reason: "possible-duplicate"`, com o id criado em paralelo). Refaça com `--answers`: o plano novo
+traz a pergunta de duplicata.
+
+**Histórico.** Acrescentar a rodada nunca causa conflito: ela entra no histórico como ele está na hora de gravar, e o
+número (`<data>-<seq>`) é atribuído nesse momento. O `entry.id` do plano é provisório; a saída do `apply` mostra o
+definitivo. No modo MCP do gbrain, um `revision_conflict` na página de histórico faz o `--receipts` pedir a releitura
+e a gravação dela de novo (até 5 vezes).
+
+### Modo MCP do gbrain: releitura e janela residual
+
+Numa base gbrain no modo MCP, o `apply` acontece em passos (o agente faz as chamadas; veja `references/base.md`):
+
+0. `remote <base> pull` (e os `--ingest` que ele pedir) **logo antes** do `apply`: as conferências do `apply` (as
+   versões do plano, as duplicatas em paralelo, o resultado válido) rodam contra o espelho que esse pull atualizou;
+1. `apply <base> p.json` pede a releitura (`get_page`) das páginas do conjunto de leitura e das páginas que o plano
+   grava (menos o histórico, que tem a sua própria nova tentativa);
+2. `apply <base> p.json --read-check resposta.json` confere as revisões relidas: uma página lida ou gravada que mudou no
+   gbrain depois do pull → `E_STORE_CONFLICT`, nada pedido para gravar. Depois pede a gravação: cada página com
+   `expected_revision` = a revisão do plano, que o gbrain recusa se ela mudou (`revision_conflict`);
+3. `apply <base> --receipts resposta.json` confere os recibos e atualiza o espelho.
+
+**Janela residual:** entre a releitura do passo 1 e o `put_pages` passam segundos; uma mudança nesse intervalo numa
+página só **lida** pelo plano não é detectada (as páginas gravadas continuam protegidas pela revisão: uma mudança
+nelas ali deixa o apply parcial, abaixo). O modo git não tem essa janela.
+
+O `put_pages` não é atômico: o apply pode terminar **parcial** (páginas gravadas e páginas em conflito ou pendentes). O
+registro do apply (`.archlens/applies/<id>.json`) guarda o que foi pedido, os recibos e o conteúdo anterior de cada
+página:
+
+| Situação | O que fazer |
+|---|---|
+| chamadas sem recibo (sessão caiu, agente parou, ou o resultado é um erro do cliente MCP sem o código do gbrain, como um timeout) | `apply <base> --resume <id>`: repete com o **mesmo** `request_id` (o gbrain nunca grava duas vezes; uma chamada que já rodou devolve o recibo). Enquanto houver chamada sem recibo, o `--undo` é recusado (`E_STORE_APPLY`): ela pode ter gravado |
+| página do plano mudou no gbrain no meio (`revision_conflict`) | `apply <base> --undo <id>` devolve as páginas já gravadas ao que eram; depois `remote pull` e `plan --answers` |
+| tags tiradas de uma página | o `--receipts` pede um seguimento com `remove_tag`/`add_tag`, cada um com `expected_revision`; o agente o executa e roda `--receipts` de novo. Conflito numa tag é tratado como numa página |
+| página de histórico apagada no gbrain (`E_STORE_HISTORY_RETRY`) | restaure-a (`restore_page`) e rode `--resume <id>`, ou `--undo <id>` |
+| página que o gbrain marcou como duplicata (`duplicate_of`) | não foi gravada; só `--undo <id>` (use uma fonte do gbrain por base) |
+
+Só falhas definitivas que não são conflito (um erro com o código do gbrain) ganham um `request_id` novo no `--resume`. Se
+a releitura do histórico já traz a rodada deste apply (uma gravação dele cujo recibo se perdeu), ela é tomada como
+gravada, sem acrescentá-la de novo.
 
 ## O delta
 
@@ -177,7 +245,13 @@ posições no delta).
 | `E_PARENT_CYCLE` | o delta move um elemento para dentro de um descendente seu (plano bloqueado) | corrija o `parent` no delta e planeje de novo |
 | `E_PLAN_OPEN` | `apply` de um plano aberto (perguntas sem resposta ou bloqueado) | responda e rode `plan <base> --answers p.json --out p2.json` |
 | `E_PLAN_SCHEMA` | `apply`, `show` ou `--answers` com um arquivo que não é plano (ex.: o delta) | rode `plan` primeiro |
-| `E_STORE_CONFLICT` | a base mudou depois do plano (inclusive por já ter aplicado este plano) | refaça com `plan <base> --answers p.json --out novo.json` |
+| `E_STORE_CONFLICT` | um objeto do plano mudou depois dele (inclusive por já ter aplicado este plano), ou um elemento parecido com um novo foi criado em paralelo | refaça com `plan <base> --answers p.json --out novo.json` |
+| `E_REMOTE_STALE` | base gbrain no modo MCP sem espelho sincronizado | `remote <base> pull` e siga os pedidos |
+| `E_REMOTE_RESPONSE` | a resposta do agente não corresponde ao pedido | refaça as chamadas do pedido e grave os resultados brutos, na ordem |
+| `E_STORE_GBRAIN_SURFACE` | gravar pelo MCP sem a sessão conferida com o conjunto completo de ferramentas | `remote <base> check`; sem o conjunto completo, use o modo git |
+| `E_STORE_HISTORY_RETRY` | modo MCP: a página de histórico sumiu ou mudou demais durante o apply | restaure-a e `apply <base> --resume <id>`, ou `--undo <id>` |
+| `E_STORE_APPLY` | modo MCP: `--resume`/`--undo`/`--receipts` sem apply que sirva (id inexistente, nada a retomar ou a desfazer), `--resume` com página em conflito, ou `--undo` com chamadas ainda sem recibo | siga a mensagem: `--receipts` do pedido em aberto, `--resume <id>` para obter os recibos, ou `--undo <id>` |
+| `E_STORE_GBRAIN_SIZE` | modo MCP: uma página passa de 8 MB, o limite do `put_pages` do gbrain | reduza o conteúdo da página (descrição, texto das pessoas) ou use o modo git |
 | `E_MERGE_INVALID` | o resultado com as respostas reais é inválido | reveja as respostas (ex.: `value:` com id inexistente) |
 | `E_PLAN_RESOLUTION` | resposta fora das opções (atalho `merge --apply`; o `plan --answers` ignora) | use as opções da tabela |
 | `E_PLAN_PENDING` | há `resolution: null` (atalho `merge --apply`) | responda os itens listados |
@@ -242,7 +316,7 @@ Os comandos antigos continuam, como atalhos:
 | Atalho | O mesmo que |
 |---|---|
 | `merge <base> <delta.json> --plan p.json [--answers p0.json]` | `plan <base> <delta.json> --out p.json [--answers p0.json]` (mesmo arquivo, com `state`) |
-| `merge <base> --apply p.json` | fechar o plano aberto todo respondido (`plan` com as respostas em memória) + `apply`; recusa com `E_STORE_CONFLICT` (base mudou), `E_PLAN_PENDING`, `E_PLAN_RESOLUTION`, `E_PLAN_REPLAN` ou `E_PLAN_STALE` (plano antigo) |
+| `merge <base> --apply p.json` | fechar o plano aberto todo respondido (`plan` com as respostas em memória) + `apply`; recusa com `E_STORE_CONFLICT` (base mudou), `E_PLAN_PENDING`, `E_PLAN_RESOLUTION`, `E_PLAN_REPLAN` ou `E_PLAN_STALE` (plano antigo). Numa base gbrain no modo MCP é recusado (`E_STORE_UNSUPPORTED`, nada gravado): use `plan --answers` e `apply` |
 
 O fluxo das skills é `plan` → `plan --answers` → `show` + prévia → `apply`: o plano final revisado é exatamente o que
 o `apply` grava.
