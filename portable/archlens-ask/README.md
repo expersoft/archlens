@@ -101,6 +101,7 @@ O resultado não bloqueia mudanças no archlens; ele fica registrado aqui.
 | Plataforma | Data | Acertos | Divergências |
 |---|---|---|---|
 | Ensaio (Claude Code via `gbrain call`, base da demonstração, ligações tipadas) | 2026-10-25 | `suporte-processo`, `impacto-container`, `consumidores-evento`, `grande`: mesmos elementos e relações do gabarito (25/26, 32/41, 3/2, 29/43); `cartao` igual; `ambiguo` listou 8 candidatos e perguntou | nenhuma no conteúdo. O ensaio apontou lacunas de instrução (status ausente, hierarquia nos dois modos, parâmetro de `resolve_slugs`, tags e backlinks tipados do gbrain), já corrigidas |
+| Reensaio após a revisão final ([`eval/ensaio-2026-10-25.md`](eval/ensaio-2026-10-25.md)) | 2026-10-25 | as mesmas seis perguntas: elementos e relações iguais ao gabarito (inclusive as derivadas); `ambiguo` perguntou | nenhuma no conteúdo; lacunas de instrução listadas no arquivo |
 | M365 Copilot | — | — | — |
 | Claude Desktop | — | — | — |
 
