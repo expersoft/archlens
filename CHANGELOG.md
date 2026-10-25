@@ -7,6 +7,13 @@ versões seguem [SemVer](https://semver.org/lang/pt-BR/).
 
 ### Adicionado
 
+- **archlens-ask** (`portable/archlens-ask/`): pacote de texto puro para consultar a base no gbrain a partir de
+  assistentes sem execução de código (M365 Copilot, Claude Desktop), via MCP. Responde em markdown e/ou Mermaid
+  (ArchiMate em `flowchart` com as cores do archlens; C4 na sintaxe C4 do Mermaid) com a seleção da `archlens-query`.
+  `REFERENCE.md` e o gabarito de validação são gerados por `npm run ask`; `npm run check-ask` avisa quando o pacote
+  fica para trás (fora do `npm test`). `AGENTS.md`/`CLAUDE.md` pedem que toda mudança no archlens avalie e atualize o
+  pacote no mesmo PR.
+
 - **Versão por objeto**: o plano final guarda em `objects` a versão de cada objeto que altera e de cada objeto em que suas
   decisões se apoiaram; o `apply` só recusa (`E_STORE_CONFLICT`, com os objetos pelo nome e o `plan --answers`) se algum
   deles mudou. Applies de domínios que não se cruzam passam em paralelo. `markdown` e `gbrain` versionam por objeto; `json`

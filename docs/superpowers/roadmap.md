@@ -25,6 +25,7 @@ Cada item tem o próprio spec e o próprio plano (`docs/superpowers/specs/`, `do
 | e.4.2 | Conector neo4j | depois de e.4.1 | — | — |
 | e.4.3 | Conector relacional | depois de e.4.1 | — | — |
 | e.4.4 | Conector S3 | depois de e.4.1 | — | — |
+| f | archlens-ask: consulta à base no gbrain para assistentes sem execução de código (M365 Copilot, Claude Desktop), em pacote de texto derivado do archlens completo (`portable/archlens-ask/`), com markdown e Mermaid | em andamento | [spec](specs/2026-10-25-archlens-ask-design.md) · [plano](plans/2026-10-25-archlens-ask.md) | branch `feat/archlens-ask` → `develop-v2` |
 
 ## Pendências registradas
 
