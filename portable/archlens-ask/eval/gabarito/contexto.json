@@ -1,0 +1,108 @@
+{
+  "title": "Contexto — Plataforma de E-commerce",
+  "spec": {
+    "key": "contexto",
+    "notation": "c4",
+    "level": "context",
+    "scope": "loja",
+    "title": "Contexto — Plataforma de E-commerce"
+  },
+  "sections": [
+    {
+      "label": "Pessoas",
+      "rows": [
+        {
+          "id": "cliente",
+          "name": "Cliente",
+          "type": "business-actor",
+          "kind": "person",
+          "status": "active",
+          "technology": null
+        }
+      ]
+    },
+    {
+      "label": "Sistemas de software",
+      "rows": [
+        {
+          "id": "loja",
+          "name": "Plataforma de E-commerce",
+          "type": "application-component",
+          "kind": "softwareSystem",
+          "status": "active",
+          "technology": null
+        },
+        {
+          "id": "erp",
+          "name": "ERP",
+          "type": "application-component",
+          "kind": "softwareSystem",
+          "status": "active",
+          "technology": "SAP ECC"
+        },
+        {
+          "id": "crm",
+          "name": "CRM",
+          "type": "application-component",
+          "kind": "softwareSystem",
+          "status": "active",
+          "technology": null
+        },
+        {
+          "id": "gateway",
+          "name": "Gateway de Pagamentos",
+          "type": "application-component",
+          "kind": "softwareSystem",
+          "status": "active",
+          "technology": null
+        },
+        {
+          "id": "antifraude",
+          "name": "Serviço Antifraude",
+          "type": "application-component",
+          "kind": "softwareSystem",
+          "status": "active",
+          "technology": null
+        }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "from": "cliente",
+      "to": "loja",
+      "type": "uses",
+      "sentence": "Cliente usa Plataforma de E-commerce.",
+      "derived": false
+    },
+    {
+      "from": "loja",
+      "to": "antifraude",
+      "type": "uses",
+      "sentence": "Plataforma de E-commerce usa Serviço Antifraude.",
+      "derived": false
+    },
+    {
+      "from": "loja",
+      "to": "gateway",
+      "type": "uses",
+      "sentence": "Plataforma de E-commerce usa Gateway de Pagamentos.",
+      "derived": false
+    },
+    {
+      "from": "erp",
+      "to": "loja",
+      "type": "uses",
+      "sentence": "ERP usa Plataforma de E-commerce.",
+      "derived": false
+    },
+    {
+      "from": "crm",
+      "to": "loja",
+      "type": "uses",
+      "sentence": "CRM usa Plataforma de E-commerce.",
+      "derived": false
+    }
+  ],
+  "notes": []
+}

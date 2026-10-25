@@ -15,7 +15,9 @@
     "setup-browser": "npx playwright install chromium",
     "vendor-elk": "cp node_modules/elkjs/lib/elk.bundled.js scripts/vendor/ && cp node_modules/elkjs/LICENSE.md scripts/vendor/ELK-LICENSE.md",
     "version": "node scripts/sync-plugin.mjs && git add .claude-plugin",
-    "check-plugin": "node scripts/sync-plugin.mjs --check"
+    "check-plugin": "node scripts/sync-plugin.mjs --check",
+    "ask": "node scripts/gen-ask.mjs",
+    "check-ask": "node scripts/gen-ask.mjs --check"
   },
   "optionalDependencies": { "playwright-core": "1.63.0" },
   "devDependencies": { "elkjs": "0.12.0" }
