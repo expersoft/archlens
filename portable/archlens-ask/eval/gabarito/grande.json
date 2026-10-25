@@ -1,0 +1,508 @@
+{
+  "title": "Camada de Aplicação",
+  "spec": {
+    "key": "view",
+    "notation": "archimate",
+    "viewpoint": "application"
+  },
+  "sections": [
+    {
+      "label": "Aplicação",
+      "rows": [
+        {
+          "id": "loja",
+          "name": "Plataforma de E-commerce",
+          "type": "application-component",
+          "kind": "softwareSystem",
+          "status": "active",
+          "technology": null
+        },
+        {
+          "id": "loja.web",
+          "name": "Web Storefront",
+          "type": "application-component",
+          "kind": "container",
+          "status": "active",
+          "technology": "Next.js"
+        },
+        {
+          "id": "loja.app",
+          "name": "App Mobile",
+          "type": "application-component",
+          "kind": "container",
+          "status": "active",
+          "technology": "React Native"
+        },
+        {
+          "id": "loja.bff",
+          "name": "BFF",
+          "type": "application-component",
+          "kind": "container",
+          "status": "active",
+          "technology": "Node.js / GraphQL"
+        },
+        {
+          "id": "loja.pedidos",
+          "name": "API de Pedidos",
+          "type": "application-component",
+          "kind": "container",
+          "status": "active",
+          "technology": "Java / Spring Boot"
+        },
+        {
+          "id": "loja.pedidos.checkout",
+          "name": "Checkout Controller",
+          "type": "application-component",
+          "kind": "component",
+          "status": "active",
+          "technology": "Spring MVC"
+        },
+        {
+          "id": "loja.pedidos.carrinho",
+          "name": "Carrinho Service",
+          "type": "application-component",
+          "kind": "component",
+          "status": "active",
+          "technology": "Spring Bean"
+        },
+        {
+          "id": "loja.pedidos.pagamento",
+          "name": "Pagamento Adapter",
+          "type": "application-component",
+          "kind": "component",
+          "status": "active",
+          "technology": "Spring Bean"
+        },
+        {
+          "id": "loja.pedidos.repo",
+          "name": "Pedido Repository",
+          "type": "application-component",
+          "kind": "component",
+          "status": "active",
+          "technology": "Spring Data JPA"
+        },
+        {
+          "id": "loja.pedidos.eventos",
+          "name": "Publicador de Eventos",
+          "type": "application-component",
+          "kind": "component",
+          "status": "active",
+          "technology": "Kafka client"
+        },
+        {
+          "id": "loja.catalogo",
+          "name": "API de Catálogo",
+          "type": "application-component",
+          "kind": "container",
+          "status": "active",
+          "technology": "Go"
+        },
+        {
+          "id": "loja.busca",
+          "name": "Índice de Busca",
+          "type": "application-component",
+          "kind": "container",
+          "status": "active",
+          "technology": "Elasticsearch"
+        },
+        {
+          "id": "loja.cache",
+          "name": "Cache de Carrinho",
+          "type": "application-component",
+          "kind": "container",
+          "status": "active",
+          "technology": "Redis"
+        },
+        {
+          "id": "loja.db-pedidos",
+          "name": "DB Pedidos",
+          "type": "application-component",
+          "kind": "container",
+          "status": "active",
+          "technology": "PostgreSQL"
+        },
+        {
+          "id": "loja.db-catalogo",
+          "name": "DB Catálogo",
+          "type": "application-component",
+          "kind": "container",
+          "status": "active",
+          "technology": "MongoDB"
+        },
+        {
+          "id": "loja.eventos",
+          "name": "Barramento de Eventos",
+          "type": "application-component",
+          "kind": "container",
+          "status": "active",
+          "technology": "Kafka"
+        },
+        {
+          "id": "erp",
+          "name": "ERP",
+          "type": "application-component",
+          "kind": "softwareSystem",
+          "status": "active",
+          "technology": "SAP ECC"
+        },
+        {
+          "id": "crm",
+          "name": "CRM",
+          "type": "application-component",
+          "kind": "softwareSystem",
+          "status": "active",
+          "technology": null
+        },
+        {
+          "id": "gateway",
+          "name": "Gateway de Pagamentos",
+          "type": "application-component",
+          "kind": "softwareSystem",
+          "status": "active",
+          "technology": null
+        },
+        {
+          "id": "antifraude",
+          "name": "Serviço Antifraude",
+          "type": "application-component",
+          "kind": "softwareSystem",
+          "status": "active",
+          "technology": null
+        },
+        {
+          "id": "transportadora",
+          "name": "API da Transportadora",
+          "type": "application-component",
+          "kind": "softwareSystem",
+          "status": "active",
+          "technology": null
+        },
+        {
+          "id": "as-checkout",
+          "name": "Serviço de Checkout",
+          "type": "application-service",
+          "kind": null,
+          "status": "active",
+          "technology": null
+        },
+        {
+          "id": "as-catalogo",
+          "name": "Serviço de Catálogo",
+          "type": "application-service",
+          "kind": null,
+          "status": "active",
+          "technology": null
+        },
+        {
+          "id": "as-pagamento",
+          "name": "Serviço de Pagamento",
+          "type": "application-service",
+          "kind": null,
+          "status": "active",
+          "technology": null
+        },
+        {
+          "id": "as-faturamento",
+          "name": "Serviço de Faturamento",
+          "type": "application-service",
+          "kind": null,
+          "status": "active",
+          "technology": null
+        },
+        {
+          "id": "as-logistica",
+          "name": "Serviço de Logística",
+          "type": "application-service",
+          "kind": null,
+          "status": "active",
+          "technology": null
+        },
+        {
+          "id": "as-consulta",
+          "name": "Consulta de Pedidos",
+          "type": "application-service",
+          "kind": null,
+          "status": "active",
+          "technology": null
+        },
+        {
+          "id": "do-pedido",
+          "name": "Registro de Pedido",
+          "type": "data-object",
+          "kind": null,
+          "status": "active",
+          "technology": null
+        },
+        {
+          "id": "do-produto",
+          "name": "Registro de Produto",
+          "type": "data-object",
+          "kind": null,
+          "status": "active",
+          "technology": null
+        }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "from": "loja.bff",
+      "to": "loja.web",
+      "type": "serving",
+      "sentence": "BFF serve Web Storefront."
+    },
+    {
+      "from": "loja.bff",
+      "to": "loja.app",
+      "type": "serving",
+      "sentence": "BFF serve App Mobile."
+    },
+    {
+      "from": "loja.catalogo",
+      "to": "loja.bff",
+      "type": "serving",
+      "sentence": "API de Catálogo serve BFF."
+    },
+    {
+      "from": "loja.busca",
+      "to": "loja.bff",
+      "type": "serving",
+      "sentence": "Índice de Busca serve BFF."
+    },
+    {
+      "from": "loja.pedidos.carrinho",
+      "to": "loja.bff",
+      "type": "serving",
+      "sentence": "Carrinho Service serve BFF."
+    },
+    {
+      "from": "loja.pedidos.checkout",
+      "to": "loja.bff",
+      "type": "serving",
+      "sentence": "Checkout Controller serve BFF."
+    },
+    {
+      "from": "loja.db-catalogo",
+      "to": "loja.catalogo",
+      "type": "serving",
+      "sentence": "DB Catálogo serve API de Catálogo."
+    },
+    {
+      "from": "loja.busca",
+      "to": "loja.catalogo",
+      "type": "serving",
+      "sentence": "Índice de Busca serve API de Catálogo."
+    },
+    {
+      "from": "loja.pedidos.carrinho",
+      "to": "loja.pedidos.checkout",
+      "type": "serving",
+      "sentence": "Carrinho Service serve Checkout Controller."
+    },
+    {
+      "from": "loja.pedidos.pagamento",
+      "to": "loja.pedidos.checkout",
+      "type": "serving",
+      "sentence": "Pagamento Adapter serve Checkout Controller."
+    },
+    {
+      "from": "loja.pedidos.repo",
+      "to": "loja.pedidos.checkout",
+      "type": "serving",
+      "sentence": "Pedido Repository serve Checkout Controller."
+    },
+    {
+      "from": "loja.pedidos.eventos",
+      "to": "loja.pedidos.checkout",
+      "type": "serving",
+      "sentence": "Publicador de Eventos serve Checkout Controller."
+    },
+    {
+      "from": "loja.cache",
+      "to": "loja.pedidos.carrinho",
+      "type": "serving",
+      "sentence": "Cache de Carrinho serve Carrinho Service."
+    },
+    {
+      "from": "loja.db-pedidos",
+      "to": "loja.pedidos.repo",
+      "type": "serving",
+      "sentence": "DB Pedidos serve Pedido Repository."
+    },
+    {
+      "from": "antifraude",
+      "to": "loja.pedidos.pagamento",
+      "type": "serving",
+      "sentence": "Serviço Antifraude serve Pagamento Adapter."
+    },
+    {
+      "from": "gateway",
+      "to": "loja.pedidos.pagamento",
+      "type": "serving",
+      "sentence": "Gateway de Pagamentos serve Pagamento Adapter."
+    },
+    {
+      "from": "loja.eventos",
+      "to": "loja.pedidos.eventos",
+      "type": "serving",
+      "sentence": "Barramento de Eventos serve Publicador de Eventos."
+    },
+    {
+      "from": "loja.eventos",
+      "to": "erp",
+      "type": "serving",
+      "sentence": "Barramento de Eventos serve ERP."
+    },
+    {
+      "from": "transportadora",
+      "to": "erp",
+      "type": "serving",
+      "sentence": "API da Transportadora serve ERP."
+    },
+    {
+      "from": "loja.pedidos",
+      "to": "crm",
+      "type": "serving",
+      "sentence": "API de Pedidos serve CRM."
+    },
+    {
+      "from": "loja.pedidos.checkout",
+      "to": "as-checkout",
+      "type": "realization",
+      "sentence": "Checkout Controller realiza Serviço de Checkout."
+    },
+    {
+      "from": "loja.catalogo",
+      "to": "as-catalogo",
+      "type": "realization",
+      "sentence": "API de Catálogo realiza Serviço de Catálogo."
+    },
+    {
+      "from": "loja.pedidos.pagamento",
+      "to": "as-pagamento",
+      "type": "realization",
+      "sentence": "Pagamento Adapter realiza Serviço de Pagamento."
+    },
+    {
+      "from": "erp",
+      "to": "as-faturamento",
+      "type": "realization",
+      "sentence": "ERP realiza Serviço de Faturamento."
+    },
+    {
+      "from": "erp",
+      "to": "as-logistica",
+      "type": "realization",
+      "sentence": "ERP realiza Serviço de Logística."
+    },
+    {
+      "from": "loja.pedidos",
+      "to": "as-consulta",
+      "type": "realization",
+      "sentence": "API de Pedidos realiza Consulta de Pedidos."
+    },
+    {
+      "from": "loja.pedidos.repo",
+      "to": "do-pedido",
+      "type": "access",
+      "sentence": "Pedido Repository grava Registro de Pedido."
+    },
+    {
+      "from": "loja.catalogo",
+      "to": "do-produto",
+      "type": "access",
+      "sentence": "API de Catálogo lê e grava Registro de Produto."
+    },
+    {
+      "from": "loja",
+      "to": "loja.web",
+      "type": "composition",
+      "sentence": "Plataforma de E-commerce contém Web Storefront como parte integrante."
+    },
+    {
+      "from": "loja",
+      "to": "loja.app",
+      "type": "composition",
+      "sentence": "Plataforma de E-commerce contém App Mobile como parte integrante."
+    },
+    {
+      "from": "loja",
+      "to": "loja.bff",
+      "type": "composition",
+      "sentence": "Plataforma de E-commerce contém BFF como parte integrante."
+    },
+    {
+      "from": "loja",
+      "to": "loja.pedidos",
+      "type": "composition",
+      "sentence": "Plataforma de E-commerce contém API de Pedidos como parte integrante."
+    },
+    {
+      "from": "loja.pedidos",
+      "to": "loja.pedidos.checkout",
+      "type": "composition",
+      "sentence": "API de Pedidos contém Checkout Controller como parte integrante."
+    },
+    {
+      "from": "loja.pedidos",
+      "to": "loja.pedidos.carrinho",
+      "type": "composition",
+      "sentence": "API de Pedidos contém Carrinho Service como parte integrante."
+    },
+    {
+      "from": "loja.pedidos",
+      "to": "loja.pedidos.pagamento",
+      "type": "composition",
+      "sentence": "API de Pedidos contém Pagamento Adapter como parte integrante."
+    },
+    {
+      "from": "loja.pedidos",
+      "to": "loja.pedidos.repo",
+      "type": "composition",
+      "sentence": "API de Pedidos contém Pedido Repository como parte integrante."
+    },
+    {
+      "from": "loja.pedidos",
+      "to": "loja.pedidos.eventos",
+      "type": "composition",
+      "sentence": "API de Pedidos contém Publicador de Eventos como parte integrante."
+    },
+    {
+      "from": "loja",
+      "to": "loja.catalogo",
+      "type": "composition",
+      "sentence": "Plataforma de E-commerce contém API de Catálogo como parte integrante."
+    },
+    {
+      "from": "loja",
+      "to": "loja.busca",
+      "type": "composition",
+      "sentence": "Plataforma de E-commerce contém Índice de Busca como parte integrante."
+    },
+    {
+      "from": "loja",
+      "to": "loja.cache",
+      "type": "composition",
+      "sentence": "Plataforma de E-commerce contém Cache de Carrinho como parte integrante."
+    },
+    {
+      "from": "loja",
+      "to": "loja.db-pedidos",
+      "type": "composition",
+      "sentence": "Plataforma de E-commerce contém DB Pedidos como parte integrante."
+    },
+    {
+      "from": "loja",
+      "to": "loja.db-catalogo",
+      "type": "composition",
+      "sentence": "Plataforma de E-commerce contém DB Catálogo como parte integrante."
+    },
+    {
+      "from": "loja",
+      "to": "loja.eventos",
+      "type": "composition",
+      "sentence": "Plataforma de E-commerce contém Barramento de Eventos como parte integrante."
+    }
+  ],
+  "notes": []
+}

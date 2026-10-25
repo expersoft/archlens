@@ -25,3 +25,14 @@ test('REFERENCE lists every element and relationship type, colors and support di
   assert.match(md, /classDef business fill:#fff5a8,stroke:#a89a2c/);
   assert.match(md, /UpdateElementStyle\(/);
 });
+
+test('buildGabarito runs the CLI query for each question with a query', async () => {
+  const { buildGabarito } = await import('../scripts/gen-ask.mjs');
+  const g = buildGabarito([
+    { id: 'a', pergunta: 'x', element: 'loja.pedidos' },
+    { id: 'b', pergunta: 'y', esperado: 'pergunta qual' },
+  ]);
+  assert.deepEqual([...g.keys()], ['portable/archlens-ask/eval/gabarito/a.json']);
+  const a = JSON.parse(g.get('portable/archlens-ask/eval/gabarito/a.json'));
+  assert.equal(a.element.id, 'loja.pedidos');
+});

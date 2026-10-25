@@ -1,0 +1,64 @@
+{
+  "title": "Container — Plataforma de E-commerce",
+  "spec": {
+    "key": "view",
+    "notation": "c4",
+    "level": "container",
+    "scope": "loja",
+    "focus": [
+      "loja.eventos"
+    ],
+    "depth": 1
+  },
+  "sections": [
+    {
+      "label": "Sistemas de software",
+      "rows": [
+        {
+          "id": "erp",
+          "name": "ERP",
+          "type": "application-component",
+          "kind": "softwareSystem",
+          "status": "active",
+          "technology": "SAP ECC"
+        }
+      ]
+    },
+    {
+      "label": "Contêineres",
+      "rows": [
+        {
+          "id": "loja.pedidos",
+          "name": "API de Pedidos",
+          "type": "application-component",
+          "kind": "container",
+          "status": "active",
+          "technology": "Java / Spring Boot"
+        },
+        {
+          "id": "loja.eventos",
+          "name": "Barramento de Eventos",
+          "type": "application-component",
+          "kind": "container",
+          "status": "active",
+          "technology": "Kafka"
+        }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "from": "loja.pedidos",
+      "to": "loja.eventos",
+      "type": "uses",
+      "sentence": "API de Pedidos usa Barramento de Eventos."
+    },
+    {
+      "from": "erp",
+      "to": "loja.eventos",
+      "type": "uses",
+      "sentence": "ERP usa Barramento de Eventos."
+    }
+  ],
+  "notes": []
+}

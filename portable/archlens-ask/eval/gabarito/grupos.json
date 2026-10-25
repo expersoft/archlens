@@ -1,0 +1,70 @@
+{
+  "title": "Vendas × Back-office",
+  "spec": {
+    "key": "vendas-x-backoffice",
+    "notation": "archimate",
+    "viewpoint": "application",
+    "title": "Vendas × Back-office",
+    "groups": {
+      "only": [
+        "plat-vendas",
+        "plat-backoffice"
+      ],
+      "crossOnly": true
+    }
+  },
+  "sections": [
+    {
+      "label": "Aplicação",
+      "rows": [
+        {
+          "id": "loja.pedidos",
+          "name": "API de Pedidos",
+          "type": "application-component",
+          "kind": "container",
+          "status": "active",
+          "technology": "Java / Spring Boot"
+        },
+        {
+          "id": "loja.eventos",
+          "name": "Barramento de Eventos",
+          "type": "application-component",
+          "kind": "container",
+          "status": "active",
+          "technology": "Kafka"
+        },
+        {
+          "id": "erp",
+          "name": "ERP",
+          "type": "application-component",
+          "kind": "softwareSystem",
+          "status": "active",
+          "technology": "SAP ECC"
+        },
+        {
+          "id": "crm",
+          "name": "CRM",
+          "type": "application-component",
+          "kind": "softwareSystem",
+          "status": "active",
+          "technology": null
+        }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "from": "loja.eventos",
+      "to": "erp",
+      "type": "serving",
+      "sentence": "Barramento de Eventos serve ERP."
+    },
+    {
+      "from": "loja.pedidos",
+      "to": "crm",
+      "type": "serving",
+      "sentence": "API de Pedidos serve CRM."
+    }
+  ],
+  "notes": []
+}

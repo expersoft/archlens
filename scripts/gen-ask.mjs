@@ -2,6 +2,7 @@
 // Regenerates the generated files of portable/archlens-ask/ from the code of the full archlens, so the package never drifts.
 // It only reads the archlens (registry, render, explain, gbrain pack): nothing there changes for the package. --check only reports.
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -149,9 +150,27 @@ export function buildReference() {
   return out.join('\n');
 }
 
+// The validation base: the same content the loja-online-gbrain demonstration loads into the gbrain.
+export const EVAL_BASE = 'examples/loja-online/architecture';
+const CLI = join(ROOT, 'scripts', 'archlens.mjs');
+
+/** The answer key: the CLI query (JSON) of each question that has one (spec, view or element). */
+export function buildGabarito(perguntas) {
+  const out = new Map();
+  for (const q of perguntas) {
+    const args = q.spec ? ['--spec', JSON.stringify(q.spec)] : q.view ? ['--view', q.view] : q.element ? ['--element', q.element, ...(q.depth ? ['--depth', String(q.depth)] : [])] : null;
+    if (!args) continue;
+    const res = spawnSync(process.execPath, [CLI, 'query', EVAL_BASE, ...args, '--format', 'json'], { cwd: ROOT, encoding: 'utf8' });
+    if (res.status !== 0) throw new Error(`gabarito "${q.id}": ${res.stderr.trim()}`);
+    out.set(`${REL_DIR}/eval/gabarito/${q.id}.json`, res.stdout);
+  }
+  return out;
+}
+
 /** Repository-relative path → generated content. */
 export function askFiles() {
-  return new Map([[`${REL_DIR}/REFERENCE.md`, buildReference()]]);
+  const perguntas = JSON.parse(read(`${REL_DIR}/eval/perguntas.json`));
+  return new Map([[`${REL_DIR}/REFERENCE.md`, buildReference()], ...buildGabarito(perguntas)]);
 }
 
 /** Problems found (empty: the package is current). */

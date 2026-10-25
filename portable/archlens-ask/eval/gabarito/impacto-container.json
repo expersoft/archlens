@@ -1,0 +1,1394 @@
+{
+  "title": "Matriz de Impacto — API de Pedidos",
+  "spec": {
+    "key": "view",
+    "notation": "archimate",
+    "viewpoint": "impact",
+    "anchor": "loja.pedidos"
+  },
+  "sections": [
+    {
+      "label": "Motivação",
+      "rows": [
+        {
+          "id": "goal-abandono",
+          "name": "Reduzir abandono de carrinho",
+          "type": "goal",
+          "kind": null,
+          "status": "active",
+          "technology": null
+        },
+        {
+          "id": "req-latencia",
+          "name": "Checkout < 2s (p95)",
+          "type": "requirement",
+          "kind": null,
+          "status": "active",
+          "technology": null
+        }
+      ]
+    },
+    {
+      "label": "Negócio",
+      "rows": [
+        {
+          "id": "cliente",
+          "name": "Cliente",
+          "type": "business-actor",
+          "kind": "person",
+          "status": "active",
+          "technology": null
+        },
+        {
+          "id": "atendente",
+          "name": "Atendente SAC",
+          "type": "business-actor",
+          "kind": "person",
+          "status": "active",
+          "technology": null
+        },
+        {
+          "id": "prod-venda",
+          "name": "Venda Online",
+          "type": "product",
+          "kind": null,
+          "status": "active",
+          "technology": null
+        },
+        {
+          "id": "bs-compra",
+          "name": "Compra online",
+          "type": "business-service",
+          "kind": null,
+          "status": "active",
+          "technology": null
+        },
+        {
+          "id": "bs-pagamento",
+          "name": "Pagamento seguro",
+          "type": "business-service",
+          "kind": null,
+          "status": "active",
+          "technology": null
+        },
+        {
+          "id": "bs-atendimento",
+          "name": "Atendimento pós-venda",
+          "type": "business-service",
+          "kind": null,
+          "status": "active",
+          "technology": null
+        },
+        {
+          "id": "br-comprador",
+          "name": "Comprador",
+          "type": "business-role",
+          "kind": "person",
+          "status": "active",
+          "technology": null
+        },
+        {
+          "id": "bp-checkout",
+          "name": "Checkout",
+          "type": "business-process",
+          "kind": null,
+          "status": "active",
+          "technology": null
+        },
+        {
+          "id": "bp-atendimento",
+          "name": "Tratar solicitação",
+          "type": "business-process",
+          "kind": null,
+          "status": "active",
+          "technology": null
+        }
+      ]
+    },
+    {
+      "label": "Aplicação",
+      "rows": [
+        {
+          "id": "loja.web",
+          "name": "Web Storefront",
+          "type": "application-component",
+          "kind": "container",
+          "status": "active",
+          "technology": "Next.js"
+        },
+        {
+          "id": "loja.app",
+          "name": "App Mobile",
+          "type": "application-component",
+          "kind": "container",
+          "status": "active",
+          "technology": "React Native"
+        },
+        {
+          "id": "loja.bff",
+          "name": "BFF",
+          "type": "application-component",
+          "kind": "container",
+          "status": "active",
+          "technology": "Node.js / GraphQL"
+        },
+        {
+          "id": "loja.pedidos",
+          "name": "API de Pedidos",
+          "type": "application-component",
+          "kind": "container",
+          "status": "active",
+          "technology": "Java / Spring Boot"
+        },
+        {
+          "id": "loja.cache",
+          "name": "Cache de Carrinho",
+          "type": "application-component",
+          "kind": "container",
+          "status": "active",
+          "technology": "Redis"
+        },
+        {
+          "id": "loja.db-pedidos",
+          "name": "DB Pedidos",
+          "type": "application-component",
+          "kind": "container",
+          "status": "active",
+          "technology": "PostgreSQL"
+        },
+        {
+          "id": "loja.eventos",
+          "name": "Barramento de Eventos",
+          "type": "application-component",
+          "kind": "container",
+          "status": "active",
+          "technology": "Kafka"
+        },
+        {
+          "id": "crm",
+          "name": "CRM",
+          "type": "application-component",
+          "kind": "softwareSystem",
+          "status": "active",
+          "technology": null
+        },
+        {
+          "id": "gateway",
+          "name": "Gateway de Pagamentos",
+          "type": "application-component",
+          "kind": "softwareSystem",
+          "status": "active",
+          "technology": null
+        },
+        {
+          "id": "antifraude",
+          "name": "Serviço Antifraude",
+          "type": "application-component",
+          "kind": "softwareSystem",
+          "status": "active",
+          "technology": null
+        },
+        {
+          "id": "as-checkout",
+          "name": "Serviço de Checkout",
+          "type": "application-service",
+          "kind": null,
+          "status": "active",
+          "technology": null
+        },
+        {
+          "id": "as-pagamento",
+          "name": "Serviço de Pagamento",
+          "type": "application-service",
+          "kind": null,
+          "status": "active",
+          "technology": null
+        },
+        {
+          "id": "as-consulta",
+          "name": "Consulta de Pedidos",
+          "type": "application-service",
+          "kind": null,
+          "status": "active",
+          "technology": null
+        },
+        {
+          "id": "do-pedido",
+          "name": "Registro de Pedido",
+          "type": "data-object",
+          "kind": null,
+          "status": "active",
+          "technology": null
+        }
+      ]
+    },
+    {
+      "label": "Tecnologia",
+      "rows": [
+        {
+          "id": "tn-k8s",
+          "name": "Cluster Kubernetes (EKS)",
+          "type": "node",
+          "kind": null,
+          "status": "active",
+          "technology": null
+        },
+        {
+          "id": "ts-hosting",
+          "name": "Hospedagem de contêineres",
+          "type": "technology-service",
+          "kind": null,
+          "status": "active",
+          "technology": null
+        },
+        {
+          "id": "ts-mensageria",
+          "name": "Mensageria",
+          "type": "technology-service",
+          "kind": null,
+          "status": "active",
+          "technology": null
+        },
+        {
+          "id": "ss-postgres",
+          "name": "PostgreSQL 16 (RDS)",
+          "type": "system-software",
+          "kind": null,
+          "status": "active",
+          "technology": null
+        },
+        {
+          "id": "ss-redis",
+          "name": "Redis (ElastiCache)",
+          "type": "system-software",
+          "kind": null,
+          "status": "active",
+          "technology": null
+        },
+        {
+          "id": "ss-kafka",
+          "name": "Apache Kafka (MSK)",
+          "type": "system-software",
+          "kind": null,
+          "status": "active",
+          "technology": null
+        },
+        {
+          "id": "art-pedidos",
+          "name": "pedidos-api.jar",
+          "type": "artifact",
+          "kind": null,
+          "status": "active",
+          "technology": null
+        }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "from": "loja.web",
+      "to": "cliente",
+      "type": "serving",
+      "sentence": "Web Storefront serve Cliente."
+    },
+    {
+      "from": "loja.app",
+      "to": "cliente",
+      "type": "serving",
+      "sentence": "App Mobile serve Cliente."
+    },
+    {
+      "from": "loja.bff",
+      "to": "loja.web",
+      "type": "serving",
+      "sentence": "BFF serve Web Storefront."
+    },
+    {
+      "from": "loja.bff",
+      "to": "loja.app",
+      "type": "serving",
+      "sentence": "BFF serve App Mobile."
+    },
+    {
+      "from": "loja.pedidos",
+      "to": "crm",
+      "type": "serving",
+      "sentence": "API de Pedidos serve CRM."
+    },
+    {
+      "from": "crm",
+      "to": "atendente",
+      "type": "serving",
+      "sentence": "CRM serve Atendente SAC."
+    },
+    {
+      "from": "prod-venda",
+      "to": "bs-compra",
+      "type": "aggregation",
+      "sentence": "Venda Online agrega Compra online."
+    },
+    {
+      "from": "prod-venda",
+      "to": "bs-pagamento",
+      "type": "aggregation",
+      "sentence": "Venda Online agrega Pagamento seguro."
+    },
+    {
+      "from": "prod-venda",
+      "to": "bs-atendimento",
+      "type": "aggregation",
+      "sentence": "Venda Online agrega Atendimento pós-venda."
+    },
+    {
+      "from": "bp-checkout",
+      "to": "bs-compra",
+      "type": "realization",
+      "sentence": "Checkout realiza Compra online."
+    },
+    {
+      "from": "bp-checkout",
+      "to": "bs-pagamento",
+      "type": "realization",
+      "sentence": "Checkout realiza Pagamento seguro."
+    },
+    {
+      "from": "bp-atendimento",
+      "to": "bs-atendimento",
+      "type": "realization",
+      "sentence": "Tratar solicitação realiza Atendimento pós-venda."
+    },
+    {
+      "from": "bs-compra",
+      "to": "br-comprador",
+      "type": "serving",
+      "sentence": "Compra online serve Comprador."
+    },
+    {
+      "from": "cliente",
+      "to": "br-comprador",
+      "type": "assignment",
+      "sentence": "Cliente desempenha o papel Comprador."
+    },
+    {
+      "from": "atendente",
+      "to": "bp-atendimento",
+      "type": "assignment",
+      "sentence": "Atendente SAC executa Tratar solicitação."
+    },
+    {
+      "from": "as-checkout",
+      "to": "bp-checkout",
+      "type": "serving",
+      "sentence": "Serviço de Checkout serve Checkout."
+    },
+    {
+      "from": "as-pagamento",
+      "to": "bp-checkout",
+      "type": "serving",
+      "sentence": "Serviço de Pagamento serve Checkout."
+    },
+    {
+      "from": "loja.pedidos",
+      "to": "as-consulta",
+      "type": "realization",
+      "sentence": "API de Pedidos realiza Consulta de Pedidos."
+    },
+    {
+      "from": "as-consulta",
+      "to": "bp-atendimento",
+      "type": "serving",
+      "sentence": "Consulta de Pedidos serve Tratar solicitação."
+    },
+    {
+      "from": "crm",
+      "to": "bp-atendimento",
+      "type": "serving",
+      "sentence": "CRM serve Tratar solicitação."
+    },
+    {
+      "from": "tn-k8s",
+      "to": "ts-hosting",
+      "type": "realization",
+      "sentence": "Cluster Kubernetes (EKS) realiza Hospedagem de contêineres."
+    },
+    {
+      "from": "ts-hosting",
+      "to": "loja.pedidos",
+      "type": "serving",
+      "sentence": "Hospedagem de contêineres serve API de Pedidos."
+    },
+    {
+      "from": "ts-hosting",
+      "to": "loja.bff",
+      "type": "serving",
+      "sentence": "Hospedagem de contêineres serve BFF."
+    },
+    {
+      "from": "ss-kafka",
+      "to": "ts-mensageria",
+      "type": "realization",
+      "sentence": "Apache Kafka (MSK) realiza Mensageria."
+    },
+    {
+      "from": "ts-mensageria",
+      "to": "loja.pedidos",
+      "type": "serving",
+      "sentence": "Mensageria serve API de Pedidos."
+    },
+    {
+      "from": "ss-postgres",
+      "to": "loja.pedidos",
+      "type": "serving",
+      "sentence": "PostgreSQL 16 (RDS) serve API de Pedidos."
+    },
+    {
+      "from": "ss-redis",
+      "to": "loja.pedidos",
+      "type": "serving",
+      "sentence": "Redis (ElastiCache) serve API de Pedidos."
+    },
+    {
+      "from": "art-pedidos",
+      "to": "loja.pedidos",
+      "type": "realization",
+      "sentence": "pedidos-api.jar realiza API de Pedidos."
+    },
+    {
+      "from": "tn-k8s",
+      "to": "art-pedidos",
+      "type": "assignment",
+      "sentence": "pedidos-api.jar roda em Cluster Kubernetes (EKS)."
+    },
+    {
+      "from": "bp-checkout",
+      "to": "goal-abandono",
+      "type": "realization",
+      "sentence": "Checkout contribui para Reduzir abandono de carrinho."
+    },
+    {
+      "from": "loja.pedidos",
+      "to": "req-latencia",
+      "type": "realization",
+      "sentence": "API de Pedidos atende a Checkout < 2s (p95)."
+    },
+    {
+      "from": "req-latencia",
+      "to": "goal-abandono",
+      "type": "influence",
+      "sentence": "Checkout < 2s (p95) influencia Reduzir abandono de carrinho."
+    },
+    {
+      "from": "loja.cache",
+      "to": "loja.pedidos",
+      "type": "serving",
+      "sentence": "Cache de Carrinho serve API de Pedidos."
+    },
+    {
+      "from": "antifraude",
+      "to": "loja.pedidos",
+      "type": "serving",
+      "sentence": "Serviço Antifraude serve API de Pedidos."
+    },
+    {
+      "from": "gateway",
+      "to": "loja.pedidos",
+      "type": "serving",
+      "sentence": "Gateway de Pagamentos serve API de Pedidos."
+    },
+    {
+      "from": "loja.db-pedidos",
+      "to": "loja.pedidos",
+      "type": "serving",
+      "sentence": "DB Pedidos serve API de Pedidos."
+    },
+    {
+      "from": "loja.pedidos",
+      "to": "do-pedido",
+      "type": "access",
+      "sentence": "API de Pedidos lê e grava Registro de Pedido."
+    },
+    {
+      "from": "loja.eventos",
+      "to": "loja.pedidos",
+      "type": "serving",
+      "sentence": "Barramento de Eventos serve API de Pedidos."
+    },
+    {
+      "from": "loja.pedidos",
+      "to": "loja.bff",
+      "type": "serving",
+      "sentence": "API de Pedidos serve BFF."
+    },
+    {
+      "from": "loja.pedidos",
+      "to": "as-checkout",
+      "type": "realization",
+      "sentence": "API de Pedidos realiza Serviço de Checkout."
+    },
+    {
+      "from": "loja.pedidos",
+      "to": "as-pagamento",
+      "type": "realization",
+      "sentence": "API de Pedidos realiza Serviço de Pagamento."
+    }
+  ],
+  "matrix": [
+    {
+      "id": "req-latencia",
+      "name": "Checkout < 2s (p95)",
+      "type": "requirement",
+      "typeLabel": "Requirement",
+      "layer": "motivation",
+      "layerLabel": "Motivação",
+      "role": "dependent",
+      "distance": 1,
+      "shown": true,
+      "path": [
+        {
+          "id": "req-latencia",
+          "name": "Checkout < 2s (p95)",
+          "via": "realization"
+        }
+      ]
+    },
+    {
+      "id": "goal-abandono",
+      "name": "Reduzir abandono de carrinho",
+      "type": "goal",
+      "typeLabel": "Goal",
+      "layer": "motivation",
+      "layerLabel": "Motivação",
+      "role": "dependent",
+      "distance": 2,
+      "shown": true,
+      "path": [
+        {
+          "id": "req-latencia",
+          "name": "Checkout < 2s (p95)",
+          "via": "realization"
+        },
+        {
+          "id": "goal-abandono",
+          "name": "Reduzir abandono de carrinho",
+          "via": "influence"
+        }
+      ]
+    },
+    {
+      "id": "atendente",
+      "name": "Atendente SAC",
+      "type": "business-actor",
+      "typeLabel": "Business Actor",
+      "layer": "business",
+      "layerLabel": "Negócio",
+      "role": "dependent",
+      "distance": 2,
+      "shown": true,
+      "path": [
+        {
+          "id": "crm",
+          "name": "CRM",
+          "via": "serving"
+        },
+        {
+          "id": "atendente",
+          "name": "Atendente SAC",
+          "via": "serving"
+        }
+      ]
+    },
+    {
+      "id": "bp-atendimento",
+      "name": "Tratar solicitação",
+      "type": "business-process",
+      "typeLabel": "Business Process",
+      "layer": "business",
+      "layerLabel": "Negócio",
+      "role": "dependent",
+      "distance": 2,
+      "shown": true,
+      "path": [
+        {
+          "id": "crm",
+          "name": "CRM",
+          "via": "serving"
+        },
+        {
+          "id": "bp-atendimento",
+          "name": "Tratar solicitação",
+          "via": "serving"
+        }
+      ]
+    },
+    {
+      "id": "bs-atendimento",
+      "name": "Atendimento pós-venda",
+      "type": "business-service",
+      "typeLabel": "Business Service",
+      "layer": "business",
+      "layerLabel": "Negócio",
+      "role": "dependent",
+      "distance": 3,
+      "shown": true,
+      "path": [
+        {
+          "id": "crm",
+          "name": "CRM",
+          "via": "serving"
+        },
+        {
+          "id": "bp-atendimento",
+          "name": "Tratar solicitação",
+          "via": "serving"
+        },
+        {
+          "id": "bs-atendimento",
+          "name": "Atendimento pós-venda",
+          "via": "realization"
+        }
+      ]
+    },
+    {
+      "id": "bp-checkout",
+      "name": "Checkout",
+      "type": "business-process",
+      "typeLabel": "Business Process",
+      "layer": "business",
+      "layerLabel": "Negócio",
+      "role": "dependent",
+      "distance": 3,
+      "shown": true,
+      "path": [
+        {
+          "id": "loja.pedidos.checkout",
+          "name": "Checkout Controller",
+          "via": "composition"
+        },
+        {
+          "id": "as-checkout",
+          "name": "Serviço de Checkout",
+          "via": "realization"
+        },
+        {
+          "id": "bp-checkout",
+          "name": "Checkout",
+          "via": "serving"
+        }
+      ]
+    },
+    {
+      "id": "cliente",
+      "name": "Cliente",
+      "type": "business-actor",
+      "typeLabel": "Business Actor",
+      "layer": "business",
+      "layerLabel": "Negócio",
+      "role": "dependent",
+      "distance": 4,
+      "shown": true,
+      "path": [
+        {
+          "id": "loja.pedidos.checkout",
+          "name": "Checkout Controller",
+          "via": "composition"
+        },
+        {
+          "id": "loja.bff",
+          "name": "BFF",
+          "via": "serving"
+        },
+        {
+          "id": "loja.web",
+          "name": "Web Storefront",
+          "via": "serving"
+        },
+        {
+          "id": "cliente",
+          "name": "Cliente",
+          "via": "serving"
+        }
+      ]
+    },
+    {
+      "id": "bs-compra",
+      "name": "Compra online",
+      "type": "business-service",
+      "typeLabel": "Business Service",
+      "layer": "business",
+      "layerLabel": "Negócio",
+      "role": "dependent",
+      "distance": 4,
+      "shown": true,
+      "path": [
+        {
+          "id": "loja.pedidos.checkout",
+          "name": "Checkout Controller",
+          "via": "composition"
+        },
+        {
+          "id": "as-checkout",
+          "name": "Serviço de Checkout",
+          "via": "realization"
+        },
+        {
+          "id": "bp-checkout",
+          "name": "Checkout",
+          "via": "serving"
+        },
+        {
+          "id": "bs-compra",
+          "name": "Compra online",
+          "via": "realization"
+        }
+      ]
+    },
+    {
+      "id": "bs-pagamento",
+      "name": "Pagamento seguro",
+      "type": "business-service",
+      "typeLabel": "Business Service",
+      "layer": "business",
+      "layerLabel": "Negócio",
+      "role": "dependent",
+      "distance": 4,
+      "shown": true,
+      "path": [
+        {
+          "id": "loja.pedidos.checkout",
+          "name": "Checkout Controller",
+          "via": "composition"
+        },
+        {
+          "id": "as-checkout",
+          "name": "Serviço de Checkout",
+          "via": "realization"
+        },
+        {
+          "id": "bp-checkout",
+          "name": "Checkout",
+          "via": "serving"
+        },
+        {
+          "id": "bs-pagamento",
+          "name": "Pagamento seguro",
+          "via": "realization"
+        }
+      ]
+    },
+    {
+      "id": "prod-venda",
+      "name": "Venda Online",
+      "type": "product",
+      "typeLabel": "Product",
+      "layer": "business",
+      "layerLabel": "Negócio",
+      "role": "dependent",
+      "distance": 4,
+      "shown": true,
+      "path": [
+        {
+          "id": "crm",
+          "name": "CRM",
+          "via": "serving"
+        },
+        {
+          "id": "bp-atendimento",
+          "name": "Tratar solicitação",
+          "via": "serving"
+        },
+        {
+          "id": "bs-atendimento",
+          "name": "Atendimento pós-venda",
+          "via": "realization"
+        },
+        {
+          "id": "prod-venda",
+          "name": "Venda Online",
+          "via": "aggregation"
+        }
+      ]
+    },
+    {
+      "id": "br-comprador",
+      "name": "Comprador",
+      "type": "business-role",
+      "typeLabel": "Business Role",
+      "layer": "business",
+      "layerLabel": "Negócio",
+      "role": "dependent",
+      "distance": 5,
+      "shown": true,
+      "path": [
+        {
+          "id": "loja.pedidos.checkout",
+          "name": "Checkout Controller",
+          "via": "composition"
+        },
+        {
+          "id": "loja.bff",
+          "name": "BFF",
+          "via": "serving"
+        },
+        {
+          "id": "loja.web",
+          "name": "Web Storefront",
+          "via": "serving"
+        },
+        {
+          "id": "cliente",
+          "name": "Cliente",
+          "via": "serving"
+        },
+        {
+          "id": "br-comprador",
+          "name": "Comprador",
+          "via": "assignment"
+        }
+      ]
+    },
+    {
+      "id": "as-consulta",
+      "name": "Consulta de Pedidos",
+      "type": "application-service",
+      "typeLabel": "Application Service",
+      "layer": "application",
+      "layerLabel": "Aplicação",
+      "role": "dependent",
+      "distance": 1,
+      "shown": true,
+      "path": [
+        {
+          "id": "as-consulta",
+          "name": "Consulta de Pedidos",
+          "via": "realization"
+        }
+      ]
+    },
+    {
+      "id": "crm",
+      "name": "CRM",
+      "type": "application-component",
+      "typeLabel": "Application Component",
+      "layer": "application",
+      "layerLabel": "Aplicação",
+      "role": "dependent",
+      "distance": 1,
+      "shown": true,
+      "path": [
+        {
+          "id": "crm",
+          "name": "CRM",
+          "via": "serving"
+        }
+      ]
+    },
+    {
+      "id": "loja.bff",
+      "name": "BFF",
+      "type": "application-component",
+      "typeLabel": "Application Component",
+      "layer": "application",
+      "layerLabel": "Aplicação",
+      "role": "dependent",
+      "distance": 2,
+      "shown": true,
+      "path": [
+        {
+          "id": "loja.pedidos.checkout",
+          "name": "Checkout Controller",
+          "via": "composition"
+        },
+        {
+          "id": "loja.bff",
+          "name": "BFF",
+          "via": "serving"
+        }
+      ]
+    },
+    {
+      "id": "as-checkout",
+      "name": "Serviço de Checkout",
+      "type": "application-service",
+      "typeLabel": "Application Service",
+      "layer": "application",
+      "layerLabel": "Aplicação",
+      "role": "dependent",
+      "distance": 2,
+      "shown": true,
+      "path": [
+        {
+          "id": "loja.pedidos.checkout",
+          "name": "Checkout Controller",
+          "via": "composition"
+        },
+        {
+          "id": "as-checkout",
+          "name": "Serviço de Checkout",
+          "via": "realization"
+        }
+      ]
+    },
+    {
+      "id": "as-pagamento",
+      "name": "Serviço de Pagamento",
+      "type": "application-service",
+      "typeLabel": "Application Service",
+      "layer": "application",
+      "layerLabel": "Aplicação",
+      "role": "dependent",
+      "distance": 2,
+      "shown": true,
+      "path": [
+        {
+          "id": "loja.pedidos.pagamento",
+          "name": "Pagamento Adapter",
+          "via": "composition"
+        },
+        {
+          "id": "as-pagamento",
+          "name": "Serviço de Pagamento",
+          "via": "realization"
+        }
+      ]
+    },
+    {
+      "id": "loja.app",
+      "name": "App Mobile",
+      "type": "application-component",
+      "typeLabel": "Application Component",
+      "layer": "application",
+      "layerLabel": "Aplicação",
+      "role": "dependent",
+      "distance": 3,
+      "shown": true,
+      "path": [
+        {
+          "id": "loja.pedidos.checkout",
+          "name": "Checkout Controller",
+          "via": "composition"
+        },
+        {
+          "id": "loja.bff",
+          "name": "BFF",
+          "via": "serving"
+        },
+        {
+          "id": "loja.app",
+          "name": "App Mobile",
+          "via": "serving"
+        }
+      ]
+    },
+    {
+      "id": "loja.web",
+      "name": "Web Storefront",
+      "type": "application-component",
+      "typeLabel": "Application Component",
+      "layer": "application",
+      "layerLabel": "Aplicação",
+      "role": "dependent",
+      "distance": 3,
+      "shown": true,
+      "path": [
+        {
+          "id": "loja.pedidos.checkout",
+          "name": "Checkout Controller",
+          "via": "composition"
+        },
+        {
+          "id": "loja.bff",
+          "name": "BFF",
+          "via": "serving"
+        },
+        {
+          "id": "loja.web",
+          "name": "Web Storefront",
+          "via": "serving"
+        }
+      ]
+    },
+    {
+      "id": "ts-hosting",
+      "name": "Hospedagem de contêineres",
+      "type": "technology-service",
+      "typeLabel": "Technology Service",
+      "layer": "technology",
+      "layerLabel": "Tecnologia",
+      "role": "supporter",
+      "distance": 1,
+      "shown": true,
+      "path": [
+        {
+          "id": "ts-hosting",
+          "name": "Hospedagem de contêineres",
+          "via": "serving"
+        }
+      ]
+    },
+    {
+      "id": "ts-mensageria",
+      "name": "Mensageria",
+      "type": "technology-service",
+      "typeLabel": "Technology Service",
+      "layer": "technology",
+      "layerLabel": "Tecnologia",
+      "role": "supporter",
+      "distance": 1,
+      "shown": true,
+      "path": [
+        {
+          "id": "ts-mensageria",
+          "name": "Mensageria",
+          "via": "serving"
+        }
+      ]
+    },
+    {
+      "id": "art-pedidos",
+      "name": "pedidos-api.jar",
+      "type": "artifact",
+      "typeLabel": "Artifact",
+      "layer": "technology",
+      "layerLabel": "Tecnologia",
+      "role": "supporter",
+      "distance": 1,
+      "shown": true,
+      "path": [
+        {
+          "id": "art-pedidos",
+          "name": "pedidos-api.jar",
+          "via": "realization"
+        }
+      ]
+    },
+    {
+      "id": "ss-postgres",
+      "name": "PostgreSQL 16 (RDS)",
+      "type": "system-software",
+      "typeLabel": "System Software",
+      "layer": "technology",
+      "layerLabel": "Tecnologia",
+      "role": "supporter",
+      "distance": 1,
+      "shown": true,
+      "path": [
+        {
+          "id": "ss-postgres",
+          "name": "PostgreSQL 16 (RDS)",
+          "via": "serving"
+        }
+      ]
+    },
+    {
+      "id": "ss-redis",
+      "name": "Redis (ElastiCache)",
+      "type": "system-software",
+      "typeLabel": "System Software",
+      "layer": "technology",
+      "layerLabel": "Tecnologia",
+      "role": "supporter",
+      "distance": 1,
+      "shown": true,
+      "path": [
+        {
+          "id": "ss-redis",
+          "name": "Redis (ElastiCache)",
+          "via": "serving"
+        }
+      ]
+    },
+    {
+      "id": "loja.pedidos.carrinho",
+      "name": "Carrinho Service",
+      "type": "application-component",
+      "typeLabel": "Application Component",
+      "layer": "application",
+      "layerLabel": "Aplicação",
+      "role": "both",
+      "distance": 1,
+      "shown": false,
+      "path": [
+        {
+          "id": "loja.pedidos.carrinho",
+          "name": "Carrinho Service",
+          "via": "composition"
+        }
+      ]
+    },
+    {
+      "id": "loja.pedidos.checkout",
+      "name": "Checkout Controller",
+      "type": "application-component",
+      "typeLabel": "Application Component",
+      "layer": "application",
+      "layerLabel": "Aplicação",
+      "role": "both",
+      "distance": 1,
+      "shown": false,
+      "path": [
+        {
+          "id": "loja.pedidos.checkout",
+          "name": "Checkout Controller",
+          "via": "composition"
+        }
+      ]
+    },
+    {
+      "id": "loja.pedidos.pagamento",
+      "name": "Pagamento Adapter",
+      "type": "application-component",
+      "typeLabel": "Application Component",
+      "layer": "application",
+      "layerLabel": "Aplicação",
+      "role": "both",
+      "distance": 1,
+      "shown": false,
+      "path": [
+        {
+          "id": "loja.pedidos.pagamento",
+          "name": "Pagamento Adapter",
+          "via": "composition"
+        }
+      ]
+    },
+    {
+      "id": "loja.pedidos.repo",
+      "name": "Pedido Repository",
+      "type": "application-component",
+      "typeLabel": "Application Component",
+      "layer": "application",
+      "layerLabel": "Aplicação",
+      "role": "both",
+      "distance": 1,
+      "shown": false,
+      "path": [
+        {
+          "id": "loja.pedidos.repo",
+          "name": "Pedido Repository",
+          "via": "composition"
+        }
+      ]
+    },
+    {
+      "id": "loja",
+      "name": "Plataforma de E-commerce",
+      "type": "application-component",
+      "typeLabel": "Application Component",
+      "layer": "application",
+      "layerLabel": "Aplicação",
+      "role": "both",
+      "distance": 1,
+      "shown": false,
+      "path": [
+        {
+          "id": "loja",
+          "name": "Plataforma de E-commerce",
+          "via": "composition"
+        }
+      ]
+    },
+    {
+      "id": "loja.pedidos.eventos",
+      "name": "Publicador de Eventos",
+      "type": "application-component",
+      "typeLabel": "Application Component",
+      "layer": "application",
+      "layerLabel": "Aplicação",
+      "role": "both",
+      "distance": 1,
+      "shown": false,
+      "path": [
+        {
+          "id": "loja.pedidos.eventos",
+          "name": "Publicador de Eventos",
+          "via": "composition"
+        }
+      ]
+    },
+    {
+      "id": "loja.eventos",
+      "name": "Barramento de Eventos",
+      "type": "application-component",
+      "typeLabel": "Application Component",
+      "layer": "application",
+      "layerLabel": "Aplicação",
+      "role": "supporter",
+      "distance": 2,
+      "shown": true,
+      "path": [
+        {
+          "id": "loja.pedidos.eventos",
+          "name": "Publicador de Eventos",
+          "via": "composition"
+        },
+        {
+          "id": "loja.eventos",
+          "name": "Barramento de Eventos",
+          "via": "serving"
+        }
+      ]
+    },
+    {
+      "id": "loja.cache",
+      "name": "Cache de Carrinho",
+      "type": "application-component",
+      "typeLabel": "Application Component",
+      "layer": "application",
+      "layerLabel": "Aplicação",
+      "role": "supporter",
+      "distance": 2,
+      "shown": true,
+      "path": [
+        {
+          "id": "loja.pedidos.carrinho",
+          "name": "Carrinho Service",
+          "via": "composition"
+        },
+        {
+          "id": "loja.cache",
+          "name": "Cache de Carrinho",
+          "via": "serving"
+        }
+      ]
+    },
+    {
+      "id": "loja.db-pedidos",
+      "name": "DB Pedidos",
+      "type": "application-component",
+      "typeLabel": "Application Component",
+      "layer": "application",
+      "layerLabel": "Aplicação",
+      "role": "supporter",
+      "distance": 2,
+      "shown": true,
+      "path": [
+        {
+          "id": "loja.pedidos.repo",
+          "name": "Pedido Repository",
+          "via": "composition"
+        },
+        {
+          "id": "loja.db-pedidos",
+          "name": "DB Pedidos",
+          "via": "serving"
+        }
+      ]
+    },
+    {
+      "id": "gateway",
+      "name": "Gateway de Pagamentos",
+      "type": "application-component",
+      "typeLabel": "Application Component",
+      "layer": "application",
+      "layerLabel": "Aplicação",
+      "role": "supporter",
+      "distance": 2,
+      "shown": true,
+      "path": [
+        {
+          "id": "loja.pedidos.pagamento",
+          "name": "Pagamento Adapter",
+          "via": "composition"
+        },
+        {
+          "id": "gateway",
+          "name": "Gateway de Pagamentos",
+          "via": "serving"
+        }
+      ]
+    },
+    {
+      "id": "do-pedido",
+      "name": "Registro de Pedido",
+      "type": "data-object",
+      "typeLabel": "Data Object",
+      "layer": "application",
+      "layerLabel": "Aplicação",
+      "role": "supporter",
+      "distance": 2,
+      "shown": true,
+      "path": [
+        {
+          "id": "loja.pedidos.repo",
+          "name": "Pedido Repository",
+          "via": "composition"
+        },
+        {
+          "id": "do-pedido",
+          "name": "Registro de Pedido",
+          "via": "access"
+        }
+      ]
+    },
+    {
+      "id": "antifraude",
+      "name": "Serviço Antifraude",
+      "type": "application-component",
+      "typeLabel": "Application Component",
+      "layer": "application",
+      "layerLabel": "Aplicação",
+      "role": "supporter",
+      "distance": 2,
+      "shown": true,
+      "path": [
+        {
+          "id": "loja.pedidos.pagamento",
+          "name": "Pagamento Adapter",
+          "via": "composition"
+        },
+        {
+          "id": "antifraude",
+          "name": "Serviço Antifraude",
+          "via": "serving"
+        }
+      ]
+    },
+    {
+      "id": "ss-kafka",
+      "name": "Apache Kafka (MSK)",
+      "type": "system-software",
+      "typeLabel": "System Software",
+      "layer": "technology",
+      "layerLabel": "Tecnologia",
+      "role": "supporter",
+      "distance": 2,
+      "shown": true,
+      "path": [
+        {
+          "id": "ts-mensageria",
+          "name": "Mensageria",
+          "via": "serving"
+        },
+        {
+          "id": "ss-kafka",
+          "name": "Apache Kafka (MSK)",
+          "via": "realization"
+        }
+      ]
+    },
+    {
+      "id": "tn-k8s",
+      "name": "Cluster Kubernetes (EKS)",
+      "type": "node",
+      "typeLabel": "Node",
+      "layer": "technology",
+      "layerLabel": "Tecnologia",
+      "role": "supporter",
+      "distance": 2,
+      "shown": true,
+      "path": [
+        {
+          "id": "ts-hosting",
+          "name": "Hospedagem de contêineres",
+          "via": "serving"
+        },
+        {
+          "id": "tn-k8s",
+          "name": "Cluster Kubernetes (EKS)",
+          "via": "realization"
+        }
+      ]
+    }
+  ],
+  "notes": []
+}

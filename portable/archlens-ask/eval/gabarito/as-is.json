@@ -1,0 +1,291 @@
+{
+  "title": "Camada de Aplicação",
+  "spec": {
+    "key": "view",
+    "notation": "archimate",
+    "viewpoint": "application",
+    "granularity": "container",
+    "status": [
+      "active",
+      "deprecated"
+    ]
+  },
+  "sections": [
+    {
+      "label": "Aplicação",
+      "rows": [
+        {
+          "id": "loja.web",
+          "name": "Web Storefront",
+          "type": "application-component",
+          "kind": "container",
+          "status": "active",
+          "technology": "Next.js"
+        },
+        {
+          "id": "loja.app",
+          "name": "App Mobile",
+          "type": "application-component",
+          "kind": "container",
+          "status": "active",
+          "technology": "React Native"
+        },
+        {
+          "id": "loja.bff",
+          "name": "BFF",
+          "type": "application-component",
+          "kind": "container",
+          "status": "active",
+          "technology": "Node.js / GraphQL"
+        },
+        {
+          "id": "loja.pedidos",
+          "name": "API de Pedidos",
+          "type": "application-component",
+          "kind": "container",
+          "status": "active",
+          "technology": "Java / Spring Boot"
+        },
+        {
+          "id": "loja.catalogo",
+          "name": "API de Catálogo",
+          "type": "application-component",
+          "kind": "container",
+          "status": "active",
+          "technology": "Go"
+        },
+        {
+          "id": "loja.busca",
+          "name": "Índice de Busca",
+          "type": "application-component",
+          "kind": "container",
+          "status": "active",
+          "technology": "Elasticsearch"
+        },
+        {
+          "id": "loja.cache",
+          "name": "Cache de Carrinho",
+          "type": "application-component",
+          "kind": "container",
+          "status": "active",
+          "technology": "Redis"
+        },
+        {
+          "id": "loja.db-pedidos",
+          "name": "DB Pedidos",
+          "type": "application-component",
+          "kind": "container",
+          "status": "active",
+          "technology": "PostgreSQL"
+        },
+        {
+          "id": "loja.db-catalogo",
+          "name": "DB Catálogo",
+          "type": "application-component",
+          "kind": "container",
+          "status": "active",
+          "technology": "MongoDB"
+        },
+        {
+          "id": "loja.eventos",
+          "name": "Barramento de Eventos",
+          "type": "application-component",
+          "kind": "container",
+          "status": "active",
+          "technology": "Kafka"
+        },
+        {
+          "id": "erp",
+          "name": "ERP",
+          "type": "application-component",
+          "kind": "softwareSystem",
+          "status": "active",
+          "technology": "SAP ECC"
+        },
+        {
+          "id": "crm",
+          "name": "CRM",
+          "type": "application-component",
+          "kind": "softwareSystem",
+          "status": "active",
+          "technology": null
+        },
+        {
+          "id": "gateway",
+          "name": "Gateway de Pagamentos",
+          "type": "application-component",
+          "kind": "softwareSystem",
+          "status": "active",
+          "technology": null
+        },
+        {
+          "id": "antifraude",
+          "name": "Serviço Antifraude",
+          "type": "application-component",
+          "kind": "softwareSystem",
+          "status": "active",
+          "technology": null
+        },
+        {
+          "id": "transportadora",
+          "name": "API da Transportadora",
+          "type": "application-component",
+          "kind": "softwareSystem",
+          "status": "active",
+          "technology": null
+        },
+        {
+          "id": "as-checkout",
+          "name": "Serviço de Checkout",
+          "type": "application-service",
+          "kind": null,
+          "status": "active",
+          "technology": null
+        },
+        {
+          "id": "as-catalogo",
+          "name": "Serviço de Catálogo",
+          "type": "application-service",
+          "kind": null,
+          "status": "active",
+          "technology": null
+        },
+        {
+          "id": "as-pagamento",
+          "name": "Serviço de Pagamento",
+          "type": "application-service",
+          "kind": null,
+          "status": "active",
+          "technology": null
+        },
+        {
+          "id": "as-faturamento",
+          "name": "Serviço de Faturamento",
+          "type": "application-service",
+          "kind": null,
+          "status": "active",
+          "technology": null
+        },
+        {
+          "id": "as-logistica",
+          "name": "Serviço de Logística",
+          "type": "application-service",
+          "kind": null,
+          "status": "active",
+          "technology": null
+        },
+        {
+          "id": "as-consulta",
+          "name": "Consulta de Pedidos",
+          "type": "application-service",
+          "kind": null,
+          "status": "active",
+          "technology": null
+        },
+        {
+          "id": "do-pedido",
+          "name": "Registro de Pedido",
+          "type": "data-object",
+          "kind": null,
+          "status": "active",
+          "technology": null
+        },
+        {
+          "id": "do-produto",
+          "name": "Registro de Produto",
+          "type": "data-object",
+          "kind": null,
+          "status": "active",
+          "technology": null
+        }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "from": "loja.bff",
+      "to": "loja.web",
+      "type": "serving",
+      "sentence": "BFF serve Web Storefront."
+    },
+    {
+      "from": "loja.bff",
+      "to": "loja.app",
+      "type": "serving",
+      "sentence": "BFF serve App Mobile."
+    },
+    {
+      "from": "loja.catalogo",
+      "to": "loja.bff",
+      "type": "serving",
+      "sentence": "API de Catálogo serve BFF."
+    },
+    {
+      "from": "loja.busca",
+      "to": "loja.bff",
+      "type": "serving",
+      "sentence": "Índice de Busca serve BFF."
+    },
+    {
+      "from": "loja.db-catalogo",
+      "to": "loja.catalogo",
+      "type": "serving",
+      "sentence": "DB Catálogo serve API de Catálogo."
+    },
+    {
+      "from": "loja.busca",
+      "to": "loja.catalogo",
+      "type": "serving",
+      "sentence": "Índice de Busca serve API de Catálogo."
+    },
+    {
+      "from": "loja.eventos",
+      "to": "erp",
+      "type": "serving",
+      "sentence": "Barramento de Eventos serve ERP."
+    },
+    {
+      "from": "transportadora",
+      "to": "erp",
+      "type": "serving",
+      "sentence": "API da Transportadora serve ERP."
+    },
+    {
+      "from": "loja.pedidos",
+      "to": "crm",
+      "type": "serving",
+      "sentence": "API de Pedidos serve CRM."
+    },
+    {
+      "from": "loja.catalogo",
+      "to": "as-catalogo",
+      "type": "realization",
+      "sentence": "API de Catálogo realiza Serviço de Catálogo."
+    },
+    {
+      "from": "erp",
+      "to": "as-faturamento",
+      "type": "realization",
+      "sentence": "ERP realiza Serviço de Faturamento."
+    },
+    {
+      "from": "erp",
+      "to": "as-logistica",
+      "type": "realization",
+      "sentence": "ERP realiza Serviço de Logística."
+    },
+    {
+      "from": "loja.pedidos",
+      "to": "as-consulta",
+      "type": "realization",
+      "sentence": "API de Pedidos realiza Consulta de Pedidos."
+    },
+    {
+      "from": "loja.catalogo",
+      "to": "do-produto",
+      "type": "access",
+      "sentence": "API de Catálogo lê e grava Registro de Produto."
+    }
+  ],
+  "notes": []
+}

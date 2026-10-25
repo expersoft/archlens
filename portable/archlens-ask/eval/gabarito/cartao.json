@@ -1,0 +1,124 @@
+{
+  "element": {
+    "id": "loja.pedidos",
+    "name": "API de Pedidos",
+    "type": "application-component",
+    "kind": "container",
+    "status": "active",
+    "technology": "Java / Spring Boot",
+    "description": "Carrinho, checkout e ciclo de vida do pedido",
+    "aliases": []
+  },
+  "parent": {
+    "id": "loja",
+    "name": "Plataforma de E-commerce",
+    "type": "application-component"
+  },
+  "children": [
+    {
+      "id": "loja.pedidos.checkout",
+      "name": "Checkout Controller",
+      "type": "application-component"
+    },
+    {
+      "id": "loja.pedidos.carrinho",
+      "name": "Carrinho Service",
+      "type": "application-component"
+    },
+    {
+      "id": "loja.pedidos.pagamento",
+      "name": "Pagamento Adapter",
+      "type": "application-component"
+    },
+    {
+      "id": "loja.pedidos.repo",
+      "name": "Pedido Repository",
+      "type": "application-component"
+    },
+    {
+      "id": "loja.pedidos.eventos",
+      "name": "Publicador de Eventos",
+      "type": "application-component"
+    }
+  ],
+  "outgoing": {
+    "realization": [
+      {
+        "id": "as-consulta",
+        "name": "Consulta de Pedidos",
+        "type": "realization",
+        "label": null,
+        "technology": null,
+        "sentence": "API de Pedidos realiza Consulta de Pedidos."
+      },
+      {
+        "id": "req-latencia",
+        "name": "Checkout < 2s (p95)",
+        "type": "realization",
+        "label": null,
+        "technology": null,
+        "sentence": "API de Pedidos atende a Checkout < 2s (p95)."
+      }
+    ],
+    "serving": [
+      {
+        "id": "crm",
+        "name": "CRM",
+        "type": "serving",
+        "label": "Consulta pedidos",
+        "technology": "REST",
+        "sentence": "API de Pedidos serve CRM."
+      }
+    ]
+  },
+  "incoming": {
+    "realization": [
+      {
+        "id": "art-pedidos",
+        "name": "pedidos-api.jar",
+        "type": "realization",
+        "label": null,
+        "technology": null,
+        "sentence": "pedidos-api.jar realiza API de Pedidos."
+      }
+    ],
+    "serving": [
+      {
+        "id": "ss-postgres",
+        "name": "PostgreSQL 16 (RDS)",
+        "type": "serving",
+        "label": null,
+        "technology": null,
+        "sentence": "PostgreSQL 16 (RDS) serve API de Pedidos."
+      },
+      {
+        "id": "ss-redis",
+        "name": "Redis (ElastiCache)",
+        "type": "serving",
+        "label": null,
+        "technology": null,
+        "sentence": "Redis (ElastiCache) serve API de Pedidos."
+      },
+      {
+        "id": "ts-hosting",
+        "name": "Hospedagem de contêineres",
+        "type": "serving",
+        "label": null,
+        "technology": null,
+        "sentence": "Hospedagem de contêineres serve API de Pedidos."
+      },
+      {
+        "id": "ts-mensageria",
+        "name": "Mensageria",
+        "type": "serving",
+        "label": null,
+        "technology": null,
+        "sentence": "Mensageria serve API de Pedidos."
+      }
+    ]
+  },
+  "properties": {},
+  "sources": [],
+  "rounds": [],
+  "around": []
+}

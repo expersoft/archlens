@@ -1,0 +1,246 @@
+{
+  "title": "Containers — Plataforma de E-commerce",
+  "spec": {
+    "key": "containers",
+    "notation": "c4",
+    "level": "container",
+    "scope": "loja",
+    "title": "Containers — Plataforma de E-commerce"
+  },
+  "sections": [
+    {
+      "label": "Pessoas",
+      "rows": [
+        {
+          "id": "cliente",
+          "name": "Cliente",
+          "type": "business-actor",
+          "kind": "person",
+          "status": "active",
+          "technology": null
+        }
+      ]
+    },
+    {
+      "label": "Sistemas de software",
+      "rows": [
+        {
+          "id": "erp",
+          "name": "ERP",
+          "type": "application-component",
+          "kind": "softwareSystem",
+          "status": "active",
+          "technology": "SAP ECC"
+        },
+        {
+          "id": "crm",
+          "name": "CRM",
+          "type": "application-component",
+          "kind": "softwareSystem",
+          "status": "active",
+          "technology": null
+        },
+        {
+          "id": "gateway",
+          "name": "Gateway de Pagamentos",
+          "type": "application-component",
+          "kind": "softwareSystem",
+          "status": "active",
+          "technology": null
+        },
+        {
+          "id": "antifraude",
+          "name": "Serviço Antifraude",
+          "type": "application-component",
+          "kind": "softwareSystem",
+          "status": "active",
+          "technology": null
+        }
+      ]
+    },
+    {
+      "label": "Contêineres",
+      "rows": [
+        {
+          "id": "loja.web",
+          "name": "Web Storefront",
+          "type": "application-component",
+          "kind": "container",
+          "status": "active",
+          "technology": "Next.js"
+        },
+        {
+          "id": "loja.app",
+          "name": "App Mobile",
+          "type": "application-component",
+          "kind": "container",
+          "status": "active",
+          "technology": "React Native"
+        },
+        {
+          "id": "loja.bff",
+          "name": "BFF",
+          "type": "application-component",
+          "kind": "container",
+          "status": "active",
+          "technology": "Node.js / GraphQL"
+        },
+        {
+          "id": "loja.pedidos",
+          "name": "API de Pedidos",
+          "type": "application-component",
+          "kind": "container",
+          "status": "active",
+          "technology": "Java / Spring Boot"
+        },
+        {
+          "id": "loja.catalogo",
+          "name": "API de Catálogo",
+          "type": "application-component",
+          "kind": "container",
+          "status": "active",
+          "technology": "Go"
+        },
+        {
+          "id": "loja.busca",
+          "name": "Índice de Busca",
+          "type": "application-component",
+          "kind": "container",
+          "status": "active",
+          "technology": "Elasticsearch"
+        },
+        {
+          "id": "loja.cache",
+          "name": "Cache de Carrinho",
+          "type": "application-component",
+          "kind": "container",
+          "status": "active",
+          "technology": "Redis"
+        },
+        {
+          "id": "loja.db-pedidos",
+          "name": "DB Pedidos",
+          "type": "application-component",
+          "kind": "container",
+          "status": "active",
+          "technology": "PostgreSQL"
+        },
+        {
+          "id": "loja.db-catalogo",
+          "name": "DB Catálogo",
+          "type": "application-component",
+          "kind": "container",
+          "status": "active",
+          "technology": "MongoDB"
+        },
+        {
+          "id": "loja.eventos",
+          "name": "Barramento de Eventos",
+          "type": "application-component",
+          "kind": "container",
+          "status": "active",
+          "technology": "Kafka"
+        }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "from": "cliente",
+      "to": "loja.web",
+      "type": "uses",
+      "sentence": "Cliente usa Web Storefront."
+    },
+    {
+      "from": "cliente",
+      "to": "loja.app",
+      "type": "uses",
+      "sentence": "Cliente usa App Mobile."
+    },
+    {
+      "from": "loja.web",
+      "to": "loja.bff",
+      "type": "uses",
+      "sentence": "Web Storefront usa BFF."
+    },
+    {
+      "from": "loja.app",
+      "to": "loja.bff",
+      "type": "uses",
+      "sentence": "App Mobile usa BFF."
+    },
+    {
+      "from": "loja.bff",
+      "to": "loja.catalogo",
+      "type": "uses",
+      "sentence": "BFF usa API de Catálogo."
+    },
+    {
+      "from": "loja.bff",
+      "to": "loja.busca",
+      "type": "uses",
+      "sentence": "BFF usa Índice de Busca."
+    },
+    {
+      "from": "loja.bff",
+      "to": "loja.pedidos",
+      "type": "uses",
+      "sentence": "BFF usa API de Pedidos."
+    },
+    {
+      "from": "loja.catalogo",
+      "to": "loja.db-catalogo",
+      "type": "uses",
+      "sentence": "API de Catálogo usa DB Catálogo."
+    },
+    {
+      "from": "loja.catalogo",
+      "to": "loja.busca",
+      "type": "uses",
+      "sentence": "API de Catálogo usa Índice de Busca."
+    },
+    {
+      "from": "loja.pedidos",
+      "to": "loja.cache",
+      "type": "uses",
+      "sentence": "API de Pedidos usa Cache de Carrinho."
+    },
+    {
+      "from": "loja.pedidos",
+      "to": "loja.db-pedidos",
+      "type": "uses",
+      "sentence": "API de Pedidos usa DB Pedidos."
+    },
+    {
+      "from": "loja.pedidos",
+      "to": "antifraude",
+      "type": "uses",
+      "sentence": "API de Pedidos usa Serviço Antifraude."
+    },
+    {
+      "from": "loja.pedidos",
+      "to": "gateway",
+      "type": "uses",
+      "sentence": "API de Pedidos usa Gateway de Pagamentos."
+    },
+    {
+      "from": "loja.pedidos",
+      "to": "loja.eventos",
+      "type": "uses",
+      "sentence": "API de Pedidos usa Barramento de Eventos."
+    },
+    {
+      "from": "erp",
+      "to": "loja.eventos",
+      "type": "uses",
+      "sentence": "ERP usa Barramento de Eventos."
+    },
+    {
+      "from": "crm",
+      "to": "loja.pedidos",
+      "type": "uses",
+      "sentence": "CRM usa API de Pedidos."
+    }
+  ],
+  "notes": []
+}
