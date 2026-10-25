@@ -75,7 +75,7 @@ para X. **Grupo:** `group` no frontmatter; a página do `grouping` não lista os
 - **degradado** (o filho não aparece): avise uma vez: "a base não tem as ligações tipadas no gbrain; o modo
   recomendado é o git ou rodar `gbrain sweep`; hierarquia e grupos podem sair incompletos". As relações de entrada
   ainda aparecem pelos backlinks do corpo das páginas (ligação `mentions`). Para filhos e membros de grupo, liste as
-  páginas candidatas com `list_pages` (tag `archlens/<tipo>`: para filhos de um sistema ou container,
+  páginas candidatas com `list_pages` (tag `archlens/<tipo>`, 100 por chamada; siga o cursor até o fim: para filhos de um sistema ou container,
   `archlens/application-component`; para membros de grupo, todos os tipos) e confira `parent`/`group` com
   `get_page`. Antes de ler mais de ~30 páginas, diga o custo e pergunte se pode seguir. Se não ler tudo, diga na
   resposta que hierarquia e grupos podem estar incompletos.
@@ -142,8 +142,10 @@ relação derivada entre os dois visíveis:
 - `dynamic`: só os `steps`, numerados, elevados a containers (scope num sistema) ou componentes (scope num container).
 
 - `focus` + `depth` cortam a visão à vizinhança dos ids em foco (padrão `depth` 1).
-- **Perfil C4.** O `kind` vem do campo `c4` da página. `application-component` sem `c4` é sistema; `business-actor` sem
-  `c4` é pessoa. Elementos puramente ArchiMate (nós, processos…) não aparecem no C4.
+- **Perfil C4.** O `kind` vem **só** do campo `c4` da página; nada é inferido na leitura. Um elemento sem `c4` (mesmo
+  `application-component` ou `business-actor`) **não é caixa C4**: não aparece como nó, e as relações dele sobem ao
+  ancestral mais próximo (`parent`, `parent` do `parent`…) que está na visão; sem ancestral visível, a relação some.
+  Elementos puramente ArchiMate (nós, processos…) também não aparecem no C4.
 - **Setas C4 ("usa", de quem consome para quem provê).** `serving` A → B vira **B → A** ("B usa A").
   `access`, `flow`, `triggering` e `association` mantêm origem → destino. As outras relações (`composition`,
   `aggregation`, `assignment`, `realization`, `influence`, `specialization`) não viram seta C4.
@@ -158,7 +160,13 @@ relação derivada entre os dois visíveis:
 ## 6. Status e grupos
 
 - **`status`**: padrão, todos menos `retired`. As-is: `["active","deprecated"]`. To-be: `["draft","planned","active"]`.
-  Esconder um elemento esconde o que está aninhado nele. `draft` aparece tracejado.
+  O campo `status` vale para elementos e para **relações** (item de `relationships`); ausente = `active`.
+  - **O filtro vem antes de tudo.** Tire da base, antes da travessia, os elementos com status fora da lista, tudo que
+    está aninhado neles (filhos, netos…) e as relações com status fora da lista ou que tocam um elemento tirado. A
+    travessia não passa por eles e nenhuma relação derivada vai "via" eles.
+  - Se a âncora, o `scope` ou um `focus` for tirado pelo filtro, não responda o recorte: diga que o elemento está
+    oculto pelo status pedido e sugira acrescentar o status dele.
+  - `draft` aparece tracejado.
 - **Grupos** (`groups`): `only` restringe aos membros desses agrupamentos e às relações entre eles; `depth` com
   `only` acrescenta vizinhos externos; `crossOnly` (2+ grupos) deixa só o que cruza de um grupo para outro; `frames`
   desenha molduras (padrão: ligado com `only`). Um `grouping` nunca é nó nem `anchor`.
@@ -312,7 +320,8 @@ C4Deployment
 
 ## 10. Legibilidade
 
-- Até ~12 nós por diagrama C4 e ~24 por diagrama ArchiMate.
+- Até ~12 nós por diagrama C4 e ~24 por diagrama ArchiMate. Exceção: uma visão salva pedida pelo nome (ou que é
+  exatamente o pedido) é desenhada inteira, com o aviso de que passa do limite e a sugestão de um recorte.
 - Acima disso, entregue sempre o markdown completo e:
   - se houver um recorte óbvio para a pergunta (só as camadas que ela cita, só o elemento em foco e seus vizinhos),
     desenhe esse diagrama recortado e diga o que ficou de fora;

@@ -149,97 +149,113 @@
       "from": "cliente",
       "to": "loja.web",
       "type": "uses",
-      "sentence": "Cliente usa Web Storefront."
+      "sentence": "Cliente usa Web Storefront.",
+      "derived": false
     },
     {
       "from": "cliente",
       "to": "loja.app",
       "type": "uses",
-      "sentence": "Cliente usa App Mobile."
+      "sentence": "Cliente usa App Mobile.",
+      "derived": false
     },
     {
       "from": "loja.web",
       "to": "loja.bff",
       "type": "uses",
-      "sentence": "Web Storefront usa BFF."
+      "sentence": "Web Storefront usa BFF.",
+      "derived": false
     },
     {
       "from": "loja.app",
       "to": "loja.bff",
       "type": "uses",
-      "sentence": "App Mobile usa BFF."
+      "sentence": "App Mobile usa BFF.",
+      "derived": false
     },
     {
       "from": "loja.bff",
       "to": "loja.catalogo",
       "type": "uses",
-      "sentence": "BFF usa API de Catálogo."
+      "sentence": "BFF usa API de Catálogo.",
+      "derived": false
     },
     {
       "from": "loja.bff",
       "to": "loja.busca",
       "type": "uses",
-      "sentence": "BFF usa Índice de Busca."
+      "sentence": "BFF usa Índice de Busca.",
+      "derived": false
     },
     {
       "from": "loja.bff",
       "to": "loja.pedidos",
       "type": "uses",
-      "sentence": "BFF usa API de Pedidos."
+      "sentence": "BFF usa API de Pedidos.",
+      "derived": false
     },
     {
       "from": "loja.catalogo",
       "to": "loja.db-catalogo",
       "type": "uses",
-      "sentence": "API de Catálogo usa DB Catálogo."
+      "sentence": "API de Catálogo usa DB Catálogo.",
+      "derived": false
     },
     {
       "from": "loja.catalogo",
       "to": "loja.busca",
       "type": "uses",
-      "sentence": "API de Catálogo usa Índice de Busca."
+      "sentence": "API de Catálogo usa Índice de Busca.",
+      "derived": false
     },
     {
       "from": "loja.pedidos",
       "to": "loja.cache",
       "type": "uses",
-      "sentence": "API de Pedidos usa Cache de Carrinho."
+      "sentence": "API de Pedidos usa Cache de Carrinho.",
+      "derived": false
     },
     {
       "from": "loja.pedidos",
       "to": "loja.db-pedidos",
       "type": "uses",
-      "sentence": "API de Pedidos usa DB Pedidos."
+      "sentence": "API de Pedidos usa DB Pedidos.",
+      "derived": false
     },
     {
       "from": "loja.pedidos",
       "to": "antifraude",
       "type": "uses",
-      "sentence": "API de Pedidos usa Serviço Antifraude."
+      "sentence": "API de Pedidos usa Serviço Antifraude.",
+      "derived": false
     },
     {
       "from": "loja.pedidos",
       "to": "gateway",
       "type": "uses",
-      "sentence": "API de Pedidos usa Gateway de Pagamentos."
+      "sentence": "API de Pedidos usa Gateway de Pagamentos.",
+      "derived": false
     },
     {
       "from": "loja.pedidos",
       "to": "loja.eventos",
       "type": "uses",
-      "sentence": "API de Pedidos usa Barramento de Eventos."
+      "sentence": "API de Pedidos usa Barramento de Eventos.",
+      "derived": false
     },
     {
       "from": "erp",
       "to": "loja.eventos",
       "type": "uses",
-      "sentence": "ERP usa Barramento de Eventos."
+      "sentence": "ERP usa Barramento de Eventos.",
+      "derived": false
     },
     {
       "from": "crm",
       "to": "loja.pedidos",
       "type": "uses",
-      "sentence": "CRM usa API de Pedidos."
+      "sentence": "CRM usa API de Pedidos.",
+      "derived": false
     }
   ],
   "notes": []

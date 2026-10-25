@@ -12,7 +12,7 @@ devolve para o mesmo recorte.
 `{"notation":"archimate","viewpoint":"layered","anchor":"bp-checkout","traverse":{"mode":"supporters"},"granularity":"container"}`
 
 **Chamadas, na ordem:**
-1. `list_pages {"tag":"archlens","limit":100}` → acha `archlens/manifest` (uma base; o bloco `archlens-json` diz
+1. `list_pages {"type":"archlens-manifest"}` → acha `archlens/manifest` (uma base; o bloco `archlens-json` diz
    formato `2.0`).
 2. `resolve_slugs {"partial":"checkout"}` / `search {"query":"checkout"}` → o processo `archlens/business-process/bp-checkout`
    (título "Checkout"). Os outros resultados (`as-checkout`, `loja.pedidos.checkout`) são de outros tipos, e o pedido
@@ -231,8 +231,8 @@ inclui `flow` e a granularidade padrão é `container` (`RULES.md` §3–§4).
 - Duas relações do BFF para a API de Pedidos (vindas de componentes diferentes) viram uma: "Gerencia carrinho; Fecha
   pedido".
 - Tags `database` → `ContainerDb`; `queue` → `ContainerQueue`; `external: true` → `System_Ext`.
-- 15 elementos, um pouco acima de ~12: o pedido é exatamente esta visão salva, então desenhe e avise que está no
-  limite.
+- 15 elementos, um pouco acima de ~12: o pedido é exatamente esta visão salva, então vale a exceção de
+  `RULES.md` §10: desenhe inteira e avise que está no limite.
 
 ```mermaid
 C4Container

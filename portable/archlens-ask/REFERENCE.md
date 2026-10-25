@@ -194,11 +194,11 @@ Todas as páginas da base ficam sob um prefixo (padrão `archlens/`) e levam a t
 |---|---|
 | `<prefixo>/<tipo>/<id>` | `get_page` devolve `type` (tipo ArchiMate), `title` (nome), `tags` (acima) e `frontmatter`: `id`, `c4` (kind), `parent` e `group` (wikilinks), `aliases`, `technology`, `status` (**ausente = `active`**), `external`, `relationships` e um campo por tipo de relação com os wikilinks dos destinos (`serving: [[<prefixo>/<tipo>/<id>\|Nome]]`); `compiled_truth`: descrição + seção "Relações" em frases |
 | `<prefixo>/views/<key>` | visão salva: resumo + spec num bloco ```` ```archlens-json ```` |
-| `<prefixo>/manifest` | nome e descrição da base; o formato (`"archlens": "2.0"`) está no bloco `archlens-json` do corpo, não no frontmatter |
+| `<prefixo>/manifest` | tipo de página `archlens-manifest` (ache com `list_pages {"type":"archlens-manifest"}`); nome e descrição da base; o formato (`"archlens": "2.0"`) está no bloco `archlens-json` do corpo, não no frontmatter |
 | `<prefixo>/notes/<nome>` | notas de interpretação |
 | `<prefixo>/changelog` | histórico de rodadas |
 
-Cada item de `relationships` é `{id, type, to, description?, technology?, accessType?}`: só as relações de **saída**; `to` é o **id** do destino (o slug completo está no wikilink do campo do mesmo tipo, ou em `resolve_slugs {"partial": "<id>"}`); `accessType` (só em `access`) é `read`, `write`, `readwrite` ou `access`.
+Cada item de `relationships` é `{id, type, to, description?, technology?, accessType?, status?}`: só as relações de **saída**; `to` é o **id** do destino (o slug completo está no wikilink do campo do mesmo tipo, ou em `resolve_slugs {"partial": "<id>"}`); `accessType` (só em `access`) é `read`, `write`, `readwrite` ou `access`; `status` ausente = `active`.
 
 `get_backlinks` devolve `{from_slug, link_type, link_source}`. Com ligações tipadas, cada relação de entrada aparece com o tipo dela (`serving`, `realization`…, `link_source: "frontmatter"`), a hierarquia como `part_of` e o grupo como `member_of`; as citações do corpo aparecem como `mentions` (`link_source: "markdown"`). Inversos no schema pack: `part_of` ↔ `composed_of`, `member_of` ↔ `has_member`.
 

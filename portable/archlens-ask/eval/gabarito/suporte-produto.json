@@ -364,289 +364,351 @@
       "from": "loja.db-catalogo",
       "to": "loja.catalogo",
       "type": "serving",
-      "sentence": "DB Catálogo serve API de Catálogo."
+      "sentence": "DB Catálogo serve API de Catálogo.",
+      "derived": false
     },
     {
       "from": "loja.busca",
       "to": "loja.catalogo",
       "type": "serving",
-      "sentence": "Índice de Busca serve API de Catálogo."
+      "sentence": "Índice de Busca serve API de Catálogo.",
+      "derived": false
     },
     {
       "from": "loja.eventos",
       "to": "erp",
       "type": "serving",
-      "sentence": "Barramento de Eventos serve ERP."
+      "sentence": "Barramento de Eventos serve ERP.",
+      "derived": false
     },
     {
       "from": "transportadora",
       "to": "erp",
       "type": "serving",
-      "sentence": "API da Transportadora serve ERP."
+      "sentence": "API da Transportadora serve ERP.",
+      "derived": false
     },
     {
       "from": "loja.pedidos",
       "to": "crm",
       "type": "serving",
-      "sentence": "API de Pedidos serve CRM."
+      "sentence": "API de Pedidos serve CRM.",
+      "derived": false
     },
     {
       "from": "crm",
       "to": "atendente",
       "type": "serving",
-      "sentence": "CRM serve Atendente SAC."
+      "sentence": "CRM serve Atendente SAC.",
+      "derived": false
     },
     {
       "from": "erp",
       "to": "operador",
       "type": "serving",
-      "sentence": "ERP serve Operador de Logística."
+      "sentence": "ERP serve Operador de Logística.",
+      "derived": false
     },
     {
       "from": "prod-venda",
       "to": "bs-compra",
       "type": "aggregation",
-      "sentence": "Venda Online agrega Compra online."
+      "sentence": "Venda Online agrega Compra online.",
+      "derived": false
     },
     {
       "from": "prod-venda",
       "to": "bs-pagamento",
       "type": "aggregation",
-      "sentence": "Venda Online agrega Pagamento seguro."
+      "sentence": "Venda Online agrega Pagamento seguro.",
+      "derived": false
     },
     {
       "from": "prod-venda",
       "to": "bs-entrega",
       "type": "aggregation",
-      "sentence": "Venda Online agrega Entrega do pedido."
+      "sentence": "Venda Online agrega Entrega do pedido.",
+      "derived": false
     },
     {
       "from": "prod-venda",
       "to": "bs-atendimento",
       "type": "aggregation",
-      "sentence": "Venda Online agrega Atendimento pós-venda."
+      "sentence": "Venda Online agrega Atendimento pós-venda.",
+      "derived": false
     },
     {
       "from": "prod-venda",
       "to": "ct-termos",
       "type": "aggregation",
-      "sentence": "Venda Online agrega Termos de Compra."
+      "sentence": "Venda Online agrega Termos de Compra.",
+      "derived": false
     },
     {
       "from": "bp-checkout",
       "to": "bs-compra",
       "type": "realization",
-      "sentence": "Checkout realiza Compra online."
+      "sentence": "Checkout realiza Compra online.",
+      "derived": false
     },
     {
       "from": "bp-checkout",
       "to": "bs-pagamento",
       "type": "realization",
-      "sentence": "Checkout realiza Pagamento seguro."
+      "sentence": "Checkout realiza Pagamento seguro.",
+      "derived": false
     },
     {
       "from": "bp-expedicao",
       "to": "bs-entrega",
       "type": "realization",
-      "sentence": "Expedição realiza Entrega do pedido."
+      "sentence": "Expedição realiza Entrega do pedido.",
+      "derived": false
     },
     {
       "from": "bp-atendimento",
       "to": "bs-atendimento",
       "type": "realization",
-      "sentence": "Tratar solicitação realiza Atendimento pós-venda."
+      "sentence": "Tratar solicitação realiza Atendimento pós-venda.",
+      "derived": false
     },
     {
       "from": "atendente",
       "to": "bp-atendimento",
       "type": "assignment",
-      "sentence": "Atendente SAC executa Tratar solicitação."
+      "sentence": "Atendente SAC executa Tratar solicitação.",
+      "derived": false
     },
     {
       "from": "operador",
       "to": "bp-expedicao",
       "type": "assignment",
-      "sentence": "Operador de Logística executa Expedição."
+      "sentence": "Operador de Logística executa Expedição.",
+      "derived": false
     },
     {
       "from": "bp-checkout",
       "to": "bo-pedido",
       "type": "access",
-      "sentence": "Checkout grava Pedido."
+      "sentence": "Checkout grava Pedido.",
+      "derived": false
     },
     {
       "from": "as-checkout",
       "to": "bp-checkout",
       "type": "serving",
-      "sentence": "Serviço de Checkout serve Checkout."
+      "sentence": "Serviço de Checkout serve Checkout.",
+      "derived": false
     },
     {
       "from": "loja.catalogo",
       "to": "as-catalogo",
       "type": "realization",
-      "sentence": "API de Catálogo realiza Serviço de Catálogo."
+      "sentence": "API de Catálogo realiza Serviço de Catálogo.",
+      "derived": false
     },
     {
       "from": "as-catalogo",
       "to": "bp-checkout",
       "type": "serving",
-      "sentence": "Serviço de Catálogo serve Checkout."
+      "sentence": "Serviço de Catálogo serve Checkout.",
+      "derived": false
     },
     {
       "from": "as-pagamento",
       "to": "bp-checkout",
       "type": "serving",
-      "sentence": "Serviço de Pagamento serve Checkout."
+      "sentence": "Serviço de Pagamento serve Checkout.",
+      "derived": false
     },
     {
       "from": "erp",
       "to": "as-logistica",
       "type": "realization",
-      "sentence": "ERP realiza Serviço de Logística."
+      "sentence": "ERP realiza Serviço de Logística.",
+      "derived": false
     },
     {
       "from": "as-logistica",
       "to": "bp-expedicao",
       "type": "serving",
-      "sentence": "Serviço de Logística serve Expedição."
+      "sentence": "Serviço de Logística serve Expedição.",
+      "derived": false
     },
     {
       "from": "loja.pedidos",
       "to": "as-consulta",
       "type": "realization",
-      "sentence": "API de Pedidos realiza Consulta de Pedidos."
+      "sentence": "API de Pedidos realiza Consulta de Pedidos.",
+      "derived": false
     },
     {
       "from": "as-consulta",
       "to": "bp-atendimento",
       "type": "serving",
-      "sentence": "Consulta de Pedidos serve Tratar solicitação."
+      "sentence": "Consulta de Pedidos serve Tratar solicitação.",
+      "derived": false
     },
     {
       "from": "crm",
       "to": "bp-atendimento",
       "type": "serving",
-      "sentence": "CRM serve Tratar solicitação."
+      "sentence": "CRM serve Tratar solicitação.",
+      "derived": false
     },
     {
       "from": "do-pedido",
       "to": "bo-pedido",
       "type": "realization",
-      "sentence": "Registro de Pedido realiza Pedido."
+      "sentence": "Registro de Pedido realiza Pedido.",
+      "derived": false
     },
     {
       "from": "loja.catalogo",
       "to": "do-produto",
       "type": "access",
-      "sentence": "API de Catálogo lê e grava Registro de Produto."
+      "sentence": "API de Catálogo lê e grava Registro de Produto.",
+      "derived": false
     },
     {
       "from": "tn-k8s",
       "to": "ts-hosting",
       "type": "realization",
-      "sentence": "Cluster Kubernetes (EKS) realiza Hospedagem de contêineres."
+      "sentence": "Cluster Kubernetes (EKS) realiza Hospedagem de contêineres.",
+      "derived": false
     },
     {
       "from": "ts-hosting",
       "to": "loja.pedidos",
       "type": "serving",
-      "sentence": "Hospedagem de contêineres serve API de Pedidos."
+      "sentence": "Hospedagem de contêineres serve API de Pedidos.",
+      "derived": false
     },
     {
       "from": "ts-hosting",
       "to": "loja.catalogo",
       "type": "serving",
-      "sentence": "Hospedagem de contêineres serve API de Catálogo."
+      "sentence": "Hospedagem de contêineres serve API de Catálogo.",
+      "derived": false
     },
     {
       "from": "ss-kafka",
       "to": "ts-mensageria",
       "type": "realization",
-      "sentence": "Apache Kafka (MSK) realiza Mensageria."
+      "sentence": "Apache Kafka (MSK) realiza Mensageria.",
+      "derived": false
     },
     {
       "from": "ts-mensageria",
       "to": "loja.pedidos",
       "type": "serving",
-      "sentence": "Mensageria serve API de Pedidos."
+      "sentence": "Mensageria serve API de Pedidos.",
+      "derived": false
     },
     {
       "from": "ts-mensageria",
       "to": "erp",
       "type": "serving",
-      "sentence": "Mensageria serve ERP."
+      "sentence": "Mensageria serve ERP.",
+      "derived": false
     },
     {
       "from": "ss-postgres",
       "to": "loja.pedidos",
       "type": "serving",
-      "sentence": "PostgreSQL 16 (RDS) serve API de Pedidos."
+      "sentence": "PostgreSQL 16 (RDS) serve API de Pedidos.",
+      "derived": false
     },
     {
       "from": "ss-redis",
       "to": "loja.pedidos",
       "type": "serving",
-      "sentence": "Redis (ElastiCache) serve API de Pedidos."
+      "sentence": "Redis (ElastiCache) serve API de Pedidos.",
+      "derived": false
     },
     {
       "from": "ss-mongo",
       "to": "loja.catalogo",
       "type": "serving",
-      "sentence": "MongoDB Atlas serve API de Catálogo."
+      "sentence": "MongoDB Atlas serve API de Catálogo.",
+      "derived": false
     },
     {
       "from": "ss-elastic",
       "to": "loja.catalogo",
       "type": "serving",
-      "sentence": "Elasticsearch serve API de Catálogo."
+      "sentence": "Elasticsearch serve API de Catálogo.",
+      "derived": false
     },
     {
       "from": "tn-sap",
       "to": "erp",
       "type": "serving",
-      "sentence": "Servidor SAP (on-premises) serve ERP."
+      "sentence": "Servidor SAP (on-premises) serve ERP.",
+      "derived": false
     },
     {
       "from": "cn-vpn",
       "to": "erp",
       "type": "serving",
-      "sentence": "VPN site-to-site serve ERP."
+      "sentence": "VPN site-to-site serve ERP.",
+      "derived": false
     },
     {
       "from": "art-pedidos",
       "to": "loja.pedidos",
       "type": "realization",
-      "sentence": "pedidos-api.jar realiza API de Pedidos."
+      "sentence": "pedidos-api.jar realiza API de Pedidos.",
+      "derived": false
     },
     {
       "from": "tn-k8s",
       "to": "art-pedidos",
       "type": "assignment",
-      "sentence": "pedidos-api.jar roda em Cluster Kubernetes (EKS)."
+      "sentence": "pedidos-api.jar roda em Cluster Kubernetes (EKS).",
+      "derived": false
     },
     {
       "from": "antifraude",
       "to": "as-pagamento",
       "type": "serving",
-      "sentence": "Serviço Antifraude serve Serviço de Pagamento."
+      "sentence": "Serviço Antifraude serve Serviço de Pagamento.",
+      "derived": true,
+      "via": [
+        "Pagamento Adapter"
+      ]
     },
     {
       "from": "gateway",
       "to": "as-pagamento",
       "type": "serving",
-      "sentence": "Gateway de Pagamentos serve Serviço de Pagamento."
+      "sentence": "Gateway de Pagamentos serve Serviço de Pagamento.",
+      "derived": true,
+      "via": [
+        "Pagamento Adapter"
+      ]
     },
     {
       "from": "loja.cache",
       "to": "as-checkout",
       "type": "serving",
-      "sentence": "Cache de Carrinho serve Serviço de Checkout."
+      "sentence": "Cache de Carrinho serve Serviço de Checkout.",
+      "derived": true,
+      "via": [
+        "Carrinho Service",
+        "Checkout Controller"
+      ]
     },
     {
       "from": "loja.db-pedidos",
       "to": "as-checkout",
       "type": "serving",
-      "sentence": "DB Pedidos serve Serviço de Checkout."
+      "sentence": "DB Pedidos serve Serviço de Checkout.",
+      "derived": true,
+      "via": [
+        "Pedido Repository",
+        "Checkout Controller"
+      ]
     }
   ],
   "notes": [

@@ -289,247 +289,315 @@
       "from": "loja.web",
       "to": "cliente",
       "type": "serving",
-      "sentence": "Web Storefront serve Cliente."
+      "sentence": "Web Storefront serve Cliente.",
+      "derived": false
     },
     {
       "from": "loja.app",
       "to": "cliente",
       "type": "serving",
-      "sentence": "App Mobile serve Cliente."
+      "sentence": "App Mobile serve Cliente.",
+      "derived": false
     },
     {
       "from": "loja.bff",
       "to": "loja.web",
       "type": "serving",
-      "sentence": "BFF serve Web Storefront."
+      "sentence": "BFF serve Web Storefront.",
+      "derived": false
     },
     {
       "from": "loja.bff",
       "to": "loja.app",
       "type": "serving",
-      "sentence": "BFF serve App Mobile."
+      "sentence": "BFF serve App Mobile.",
+      "derived": false
     },
     {
       "from": "loja.pedidos",
       "to": "crm",
       "type": "serving",
-      "sentence": "API de Pedidos serve CRM."
+      "sentence": "API de Pedidos serve CRM.",
+      "derived": false
     },
     {
       "from": "crm",
       "to": "atendente",
       "type": "serving",
-      "sentence": "CRM serve Atendente SAC."
+      "sentence": "CRM serve Atendente SAC.",
+      "derived": false
     },
     {
       "from": "prod-venda",
       "to": "bs-compra",
       "type": "aggregation",
-      "sentence": "Venda Online agrega Compra online."
+      "sentence": "Venda Online agrega Compra online.",
+      "derived": false
     },
     {
       "from": "prod-venda",
       "to": "bs-pagamento",
       "type": "aggregation",
-      "sentence": "Venda Online agrega Pagamento seguro."
+      "sentence": "Venda Online agrega Pagamento seguro.",
+      "derived": false
     },
     {
       "from": "prod-venda",
       "to": "bs-atendimento",
       "type": "aggregation",
-      "sentence": "Venda Online agrega Atendimento pós-venda."
+      "sentence": "Venda Online agrega Atendimento pós-venda.",
+      "derived": false
     },
     {
       "from": "bp-checkout",
       "to": "bs-compra",
       "type": "realization",
-      "sentence": "Checkout realiza Compra online."
+      "sentence": "Checkout realiza Compra online.",
+      "derived": false
     },
     {
       "from": "bp-checkout",
       "to": "bs-pagamento",
       "type": "realization",
-      "sentence": "Checkout realiza Pagamento seguro."
+      "sentence": "Checkout realiza Pagamento seguro.",
+      "derived": false
     },
     {
       "from": "bp-atendimento",
       "to": "bs-atendimento",
       "type": "realization",
-      "sentence": "Tratar solicitação realiza Atendimento pós-venda."
+      "sentence": "Tratar solicitação realiza Atendimento pós-venda.",
+      "derived": false
     },
     {
       "from": "bs-compra",
       "to": "br-comprador",
       "type": "serving",
-      "sentence": "Compra online serve Comprador."
+      "sentence": "Compra online serve Comprador.",
+      "derived": false
     },
     {
       "from": "cliente",
       "to": "br-comprador",
       "type": "assignment",
-      "sentence": "Cliente desempenha o papel Comprador."
+      "sentence": "Cliente desempenha o papel Comprador.",
+      "derived": false
     },
     {
       "from": "atendente",
       "to": "bp-atendimento",
       "type": "assignment",
-      "sentence": "Atendente SAC executa Tratar solicitação."
+      "sentence": "Atendente SAC executa Tratar solicitação.",
+      "derived": false
     },
     {
       "from": "as-checkout",
       "to": "bp-checkout",
       "type": "serving",
-      "sentence": "Serviço de Checkout serve Checkout."
+      "sentence": "Serviço de Checkout serve Checkout.",
+      "derived": false
     },
     {
       "from": "as-pagamento",
       "to": "bp-checkout",
       "type": "serving",
-      "sentence": "Serviço de Pagamento serve Checkout."
+      "sentence": "Serviço de Pagamento serve Checkout.",
+      "derived": false
     },
     {
       "from": "loja.pedidos",
       "to": "as-consulta",
       "type": "realization",
-      "sentence": "API de Pedidos realiza Consulta de Pedidos."
+      "sentence": "API de Pedidos realiza Consulta de Pedidos.",
+      "derived": false
     },
     {
       "from": "as-consulta",
       "to": "bp-atendimento",
       "type": "serving",
-      "sentence": "Consulta de Pedidos serve Tratar solicitação."
+      "sentence": "Consulta de Pedidos serve Tratar solicitação.",
+      "derived": false
     },
     {
       "from": "crm",
       "to": "bp-atendimento",
       "type": "serving",
-      "sentence": "CRM serve Tratar solicitação."
+      "sentence": "CRM serve Tratar solicitação.",
+      "derived": false
     },
     {
       "from": "tn-k8s",
       "to": "ts-hosting",
       "type": "realization",
-      "sentence": "Cluster Kubernetes (EKS) realiza Hospedagem de contêineres."
+      "sentence": "Cluster Kubernetes (EKS) realiza Hospedagem de contêineres.",
+      "derived": false
     },
     {
       "from": "ts-hosting",
       "to": "loja.pedidos",
       "type": "serving",
-      "sentence": "Hospedagem de contêineres serve API de Pedidos."
+      "sentence": "Hospedagem de contêineres serve API de Pedidos.",
+      "derived": false
     },
     {
       "from": "ts-hosting",
       "to": "loja.bff",
       "type": "serving",
-      "sentence": "Hospedagem de contêineres serve BFF."
+      "sentence": "Hospedagem de contêineres serve BFF.",
+      "derived": false
     },
     {
       "from": "ss-kafka",
       "to": "ts-mensageria",
       "type": "realization",
-      "sentence": "Apache Kafka (MSK) realiza Mensageria."
+      "sentence": "Apache Kafka (MSK) realiza Mensageria.",
+      "derived": false
     },
     {
       "from": "ts-mensageria",
       "to": "loja.pedidos",
       "type": "serving",
-      "sentence": "Mensageria serve API de Pedidos."
+      "sentence": "Mensageria serve API de Pedidos.",
+      "derived": false
     },
     {
       "from": "ss-postgres",
       "to": "loja.pedidos",
       "type": "serving",
-      "sentence": "PostgreSQL 16 (RDS) serve API de Pedidos."
+      "sentence": "PostgreSQL 16 (RDS) serve API de Pedidos.",
+      "derived": false
     },
     {
       "from": "ss-redis",
       "to": "loja.pedidos",
       "type": "serving",
-      "sentence": "Redis (ElastiCache) serve API de Pedidos."
+      "sentence": "Redis (ElastiCache) serve API de Pedidos.",
+      "derived": false
     },
     {
       "from": "art-pedidos",
       "to": "loja.pedidos",
       "type": "realization",
-      "sentence": "pedidos-api.jar realiza API de Pedidos."
+      "sentence": "pedidos-api.jar realiza API de Pedidos.",
+      "derived": false
     },
     {
       "from": "tn-k8s",
       "to": "art-pedidos",
       "type": "assignment",
-      "sentence": "pedidos-api.jar roda em Cluster Kubernetes (EKS)."
+      "sentence": "pedidos-api.jar roda em Cluster Kubernetes (EKS).",
+      "derived": false
     },
     {
       "from": "bp-checkout",
       "to": "goal-abandono",
       "type": "realization",
-      "sentence": "Checkout contribui para Reduzir abandono de carrinho."
+      "sentence": "Checkout contribui para Reduzir abandono de carrinho.",
+      "derived": false
     },
     {
       "from": "loja.pedidos",
       "to": "req-latencia",
       "type": "realization",
-      "sentence": "API de Pedidos atende a Checkout < 2s (p95)."
+      "sentence": "API de Pedidos atende a Checkout < 2s (p95).",
+      "derived": false
     },
     {
       "from": "req-latencia",
       "to": "goal-abandono",
       "type": "influence",
-      "sentence": "Checkout < 2s (p95) influencia Reduzir abandono de carrinho."
+      "sentence": "Checkout < 2s (p95) influencia Reduzir abandono de carrinho.",
+      "derived": false
     },
     {
       "from": "loja.cache",
       "to": "loja.pedidos",
       "type": "serving",
-      "sentence": "Cache de Carrinho serve API de Pedidos."
+      "sentence": "Cache de Carrinho serve API de Pedidos.",
+      "derived": true,
+      "via": [
+        "Carrinho Service"
+      ]
     },
     {
       "from": "antifraude",
       "to": "loja.pedidos",
       "type": "serving",
-      "sentence": "Serviço Antifraude serve API de Pedidos."
+      "sentence": "Serviço Antifraude serve API de Pedidos.",
+      "derived": true,
+      "via": [
+        "Pagamento Adapter"
+      ]
     },
     {
       "from": "gateway",
       "to": "loja.pedidos",
       "type": "serving",
-      "sentence": "Gateway de Pagamentos serve API de Pedidos."
+      "sentence": "Gateway de Pagamentos serve API de Pedidos.",
+      "derived": true,
+      "via": [
+        "Pagamento Adapter"
+      ]
     },
     {
       "from": "loja.db-pedidos",
       "to": "loja.pedidos",
       "type": "serving",
-      "sentence": "DB Pedidos serve API de Pedidos."
+      "sentence": "DB Pedidos serve API de Pedidos.",
+      "derived": true,
+      "via": [
+        "Pedido Repository"
+      ]
     },
     {
       "from": "loja.pedidos",
       "to": "do-pedido",
       "type": "access",
-      "sentence": "API de Pedidos lê e grava Registro de Pedido."
+      "sentence": "API de Pedidos lê e grava Registro de Pedido.",
+      "derived": true,
+      "via": [
+        "Pedido Repository"
+      ]
     },
     {
       "from": "loja.eventos",
       "to": "loja.pedidos",
       "type": "serving",
-      "sentence": "Barramento de Eventos serve API de Pedidos."
+      "sentence": "Barramento de Eventos serve API de Pedidos.",
+      "derived": true,
+      "via": [
+        "Publicador de Eventos"
+      ]
     },
     {
       "from": "loja.pedidos",
       "to": "loja.bff",
       "type": "serving",
-      "sentence": "API de Pedidos serve BFF."
+      "sentence": "API de Pedidos serve BFF.",
+      "derived": true,
+      "via": [
+        "Checkout Controller"
+      ]
     },
     {
       "from": "loja.pedidos",
       "to": "as-checkout",
       "type": "realization",
-      "sentence": "API de Pedidos realiza Serviço de Checkout."
+      "sentence": "API de Pedidos realiza Serviço de Checkout.",
+      "derived": true,
+      "via": [
+        "Checkout Controller"
+      ]
     },
     {
       "from": "loja.pedidos",
       "to": "as-pagamento",
       "type": "realization",
-      "sentence": "API de Pedidos realiza Serviço de Pagamento."
+      "sentence": "API de Pedidos realiza Serviço de Pagamento.",
+      "derived": true,
+      "via": [
+        "Pagamento Adapter"
+      ]
     }
   ],
   "matrix": [

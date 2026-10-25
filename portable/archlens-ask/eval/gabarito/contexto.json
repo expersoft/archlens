@@ -72,31 +72,36 @@
       "from": "cliente",
       "to": "loja",
       "type": "uses",
-      "sentence": "Cliente usa Plataforma de E-commerce."
+      "sentence": "Cliente usa Plataforma de E-commerce.",
+      "derived": false
     },
     {
       "from": "loja",
       "to": "antifraude",
       "type": "uses",
-      "sentence": "Plataforma de E-commerce usa Serviço Antifraude."
+      "sentence": "Plataforma de E-commerce usa Serviço Antifraude.",
+      "derived": false
     },
     {
       "from": "loja",
       "to": "gateway",
       "type": "uses",
-      "sentence": "Plataforma de E-commerce usa Gateway de Pagamentos."
+      "sentence": "Plataforma de E-commerce usa Gateway de Pagamentos.",
+      "derived": false
     },
     {
       "from": "erp",
       "to": "loja",
       "type": "uses",
-      "sentence": "ERP usa Plataforma de E-commerce."
+      "sentence": "ERP usa Plataforma de E-commerce.",
+      "derived": false
     },
     {
       "from": "crm",
       "to": "loja",
       "type": "uses",
-      "sentence": "CRM usa Plataforma de E-commerce."
+      "sentence": "CRM usa Plataforma de E-commerce.",
+      "derived": false
     }
   ],
   "notes": []

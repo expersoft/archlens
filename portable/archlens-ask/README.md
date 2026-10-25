@@ -88,6 +88,10 @@ Faça as perguntas de `eval/perguntas.json` ao agente, sobre a base `loja-online
 - **elementos** e **relações diretas** (tipo e direção): iguais ao gabarito;
 - **relações derivadas:** mesmas pontas; o tipo pode diferir quando houver caminhos mais curtos empatados;
 - perguntas com `esperado` (`ambiguo`, `grande`, `duas-bases`): o comportamento descrito;
+- perguntas com `base` (`as-is-registro`, `to-be-registro`, sobre `examples/telemedicina`): carregue essa base num
+  gbrain (`archlens store convert … --to gbrain`) para validá-las; elas conferem que o filtro de status vem antes da
+  travessia;
+- no gabarito, cada relação traz `derived` (e `via`, quando derivada): só as derivadas podem diferir no tipo;
 - uma rodada **sem ligações tipadas** (base gravada pelo MCP sem `sweep`): o aviso de hierarquia e grupos
   incompletos aparece;
 - `duas-bases`: com dois prefixos `archlens` no mesmo gbrain, o agente pergunta qual base usar.

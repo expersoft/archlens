@@ -51,13 +51,15 @@
       "from": "loja.pedidos",
       "to": "loja.eventos",
       "type": "uses",
-      "sentence": "API de Pedidos usa Barramento de Eventos."
+      "sentence": "API de Pedidos usa Barramento de Eventos.",
+      "derived": false
     },
     {
       "from": "erp",
       "to": "loja.eventos",
       "type": "uses",
-      "sentence": "ERP usa Barramento de Eventos."
+      "sentence": "ERP usa Barramento de Eventos.",
+      "derived": false
     }
   ],
   "notes": []

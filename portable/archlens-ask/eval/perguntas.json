@@ -20,5 +20,13 @@
     "spec": { "notation": "archimate", "viewpoint": "application" },
     "esperado": "Entrega o markdown completo e propõe um recorte (granularidade container, foco ou grupos) em vez de um diagrama com todos os nós." },
   { "id": "duas-bases", "pergunta": "(roteiro manual) Qualquer pergunta com dois prefixos archlens no mesmo gbrain.",
-    "esperado": "Pergunta qual base usar antes de consultar." }
+    "esperado": "Pergunta qual base usar antes de consultar." },
+  { "id": "as-is-registro", "pergunta": "Hoje, o que sustenta o serviço de registro clínico?",
+    "base": "examples/telemedicina/architecture",
+    "spec": { "notation": "archimate", "viewpoint": "layered", "anchor": "as-registro", "traverse": { "mode": "supporters" }, "status": ["active", "deprecated"] },
+    "esperado": "Base telemedicina (carregue-a num gbrain para validar). Traz o PEP (deprecated) e a infraestrutura dele; não traz o PEP na nuvem (planned)." },
+  { "id": "to-be-registro", "pergunta": "Depois das mudanças decididas, o que vai sustentar o serviço de registro clínico?",
+    "base": "examples/telemedicina/architecture",
+    "spec": { "notation": "archimate", "viewpoint": "layered", "anchor": "as-registro", "traverse": { "mode": "supporters" }, "status": ["planned", "active"] },
+    "esperado": "Base telemedicina. Traz o PEP na nuvem (planned); o PEP (deprecated) e o que só ele alcançava ficam de fora, porque o filtro de status vem antes da travessia." }
 ]

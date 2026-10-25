@@ -57,13 +57,15 @@
       "from": "loja.eventos",
       "to": "erp",
       "type": "serving",
-      "sentence": "Barramento de Eventos serve ERP."
+      "sentence": "Barramento de Eventos serve ERP.",
+      "derived": false
     },
     {
       "from": "loja.pedidos",
       "to": "crm",
       "type": "serving",
-      "sentence": "API de Pedidos serve CRM."
+      "sentence": "API de Pedidos serve CRM.",
+      "derived": false
     }
   ],
   "notes": []

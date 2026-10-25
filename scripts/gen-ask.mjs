@@ -140,11 +140,11 @@ export function buildReference() {
   out.push('|---|---|');
   out.push('| `<prefixo>/<tipo>/<id>` | `get_page` devolve `type` (tipo ArchiMate), `title` (nome), `tags` (acima) e `frontmatter`: `id`, `c4` (kind), `parent` e `group` (wikilinks), `aliases`, `technology`, `status` (**ausente = `active`**), `external`, `relationships` e um campo por tipo de relação com os wikilinks dos destinos (`serving: [[<prefixo>/<tipo>/<id>\\|Nome]]`); `compiled_truth`: descrição + seção "Relações" em frases |');
   out.push('| `<prefixo>/views/<key>` | visão salva: resumo + spec num bloco ```` ```archlens-json ```` |');
-  out.push('| `<prefixo>/manifest` | nome e descrição da base; o formato (`"archlens": "2.0"`) está no bloco `archlens-json` do corpo, não no frontmatter |');
+  out.push('| `<prefixo>/manifest` | tipo de página `archlens-manifest` (ache com `list_pages {"type":"archlens-manifest"}`); nome e descrição da base; o formato (`"archlens": "2.0"`) está no bloco `archlens-json` do corpo, não no frontmatter |');
   out.push('| `<prefixo>/notes/<nome>` | notas de interpretação |');
   out.push('| `<prefixo>/changelog` | histórico de rodadas |');
   out.push('');
-  out.push('Cada item de `relationships` é `{id, type, to, description?, technology?, accessType?}`: só as relações de **saída**; `to` é o **id** do destino (o slug completo está no wikilink do campo do mesmo tipo, ou em `resolve_slugs {"partial": "<id>"}`); `accessType` (só em `access`) é `read`, `write`, `readwrite` ou `access`.');
+  out.push('Cada item de `relationships` é `{id, type, to, description?, technology?, accessType?, status?}`: só as relações de **saída**; `to` é o **id** do destino (o slug completo está no wikilink do campo do mesmo tipo, ou em `resolve_slugs {"partial": "<id>"}`); `accessType` (só em `access`) é `read`, `write`, `readwrite` ou `access`; `status` ausente = `active`.');
   out.push('');
   out.push('`get_backlinks` devolve `{from_slug, link_type, link_source}`. Com ligações tipadas, cada relação de entrada aparece com o tipo dela (`serving`, `realization`…, `link_source: "frontmatter"`), a hierarquia como `part_of` e o grupo como `member_of`; as citações do corpo aparecem como `mentions` (`link_source: "markdown"`). Inversos no schema pack: `part_of` ↔ `composed_of`, `member_of` ↔ `has_member`.');
   out.push('');
@@ -157,15 +157,33 @@ export function buildReference() {
 export const EVAL_BASE = 'examples/loja-online/architecture';
 const CLI = join(ROOT, 'scripts', 'archlens.mjs');
 
-/** The answer key: the CLI query (JSON) of each question that has one (spec, view or element). */
+const cli = (args, id) => {
+  const res = spawnSync(process.execPath, [CLI, ...args], { cwd: ROOT, encoding: 'utf8' });
+  if (res.status !== 0) throw new Error(`gabarito "${id}": ${res.stderr.trim()}`);
+  return res.stdout;
+};
+
+/**
+ * The answer key: the CLI query (JSON) of each question that has one (spec, view or element), on the question's `base`
+ * (default EVAL_BASE). View answers get `derived` and `via` on each edge (from the resolved view), so a validator knows
+ * which relationships may differ in type.
+ */
 export function buildGabarito(perguntas) {
   const out = new Map();
   for (const q of perguntas) {
     const args = q.spec ? ['--spec', JSON.stringify(q.spec)] : q.view ? ['--view', q.view] : q.element ? ['--element', q.element, ...(q.depth ? ['--depth', String(q.depth)] : [])] : null;
     if (!args) continue;
-    const res = spawnSync(process.execPath, [CLI, 'query', EVAL_BASE, ...args, '--format', 'json'], { cwd: ROOT, encoding: 'utf8' });
-    if (res.status !== 0) throw new Error(`gabarito "${q.id}": ${res.stderr.trim()}`);
-    out.set(`${REL_DIR}/eval/gabarito/${q.id}.json`, res.stdout);
+    const base = q.base ?? EVAL_BASE;
+    const answer = JSON.parse(cli(['query', base, ...args, '--format', 'json'], q.id));
+    if (Array.isArray(answer.edges) && !q.element) {
+      const resolved = JSON.parse(cli(['resolve', base, ...args], q.id));
+      const byKey = new Map(resolved.edges.map(e => [`${e.from}|${e.type}|${e.to}`, e]));
+      answer.edges = answer.edges.map(e => {
+        const r = byKey.get(`${e.from}|${e.type}|${e.to}`);
+        return { ...e, derived: Boolean(r?.derived), ...(r?.derived && r.via ? { via: r.via } : {}) };
+      });
+    }
+    out.set(`${REL_DIR}/eval/gabarito/${q.id}.json`, `${JSON.stringify(answer, null, 2)}\n`);
   }
   return out;
 }

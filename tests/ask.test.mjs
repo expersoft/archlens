@@ -56,3 +56,19 @@ test('checkCoverage reports size and missing terms', async () => {
   assert.equal(problems.length, 2);
   assert.match(problems.join('\n'), /anchor/);
 });
+
+test('buildGabarito marks derived edges with the hidden elements they pass through', async () => {
+  const { buildGabarito } = await import('../scripts/gen-ask.mjs');
+  const spec = { notation: 'archimate', viewpoint: 'layered', anchor: 'bp-checkout', traverse: { mode: 'supporters' }, granularity: 'container' };
+  const g = JSON.parse(buildGabarito([{ id: 'd', pergunta: 'x', spec }]).get('portable/archlens-ask/eval/gabarito/d.json'));
+  const derived = g.edges.find(e => e.from === 'loja.cache' && e.to === 'as-checkout');
+  assert.equal(derived.derived, true);
+  assert.deepEqual(derived.via, ['Carrinho Service', 'Checkout Controller']);
+  assert.equal(g.edges.find(e => e.from === 'as-checkout' && e.to === 'bp-checkout').derived, false);
+});
+
+test('buildGabarito queries the base a question names', async () => {
+  const { buildGabarito } = await import('../scripts/gen-ask.mjs');
+  const g = buildGabarito([{ id: 't', pergunta: 'x', base: 'examples/telemedicina/architecture', element: 'pep' }]);
+  assert.equal(JSON.parse(g.get('portable/archlens-ask/eval/gabarito/t.json')).element.id, 'pep');
+});

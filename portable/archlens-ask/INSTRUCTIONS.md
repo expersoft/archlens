@@ -28,8 +28,9 @@ Use só as de leitura do gbrain: `get_page`, `list_pages`, `get_backlinks`, `tra
 
 ## Fluxo de cada pergunta
 
-1. **Ache a base.** Procure as páginas `<prefixo>/manifest` com a tag `archlens` (`list_pages` por tag). Uma base = um
-   prefixo (padrão `archlens/`). Mais de uma: pergunte qual. Nenhuma: diga que não há base archlens acessível por este
+1. **Ache a base.** Liste os manifestos: `list_pages {"type":"archlens-manifest"}` (ou `resolve_slugs
+   {"partial":"manifest"}`); nunca só pela tag `archlens`, que todas as páginas têm. Uma base = um prefixo (padrão
+   `archlens/`). Mais de uma: pergunte qual. Nenhuma: diga que não há base archlens acessível por este
    MCP. Se o campo `archlens` do bloco `archlens-json` do manifesto não for `2.0`, avise que as respostas podem sair
    erradas.
 2. **Descubra o modo de ligações** (uma vez por conversa; `RULES.md` §2): com ligações tipadas (recomendado) ou

@@ -249,259 +249,302 @@
       "from": "loja.bff",
       "to": "loja.web",
       "type": "serving",
-      "sentence": "BFF serve Web Storefront."
+      "sentence": "BFF serve Web Storefront.",
+      "derived": false
     },
     {
       "from": "loja.bff",
       "to": "loja.app",
       "type": "serving",
-      "sentence": "BFF serve App Mobile."
+      "sentence": "BFF serve App Mobile.",
+      "derived": false
     },
     {
       "from": "loja.catalogo",
       "to": "loja.bff",
       "type": "serving",
-      "sentence": "API de Catálogo serve BFF."
+      "sentence": "API de Catálogo serve BFF.",
+      "derived": false
     },
     {
       "from": "loja.busca",
       "to": "loja.bff",
       "type": "serving",
-      "sentence": "Índice de Busca serve BFF."
+      "sentence": "Índice de Busca serve BFF.",
+      "derived": false
     },
     {
       "from": "loja.pedidos.carrinho",
       "to": "loja.bff",
       "type": "serving",
-      "sentence": "Carrinho Service serve BFF."
+      "sentence": "Carrinho Service serve BFF.",
+      "derived": false
     },
     {
       "from": "loja.pedidos.checkout",
       "to": "loja.bff",
       "type": "serving",
-      "sentence": "Checkout Controller serve BFF."
+      "sentence": "Checkout Controller serve BFF.",
+      "derived": false
     },
     {
       "from": "loja.db-catalogo",
       "to": "loja.catalogo",
       "type": "serving",
-      "sentence": "DB Catálogo serve API de Catálogo."
+      "sentence": "DB Catálogo serve API de Catálogo.",
+      "derived": false
     },
     {
       "from": "loja.busca",
       "to": "loja.catalogo",
       "type": "serving",
-      "sentence": "Índice de Busca serve API de Catálogo."
+      "sentence": "Índice de Busca serve API de Catálogo.",
+      "derived": false
     },
     {
       "from": "loja.pedidos.carrinho",
       "to": "loja.pedidos.checkout",
       "type": "serving",
-      "sentence": "Carrinho Service serve Checkout Controller."
+      "sentence": "Carrinho Service serve Checkout Controller.",
+      "derived": false
     },
     {
       "from": "loja.pedidos.pagamento",
       "to": "loja.pedidos.checkout",
       "type": "serving",
-      "sentence": "Pagamento Adapter serve Checkout Controller."
+      "sentence": "Pagamento Adapter serve Checkout Controller.",
+      "derived": false
     },
     {
       "from": "loja.pedidos.repo",
       "to": "loja.pedidos.checkout",
       "type": "serving",
-      "sentence": "Pedido Repository serve Checkout Controller."
+      "sentence": "Pedido Repository serve Checkout Controller.",
+      "derived": false
     },
     {
       "from": "loja.pedidos.eventos",
       "to": "loja.pedidos.checkout",
       "type": "serving",
-      "sentence": "Publicador de Eventos serve Checkout Controller."
+      "sentence": "Publicador de Eventos serve Checkout Controller.",
+      "derived": false
     },
     {
       "from": "loja.cache",
       "to": "loja.pedidos.carrinho",
       "type": "serving",
-      "sentence": "Cache de Carrinho serve Carrinho Service."
+      "sentence": "Cache de Carrinho serve Carrinho Service.",
+      "derived": false
     },
     {
       "from": "loja.db-pedidos",
       "to": "loja.pedidos.repo",
       "type": "serving",
-      "sentence": "DB Pedidos serve Pedido Repository."
+      "sentence": "DB Pedidos serve Pedido Repository.",
+      "derived": false
     },
     {
       "from": "antifraude",
       "to": "loja.pedidos.pagamento",
       "type": "serving",
-      "sentence": "Serviço Antifraude serve Pagamento Adapter."
+      "sentence": "Serviço Antifraude serve Pagamento Adapter.",
+      "derived": false
     },
     {
       "from": "gateway",
       "to": "loja.pedidos.pagamento",
       "type": "serving",
-      "sentence": "Gateway de Pagamentos serve Pagamento Adapter."
+      "sentence": "Gateway de Pagamentos serve Pagamento Adapter.",
+      "derived": false
     },
     {
       "from": "loja.eventos",
       "to": "loja.pedidos.eventos",
       "type": "serving",
-      "sentence": "Barramento de Eventos serve Publicador de Eventos."
+      "sentence": "Barramento de Eventos serve Publicador de Eventos.",
+      "derived": false
     },
     {
       "from": "loja.eventos",
       "to": "erp",
       "type": "serving",
-      "sentence": "Barramento de Eventos serve ERP."
+      "sentence": "Barramento de Eventos serve ERP.",
+      "derived": false
     },
     {
       "from": "transportadora",
       "to": "erp",
       "type": "serving",
-      "sentence": "API da Transportadora serve ERP."
+      "sentence": "API da Transportadora serve ERP.",
+      "derived": false
     },
     {
       "from": "loja.pedidos",
       "to": "crm",
       "type": "serving",
-      "sentence": "API de Pedidos serve CRM."
+      "sentence": "API de Pedidos serve CRM.",
+      "derived": false
     },
     {
       "from": "loja.pedidos.checkout",
       "to": "as-checkout",
       "type": "realization",
-      "sentence": "Checkout Controller realiza Serviço de Checkout."
+      "sentence": "Checkout Controller realiza Serviço de Checkout.",
+      "derived": false
     },
     {
       "from": "loja.catalogo",
       "to": "as-catalogo",
       "type": "realization",
-      "sentence": "API de Catálogo realiza Serviço de Catálogo."
+      "sentence": "API de Catálogo realiza Serviço de Catálogo.",
+      "derived": false
     },
     {
       "from": "loja.pedidos.pagamento",
       "to": "as-pagamento",
       "type": "realization",
-      "sentence": "Pagamento Adapter realiza Serviço de Pagamento."
+      "sentence": "Pagamento Adapter realiza Serviço de Pagamento.",
+      "derived": false
     },
     {
       "from": "erp",
       "to": "as-faturamento",
       "type": "realization",
-      "sentence": "ERP realiza Serviço de Faturamento."
+      "sentence": "ERP realiza Serviço de Faturamento.",
+      "derived": false
     },
     {
       "from": "erp",
       "to": "as-logistica",
       "type": "realization",
-      "sentence": "ERP realiza Serviço de Logística."
+      "sentence": "ERP realiza Serviço de Logística.",
+      "derived": false
     },
     {
       "from": "loja.pedidos",
       "to": "as-consulta",
       "type": "realization",
-      "sentence": "API de Pedidos realiza Consulta de Pedidos."
+      "sentence": "API de Pedidos realiza Consulta de Pedidos.",
+      "derived": false
     },
     {
       "from": "loja.pedidos.repo",
       "to": "do-pedido",
       "type": "access",
-      "sentence": "Pedido Repository grava Registro de Pedido."
+      "sentence": "Pedido Repository grava Registro de Pedido.",
+      "derived": false
     },
     {
       "from": "loja.catalogo",
       "to": "do-produto",
       "type": "access",
-      "sentence": "API de Catálogo lê e grava Registro de Produto."
+      "sentence": "API de Catálogo lê e grava Registro de Produto.",
+      "derived": false
     },
     {
       "from": "loja",
       "to": "loja.web",
       "type": "composition",
-      "sentence": "Plataforma de E-commerce contém Web Storefront como parte integrante."
+      "sentence": "Plataforma de E-commerce contém Web Storefront como parte integrante.",
+      "derived": false
     },
     {
       "from": "loja",
       "to": "loja.app",
       "type": "composition",
-      "sentence": "Plataforma de E-commerce contém App Mobile como parte integrante."
+      "sentence": "Plataforma de E-commerce contém App Mobile como parte integrante.",
+      "derived": false
     },
     {
       "from": "loja",
       "to": "loja.bff",
       "type": "composition",
-      "sentence": "Plataforma de E-commerce contém BFF como parte integrante."
+      "sentence": "Plataforma de E-commerce contém BFF como parte integrante.",
+      "derived": false
     },
     {
       "from": "loja",
       "to": "loja.pedidos",
       "type": "composition",
-      "sentence": "Plataforma de E-commerce contém API de Pedidos como parte integrante."
+      "sentence": "Plataforma de E-commerce contém API de Pedidos como parte integrante.",
+      "derived": false
     },
     {
       "from": "loja.pedidos",
       "to": "loja.pedidos.checkout",
       "type": "composition",
-      "sentence": "API de Pedidos contém Checkout Controller como parte integrante."
+      "sentence": "API de Pedidos contém Checkout Controller como parte integrante.",
+      "derived": false
     },
     {
       "from": "loja.pedidos",
       "to": "loja.pedidos.carrinho",
       "type": "composition",
-      "sentence": "API de Pedidos contém Carrinho Service como parte integrante."
+      "sentence": "API de Pedidos contém Carrinho Service como parte integrante.",
+      "derived": false
     },
     {
       "from": "loja.pedidos",
       "to": "loja.pedidos.pagamento",
       "type": "composition",
-      "sentence": "API de Pedidos contém Pagamento Adapter como parte integrante."
+      "sentence": "API de Pedidos contém Pagamento Adapter como parte integrante.",
+      "derived": false
     },
     {
       "from": "loja.pedidos",
       "to": "loja.pedidos.repo",
       "type": "composition",
-      "sentence": "API de Pedidos contém Pedido Repository como parte integrante."
+      "sentence": "API de Pedidos contém Pedido Repository como parte integrante.",
+      "derived": false
     },
     {
       "from": "loja.pedidos",
       "to": "loja.pedidos.eventos",
       "type": "composition",
-      "sentence": "API de Pedidos contém Publicador de Eventos como parte integrante."
+      "sentence": "API de Pedidos contém Publicador de Eventos como parte integrante.",
+      "derived": false
     },
     {
       "from": "loja",
       "to": "loja.catalogo",
       "type": "composition",
-      "sentence": "Plataforma de E-commerce contém API de Catálogo como parte integrante."
+      "sentence": "Plataforma de E-commerce contém API de Catálogo como parte integrante.",
+      "derived": false
     },
     {
       "from": "loja",
       "to": "loja.busca",
       "type": "composition",
-      "sentence": "Plataforma de E-commerce contém Índice de Busca como parte integrante."
+      "sentence": "Plataforma de E-commerce contém Índice de Busca como parte integrante.",
+      "derived": false
     },
     {
       "from": "loja",
       "to": "loja.cache",
       "type": "composition",
-      "sentence": "Plataforma de E-commerce contém Cache de Carrinho como parte integrante."
+      "sentence": "Plataforma de E-commerce contém Cache de Carrinho como parte integrante.",
+      "derived": false
     },
     {
       "from": "loja",
       "to": "loja.db-pedidos",
       "type": "composition",
-      "sentence": "Plataforma de E-commerce contém DB Pedidos como parte integrante."
+      "sentence": "Plataforma de E-commerce contém DB Pedidos como parte integrante.",
+      "derived": false
     },
     {
       "from": "loja",
       "to": "loja.db-catalogo",
       "type": "composition",
-      "sentence": "Plataforma de E-commerce contém DB Catálogo como parte integrante."
+      "sentence": "Plataforma de E-commerce contém DB Catálogo como parte integrante.",
+      "derived": false
     },
     {
       "from": "loja",
       "to": "loja.eventos",
       "type": "composition",
-      "sentence": "Plataforma de E-commerce contém Barramento de Eventos como parte integrante."
+      "sentence": "Plataforma de E-commerce contém Barramento de Eventos como parte integrante.",
+      "derived": false
     }
   ],
   "notes": []

@@ -232,157 +232,204 @@
       "from": "loja.db-catalogo",
       "to": "loja.catalogo",
       "type": "serving",
-      "sentence": "DB Catálogo serve API de Catálogo."
+      "sentence": "DB Catálogo serve API de Catálogo.",
+      "derived": false
     },
     {
       "from": "loja.busca",
       "to": "loja.catalogo",
       "type": "serving",
-      "sentence": "Índice de Busca serve API de Catálogo."
+      "sentence": "Índice de Busca serve API de Catálogo.",
+      "derived": false
     },
     {
       "from": "bp-checkout",
       "to": "bo-pedido",
       "type": "access",
-      "sentence": "Checkout grava Pedido."
+      "sentence": "Checkout grava Pedido.",
+      "derived": false
     },
     {
       "from": "as-checkout",
       "to": "bp-checkout",
       "type": "serving",
-      "sentence": "Serviço de Checkout serve Checkout."
+      "sentence": "Serviço de Checkout serve Checkout.",
+      "derived": false
     },
     {
       "from": "loja.catalogo",
       "to": "as-catalogo",
       "type": "realization",
-      "sentence": "API de Catálogo realiza Serviço de Catálogo."
+      "sentence": "API de Catálogo realiza Serviço de Catálogo.",
+      "derived": false
     },
     {
       "from": "as-catalogo",
       "to": "bp-checkout",
       "type": "serving",
-      "sentence": "Serviço de Catálogo serve Checkout."
+      "sentence": "Serviço de Catálogo serve Checkout.",
+      "derived": false
     },
     {
       "from": "as-pagamento",
       "to": "bp-checkout",
       "type": "serving",
-      "sentence": "Serviço de Pagamento serve Checkout."
+      "sentence": "Serviço de Pagamento serve Checkout.",
+      "derived": false
     },
     {
       "from": "do-pedido",
       "to": "bo-pedido",
       "type": "realization",
-      "sentence": "Registro de Pedido realiza Pedido."
+      "sentence": "Registro de Pedido realiza Pedido.",
+      "derived": false
     },
     {
       "from": "loja.catalogo",
       "to": "do-produto",
       "type": "access",
-      "sentence": "API de Catálogo lê e grava Registro de Produto."
+      "sentence": "API de Catálogo lê e grava Registro de Produto.",
+      "derived": false
     },
     {
       "from": "tn-k8s",
       "to": "ts-hosting",
       "type": "realization",
-      "sentence": "Cluster Kubernetes (EKS) realiza Hospedagem de contêineres."
+      "sentence": "Cluster Kubernetes (EKS) realiza Hospedagem de contêineres.",
+      "derived": false
     },
     {
       "from": "ts-hosting",
       "to": "loja.pedidos",
       "type": "serving",
-      "sentence": "Hospedagem de contêineres serve API de Pedidos."
+      "sentence": "Hospedagem de contêineres serve API de Pedidos.",
+      "derived": false
     },
     {
       "from": "ts-hosting",
       "to": "loja.catalogo",
       "type": "serving",
-      "sentence": "Hospedagem de contêineres serve API de Catálogo."
+      "sentence": "Hospedagem de contêineres serve API de Catálogo.",
+      "derived": false
     },
     {
       "from": "ss-kafka",
       "to": "ts-mensageria",
       "type": "realization",
-      "sentence": "Apache Kafka (MSK) realiza Mensageria."
+      "sentence": "Apache Kafka (MSK) realiza Mensageria.",
+      "derived": false
     },
     {
       "from": "ts-mensageria",
       "to": "loja.pedidos",
       "type": "serving",
-      "sentence": "Mensageria serve API de Pedidos."
+      "sentence": "Mensageria serve API de Pedidos.",
+      "derived": false
     },
     {
       "from": "ss-postgres",
       "to": "loja.pedidos",
       "type": "serving",
-      "sentence": "PostgreSQL 16 (RDS) serve API de Pedidos."
+      "sentence": "PostgreSQL 16 (RDS) serve API de Pedidos.",
+      "derived": false
     },
     {
       "from": "ss-redis",
       "to": "loja.pedidos",
       "type": "serving",
-      "sentence": "Redis (ElastiCache) serve API de Pedidos."
+      "sentence": "Redis (ElastiCache) serve API de Pedidos.",
+      "derived": false
     },
     {
       "from": "ss-mongo",
       "to": "loja.catalogo",
       "type": "serving",
-      "sentence": "MongoDB Atlas serve API de Catálogo."
+      "sentence": "MongoDB Atlas serve API de Catálogo.",
+      "derived": false
     },
     {
       "from": "ss-elastic",
       "to": "loja.catalogo",
       "type": "serving",
-      "sentence": "Elasticsearch serve API de Catálogo."
+      "sentence": "Elasticsearch serve API de Catálogo.",
+      "derived": false
     },
     {
       "from": "art-pedidos",
       "to": "loja.pedidos",
       "type": "realization",
-      "sentence": "pedidos-api.jar realiza API de Pedidos."
+      "sentence": "pedidos-api.jar realiza API de Pedidos.",
+      "derived": false
     },
     {
       "from": "tn-k8s",
       "to": "art-pedidos",
       "type": "assignment",
-      "sentence": "pedidos-api.jar roda em Cluster Kubernetes (EKS)."
+      "sentence": "pedidos-api.jar roda em Cluster Kubernetes (EKS).",
+      "derived": false
     },
     {
       "from": "loja.pedidos",
       "to": "as-checkout",
       "type": "realization",
-      "sentence": "API de Pedidos realiza Serviço de Checkout."
+      "sentence": "API de Pedidos realiza Serviço de Checkout.",
+      "derived": true,
+      "via": [
+        "Checkout Controller"
+      ]
     },
     {
       "from": "antifraude",
       "to": "as-pagamento",
       "type": "serving",
-      "sentence": "Serviço Antifraude serve Serviço de Pagamento."
+      "sentence": "Serviço Antifraude serve Serviço de Pagamento.",
+      "derived": true,
+      "via": [
+        "Pagamento Adapter"
+      ]
     },
     {
       "from": "gateway",
       "to": "as-pagamento",
       "type": "serving",
-      "sentence": "Gateway de Pagamentos serve Serviço de Pagamento."
+      "sentence": "Gateway de Pagamentos serve Serviço de Pagamento.",
+      "derived": true,
+      "via": [
+        "Pagamento Adapter"
+      ]
     },
     {
       "from": "loja.cache",
       "to": "as-checkout",
       "type": "serving",
-      "sentence": "Cache de Carrinho serve Serviço de Checkout."
+      "sentence": "Cache de Carrinho serve Serviço de Checkout.",
+      "derived": true,
+      "via": [
+        "Carrinho Service",
+        "Checkout Controller"
+      ]
     },
     {
       "from": "loja.db-pedidos",
       "to": "as-checkout",
       "type": "serving",
-      "sentence": "DB Pedidos serve Serviço de Checkout."
+      "sentence": "DB Pedidos serve Serviço de Checkout.",
+      "derived": true,
+      "via": [
+        "Pedido Repository",
+        "Checkout Controller"
+      ]
     },
     {
       "from": "loja.eventos",
       "to": "as-checkout",
       "type": "serving",
-      "sentence": "Barramento de Eventos serve Serviço de Checkout."
+      "sentence": "Barramento de Eventos serve Serviço de Checkout.",
+      "derived": true,
+      "via": [
+        "Publicador de Eventos",
+        "Checkout Controller"
+      ]
     }
   ],
   "notes": []

@@ -206,85 +206,99 @@
       "from": "loja.bff",
       "to": "loja.web",
       "type": "serving",
-      "sentence": "BFF serve Web Storefront."
+      "sentence": "BFF serve Web Storefront.",
+      "derived": false
     },
     {
       "from": "loja.bff",
       "to": "loja.app",
       "type": "serving",
-      "sentence": "BFF serve App Mobile."
+      "sentence": "BFF serve App Mobile.",
+      "derived": false
     },
     {
       "from": "loja.catalogo",
       "to": "loja.bff",
       "type": "serving",
-      "sentence": "API de Catálogo serve BFF."
+      "sentence": "API de Catálogo serve BFF.",
+      "derived": false
     },
     {
       "from": "loja.busca",
       "to": "loja.bff",
       "type": "serving",
-      "sentence": "Índice de Busca serve BFF."
+      "sentence": "Índice de Busca serve BFF.",
+      "derived": false
     },
     {
       "from": "loja.db-catalogo",
       "to": "loja.catalogo",
       "type": "serving",
-      "sentence": "DB Catálogo serve API de Catálogo."
+      "sentence": "DB Catálogo serve API de Catálogo.",
+      "derived": false
     },
     {
       "from": "loja.busca",
       "to": "loja.catalogo",
       "type": "serving",
-      "sentence": "Índice de Busca serve API de Catálogo."
+      "sentence": "Índice de Busca serve API de Catálogo.",
+      "derived": false
     },
     {
       "from": "loja.eventos",
       "to": "erp",
       "type": "serving",
-      "sentence": "Barramento de Eventos serve ERP."
+      "sentence": "Barramento de Eventos serve ERP.",
+      "derived": false
     },
     {
       "from": "transportadora",
       "to": "erp",
       "type": "serving",
-      "sentence": "API da Transportadora serve ERP."
+      "sentence": "API da Transportadora serve ERP.",
+      "derived": false
     },
     {
       "from": "loja.pedidos",
       "to": "crm",
       "type": "serving",
-      "sentence": "API de Pedidos serve CRM."
+      "sentence": "API de Pedidos serve CRM.",
+      "derived": false
     },
     {
       "from": "loja.catalogo",
       "to": "as-catalogo",
       "type": "realization",
-      "sentence": "API de Catálogo realiza Serviço de Catálogo."
+      "sentence": "API de Catálogo realiza Serviço de Catálogo.",
+      "derived": false
     },
     {
       "from": "erp",
       "to": "as-faturamento",
       "type": "realization",
-      "sentence": "ERP realiza Serviço de Faturamento."
+      "sentence": "ERP realiza Serviço de Faturamento.",
+      "derived": false
     },
     {
       "from": "erp",
       "to": "as-logistica",
       "type": "realization",
-      "sentence": "ERP realiza Serviço de Logística."
+      "sentence": "ERP realiza Serviço de Logística.",
+      "derived": false
     },
     {
       "from": "loja.pedidos",
       "to": "as-consulta",
       "type": "realization",
-      "sentence": "API de Pedidos realiza Consulta de Pedidos."
+      "sentence": "API de Pedidos realiza Consulta de Pedidos.",
+      "derived": false
     },
     {
       "from": "loja.catalogo",
       "to": "do-produto",
       "type": "access",
-      "sentence": "API de Catálogo lê e grava Registro de Produto."
+      "sentence": "API de Catálogo lê e grava Registro de Produto.",
+      "derived": false
     }
   ],
   "notes": []
