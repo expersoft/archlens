@@ -188,15 +188,18 @@ UpdateElementStyle(<id da âncora>, $borderColor="#f2b705")
 
 ## Páginas da base no gbrain
 
-Todas as páginas da base levam a tag `archlens` e ficam sob um prefixo (padrão `archlens/`). Elementos levam também `archlens/<tipo>` e, com perfil C4, `archlens/c4/<kind>`.
+Todas as páginas da base ficam sob um prefixo (padrão `archlens/`) e levam a tag `archlens`. Elementos levam também `archlens/<tipo>`, `archlens/c4/<kind>` (com perfil C4) e `archlens/tag/<tag>` para cada tag do elemento (ex.: `archlens/tag/database`, `archlens/tag/queue`).
 
-| página | conteúdo útil |
+| página (slug) | conteúdo útil |
 |---|---|
-| `<prefixo>/<tipo>/<id>.md` | frontmatter: `id`, `type`, `title`, `aliases`, `c4`, `status`, `technology`, `tags`, `group`, `parent`, `external`, `relationships` (lista `{id, type, to, description?, technology?}`, só as de saída); corpo: descrição + seção "Relações" em frases |
-| `<prefixo>/views/<key>.md` | visão salva: resumo + spec num bloco ```` ```archlens-json ```` |
-| `<prefixo>/manifest.md` | nome, descrição e formato da base (bloco `archlens-json`, campo `archlens`) |
-| `<prefixo>/notes/<nome>.md` | notas de interpretação |
-| `<prefixo>/changelog.md` | histórico de rodadas |
-| `<prefixo>/gbrain-pack.yaml` | schema pack: tipos de página e tipos de ligação com inversos |
+| `<prefixo>/<tipo>/<id>` | `get_page` devolve `type` (tipo ArchiMate), `title` (nome), `tags` (acima) e `frontmatter`: `id`, `c4` (kind), `parent` e `group` (wikilinks), `aliases`, `technology`, `status` (**ausente = `active`**), `external`, `relationships` e um campo por tipo de relação com os wikilinks dos destinos (`serving: [[<prefixo>/<tipo>/<id>\|Nome]]`); `compiled_truth`: descrição + seção "Relações" em frases |
+| `<prefixo>/views/<key>` | visão salva: resumo + spec num bloco ```` ```archlens-json ```` |
+| `<prefixo>/manifest` | nome e descrição da base; o formato (`"archlens": "2.0"`) está no bloco `archlens-json` do corpo, não no frontmatter |
+| `<prefixo>/notes/<nome>` | notas de interpretação |
+| `<prefixo>/changelog` | histórico de rodadas |
 
-Ligações extras do schema pack: `part_of` (inverso `composed_of`, do campo `parent`) e `member_of` (inverso `has_member`, do campo `group`).
+Cada item de `relationships` é `{id, type, to, description?, technology?, accessType?}`: só as relações de **saída**; `to` é o **id** do destino (o slug completo está no wikilink do campo do mesmo tipo, ou em `resolve_slugs {"partial": "<id>"}`); `accessType` (só em `access`) é `read`, `write`, `readwrite` ou `access`.
+
+`get_backlinks` devolve `{from_slug, link_type, link_source}`. Com ligações tipadas, cada relação de entrada aparece com o tipo dela (`serving`, `realization`…, `link_source: "frontmatter"`), a hierarquia como `part_of` e o grupo como `member_of`; as citações do corpo aparecem como `mentions` (`link_source: "markdown"`). Inversos no schema pack: `part_of` ↔ `composed_of`, `member_of` ↔ `has_member`.
+
+Parâmetros que confundem: `resolve_slugs {"partial": "texto"}` (devolve slugs que contêm o texto); `list_pages {"tag": "...", "limit": 100}`; `get_page {"slug": "..."}`; `get_backlinks {"slug": "..."}`; `search {"query": "..."}` (busca por palavra).

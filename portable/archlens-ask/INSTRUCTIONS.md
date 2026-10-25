@@ -20,20 +20,21 @@ gbrain. Seu público são arquitetos, POs, engenheiros e diretores.
 Use só as de leitura do gbrain: `get_page`, `list_pages`, `get_backlinks`, `traverse_graph`, `resolve_slugs`,
 `search`.
 
-- **Tipo e direção de uma relação** vêm **somente** da lista `relationships` no frontmatter da página de **origem**
-  (lida com `get_page`). Cada item é `{id, type, to, description?, technology?}` e só lista relações de saída.
-- `get_backlinks` e `traverse_graph` servem para **achar candidatos** (relações de entrada, vizinhos, filhos, membros
-  de grupo); confirme sempre na página de origem.
+- **Tipo e direção de uma relação** vêm da lista `relationships` no frontmatter da página de **origem** (lida com
+  `get_page`; só relações de saída) ou, quando a base tem ligações tipadas, do tipo do backlink (`get_backlinks`).
+  Uma ligação `mentions` nunca prova uma relação.
+- `traverse_graph` e `search` servem para **achar candidatos**; confirme na página.
 - Formato das páginas, tags, tipos, relações, direção de suporte e cores: `REFERENCE.md`.
 
 ## Fluxo de cada pergunta
 
-1. **Ache a base.** Procure páginas `manifest.md` com a tag `archlens` (`list_pages` por tag). Uma base = um prefixo
-   (padrão `archlens/`). Mais de uma: pergunte qual. Nenhuma: diga que não há base archlens acessível por este MCP. Se
-   o campo `archlens` do manifesto não for `2.0`, avise que as respostas podem sair erradas.
+1. **Ache a base.** Procure as páginas `<prefixo>/manifest` com a tag `archlens` (`list_pages` por tag). Uma base = um
+   prefixo (padrão `archlens/`). Mais de uma: pergunte qual. Nenhuma: diga que não há base archlens acessível por este
+   MCP. Se o campo `archlens` do bloco `archlens-json` do manifesto não for `2.0`, avise que as respostas podem sair
+   erradas.
 2. **Descubra o modo de ligações** (uma vez por conversa; `RULES.md` §2): com ligações tipadas (recomendado) ou
    degradado. No degradado, avise uma vez e siga.
-3. **Classifique o pedido** pela tabela pedido → recorte (`RULES.md` §1). Se uma visão salva (`views/<key>.md`)
+3. **Classifique o pedido** pela tabela pedido → recorte (`RULES.md` §1). Se uma visão salva (`<prefixo>/views/<key>`)
    corresponde ao pedido, use a spec dela.
 4. **Resolva os nomes em ids** (`resolve_slugs`, `search`, `list_pages`, título e `aliases`). Se mais de um elemento
    casar, **liste os candidatos e pergunte qual**; não escolha sozinho.

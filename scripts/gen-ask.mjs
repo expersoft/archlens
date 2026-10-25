@@ -134,18 +134,21 @@ export function buildReference() {
 
   out.push('## Páginas da base no gbrain');
   out.push('');
-  out.push(`Todas as páginas da base levam a tag \`${COMMON_TAG}\` e ficam sob um prefixo (padrão \`archlens/\`). Elementos levam também \`${COMMON_TAG}/<tipo>\` e, com perfil C4, \`${COMMON_TAG}/c4/<kind>\`.`);
+  out.push(`Todas as páginas da base ficam sob um prefixo (padrão \`archlens/\`) e levam a tag \`${COMMON_TAG}\`. Elementos levam também \`${COMMON_TAG}/<tipo>\`, \`${COMMON_TAG}/c4/<kind>\` (com perfil C4) e \`${COMMON_TAG}/tag/<tag>\` para cada tag do elemento (ex.: \`${COMMON_TAG}/tag/database\`, \`${COMMON_TAG}/tag/queue\`).`);
   out.push('');
-  out.push('| página | conteúdo útil |');
+  out.push('| página (slug) | conteúdo útil |');
   out.push('|---|---|');
-  out.push('| `<prefixo>/<tipo>/<id>.md` | frontmatter: `id`, `type`, `title`, `aliases`, `c4`, `status`, `technology`, `tags`, `group`, `parent`, `external`, `relationships` (lista `{id, type, to, description?, technology?}`, só as de saída); corpo: descrição + seção "Relações" em frases |');
-  out.push('| `<prefixo>/views/<key>.md` | visão salva: resumo + spec num bloco ```` ```archlens-json ```` |');
-  out.push('| `<prefixo>/manifest.md` | nome, descrição e formato da base (bloco `archlens-json`, campo `archlens`) |');
-  out.push('| `<prefixo>/notes/<nome>.md` | notas de interpretação |');
-  out.push('| `<prefixo>/changelog.md` | histórico de rodadas |');
-  out.push('| `<prefixo>/gbrain-pack.yaml` | schema pack: tipos de página e tipos de ligação com inversos |');
+  out.push('| `<prefixo>/<tipo>/<id>` | `get_page` devolve `type` (tipo ArchiMate), `title` (nome), `tags` (acima) e `frontmatter`: `id`, `c4` (kind), `parent` e `group` (wikilinks), `aliases`, `technology`, `status` (**ausente = `active`**), `external`, `relationships` e um campo por tipo de relação com os wikilinks dos destinos (`serving: [[<prefixo>/<tipo>/<id>\\|Nome]]`); `compiled_truth`: descrição + seção "Relações" em frases |');
+  out.push('| `<prefixo>/views/<key>` | visão salva: resumo + spec num bloco ```` ```archlens-json ```` |');
+  out.push('| `<prefixo>/manifest` | nome e descrição da base; o formato (`"archlens": "2.0"`) está no bloco `archlens-json` do corpo, não no frontmatter |');
+  out.push('| `<prefixo>/notes/<nome>` | notas de interpretação |');
+  out.push('| `<prefixo>/changelog` | histórico de rodadas |');
   out.push('');
-  out.push('Ligações extras do schema pack: `part_of` (inverso `composed_of`, do campo `parent`) e `member_of` (inverso `has_member`, do campo `group`).');
+  out.push('Cada item de `relationships` é `{id, type, to, description?, technology?, accessType?}`: só as relações de **saída**; `to` é o **id** do destino (o slug completo está no wikilink do campo do mesmo tipo, ou em `resolve_slugs {"partial": "<id>"}`); `accessType` (só em `access`) é `read`, `write`, `readwrite` ou `access`.');
+  out.push('');
+  out.push('`get_backlinks` devolve `{from_slug, link_type, link_source}`. Com ligações tipadas, cada relação de entrada aparece com o tipo dela (`serving`, `realization`…, `link_source: "frontmatter"`), a hierarquia como `part_of` e o grupo como `member_of`; as citações do corpo aparecem como `mentions` (`link_source: "markdown"`). Inversos no schema pack: `part_of` ↔ `composed_of`, `member_of` ↔ `has_member`.');
+  out.push('');
+  out.push('Parâmetros que confundem: `resolve_slugs {"partial": "texto"}` (devolve slugs que contêm o texto); `list_pages {"tag": "...", "limit": 100}`; `get_page {"slug": "..."}`; `get_backlinks {"slug": "..."}`; `search {"query": "..."}` (busca por palavra).');
   out.push('');
   return out.join('\n');
 }

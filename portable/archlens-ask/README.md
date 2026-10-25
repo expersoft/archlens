@@ -96,8 +96,12 @@ O resultado não bloqueia mudanças no archlens; ele fica registrado aqui.
 
 | Plataforma | Data | Acertos | Divergências |
 |---|---|---|---|
+| Ensaio (Claude Code via `gbrain call`, base da demonstração, ligações tipadas) | 2026-10-25 | `suporte-processo`, `impacto-container`, `consumidores-evento`, `grande`: mesmos elementos e relações do gabarito (25/26, 32/41, 3/2, 29/43); `cartao` igual; `ambiguo` listou 8 candidatos e perguntou | nenhuma no conteúdo. O ensaio apontou lacunas de instrução (status ausente, hierarquia nos dois modos, parâmetro de `resolve_slugs`, tags e backlinks tipados do gbrain), já corrigidas |
 | M365 Copilot | — | — | — |
 | Claude Desktop | — | — | — |
+
+Custo observado no ensaio: ~70 chamadas ao gbrain para uma travessia de 25 elementos (`suporte-processo`) e poucas
+chamadas para cartão, foco C4 e ambiguidade.
 
 ## Manutenção
 

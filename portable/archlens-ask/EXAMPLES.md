@@ -12,12 +12,13 @@ devolve para o mesmo recorte.
 `{"notation":"archimate","viewpoint":"layered","anchor":"bp-checkout","traverse":{"mode":"supporters"},"granularity":"container"}`
 
 **Chamadas, na ordem:**
-1. `list_pages {"tag":"archlens"}` → acha `archlens/manifest.md` (uma base, formato `2.0`).
-2. `resolve_slugs {"slugs":["checkout"]}` / `search {"query":"checkout"}` → o processo `archlens/business-process/bp-checkout`
+1. `list_pages {"tag":"archlens","limit":100}` → acha `archlens/manifest` (uma base; o bloco `archlens-json` diz
+   formato `2.0`).
+2. `resolve_slugs {"partial":"checkout"}` / `search {"query":"checkout"}` → o processo `archlens/business-process/bp-checkout`
    (título "Checkout"). Os outros resultados (`as-checkout`, `loja.pedidos.checkout`) são de outros tipos, e o pedido
    fala de **processo**: não há ambiguidade.
-3. `get_backlinks {"slug":"archlens/business-process/bp-checkout"}` → páginas que citam o processo. Confirme cada uma
-   com `get_page` e o `relationships` dela: `as-checkout`, `as-catalogo` e `as-pagamento` têm `serving → bp-checkout`.
+3. `get_backlinks {"slug":"archlens/business-process/bp-checkout"}` → com ligações tipadas, os backlinks `serving` de
+   `as-checkout`, `as-catalogo` e `as-pagamento` (ignore os `mentions`).
 4. `get_page` de `bp-checkout`: tem `access → bo-pedido`. Em `access`, **o dado sustenta quem o acessa**
    (`REFERENCE.md`), então `bo-pedido` entra como suporte.
 5. Siga a busca em largura (`RULES.md` §3), com `get_backlinks` + `get_page` a cada salto:
@@ -297,7 +298,7 @@ C4Container
 
 **Chamadas:** `get_page archlens/application-component/loja.pedidos` (identidade, `parent`, relações de saída);
 `get_backlinks` dela (relações de entrada e filhos, confirmados com `get_page` de cada candidata);
-`get_page archlens/changelog.md` (rodadas que citam o id).
+`get_page archlens/changelog` (rodadas que citam o id).
 
 **Resposta:**
 

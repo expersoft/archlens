@@ -41,9 +41,9 @@ Outros campos do recorte: `key` e `title` (nome e título; numa visão salva, us
 (`["diagram","matrix"]` acrescenta a matriz). Campos de apresentação do archlens não se aplicam ao Mermaid e são
 ignorados: `layout` (e `layout.style`), `animation`, `edgeLabels`.
 
-**Visões salvas.** As páginas `<prefixo>/views/<key>.md` guardam a spec num bloco `archlens-json`. Se o pedido cita
-uma visão pelo título ou bate com uma delas (mesma âncora e intenção), use a spec dela, com os ajustes que o usuário
-pedir.
+**Visões salvas.** As páginas `<prefixo>/views/<key>` guardam a spec num bloco `archlens-json`. Se o pedido cita
+uma visão pelo título ou bate com uma delas (mesma âncora e intenção), use a spec dela. Se você ajustar algum campo a
+pedido do usuário, tire a `key` e dê um `title` novo que descreva o recorte ajustado; sem ajuste, mantenha os dela.
 
 **Camadas por viewpoint.** `business` → negócio; `application` e `application-cooperation` → aplicação;
 `technology` → tecnologia e física; `strategy`, `motivation`, `implementation-migration` → a camada de mesmo nome
@@ -55,8 +55,15 @@ negócio, aplicação, tecnologia e física; `layered`, `impact` e `custom` → 
 **Achar elementos.** `resolve_slugs` com o nome, `search` por texto, ou `list_pages` com a tag `archlens/<tipo>`. O
 slug de um elemento é `<prefixo>/<tipo>/<id>` (ex.: `archlens/application-component/loja.pedidos`).
 
-**Relações de saída de X:** o `relationships` da página de X. **De entrada:** `get_backlinks(X)` dá as páginas
-candidatas; o `relationships` de cada uma confirma (item com `to: X`).
+**Relações de saída de X:** o `relationships` da página de X (`to` é o id; o slug está no wikilink do campo do mesmo
+tipo). **De entrada:** `get_backlinks(X)`. Com ligações tipadas, cada backlink tipado (`link_source: "frontmatter"`)
+já dá o tipo e a direção (origem `from_slug` → X); leia a página de origem quando precisar da descrição ou da
+tecnologia da relação. Ignore os backlinks `mentions` quando há ligações tipadas. Sem elas, os backlinks são só
+`mentions`: confirme cada um no `relationships` da página de origem (item com `to: X`).
+
+**Status:** campo `status` do frontmatter; **ausente significa `active`**.
+
+**Reaproveite** as páginas já lidas na mesma conversa; releia só se o usuário disser que a base mudou.
 
 **Hierarquia:** `parent` no frontmatter (filho → pai, wikilink). Os filhos de X são as páginas cujo `parent` aponta
 para X. **Grupo:** `group` no frontmatter; a página do `grouping` não lista os membros.
@@ -86,11 +93,13 @@ A **direção de suporte** de cada relação está em `REFERENCE.md` (coluna "qu
 `composition`, `aggregation` e `access` vão do **destino** para a **origem** (a parte sustenta o todo; o dado
 sustenta quem o acessa).
 
-**Busca em largura**, a partir da âncora, até `traverse.maxDepth` (padrão 12) saltos:
+**Busca em largura**, a partir da âncora, até `traverse.maxDepth` (padrão 12) saltos. Com muitos nós, anote numa
+tabela de trabalho, para cada elemento achado: distância, predecessor, relação do salto e se chegou subindo.
 - `supporters` de N: os elementos que sustentam N; `dependents` de N: os que N sustenta;
-- **hierarquia** (`traverse.hierarchy`, padrão ligado; `parent` conta como composição): de N pode-se ir ao pai de N
-  (subida) e aos filhos de N, **a menos que se tenha chegado a N subindo** (depois de subir não se desce; os irmãos
-  não vazam);
+- **hierarquia** (`traverse.hierarchy`, padrão ligado; `parent` conta como composição), **nos dois modos**: de N
+  pode-se ir ao pai de N (subida) e aos filhos de N, **a menos que se tenha chegado a N subindo** (depois de subir não
+  se desce; os irmãos não vazam). O salto de hierarquia, para cima ou para baixo, conta como `composition` (no caminho
+  da matriz: `composition → <nome>`);
 - a **distância** de um elemento é o salto em que foi achado pela primeira vez; o **predecessor** é quem o achou. A
   relação usada nesse salto entra no caminho;
 - `both` roda as duas buscas; um elemento achado nas duas tem papel `both`.
@@ -169,7 +178,7 @@ relação derivada entre os dois visíveis:
 5. notas: o que ficou de fora; com mais de 40 elementos, sugira recortar.
 
 **Cartão do elemento** ("me fale de X"): nome, tipo, perfil C4, status, tecnologia, descrição; pai e filhos; relações
-de saída e de entrada agrupadas por tipo; propriedades; fontes (`sources`); as rodadas do `changelog.md` que citam o
+de saída e de entrada agrupadas por tipo; propriedades; fontes (`sources`); as rodadas da página `<prefixo>/changelog` que citam o
 id; com profundidade > 1, "Em volta": os vizinhos a N saltos.
 
 ## 8. Mermaid ArchiMate (`flowchart`)
@@ -294,6 +303,9 @@ C4Deployment
   simples.
 - Cores: um `UpdateElementStyle` por elemento, com as cores C4 de `REFERENCE.md`. Âncora ou foco com
   `$borderColor="#f2b705"`.
+- **Eventos e tópicos.** Quem publica e quem consome nem sempre se distingue pelo tipo da relação (a base pode ligar o
+  barramento aos dois lados com `serving`). Use a descrição da relação ("Publica…", "Consome…") para dizer o papel, e
+  diga quando ela não deixar claro.
 - Rótulos sobrepostos: `UpdateRelStyle(origem, destino, $offsetX="…", $offsetY="…")`. Muitas caixas numa linha:
   `UpdateLayoutConfig($c4ShapeInRow="3", $c4BoundaryInRow="1")`. O layout do Mermaid C4 não permite mais controle que
   isso.
@@ -301,9 +313,11 @@ C4Deployment
 ## 10. Legibilidade
 
 - Até ~12 nós por diagrama C4 e ~24 por diagrama ArchiMate.
-- Acima disso, entregue o markdown completo e proponha um recorte: `granularity:"container"` ou `"system"`,
-  `focus` + `depth`, `groups.only`, `collapse:["application-service"]`, `layers` menores. Pode desenhar um diagrama
-  recortado, dizendo o que saiu dele.
+- Acima disso, entregue sempre o markdown completo e:
+  - se houver um recorte óbvio para a pergunta (só as camadas que ela cita, só o elemento em foco e seus vizinhos),
+    desenhe esse diagrama recortado e diga o que ficou de fora;
+  - se não houver, não desenhe: ofereça dois ou três recortes (`granularity:"container"` ou `"system"`, `focus` +
+    `depth`, `groups.only`, `collapse:["application-service"]`, `layers` menores) e pergunte qual.
 - Um diagrama por pergunta, salvo pedido; "mostre as camadas separadas" → um por camada.
 
 <!-- Modelos conferidos com Mermaid 11.4.1 (render em Chromium headless). -->
