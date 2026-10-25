@@ -135,6 +135,9 @@ relação derivada entre os dois visíveis:
 - `focus` + `depth` cortam a visão à vizinhança dos ids em foco (padrão `depth` 1).
 - **Perfil C4.** O `kind` vem do campo `c4` da página. `application-component` sem `c4` é sistema; `business-actor` sem
   `c4` é pessoa. Elementos puramente ArchiMate (nós, processos…) não aparecem no C4.
+- **Setas C4 ("usa", de quem consome para quem provê).** `serving` A → B vira **B → A** ("B usa A").
+  `access`, `flow`, `triggering` e `association` mantêm origem → destino. As outras relações (`composition`,
+  `aggregation`, `assignment`, `realization`, `influence`, `specialization`) não viram seta C4.
 - **Elevação.** Se a visão mostra containers, `componenteA → componenteB` vira `containerA → containerB`. Relações
   paralelas viram uma só, juntando descrições e tecnologias.
 - **Setas via intermediários** (`derive`, padrão ligado). Os intermediários são `application-service`,
