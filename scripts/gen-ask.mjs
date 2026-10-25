@@ -173,9 +173,36 @@ export function askFiles() {
   return new Map([[`${REL_DIR}/REFERENCE.md`, buildReference()], ...buildGabarito(perguntas)]);
 }
 
+// Instructions limit of a Microsoft 365 Copilot declarative agent; what does not fit goes to RULES.md (attached knowledge).
+export const INSTRUCTIONS_LIMIT = 8000;
+
+/** What the package must mention: the viewpoints, the C4 levels and the spec fields that references/views.md documents. */
+export function coverageTerms(viewsMd) {
+  const terms = new Set(ARCHIMATE_VIEWPOINTS);
+  for (const line of viewsMd.split('\n')) {
+    const m = /^\| ((?:`[^`]+`(?:, )?)+) \|/.exec(line); // top-level table rows only (the layout-style table is indented)
+    if (!m) continue;
+    for (const [, t] of m[1].matchAll(/`([^`]+)`/g)) terms.add(t);
+    if (m[1] === '`level`') for (const [, t] of line.slice(m[0].length).matchAll(/`([^`]+)`/g)) terms.add(t);
+  }
+  return [...terms];
+}
+
+/** Problems of the hand-written part (empty: ok): INSTRUCTIONS.md too long, or a term of coverageTerms missing from both files. */
+export function checkCoverage({ instructions, rules, viewsMd }) {
+  const problems = [];
+  if (instructions.length > INSTRUCTIONS_LIMIT) problems.push(`INSTRUCTIONS.md tem ${instructions.length} caracteres (limite ${INSTRUCTIONS_LIMIT})`);
+  for (const t of coverageTerms(viewsMd)) {
+    if (!instructions.includes(`\`${t}\``) && !rules.includes(`\`${t}\``)) problems.push(`termo "${t}" não aparece em INSTRUCTIONS.md nem em RULES.md`);
+  }
+  return problems;
+}
+
 /** Problems found (empty: the package is current). */
 export function checkAsk() {
   const problems = [];
+  const hand = name => (existsSync(join(ASK_DIR, name)) ? readFileSync(join(ASK_DIR, name), 'utf8') : '');
+  problems.push(...checkCoverage({ instructions: hand('INSTRUCTIONS.md'), rules: hand('RULES.md'), viewsMd: read('references/views.md') }));
   for (const [rel, text] of askFiles()) {
     const path = join(ROOT, rel);
     if (!existsSync(path) || readFileSync(path, 'utf8') !== text) problems.push(`${rel} desatualizado; rode "npm run ask"`);

@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { themeColors, relationshipInverses, buildReference } from '../scripts/gen-ask.mjs';
 import { ELEMENT_TYPES, RELATIONSHIP_TYPES } from '../scripts/lib/registry.mjs';
 
@@ -35,4 +36,23 @@ test('buildGabarito runs the CLI query for each question with a query', async ()
   assert.deepEqual([...g.keys()], ['portable/archlens-ask/eval/gabarito/a.json']);
   const a = JSON.parse(g.get('portable/archlens-ask/eval/gabarito/a.json'));
   assert.equal(a.element.id, 'loja.pedidos');
+});
+
+const viewsMd = () => readFileSync(new URL('../references/views.md', import.meta.url), 'utf8');
+
+test('coverageTerms has viewpoints, C4 levels and spec fields', async () => {
+  const { coverageTerms } = await import('../scripts/gen-ask.mjs');
+  const t = coverageTerms(viewsMd());
+  for (const x of ['impact', 'product-support', 'landscape', 'dynamic', 'anchor', 'granularity', 'nesting', 'focus']) assert.ok(t.includes(x), x);
+  assert.ok(!t.includes('bands-flow'));
+});
+
+test('checkCoverage reports size and missing terms', async () => {
+  const { coverageTerms, checkCoverage, INSTRUCTIONS_LIMIT } = await import('../scripts/gen-ask.mjs');
+  const md = viewsMd();
+  const ok = coverageTerms(md).map(x => `\`${x}\``).join(' ');
+  assert.deepEqual(checkCoverage({ instructions: 'x', rules: ok, viewsMd: md }), []);
+  const problems = checkCoverage({ instructions: 'x'.repeat(INSTRUCTIONS_LIMIT + 1), rules: ok.replace('`anchor`', ''), viewsMd: md });
+  assert.equal(problems.length, 2);
+  assert.match(problems.join('\n'), /anchor/);
 });
