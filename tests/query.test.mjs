@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { normalizeModel } from '../scripts/lib/model.mjs';
 import { resolveView } from '../scripts/lib/query.mjs';
+import { nestingSpec, visualParents } from '../scripts/lib/query-archimate.mjs';
 import { validateModel } from '../scripts/lib/validate.mjs';
 import { suggestViews } from '../scripts/lib/suggest.mjs';
 import { asBase } from './helpers.mjs';
@@ -549,6 +550,46 @@ test('an invalid nesting is E_VIEW_NESTING', () => {
   for (const bad of ['dentro', { mode: 'nested', depth: 0 }, { mode: 'x' }]) {
     assert.throws(() => appView({ nesting: bad }), e => e.code === 'E_VIEW_NESTING', JSON.stringify(bad));
   }
+});
+
+test('nesting except in nested mode takes one box apart', () => {
+  const v = appView({ nesting: { mode: 'nested', except: ['odin.api'] } });
+  assert.equal(node(v, 'odin.api').nestedIn, 'odin');
+  assert.equal(node(v, 'odin.api.rest').nestedIn, 'odin', 'next to its parent, inside the box where the parent is');
+  assert.ok(v.edges.some(e => e.from === 'odin.api' && e.to === 'odin.api.rest' && e.type === 'composition'));
+  assert.equal(node(v, 'bus.adapter').nestedIn, 'bus');
+});
+
+test('nesting except in edges mode nests only those', () => {
+  const v = appView({ nesting: { mode: 'edges', except: ['bus'] } });
+  assert.equal(node(v, 'bus.adapter').nestedIn, 'bus');
+  assert.deepEqual(v.nodes.filter(n => n.nestedIn).map(n => n.id), ['bus.adapter']);
+  assert.ok(!v.edges.some(e => e.from === 'bus' && e.to === 'bus.adapter'));
+});
+
+test('nesting except with an unknown id or a bad value', () => {
+  assert.throws(() => appView({ nesting: { mode: 'nested', except: ['nao-existe'] } }), e => e.code === 'E_UNKNOWN_REF');
+  assert.throws(() => appView({ nesting: { mode: 'nested', except: 'bus' } }), e => e.code === 'E_VIEW_NESTING');
+  assert.throws(() => appView({ nesting: { mode: 'nested', except: [1] } }), e => e.code === 'E_VIEW_NESTING');
+  const v = appView({ nesting: { mode: 'nested', except: ['crm'], depth: 1 } });
+  const w = appView({ nesting: { mode: 'nested', depth: 1 } });
+  assert.deepEqual(v.nodes.map(n => n.nestedIn), w.nodes.map(n => n.nestedIn));
+  const outside = resolveView(odin(), { key: 'a', notation: 'archimate', viewpoint: 'application', exclude: ['bus'], nesting: { mode: 'nested', except: ['bus'] } });
+  assert.ok(outside.nodes.length > 0);
+});
+
+test('nestingSpec keeps the old shape without except', () => {
+  assert.deepEqual(nestingSpec('nested'), { mode: 'nested', depth: null });
+  assert.deepEqual(nestingSpec({ mode: 'edges', except: [] }), { mode: 'edges', depth: null });
+  assert.deepEqual(nestingSpec({ mode: 'nested', except: ['a'] }), { mode: 'nested', depth: null, except: ['a'] });
+});
+
+test('visualParents matches what nested mode draws', () => {
+  const v = appView({ nesting: 'nested' });
+  const parents = visualParents(new Set(v.nodes.map(n => n.id)), appView().edges, odin()); // the edges before nesting removes some
+  const nested = v.nodes.filter(n => n.nestedIn);
+  assert.ok(nested.length > 0);
+  for (const n of nested) assert.equal(parents.get(n.id), n.nestedIn);
 });
 
 test('C4 containers tagged bucket, storage or data-store draw as a data store; a queue tag still wins', () => {

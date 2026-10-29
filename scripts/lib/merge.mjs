@@ -503,6 +503,7 @@ function rewriteView(ctx, view) {
   const v = structuredClone(view);
   for (const f of VIEW_REFS) if (v[f]) v[f] = resolveRef(ctx, v[f]);
   for (const f of VIEW_LISTS) if (Array.isArray(v[f])) v[f] = v[f].map(x => resolveRef(ctx, x));
+  if (Array.isArray(v.nesting?.except)) v.nesting.except = v.nesting.except.map(x => resolveRef(ctx, x));
   if (Array.isArray(v.steps)) {
     v.steps = v.steps.map(s => ({ ...s, ...(s.from ? { from: resolveRef(ctx, s.from) } : {}), ...(s.to ? { to: resolveRef(ctx, s.to) } : {}) }));
   }
@@ -631,7 +632,7 @@ function removalCascade(ctx, id) {
   const views = [];
   for (const v of ctx.raw.views || []) {
     if (VIEW_REFS.some(f => gone.has(v[f]))) views.push({ key: v.key, action: 'remove' });
-    else if (VIEW_LISTS.some(f => (v[f] || []).some(x => gone.has(x))) || (v.steps || []).some(s => gone.has(s.from) || gone.has(s.to))) {
+    else if (VIEW_LISTS.some(f => (v[f] || []).some(x => gone.has(x))) || (v.nesting?.except || []).some(x => gone.has(x)) || (v.steps || []).some(s => gone.has(s.from) || gone.has(s.to))) {
       views.push({ key: v.key, action: 'trim' });
     }
   }
@@ -679,6 +680,11 @@ function applyRemoval(ctx, cascade, rels) {
     if (Array.isArray(t.groups?.only) && t.groups.only.some(x => gone.has(x))) {
       t.groups = { ...t.groups, only: t.groups.only.filter(x => !gone.has(x)) };
       if (t.groups.crossOnly && t.groups.only.length < 2) t.groups.crossOnly = false;
+    }
+    if (Array.isArray(t.nesting?.except)) { // an empty except returns the old nesting shape
+      const { except, ...rest } = t.nesting;
+      const kept = except.filter(x => !gone.has(x));
+      t.nesting = kept.length ? { ...rest, except: kept } : rest;
     }
     if (Array.isArray(t.steps)) t.steps = t.steps.filter(s => !gone.has(s.from) && !gone.has(s.to));
     return t;

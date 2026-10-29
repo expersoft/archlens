@@ -54,4 +54,20 @@ describe('ContextMenu', () => {
     await u.click(loading);
     expect(onPick).not.toHaveBeenCalled();
   });
+  it('pai visual ganha Agrupar aqui dentro / Desagrupar; outro nó não', async () => {
+    const u = userEvent.setup();
+    const onNest = vi.fn(); const onClose = vi.fn();
+    const nest = (open: string[]) => ({ mode: 'edges' as const, except: [], holders: ['loja'], open });
+    const r = render(<ContextMenu at={{ x: 0, y: 0 }} title="t" items={items} onPick={() => {}} onClose={onClose} nest={nest([])} nodeId="loja" onNest={onNest} />);
+    await u.click(screen.getByText('Agrupar aqui dentro'));
+    expect(onNest).toHaveBeenCalledWith('loja');
+    expect(onClose).toHaveBeenCalled();
+    r.unmount();
+    const r2 = render(<ContextMenu at={{ x: 0, y: 0 }} title="t" items={items} onPick={() => {}} onClose={() => {}} nest={nest(['loja'])} nodeId="loja" onNest={onNest} />);
+    expect(screen.getByText('Desagrupar')).toBeTruthy();
+    r2.unmount();
+    render(<ContextMenu at={{ x: 0, y: 0 }} title="t" items={items} onPick={() => {}} onClose={() => {}} nest={nest([])} nodeId="outro" onNest={onNest} />);
+    expect(screen.queryByText('Desagrupar')).toBeNull();
+    expect(screen.queryByText('Agrupar aqui dentro')).toBeNull();
+  });
 });

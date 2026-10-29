@@ -46,7 +46,9 @@ Esta skill **nunca grava a base**: `views`, `query`, `resolve`, `render` e `deli
 Por padrão a visão ArchiMate liga pai e filho por seta de composição (losango). Pedidos como "dentro de",
 "aninhado", "caixas dentro de caixas" → `"nesting": "nested"`; "com o losango", "com setas de composição" → `"edges"`.
 Em diagramas grandes use `"nesting": { "mode": "nested", "depth": N }` (só os N primeiros níveis ficam dentro; abaixo
-disso o elemento fica ao lado, ligado pelo losango). Detalhes em `references/views.md`.
+disso o elemento fica ao lado, ligado pelo losango). Para agrupar ou desagrupar um elemento só: "desagrupe X" →
+`"nesting": { "mode": "nested", "except": ["X"] }` (tudo aninhado, menos dentro de X); "só X aninhado" →
+`{ "mode": "edges", "except": ["X"] }`. Detalhes em `references/views.md`.
 
 ## Pedido → view spec
 

@@ -18,6 +18,9 @@ export interface ShellProps {
   /** Notação da visão atual; o seletor ArchiMate | C4 só age se onNotation for informado. */
   notation?: 'archimate' | 'c4';
   onNotation?: (n: 'archimate' | 'c4') => void;
+  /** Botão da barra: Agrupar tudo / Desagrupar tudo. Ausente (ou rótulo vazio) esconde o botão. */
+  nestLabel?: string;
+  onNestAll?: () => void;
   bases?: BaseInfo[];
   base?: string | null;
   onBase?: (id: string) => void;
@@ -25,6 +28,8 @@ export interface ShellProps {
   onSearch?: (q: string) => void;
   /** Cada incremento abre a aba Conversa (ex.: lista de resultados da busca). */
   chatRequest?: number;
+  /** Cada incremento abre a lateral direita (ex.: cartão do elemento achado por uma pergunta). */
+  rightRequest?: number;
 }
 
 const narrow = () => typeof window !== 'undefined' && window.innerWidth < 1100;
@@ -49,6 +54,7 @@ export function Shell(p: ShellProps) {
 
   useEffect(() => { if (left) setLastLeft(left); }, [left, setLastLeft]);
   useEffect(() => { if (p.chatRequest) setLeft('chat'); }, [p.chatRequest, setLeft]);
+  useEffect(() => { if (p.rightRequest) setRight(true); }, [p.rightRequest, setRight]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -77,7 +83,7 @@ export function Shell(p: ShellProps) {
           <input
             ref={search}
             type="search"
-            placeholder="Buscar elemento… (Ctrl+K)"
+            placeholder="Buscar elemento ou perguntar… (Ctrl+K)"
             aria-label="Buscar"
             disabled={!p.onSearch}
             onKeyDown={(e) => {
@@ -90,6 +96,7 @@ export function Shell(p: ShellProps) {
             <button className={p.notation !== 'c4' ? 'on' : ''} disabled={!p.onNotation} onClick={() => p.notation === 'c4' && p.onNotation?.('archimate')}>ArchiMate</button>
             <button className={p.notation === 'c4' ? 'on' : ''} disabled={!p.onNotation} onClick={() => p.notation !== 'c4' && p.onNotation?.('c4')}>C4</button>
           </div>
+          {p.nestLabel && <button type="button" className="nest" onClick={() => p.onNestAll?.()}>{p.nestLabel}</button>}
           <span className="status">{p.status}</span>
           <button className="icon" aria-label="Alternar tema" title="Alternar tema" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
             {theme === 'dark' ? '☀' : '☾'}

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
@@ -263,5 +263,169 @@ describe('App', () => {
     post({ type: 'context', id: 'A', x: 5, y: 5 });
     await waitFor(() => expect(document.querySelector('.status')!.textContent).toBe('sem ações'));
     expect(screen.queryByText('Carregando…')).toBeNull();
+  });
+});
+
+describe('App: aninhamento', () => {
+  const nestOf = (open: string[]): api.NestState => ({ mode: 'edges', except: [], holders: ['A'], open });
+  it('agrupar tudo troca a visão e o voltar desfaz', async () => {
+    const spec = { notation: 'archimate', k: 'x' };
+    getView.mockImplementation(async (_b, s) => ({ ...mkView('Inicial', s), nest: s.nesting ? { ...nestOf(['A']), mode: 'nested' } : nestOf([]) }));
+    vi.mocked(api.getCatalog).mockResolvedValue({ id: 'b', name: 'Base', views: [{ key: 'v', title: 'Inicial', spec, saved: true }], elements: [] });
+    await boot();
+    await userEvent.click(screen.getByRole('button', { name: 'Agrupar tudo' }));
+    await waitFor(() => expect(getView).toHaveBeenLastCalledWith('b', { ...spec, nesting: 'nested' }));
+    await screen.findByRole('button', { name: 'Desagrupar tudo' });
+    expect(trail()).toBe('Inicial › Inicial');
+    getView.mockClear();
+    await userEvent.click(screen.getByRole('button', { name: 'Inicial' }));
+    expect(screen.getByRole('button', { name: 'Agrupar tudo' })).toBeTruthy();
+  });
+  it('numa visão C4 (nest null) o botão não aparece', async () => {
+    getView.mockImplementation(async (_b, s) => ({ ...mkView('Inicial', s), nest: null }));
+    await boot();
+    expect(screen.queryByRole('button', { name: /Agrupar tudo|Desagrupar tudo/ })).toBeNull();
+  });
+});
+
+describe('App: busca em texto', () => {
+  type Ev = Record<string, unknown>;
+  const bodies: Record<string, unknown>[] = [];
+  const signals: AbortSignal[] = [];
+  let handler: (n: number, signal: AbortSignal) => Response;
+  const nd = (...evs: Ev[]) => new Response(evs.map((e) => JSON.stringify(e)).join('\n') + '\n', { headers: { 'content-type': 'application/x-ndjson' } });
+  const hang = (signal: AbortSignal) => new Response(new ReadableStream({
+    start(c) { signal.addEventListener('abort', () => c.error(new DOMException('abortado', 'AbortError'))); },
+  }));
+  const viewEv = (title: string, spec: api.ViewSpec = { k: title }, extra: Ev = {}): Ev[] => [
+    { type: 'stage', stage: 'interpretando' },
+    { type: 'result', result: { kind: 'view', spec }, view: mkView(title, spec), ...extra },
+    { type: 'done', metrics: { total: 5 } },
+  ];
+
+  beforeEach(() => {
+    bodies.length = 0; signals.length = 0;
+    handler = () => nd(...viewEv('Resposta'));
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      if (String(url).endsWith('/api/info')) return Response.json({ ask: { enabled: true, provider: 'scripted', model: 'm1', mode: 'tools' } });
+      if (String(url).endsWith('/ask')) {
+        const h = new Headers(init?.headers);
+        expect(h.get('content-type')).toBe('application/json');
+        bodies.push(JSON.parse(String(init?.body)));
+        signals.push(init!.signal!);
+        return handler(bodies.length, init!.signal!);
+      }
+      throw new Error(`fetch inesperado: ${url}`);
+    }));
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  const askBox = async () => {
+    const box = await screen.findByLabelText('Pergunta') as HTMLTextAreaElement;
+    await waitFor(() => expect(box.disabled).toBe(false));
+    return box;
+  };
+  const srcdoc = (c: HTMLElement) => c.querySelector('iframe')!.getAttribute('srcdoc') ?? '';
+
+  it('pergunta abre a visão do resultado', async () => {
+    const r = render(<App />);
+    await screen.findByRole('navigation', { name: 'Trilha' });
+    const box = await askBox();
+    getView.mockClear();
+    await userEvent.type(box, 'o que suporta o checkout?{Enter}');
+    await waitFor(() => expect(trail()).toBe('Inicial › Resposta'));
+    expect(getView).not.toHaveBeenCalled();
+    expect(srcdoc(r.container)).toContain('<p>Resposta</p>');
+    expect(screen.getByRole('list', { name: 'Histórico' }).textContent).toContain('Pergunta');
+    expect(bodies[0]).toMatchObject({ question: 'o que suporta o checkout?', context: { spec: { level: 'landscape' } }, history: [] });
+  });
+
+  it('segunda pergunta cancela a primeira', async () => {
+    handler = (n, signal) => (n === 1 ? hang(signal) : nd(...viewEv('Segunda')));
+    const r = render(<App />);
+    await screen.findByRole('navigation', { name: 'Trilha' });
+    const box = await askBox();
+    await userEvent.type(box, 'primeira pergunta?{Enter}');
+    await waitFor(() => expect(signals).toHaveLength(1));
+    await userEvent.type(box, 'segunda pergunta?{Enter}');
+    await waitFor(() => expect(trail()).toBe('Inicial › Segunda'));
+    expect(signals[0].aborted).toBe(true);
+    expect(screen.getByText('cancelada')).toBeTruthy();
+    expect(srcdoc(r.container)).toContain('<p>Segunda</p>');
+    expect(screen.queryByText('Carregando…')).toBeNull();
+  });
+
+  it('clique de navegação cancela a pergunta em andamento', async () => {
+    handler = (_n, signal) => hang(signal);
+    render(<App />);
+    await screen.findByRole('navigation', { name: 'Trilha' });
+    const box = await askBox();
+    await userEvent.type(box, 'primeira pergunta?{Enter}');
+    await waitFor(() => expect(signals).toHaveLength(1));
+    getActions.mockResolvedValue({ actions: [{ label: 'Contexto (C4)', spec: { k: 'ctx' } }] });
+    await userEvent.click(screen.getByRole('button', { name: 'Explorador' }));
+    await userEvent.click(await screen.findByText('Elem A'));
+    await waitFor(() => expect(trail()).toBe('Inicial › ctx'));
+    expect(signals[0].aborted).toBe(true);
+    await userEvent.click(screen.getByRole('button', { name: 'Conversa e histórico' }));
+    expect(screen.getByText('cancelada')).toBeTruthy();
+  });
+
+  it('busca do topo com pergunta vai para o agente', async () => {
+    render(<App />);
+    await screen.findByRole('navigation', { name: 'Trilha' });
+    await askBox();
+    await userEvent.type(screen.getByLabelText('Buscar'), 'o que sustenta o checkout{Enter}');
+    await waitFor(() => expect(trail()).toBe('Inicial › Resposta'));
+    expect(bodies[0].question).toBe('o que sustenta o checkout');
+    expect(find).not.toHaveBeenCalled();
+  });
+
+  it('busca do topo sem resultado por nome vira pergunta; nome com resultado segue a busca', async () => {
+    render(<App />);
+    await screen.findByRole('navigation', { name: 'Trilha' });
+    await askBox();
+    find.mockResolvedValueOnce([]);
+    await userEvent.type(screen.getByLabelText('Buscar'), 'pedidos{Enter}');
+    await waitFor(() => expect(bodies).toHaveLength(1));
+    expect(find).toHaveBeenCalledWith('b', 'pedidos');
+  });
+
+  it('clarify reenvia com a escolha', async () => {
+    handler = (n) => (n === 1
+      ? nd({ type: 'result', result: { kind: 'clarify', question: 'Qual?', options: [{ id: 'loja.pedidos', name: 'Pedidos', typeLabel: 'Sistema' }] } }, { type: 'done', metrics: { total: 1 } })
+      : nd(...viewEv('Escolhida')));
+    render(<App />);
+    await screen.findByRole('navigation', { name: 'Trilha' });
+    const box = await askBox();
+    await userEvent.type(box, 'quem usa pedidos?{Enter}');
+    await userEvent.click(await screen.findByRole('button', { name: 'Pedidos · Sistema' }));
+    await waitFor(() => expect(trail()).toBe('Inicial › Escolhida'));
+    expect(bodies[1]).toMatchObject({ question: 'quem usa pedidos?', chosen: 'loja.pedidos' });
+    expect(bodies[1].history).toEqual([{ question: 'quem usa pedidos?' }]);
+  });
+
+  it('erro do agente aparece no status e a navegação segue', async () => {
+    handler = () => nd({ type: 'error', error: 'provedor fora do ar' }, { type: 'done', metrics: { total: 1 } });
+    render(<App />);
+    await screen.findByRole('navigation', { name: 'Trilha' });
+    const box = await askBox();
+    await userEvent.type(box, 'o que suporta o checkout?{Enter}');
+    await waitFor(() => expect(document.querySelector('.status')!.textContent).toBe('provedor fora do ar'));
+    getActions.mockResolvedValue({ actions: [{ label: 'Contexto (C4)', spec: { k: 'ctx' } }] });
+    await userEvent.click(screen.getByRole('button', { name: 'Explorador' }));
+    await userEvent.click(await screen.findByText('Elem B'));
+    await waitFor(() => expect(trail()).toBe('Inicial › ctx'));
+  });
+
+  it('resultado element seleciona o elemento e abre os detalhes', async () => {
+    handler = () => nd({ type: 'result', result: { kind: 'element', id: 'A' } }, { type: 'done', metrics: { total: 1 } });
+    render(<App />);
+    await screen.findByRole('navigation', { name: 'Trilha' });
+    const box = await askBox();
+    getActions.mockResolvedValue({ actions: [{ label: 'Contexto (C4)', spec: { k: 'ctx' } }] });
+    await userEvent.type(box, 'onde fica o elemento A?{Enter}');
+    await waitFor(() => expect(getElement).toHaveBeenCalledWith('b', 'A'));
+    await waitFor(() => expect(trail()).toBe('Inicial › ctx'));
   });
 });

@@ -39,4 +39,9 @@ describe('history reducer', () => {
     expect(s.steps.map((x) => x.label)).toEqual(['a', 'b']);
     expect(s.cur).toBe(0);
   });
+  it('settle libera o pedido pendente sem passo novo, só se o ticket é o atual', () => {
+    const s = run({ type: 'request', ticket: 1 });
+    expect(reducer(s, { type: 'settle', ticket: 0 }).pending).toBe(1);
+    expect(reducer(s, { type: 'settle', ticket: 1 }).pending).toBeNull();
+  });
 });

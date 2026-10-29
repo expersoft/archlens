@@ -5,15 +5,19 @@
   "type": "module",
   "scripts": {
     "test": "npm run test:server && npm run test:web",
-    "test:server": "node --test server/*.test.mjs",
+    "test:server": "node --test server/*.test.mjs eval/*.test.mjs",
     "test:sweep": "GUI_SWEEP=full node --test server/navigation.test.mjs",
     "test:web": "vitest run",
+    "eval": "node eval/run.mjs",
+    "prompt": "node scripts/gen-prompt.mjs",
+    "prompt:check": "node scripts/gen-prompt.mjs --check",
     "typecheck": "tsc --noEmit",
     "build": "npm run typecheck && vite build",
     "dev": "vite",
     "test:e2e": "npm run build && node --test e2e/*.test.mjs"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "0.133.0",
     "react": "18.3.1",
     "react-dom": "18.3.1"
   },

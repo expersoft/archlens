@@ -33,3 +33,5 @@ Detalhes: `portable/archlens-ask/README.md` e `docs/superpowers/specs/2026-10-25
 1. **Avalie o impacto na GUI:** a ponte com o iframe (`embed`), a forma de `viewData` e do cartão do elemento, o catálogo
    e as ações de navegação.
 2. **Rode `npm run gui:test`** antes de concluir e resolva o que ele apontar.
+3. **Prompt da busca em texto:** mudanças em `references/views.md` ou na skill `archlens-query` pedem `npm --prefix apps/gui run prompt`
+   (o `gui:test` falha com o prompt desatualizado).

@@ -72,7 +72,8 @@ Consultar (nunca grava a base)
   validate  <base>                         valida schema, referências, hierarquia C4 e regras ArchiMate
   check     [base] [--json]               valida e confere se o ARCHITECTURE.md está em dia (CI / pre-commit)
   extract   <base> [--out m.json]          imprime o modelo canônico em JSON
-  serve     <base> [--port N] [--host H] [--open]   abre a GUI (navegador) sobre a base; padrão 127.0.0.1:5180
+  serve     <base> [--port N] [--host H] [--open] [--llm anthropic|openai [--model M] [--endpoint URL] [--env-file PATH]]
+            abre a GUI (navegador) sobre a base; padrão 127.0.0.1:5180; --llm liga a busca em texto (chave no ambiente ou .env)
             --config archlens-gui.json [--port N] [--host H] [--open]   a GUI sobre várias bases
 
 Atalhos
@@ -445,9 +446,15 @@ async function main() {
         port = Number(args.port);
         if (!Number.isInteger(port) || port < 0 || port > 65535) fail('--port aceita um número de 0 a 65535');
       }
+      let llm;
+      if (args.llm !== undefined) {
+        llm = { provider: str(args.llm) };
+        if (str(args.model)) llm.model = args.model;
+        if (str(args.endpoint)) llm.endpoint = args.endpoint;
+      }
       let config;
-      try { config = gui.loadConfig({ file: str(args.config), base: str(file), port, host: str(args.host) }); } catch (e) { fail(e.message); }
-      if (!config.bases.length) fail('uso: archlens serve <base> [--port N] [--host H] [--open]\n      archlens serve --config archlens-gui.json [--port N]');
+      try { config = gui.loadConfig({ file: str(args.config), base: str(file), port, host: str(args.host), llm, envFile: str(args['env-file']) }); } catch (e) { fail(e.message); }
+      if (!config.bases.length) fail('uso: archlens serve <base> [--port N] [--host H] [--open] [--llm anthropic|openai [--model M] [--endpoint URL] [--env-file PATH]]\n      archlens serve --config archlens-gui.json [--port N]');
       const registry = createBaseRegistry(config);
       const bases = registry.list();
       const bad = args.config ? (bases.some(b => b.ok) ? null : bases[0]) : bases.find(b => !b.ok);
@@ -455,6 +462,14 @@ async function main() {
       let srv;
       try { srv = await gui.startServer({ config, staticDir: dist, registry }); } catch (e) { registry.close(); fail(e.message); }
       console.log(`archlens GUI: ${srv.url}`);
+      if (srv.askOff) console.warn(`aviso: busca em texto desligada: ${srv.askOff}`);
+      if (srv.provider && config.llm) {
+        const keyVar = config.llm.apiKeyEnv ?? (config.llm.provider === 'anthropic' ? 'ANTHROPIC_API_KEY' : 'OPENAI_API_KEY');
+        const from = process.env[keyVar] ? 'ambiente' : config.envFile;
+        console.log(`busca em texto: ${srv.provider.name} ${srv.provider.model}${config.llm.auth === 'none' ? '' : ` (chave de ${keyVar}, ${from})`}`);
+        const warn = config.envFile && gui.envFileWarning(config.envFile);
+        if (warn) console.warn(`aviso: ${warn}`);
+      }
       if (args.open) openFile(srv.url);
       const stop = () => { registry.close(); srv.close().finally(() => process.exit(0)); };
       process.on('SIGINT', stop);

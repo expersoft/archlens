@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import type { Action } from './api';
+import type { Action, NestState } from './api';
+import { oneLabel } from './nesting';
 
 export interface ContextMenuProps {
   at: { x: number; y: number };
@@ -9,9 +10,13 @@ export interface ContextMenuProps {
   items: Action[] | null;
   onPick: (a: Action) => void;
   onClose: () => void;
+  /** Estado do aninhamento da visão e o nó do menu: um pai visual ganha Agrupar/Desagrupar. */
+  nest?: NestState | null;
+  nodeId?: string;
+  onNest?: (id: string) => void;
 }
 
-export function ContextMenu({ at, title, items, onPick, onClose }: ContextMenuProps) {
+export function ContextMenu({ at, title, items, onPick, onClose, nest, nodeId, onNest }: ContextMenuProps) {
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState(at);
   const [open, setOpen] = useState<number | null>(null);
@@ -77,12 +82,25 @@ export function ContextMenu({ at, title, items, onPick, onClose }: ContextMenuPr
     );
   };
 
+  const holds = !!(nest && nodeId && onNest && nest.holders.includes(nodeId));
+
   return createPortal(
     <div ref={ref} className="menu" role="menu" style={{ left: pos.x, top: pos.y }} onContextMenu={(e) => e.preventDefault()}>
       <div className="mt">{title}</div>
       {items
         ? items.map((a, i) => row(a, i, false))
         : <div className="mi off" role="menuitem" aria-disabled="true" aria-busy="true">Carregando…</div>}
+      {holds && (
+        <div
+          role="menuitem"
+          tabIndex={-1}
+          className="mi"
+          onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); onNest!(nodeId!); onClose(); } }}
+          onClick={(e) => { e.stopPropagation(); onNest!(nodeId!); onClose(); }}
+        >
+          <span>{oneLabel(nest!, nodeId!)}</span>
+        </div>
+      )}
     </div>,
     document.body,
   );

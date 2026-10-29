@@ -14,6 +14,18 @@ versões seguem [SemVer](https://semver.org/lang/pt-BR/).
 - **`archlens serve <base> [--port N] [--host H] [--open]`** (ou `--config archlens-gui.json`, com várias bases) abre a GUI.
 - **Núcleo:** modo `embed` do HTML (ponte `postMessage` com a GUI, sem a moldura da página) e `buildView`, que monta a
   visão a partir de uma especificação, devolvendo também o `viewData`.
+- **GUI, fase 2:** busca em texto com LLM (opt-in): agente com ferramentas e modo sem ferramentas (JSON) para gateways
+  que não as suportam; Anthropic, OpenAI, OpenRouter e gateways compatíveis (URL, autenticação, cabeçalhos e parâmetros
+  configuráveis); chave só por ambiente ou `.env`; tetos de rodadas e de tempo; respostas em visão, cartão de elemento,
+  tabela ou esclarecimento; conversa com cancelamento da pergunta anterior; telemetria sem o texto da pergunta por
+  padrão.
+- **`archlens serve --llm anthropic|openai [--model M] [--endpoint URL] [--env-file PATH]`** liga a busca em texto. Sem a chave, `--llm` impede a subida; o `llm` do `archlens-gui.json` só
+  desliga a busca, com aviso no terminal e na caixa de pergunta.
+- **Avaliação da busca** (`npm --prefix apps/gui run eval`): roda as perguntas do archlens-ask contra o gabarito, com
+  `--dry` para conferir o encanamento sem chave.
+- **`nesting.except` na view spec:** aninha ou desaninha elementos um a um, no sentido contrário ao do `nesting` da
+  visão. A GUI ganha `Agrupar tudo`/`Desagrupar tudo` no diagrama e `Agrupar aqui dentro`/`Desagrupar` no menu do
+  elemento.
 
 ## [0.5.0] — 2026-10-28
 
