@@ -29,10 +29,10 @@ function hostnameOf(header) {
 
 /**
  * DNS rebinding guard: a page on another name that resolves to this machine must not read the API.
- * Bound to 0.0.0.0 (team mode, behind a proxy) any Host is accepted.
+ * Bound to all interfaces (0.0.0.0 or ::, team mode behind a proxy) any Host is accepted.
  */
 function hostAllowed(header, configured) {
-  if (configured === '0.0.0.0') return true;
+  if (configured === '0.0.0.0' || configured === '::') return true;
   const h = hostnameOf(header);
   if (LOCAL_HOSTS.has(h)) return true;
   const c = String(configured ?? '').toLowerCase();

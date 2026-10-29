@@ -127,6 +127,12 @@ node scripts/archlens.mjs serve --config archlens-gui.json   # várias bases
 { "bases": [{ "id": "loja", "name": "Loja online", "path": "examples/loja-online/architecture" }] }
 ```
 
+Os `path` do `archlens-gui.json` valem a partir da pasta do próprio arquivo, não de onde o comando roda; cada base
+precisa de `id` único e `path`.
+
+> **Atenção:** com `--host` diferente de `localhost`/`127.0.0.1` (por exemplo `0.0.0.0`), a API — só leitura, mas
+> **sem autenticação** — fica aberta a quem alcança a máquina pela rede. Em equipe, ponha um proxy com login na frente.
+
 O que faz:
 
 - **Navega** pelas visões: botão direito no elemento abre o menu de visões (contexto, containers, componentes,
