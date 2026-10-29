@@ -368,6 +368,8 @@ export function renderHtml({ title, subtitle = '', views, preview, embed = false
   const json = JSON.stringify({ title, minScreenPx: MIN_SCREEN_PX, views: data, ...(embed ? { embed: true } : {}) }).replace(/</g, '\\u003c');
   const sections = views.map((v, i) => `<section class="view" data-view="${esc(v.key)}" data-index="${i}"${i ? ' hidden' : ''}>${viewSvg(v, i)}<div class="legend" hidden>${legend(v)}</div></section>`).join('');
   const options = views.map((v, i) => `<option value="${esc(v.key)}"${i ? '' : ' selected'}>${i + 1}. ${esc(v.title)}</option>`).join('');
+  // Embed: the bar is gone, so its height is zero. Keep the space in ":root {": scripts/gen-ask.mjs (themeColors)
+  // reads the first ":root" followed directly by "{" in this file, which must stay the theme block of CSS.
   return `<!doctype html>
 <html lang="pt-BR">
 <head>
@@ -1133,10 +1135,11 @@ const JS = String.raw`
   // ---------- GUI bridge (embedded only): host -> page commands
   const HOST_ACTS = ['play', 'flow', 'labels', 'legend', 'matrix', 'fit', 'svg', 'png', 'present', 'glossary'];
   if (EMBED) addEventListener('message', ev => {
+    if (ev.source !== window.parent) return; // only the host page that embeds this one
     const m = ev.data; if (!m || m.source !== 'archlens-host') return;
     if (m.type === 'act' && HOST_ACTS.includes(m.act)) { actions[m.act](); postState(); }
     else if (m.type === 'theme' && (m.theme === 'light' || m.theme === 'dark')) root.dataset.theme = m.theme;
-    else if (m.type === 'select') { if (m.id && view().nodes[m.id]) trace(m.id); else clearTrace(); }
+    else if (m.type === 'select') { if (m.id && view().nodes[m.id]) { trace(m.id); if (m.focus) focusNode(m.id); } else clearTrace(); }
   });
   addEventListener('hashchange', () => { const i = DATA.views.findIndex(v => '#' + encodeURIComponent(v.key) === location.hash); if (i >= 0 && i !== current) show(i, true); });
 

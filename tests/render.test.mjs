@@ -360,6 +360,13 @@ test('embed omits the page chrome and keeps the diagram', async () => {
   assert.ok(!renderHtml({ title: 'Loja Mini', views: [await containerView()] }).includes('--bar-h:0px'));
 });
 
+test('embed bridge: only the parent window commands, and select can center the node', async () => {
+  const html = renderHtml({ title: 'Loja Mini', views: [await containerView()], embed: true });
+  const bridge = html.slice(html.indexOf('const HOST_ACTS'));
+  assert.match(bridge, /ev\.source !== window\.parent\) return/);
+  assert.match(bridge, /m\.type === 'select'\) \{ if \(m\.id && view\(\)\.nodes\[m\.id\]\) \{ trace\(m\.id\); if \(m\.focus\) focusNode\(m\.id\); \}/);
+});
+
 test('embed off is byte-identical to before', async () => {
   const views = [await containerView()];
   const html = renderHtml({ title: 'Loja Mini', views });
