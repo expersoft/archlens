@@ -1,4 +1,5 @@
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
+import type { BaseInfo } from './api';
 import { useStoredState } from './store';
 import { isGuiShortcut } from './shortcuts';
 import { useTheme, type Theme } from './theme';
@@ -17,6 +18,13 @@ export interface ShellProps {
   /** Notação da visão atual; o seletor ArchiMate | C4 só age se onNotation for informado. */
   notation?: 'archimate' | 'c4';
   onNotation?: (n: 'archimate' | 'c4') => void;
+  bases?: BaseInfo[];
+  base?: string | null;
+  onBase?: (id: string) => void;
+  /** Enter no campo de busca, com texto não vazio. */
+  onSearch?: (q: string) => void;
+  /** Cada incremento abre a aba Conversa (ex.: lista de resultados da busca). */
+  chatRequest?: number;
 }
 
 const narrow = () => typeof window !== 'undefined' && window.innerWidth < 1100;
@@ -29,6 +37,7 @@ export function Shell(p: ShellProps) {
   const theme = p.theme ?? ownTheme;
   const setTheme = p.onThemeChange ?? setOwnTheme;
   const presenting = !!p.presenting;
+  const search = useRef<HTMLInputElement>(null);
 
   useEffect(() => { document.documentElement.dataset.theme = theme; }, [theme]);
 
@@ -39,10 +48,13 @@ export function Shell(p: ShellProps) {
   }, []);
 
   useEffect(() => { if (left) setLastLeft(left); }, [left, setLastLeft]);
+  useEffect(() => { if (p.chatRequest) setLeft('chat'); }, [p.chatRequest, setLeft]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (!isGuiShortcut(e) || e.code !== 'KeyB') return;
+      if (!isGuiShortcut(e)) return;
+      if (e.code === 'KeyK') { e.preventDefault(); search.current?.focus(); search.current?.select(); return; }
+      if (e.code !== 'KeyB') return;
       e.preventDefault();
       if (e.altKey) setRight((r) => !r);
       else setLeft((l) => (l ? null : lastLeft));
@@ -58,8 +70,22 @@ export function Shell(p: ShellProps) {
       {!presenting && (
         <header className="top" data-testid="topbar">
           <b>archlens</b>
-          <select aria-label="Base" disabled><option>Base</option></select>
-          <input type="search" placeholder="Buscar elemento…" aria-label="Buscar" disabled />
+          <select aria-label="Base" value={p.base ?? ''} disabled={!p.bases?.length || !p.onBase} onChange={(e) => p.onBase?.(e.target.value)}>
+            {!p.bases?.length && <option value="">Base</option>}
+            {p.bases?.map((b) => <option key={b.id} value={b.id} disabled={!b.ok} title={b.ok ? undefined : b.error}>{b.name}</option>)}
+          </select>
+          <input
+            ref={search}
+            type="search"
+            placeholder="Buscar elemento… (Ctrl+K)"
+            aria-label="Buscar"
+            disabled={!p.onSearch}
+            onKeyDown={(e) => {
+              if (e.key !== 'Enter') return;
+              const q = e.currentTarget.value.trim();
+              if (q) p.onSearch?.(q);
+            }}
+          />
           <div className="seg" role="group" aria-label="Notação">
             <button className={p.notation !== 'c4' ? 'on' : ''} disabled={!p.onNotation} onClick={() => p.notation === 'c4' && p.onNotation?.('archimate')}>ArchiMate</button>
             <button className={p.notation === 'c4' ? 'on' : ''} disabled={!p.onNotation} onClick={() => p.notation !== 'c4' && p.onNotation?.('c4')}>C4</button>
@@ -73,7 +99,7 @@ export function Shell(p: ShellProps) {
       <div className="main">
         {!presenting && (
           <nav className="rail" aria-label="Painel esquerdo">
-            <button aria-label="Conversa" title="Conversa (Ctrl+B)" className={left === 'chat' ? 'on' : ''} onClick={() => toggleLeft('chat')}>💬</button>
+            <button aria-label="Conversa e histórico" title="Conversa e histórico (Ctrl+B)" className={left === 'chat' ? 'on' : ''} onClick={() => toggleLeft('chat')}>💬</button>
             <button aria-label="Explorador" title="Explorador (Ctrl+B)" className={left === 'tree' ? 'on' : ''} onClick={() => toggleLeft('tree')}>🗂</button>
           </nav>
         )}

@@ -29,7 +29,28 @@ export interface ViewResult {
   cached: boolean;
 }
 export interface Action { label: string; spec?: ViewSpec; sub?: Action[]; primary?: boolean; matrix?: boolean }
-export interface ElementDetail { card: unknown; actions: Action[] }
+export interface ViewNode {
+  name: string; typeLabel?: string; c4Label?: string | null; layer?: string; technology?: string | null; description?: string | null;
+  role?: string | null; isAnchor?: boolean; distance?: number | null; status?: string;
+}
+export interface ViewEdge {
+  id: string; from: string; to: string; type: string; label?: string | null; technology?: string | null; derived?: boolean;
+  help?: { sentence?: string };
+}
+export interface ViewData { nodes: Record<string, ViewNode>; edges: ViewEdge[] }
+export interface Ref { id: string; name: string; type?: string }
+export interface RelRef extends Ref { label?: string | null; technology?: string | null; sentence?: string }
+export interface Card {
+  element: { id: string; name: string; type: string; kind?: string | null; status?: string; technology?: string | null; description?: string | null; aliases?: string[] };
+  parent: Ref | null;
+  children: Ref[];
+  outgoing: Record<string, RelRef[]>;
+  incoming: Record<string, RelRef[]>;
+  properties?: Record<string, unknown>;
+  sources?: { kind?: string; ref?: string; excerpt?: string; date?: string }[];
+  rounds?: { id?: string; date?: string; summary?: string; how?: string[] }[];
+}
+export interface ElementDetail { card: Card | null; actions: Action[] }
 
 async function call<T>(path: string, body?: unknown): Promise<T> {
   const res = await fetch(path, body === undefined ? undefined : {

@@ -10,7 +10,8 @@
     "test:web": "vitest run",
     "typecheck": "tsc --noEmit",
     "build": "npm run typecheck && vite build",
-    "dev": "vite"
+    "dev": "vite",
+    "test:e2e": "npm run build && node --test e2e/*.test.mjs"
   },
   "dependencies": {
     "react": "18.3.1",
@@ -24,6 +25,7 @@
     "@types/react-dom": "18.3.7",
     "@vitejs/plugin-react": "4.7.0",
     "jsdom": "25.0.1",
+    "playwright-core": "1.63.0",
     "typescript": "5.9.3",
     "vite": "5.4.21",
     "vitest": "2.1.9"

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
-vi.mock('./api', async (orig) => ({ ...(await orig<typeof import('./api')>()), getBases: vi.fn(), getCatalog: vi.fn(), getView: vi.fn(), getElement: vi.fn(), flip: vi.fn() }));
+vi.mock('./api', async (orig) => ({ ...(await orig<typeof import('./api')>()), getBases: vi.fn(), getCatalog: vi.fn(), getView: vi.fn(), getElement: vi.fn(), flip: vi.fn(), find: vi.fn() }));
 vi.mock('./bridge', async (orig) => ({ ...(await orig<typeof import('./bridge')>()), send: vi.fn() }));
 
 import * as api from './api';
@@ -22,6 +22,7 @@ const mkView = (title: string, spec: api.ViewSpec = { k: title }): api.ViewResul
 const getView = vi.mocked(api.getView);
 const getElement = vi.mocked(api.getElement);
 const flip = vi.mocked(api.flip);
+const find = vi.mocked(api.find);
 const send = vi.mocked(bridge.send);
 
 beforeEach(() => {
@@ -110,5 +111,50 @@ describe('App', () => {
     await userEvent.click(screen.getByText('Menu').closest('button')!);
     post({ type: 'ready' });
     expect(matrixCalls()).toBe(2);
+  });
+
+  it('(f) escolher no Explorador um elemento fora da visão abre o Contexto pelo caminho com ticket', async () => {
+    await boot();
+    getElement.mockResolvedValue({ card: null, actions: [{ label: 'Outra', spec: { k: 'o' } }, { label: 'Contexto (C4)', spec: { k: 'ctx' } }] });
+    await userEvent.click(screen.getByRole('button', { name: 'Explorador' }));
+    await userEvent.click(await screen.findByText('Elem A'));
+    await waitFor(() => expect(trail()).toBe('Inicial › ctx'));
+  });
+
+  it('(g) elemento que está na visão só manda select pela ponte', async () => {
+    vi.mocked(api.getView).mockResolvedValue({ ...mkView('Inicial', { level: 'landscape' }), data: { nodes: { A: { name: 'Elem A' } }, edges: [] } });
+    await boot();
+    getElement.mockResolvedValue({ card: null, actions: [{ label: 'Contexto (C4)', spec: { k: 'ctx' } }] });
+    await userEvent.click(screen.getByRole('button', { name: 'Explorador' }));
+    await userEvent.click(await screen.findByText('Elem A'));
+    expect(send).toHaveBeenCalledWith(expect.anything(), { type: 'select', id: 'A' });
+    expect(trail()).toBe('Inicial');
+  });
+
+  it('(h) busca: nada, um e vários resultados', async () => {
+    await boot();
+    getElement.mockResolvedValue({ card: null, actions: [{ label: 'Contexto (C4)', spec: { k: 'ctx' } }] });
+    const box = screen.getByLabelText('Buscar');
+    find.mockResolvedValueOnce([]);
+    await userEvent.type(box, 'zzz{Enter}');
+    await waitFor(() => expect(document.querySelector('.status')!.textContent).toBe('nada encontrado para "zzz"'));
+    find.mockResolvedValueOnce([{ id: 'A', name: 'Elem A', type: 't', score: 1 }, { id: 'B', name: 'Elem B', type: 't', score: 1 }]);
+    await userEvent.clear(box);
+    await userEvent.type(box, 'elem{Enter}');
+    await userEvent.click(await screen.findByRole('button', { name: /Elem B/ }));
+    await waitFor(() => expect(trail()).toBe('Inicial › ctx'));
+  });
+
+  it('(i) trocar de base reseta histórico e carrega a nova; inválida fica desabilitada', async () => {
+    vi.mocked(api.getBases).mockResolvedValue([{ id: 'b', name: 'B', ok: true }, { id: 'c', name: 'C', ok: true }, { id: 'd', name: 'D', ok: false, error: 'quebrada' }]);
+    await boot();
+    const sel = screen.getByLabelText('Base') as HTMLSelectElement;
+    expect(Array.from(sel.options).find((o) => o.value === 'd')!.disabled).toBe(true);
+    expect(Array.from(sel.options).find((o) => o.value === 'd')!.title).toBe('quebrada');
+    vi.mocked(api.getCatalog).mockResolvedValueOnce({ id: 'c', name: 'Outra', views: [{ key: 'w', title: 'Nova', spec: { level: 'landscape', z: 1 }, saved: true }], elements: [] });
+    getView.mockResolvedValueOnce(mkView('Nova'));
+    await userEvent.selectOptions(sel, 'c');
+    await waitFor(() => expect(trail()).toBe('Nova'));
+    expect(getView).toHaveBeenLastCalledWith('c', { level: 'landscape', z: 1 });
   });
 });

@@ -48,7 +48,7 @@ describe('Shell', () => {
     setWidth(1600);
     const u = userEvent.setup();
     render(<Wrapped />);
-    await u.click(screen.getByRole('button', { name: 'Conversa' }));
+    await u.click(screen.getByRole('button', { name: 'Conversa e histórico' }));
     expect(screen.queryByTestId('side-left')).toBeNull();
     await u.click(screen.getByRole('button', { name: 'Explorador' }));
     expect(screen.getByText('explorador')).toBeTruthy();

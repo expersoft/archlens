@@ -5,6 +5,16 @@ versões seguem [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Não lançado]
 
+### Adicionado
+
+- **GUI, fase 1** (`apps/gui/`): interface web local e somente leitura sobre a base. Diagrama no centro; conversa e
+  histórico, Explorador (visões salvas e sugeridas, árvore por camada, filtro) e Detalhes ("Nesta visão" e "Na base");
+  menu do botão direito, duplo clique, trilha, notação ArchiMate | C4, tema, busca por nome (`Ctrl+K`) e seletor de
+  base. Teste ponta a ponta em Chromium (`npm --prefix apps/gui run test:e2e`).
+- **`archlens serve <base> [--port N] [--host H] [--open]`** (ou `--config archlens-gui.json`, com várias bases) abre a GUI.
+- **Núcleo:** modo `embed` do HTML (ponte `postMessage` com a GUI, sem a moldura da página) e `buildView`, que monta a
+  visão a partir de uma especificação, devolvendo também o `viewData`.
+
 ## [0.5.0] — 2026-10-28
 
 ### Adicionado
