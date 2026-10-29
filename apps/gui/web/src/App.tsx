@@ -38,9 +38,19 @@ export function App() {
     return () => document.removeEventListener('fullscreenchange', on);
   }, []);
 
-  const open = useCallback(async (b: string, spec: ViewSpec, kind: Step['kind'], label: string, matrix?: boolean) => {
+  const [notice, setNotice] = useState<string | null>(null);
+
+  /** Reserva o ticket de forma síncrona, antes de qualquer espera. */
+  const reserve = useCallback(() => {
     const t = ++ticket.current;
     dispatch({ type: 'request', ticket: t });
+    setNotice(null);
+    return t;
+  }, []);
+  const fail = (t: number, e: unknown) =>
+    dispatch({ type: 'failed', ticket: t, error: e instanceof Error ? e.message : String(e) });
+
+  const run = useCallback(async (t: number, b: string, spec: ViewSpec, kind: Step['kind'], label: string, matrix?: boolean) => {
     try {
       const r = await getView(b, spec);
       dispatch({ type: 'loaded', ticket: t, step: { kind, label, view: r, ms: totalMs(r), matrix } });
@@ -48,6 +58,9 @@ export function App() {
       dispatch({ type: 'failed', ticket: t, error: e instanceof Error ? e.message : String(e) });
     }
   }, []);
+
+  // uma vez por carga do iframe: ao trocar o passo mostrado, o próximo `ready` reenvia a matriz
+  useEffect(() => { matrixSent.current = null; }, [step]);
 
   useEffect(() => {
     let dead = false;
@@ -61,26 +74,35 @@ export function App() {
         setCatalog(cat);
         const v = pickInitialView(cat.views);
         if (!v) { setStatus(`${cat.name}: sem visões`); return; }
-        void open(bs.id, v.spec, 'Visão', v.title);
+        void run(reserve(), bs.id, v.spec, 'Visão', v.title);
       } catch (e) {
         if (!dead) setStatus(e instanceof Error ? e.message : String(e));
       }
     })();
     return () => { dead = true; };
-  }, [open]);
+  }, [run, reserve]);
+
+  // foco indo para o iframe (clique, rolagem) fecha o menu
+  useEffect(() => {
+    const on = () => { menuTicket.current++; setMenu(null); };
+    window.addEventListener('blur', on);
+    return () => window.removeEventListener('blur', on);
+  }, []);
 
   const nameOf = (id: string) => stateRef.current.catalog?.elements.find((e) => e.id === id)?.name ?? id;
 
   const openAction = (a: Action, id: string, kind: Step['kind']) => {
     const b = stateRef.current.base;
     if (!b || !a.spec) return;
-    void open(b, a.spec, kind, `${a.label}: ${nameOf(id)}`, a.matrix);
+    void run(reserve(), b, a.spec, kind, `${a.label}: ${nameOf(id)}`, a.matrix);
   };
 
   const onEvent = (e: BridgeEvent) => {
     const { base: b, step: cur } = stateRef.current;
     if (e.type === 'theme') setTheme(e.theme);
     else if (e.type === 'select') {
+      menuTicket.current++;
+      setMenu(null);
       if (e.id !== stateRef.current.selected) setSelected(e.id);
     } else if (e.type === 'ready') {
       if (cur?.matrix && matrixSent.current !== cur) {
@@ -89,32 +111,39 @@ export function App() {
       }
     } else if (e.type === 'context' && b) {
       const mt = ++menuTicket.current;
+      setMenu(null);
+      setNotice(null);
       const rect = frame.current?.getBoundingClientRect();
       const at = { x: (rect?.left ?? 0) + e.x, y: (rect?.top ?? 0) + e.y };
       getElement(b, e.id).then((d) => {
         if (mt === menuTicket.current) setMenu({ id: e.id, at, title: nameOf(e.id), items: d.actions });
-      }).catch((err) => setStatus(err instanceof Error ? err.message : String(err)));
+      }).catch((err) => {
+        if (mt === menuTicket.current) setNotice(err instanceof Error ? err.message : String(err));
+      });
     } else if (e.type === 'expand' && b) {
       menuTicket.current++;
       setMenu(null);
+      const t = reserve();
       getElement(b, e.id).then((d) => {
+        if (t !== ticket.current) return;
         const p = d.actions.find((a) => a.primary && a.spec);
-        if (p) openAction(p, e.id, 'Clique duplo');
-      }).catch((err) => setStatus(err instanceof Error ? err.message : String(err)));
+        if (p) void run(t, b, p.spec!, 'Clique duplo', `${p.label}: ${nameOf(e.id)}`, p.matrix);
+      }).catch((err) => { if (t === ticket.current) fail(t, err); });
     }
   };
 
   const notation = (view?.spec as { notation?: string } | undefined)?.notation === 'c4' ? 'c4' : 'archimate';
   const onNotation = (n: 'archimate' | 'c4') => {
     if (!base || !view || n === notation) return;
+    const t = reserve();
     flip(base, view.spec)
-      .then((r) => open(base, r.spec, 'Notação', n === 'c4' ? 'Ver em C4' : 'Ver em ArchiMate'))
-      .catch((err) => setStatus(err instanceof Error ? err.message : String(err)));
+      .then((r) => { if (t === ticket.current) return run(t, base, r.spec, 'Notação', n === 'c4' ? 'Ver em C4' : 'Ver em ArchiMate'); })
+      .catch((err) => { if (t === ticket.current) fail(t, err); });
   };
 
   const closeMenu = useCallback(() => setMenu(null), []);
   const trail = useMemo(() => hist.steps.slice(0, hist.cur + 1), [hist.steps, hist.cur]);
-  const shownStatus = hist.error ?? (view && catalog ? `${catalog.name} · ${view.title}` : status);
+  const shownStatus = hist.error ?? notice ?? (view && catalog ? `${catalog.name} · ${view.title}` : status);
 
   return (
     <Shell

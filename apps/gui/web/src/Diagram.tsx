@@ -68,6 +68,10 @@ export const Diagram = forwardRef<HTMLIFrameElement, DiagramProps>(function Diag
     const w = frame.current?.contentWindow;
     if (!w) return;
     const h = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape' }));
+        return;
+      }
       if (!isGuiShortcut(e)) return;
       e.preventDefault();
       window.dispatchEvent(new KeyboardEvent('keydown', {
