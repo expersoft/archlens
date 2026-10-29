@@ -27,6 +27,12 @@ versões seguem [SemVer](https://semver.org/lang/pt-BR/).
   visão. A GUI ganha `Agrupar tudo`/`Desagrupar tudo` no diagrama e `Agrupar aqui dentro`/`Desagrupar` no menu do
   elemento.
 
+### Segurança
+
+- **GUI, ferramentas de desenvolvimento:** `vite` 5.4.21 → 6.4.5 e `vitest` 2.1.9 → 4.1.12, fechando os alertas do
+  `npm audit` (`tinypool`, `@vitest/mocker`, `esbuild`). Nada muda no que o `archlens serve` executa; rodar os testes
+  da GUI passa a pedir Node 20 ou mais novo.
+
 ## [0.5.0] — 2026-10-28
 
 ### Adicionado
