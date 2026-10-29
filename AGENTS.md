@@ -24,3 +24,12 @@ formatos e o conector gbrain.
 manda é o archlens completo; o archlens-ask acompanha.
 
 Detalhes: `portable/archlens-ask/README.md` e `docs/superpowers/specs/2026-10-25-archlens-ask-design.md`.
+
+## GUI: avalie o impacto
+
+`apps/gui/` é uma interface web que consome o núcleo (`embed`, `buildView`, `viewData`) e a base. Em mudanças de
+`render.mjs`, `query*.mjs`, `view-build.mjs` ou `store/`:
+
+1. **Avalie o impacto na GUI:** a ponte com o iframe (`embed`), a forma de `viewData` e do cartão do elemento, o catálogo
+   e as ações de navegação.
+2. **Rode `npm run gui:test`** antes de concluir e resolva o que ele apontar.

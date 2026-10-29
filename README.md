@@ -112,6 +112,39 @@ git tag -a v<x> -m "archlens <x>" <commit do merge> && git push origin v<x>
 `npm run check-plugin` só confere a sincronia (sai com 1 se os manifestos não acompanham o `package.json`). Quem instala pelo
 marketplace do GitHub recebe a versão quando ela chega à branch padrão (`main`).
 
+## GUI
+
+Uma interface web local para **explorar** a base: o diagrama no centro, a conversa e o histórico, o Explorador (visões
+salvas e sugeridas, árvore por camada) e os Detalhes do elemento à direita.
+
+```bash
+npm run gui:build                                  # uma vez: instala e compila o front (apps/gui/dist)
+node scripts/archlens.mjs serve architecture --open   # [--port N] [--host H]; padrão 127.0.0.1:5180
+node scripts/archlens.mjs serve --config archlens-gui.json   # várias bases
+```
+
+```json
+{ "bases": [{ "id": "loja", "name": "Loja online", "path": "examples/loja-online/architecture" }] }
+```
+
+Os `path` do `archlens-gui.json` valem a partir da pasta do próprio arquivo, não de onde o comando roda; cada base
+precisa de `id` único e `path`.
+
+> **Atenção:** com `--host` diferente de `localhost`/`127.0.0.1` (por exemplo `0.0.0.0`), a API — só leitura, mas
+> **sem autenticação** — fica aberta a quem alcança a máquina pela rede. Em equipe, ponha um proxy com login na frente.
+
+O que faz:
+
+- **Navega** pelas visões: botão direito no elemento abre o menu de visões (contexto, containers, componentes,
+  suporte, impacto…), duplo clique expande, a trilha e o histórico voltam a qualquer passo. A notação alterna entre
+  ArchiMate e C4, e o tema, o painel esquerdo (`Ctrl+B`) e o direito (`Ctrl+Alt+B`) seguem o seu gosto.
+- **Detalhes** do elemento: "Nesta visão" (tipo C4 e ArchiMate, papel, distância, relações como frases) e "Na base"
+  (apelidos, pai, filhos, fontes e rodadas).
+- **Busca por nome** (`Ctrl+K`), seletor de base, e a troca de base reinicia o histórico.
+
+O que não faz: **só lê**, nunca grava a base (mudanças continuam em `archlens-plan` e `archlens-apply`). A busca em
+linguagem natural, com LLM, vem numa fase seguinte. O teste ponta a ponta, em Chromium real, é `npm --prefix apps/gui run test:e2e`.
+
 ## Manter o ARCHITECTURE.md em dia
 
 ```bash

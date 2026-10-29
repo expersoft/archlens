@@ -336,7 +336,7 @@ function viewSvg(v, idx) {
     + `<g class="content">${parts.join('')}${parents ? `<g class="nodes parents">${parents}</g>` : ''}<g class="edges">${edges}</g><g class="nodes">${nodes}</g></g></svg>`;
 }
 
-function viewData(v) {
+export function viewData(v) {
   // layer of the outermost nesting box: a nested child is shown with that box's band
   const byId = new Map(v.nodes.map(n => [n.id, n]));
   const band = n => (n.nestedIn && byId.has(n.nestedIn) ? band(byId.get(n.nestedIn)) : n.layer);
@@ -363,21 +363,23 @@ function viewData(v) {
   };
 }
 
-export function renderHtml({ title, subtitle = '', views, preview }) {
+export function renderHtml({ title, subtitle = '', views, preview, embed = false }) {
   const data = views.map(viewData);
-  const json = JSON.stringify({ title, minScreenPx: MIN_SCREEN_PX, views: data }).replace(/</g, '\\u003c');
+  const json = JSON.stringify({ title, minScreenPx: MIN_SCREEN_PX, views: data, ...(embed ? { embed: true } : {}) }).replace(/</g, '\\u003c');
   const sections = views.map((v, i) => `<section class="view" data-view="${esc(v.key)}" data-index="${i}"${i ? ' hidden' : ''}>${viewSvg(v, i)}<div class="legend" hidden>${legend(v)}</div></section>`).join('');
   const options = views.map((v, i) => `<option value="${esc(v.key)}"${i ? '' : ' selected'}>${i + 1}. ${esc(v.title)}</option>`).join('');
+  // Embed: the bar is gone, so its height is zero. Keep the space in ":root {": scripts/gen-ask.mjs (themeColors)
+  // reads the first ":root" followed directly by "{" in this file, which must stay the theme block of CSS.
   return `<!doctype html>
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(title)}</title>
-<style>${CSS}</style>
+<style>${CSS}</style>${embed ? '\n<style>:root {--bar-h:0px}</style>' : ''}
 </head>
 <body${preview ? ' class="preview"' : ''}>
-<header class="bar">
+${embed ? '' : `<header class="bar">
   <div class="brand"><strong>${esc(title)}</strong>${subtitle ? `<span>${esc(subtitle)}</span>` : ''}</div>
   <nav class="views">
     <button data-act="prev" title="Visão anterior (←)">‹</button>
@@ -396,14 +398,14 @@ export function renderHtml({ title, subtitle = '', views, preview }) {
     <button data-act="present" class="primary" title="Modo apresentação (P)">Apresentar</button>
   </div>
 </header>
-${preview ? `<div class="preview-banner" role="status">PRÉVIA · não é a base oficial — ${esc(preview.label)}</div>` : ''}
+`}${preview ? `<div class="preview-banner" role="status">PRÉVIA · não é a base oficial — ${esc(preview.label)}</div>` : ''}
 <svg class="defs" width="0" height="0" aria-hidden="true" focusable="false">${markerDefs('lg')}</svg>
 <main class="stage">${sections}</main>
 <div class="hovercard" role="tooltip" hidden></div>
 <div class="caption" hidden></div>
-<div class="legibility" hidden></div>
+${embed ? '' : `<div class="legibility" hidden></div>
 <aside class="drawer" aria-hidden="true"><button class="close" data-act="close" aria-label="Fechar">×</button><div class="drawer-body"></div></aside>
-<div class="sheet" hidden><div class="sheet-head"><strong>Matriz de dependência</strong><button data-act="matrix">Fechar</button></div><div class="sheet-body"></div></div>
+`}<div class="sheet" hidden><div class="sheet-head"><strong>Matriz de dependência</strong><button data-act="matrix">Fechar</button></div><div class="sheet-body"></div></div>
 <div class="export-menu" hidden><button data-act="svg">Baixar SVG</button><button data-act="png">Baixar PNG (2×)</button></div>
 <div class="help" hidden>
   <button class="close" data-act="help" aria-label="Fechar">×</button>
@@ -669,7 +671,10 @@ const JS = String.raw`
   // ---------- theme
   const root = document.documentElement;
   try { root.dataset.theme = localStorage.getItem('archlens-theme') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'); } catch { root.dataset.theme = 'light'; }
-  const toggleTheme = () => { root.dataset.theme = root.dataset.theme === 'dark' ? 'light' : 'dark'; try { localStorage.setItem('archlens-theme', root.dataset.theme); } catch {} };
+  const EMBED = !!DATA.embed; // inside the GUI iframe: no toolbar/drawer, talks to the parent via postMessage
+  const post = m => { try { window.parent.postMessage({ source: 'archlens', ...m }, '*'); } catch {} };
+  const tb = s => $(s) || { classList: { toggle() {}, remove() {}, add() {} }, addEventListener() {} }; // toolbar bits are absent when embedded
+  const toggleTheme = () => { root.dataset.theme = root.dataset.theme === 'dark' ? 'light' : 'dark'; try { localStorage.setItem('archlens-theme', root.dataset.theme); } catch {} if (EMBED) post({ type: 'theme', theme: root.dataset.theme }); };
 
   // ---------- views
   const view = () => DATA.views[current];
@@ -680,11 +685,11 @@ const JS = String.raw`
     stop(); clearTrace(); clearPreview(); unpin();
     sections.forEach((s, k) => { s.hidden = k !== i; });
     current = i;
-    $('#viewSelect').value = view().key;
+    tb('#viewSelect').value = view().key;
     if (!fromHash) history.replaceState(null, '', '#' + encodeURIComponent(view().key));
-    $('[data-act=matrix]').hidden = !view().matrix;
+    tb('[data-act=matrix]').hidden = !view().matrix;
     if (!view().matrix) $('.sheet').hidden = true; else if (!$('.sheet').hidden) renderMatrix();
-    $('[data-act=legend]').classList.toggle('on', !$('.legend', sec()).hidden);
+    tb('[data-act=legend]').classList.toggle('on', !$('.legend', sec()).hidden);
     reshape(i);
     intro();
     requestAnimationFrame(checkLegibility);
@@ -777,7 +782,12 @@ const JS = String.raw`
       const g = e.target.closest('.node'); if (!g) return;
       const id = g.dataset.node;
       const target = DATA.views.findIndex(v => v.key !== view().key && (v.scope === id || v.anchor === id) && (v.notation !== 'c4' || v.level === 'container' || v.level === 'component'));
+      if (EMBED) { post({ type: 'expand', id }); return; }
       if (target >= 0) show(target);
+    });
+    if (EMBED) s.addEventListener('contextmenu', e => {
+      const g = e.target.closest('.node'); if (!g) return;
+      e.preventDefault(); post({ type: 'context', id: g.dataset.node, x: e.clientX, y: e.clientY });
     });
     s.addEventListener('keydown', e => {
       const chip = e.target.closest('.f-chip');
@@ -872,7 +882,7 @@ const JS = String.raw`
     const box = s.getBoundingClientRect();
     const scale = Math.min(box.width / r.w, box.height / r.h);
     const px = view().minFont * scale;
-    const el = $('.legibility');
+    const el = tb('.legibility');
     if (px < DATA.minScreenPx) {
       el.hidden = false;
       el.textContent = 'Texto a ~' + px.toFixed(1) + 'px nesta tela (mínimo ' + DATA.minScreenPx + 'px). Use a roda do mouse / F para focar, ou divida a visão (focus + depth, collapse, layers).';
@@ -900,13 +910,14 @@ const JS = String.raw`
     }
     return { nodes: seen, edges: out };
   }
-  function clearTrace() {
+  function clearTrace(quiet) { // quiet === true: trace() is about to post its own select
     selected = null;
+    if (EMBED && quiet !== true) post({ type: 'select', id: null });
     const s = svg(); if (!s) return;
     s.classList.remove('dimming');
     $$('.node', s).forEach(n => n.classList.remove('lit', 'sel', 'pulse'));
     $$('.edge', s).forEach(e => { e.classList.remove('up', 'down', 'lit'); setTone(e, 'base'); });
-    $('.drawer').classList.remove('open');
+    tb('.drawer').classList.remove('open');
   }
   function setTone(e, tone) {
     const line = $('.line', e); const pre = 'v' + current;
@@ -914,7 +925,7 @@ const JS = String.raw`
     if (line.dataset.me) line.setAttribute('marker-end', 'url(#' + pre + '-' + line.dataset.me + '-' + tone + ')');
   }
   function trace(id) {
-    clearTrace(); clearPreview(); hideCard(); selected = id;
+    clearTrace(true); clearPreview(); hideCard(); selected = id;
     const s = svg();
     const down = walk(id, 'down'), up = walk(id, 'up');
     s.classList.add('dimming');
@@ -932,6 +943,7 @@ const JS = String.raw`
   const questions = list => '<ul>' + list.map(q => '<li>[' + q.n + '] ' + escH(q.question) + (q.assumed ? ' <span class="chip">a prévia assume: ' + escH(q.assumed) + '</span>' : '') + (q.options && q.options.length ? ' · opções: ' + escH(q.options.join(' | ')) : '') + '</li>').join('') + '</ul>';
   function openFrame(id) {
     const v = view(), g = v.frames && v.frames[id]; if (!g) return;
+    if (EMBED) { post({ type: 'select', id }); return; }
     let h = '<h2>' + escH(g.name) + '</h2><div class="kind">Agrupamento</div>';
     if (g.status && g.status !== 'active') h += '<p class="warn">' + escH({ draft: 'Rascunho: em discussão.', planned: 'Planejado: ainda não existe.', deprecated: 'Em desativação.', retired: 'Desativado.' }[g.status] || g.status) + '</p>';
     if (g.change) h += '<p class="warn">' + escH({ added: 'Novo neste delta.', changed: 'Alterado por este delta.', removed: 'Removido por este delta.', retired: 'Desativado por este delta.' }[g.change]) + '</p>';
@@ -942,6 +954,7 @@ const JS = String.raw`
   }
   function openDrawer(id) {
     const v = view(), n = v.nodes[id]; if (!n) return;
+    if (EMBED) { post({ type: 'select', id }); return; }
     const name = x => escH(v.nodes[x] ? v.nodes[x].name : x);
     const fmt = x => (x === undefined || x === null ? '—' : typeof x === 'string' ? x : JSON.stringify(x));
     const rels = v.edges.filter(e => e.from === id || e.to === id);
@@ -968,7 +981,7 @@ const JS = String.raw`
     $('.drawer-body').innerHTML = h;
     $('.drawer').classList.add('open');
   }
-  $('.drawer').addEventListener('click', e => { const li = e.target.closest('[data-go]'); if (li) { trace(li.dataset.go); } });
+  tb('.drawer').addEventListener('click', e => { const li = e.target.closest('[data-go]'); if (li) { trace(li.dataset.go); } });
 
   // ---------- animations: story (C4 dynamic), impact (anchored ArchiMate), layers, reveal
   function caption(text) { const c = $('.caption'); c.hidden = !text; c.textContent = text || ''; }
@@ -979,13 +992,13 @@ const JS = String.raw`
     s.classList.remove('dimming');
     $$('.lit', s).forEach(x => x.classList.remove('lit'));
     $$('.pulse', s).forEach(x => x.classList.remove('pulse'));
-    $('[data-act=play]').textContent = '▶ Animar';
+    tb('[data-act=play]').textContent = '▶ Animar';
   }
   function play() {
     if (timer) { stop(); return; }
     clearTrace();
     const v = view(), s = svg();
-    $('[data-act=play]').textContent = '■ Parar';
+    tb('[data-act=play]').textContent = '■ Parar';
     const steps = [];
     if (v.edges.some(e => e.step)) {
       const edges = v.edges.filter(e => e.step).sort((a, b) => a.step - b.step);
@@ -1077,10 +1090,10 @@ const JS = String.raw`
   // ---------- toolbar + keys
   const actions = {
     prev: () => show(current - 1), next: () => show(current + 1), play, fit,
-    flow: () => { body.classList.toggle('flowing'); $('[data-act=flow]').classList.toggle('on'); },
-    labels: () => { body.classList.toggle('labels'); $('[data-act=labels]').classList.toggle('on'); },
+    flow: () => { body.classList.toggle('flowing'); tb('[data-act=flow]').classList.toggle('on'); },
+    labels: () => { body.classList.toggle('labels'); tb('[data-act=labels]').classList.toggle('on'); },
     matrix: toggleMatrix, theme: toggleTheme, present,
-    legend: () => { const l = $('.legend', sec()); l.hidden = !l.hidden; $('[data-act=legend]').classList.toggle('on', !l.hidden); },
+    legend: () => { const l = $('.legend', sec()); l.hidden = !l.hidden; tb('[data-act=legend]').classList.toggle('on', !l.hidden); },
     export: () => { const m = $('.export-menu'); m.hidden = !m.hidden; },
     svg: () => { download(new Blob([exportSvg()], { type: 'image/svg+xml' }), view().key + '.svg'); $('.export-menu').hidden = true; },
     png: () => { exportPng(); $('.export-menu').hidden = true; },
@@ -1094,8 +1107,9 @@ const JS = String.raw`
       t.classList.remove('flash'); void t.offsetWidth; t.classList.add('flash');
     },
   };
-  document.addEventListener('click', e => { const b = e.target.closest('[data-act]'); if (b && actions[b.dataset.act]) actions[b.dataset.act](b); });
-  $('#viewSelect').addEventListener('change', e => show(DATA.views.findIndex(v => v.key === e.target.value)));
+  const postState = () => post({ type: 'state', flowing: body.classList.contains('flowing'), labels: body.classList.contains('labels'), legend: !$('.legend', sec()).hidden, matrix: !$('.sheet').hidden });
+  document.addEventListener('click', e => { const b = e.target.closest('[data-act]'); if (b && actions[b.dataset.act]) { actions[b.dataset.act](b); if (EMBED) postState(); } });
+  tb('#viewSelect').addEventListener('change', e => show(DATA.views.findIndex(v => v.key === e.target.value)));
   document.addEventListener('keydown', e => {
     if (e.target.matches('select, input, textarea') || e.metaKey || e.ctrlKey || e.altKey) return;
     switch (e.key) {
@@ -1116,11 +1130,22 @@ const JS = String.raw`
       case 'Escape': stop(); clearTrace(); unpin(); $('.help').hidden = true; $('.export-menu').hidden = true; $('.sheet').hidden = true; if (!fitted[current]) fit(); break;
       default: return;
     }
+    if (EMBED) postState();
+  });
+  // ---------- GUI bridge (embedded only): host -> page commands
+  const HOST_ACTS = ['play', 'flow', 'labels', 'legend', 'matrix', 'fit', 'svg', 'png', 'present', 'glossary'];
+  if (EMBED) addEventListener('message', ev => {
+    if (ev.source !== window.parent) return; // only the host page that embeds this one
+    const m = ev.data; if (!m || m.source !== 'archlens-host') return;
+    if (m.type === 'act' && HOST_ACTS.includes(m.act)) { actions[m.act](); postState(); }
+    else if (m.type === 'theme' && (m.theme === 'light' || m.theme === 'dark')) root.dataset.theme = m.theme;
+    else if (m.type === 'select') { if (m.id && view().nodes[m.id]) { trace(m.id); if (m.focus) focusNode(m.id); } else clearTrace(); }
   });
   addEventListener('hashchange', () => { const i = DATA.views.findIndex(v => '#' + encodeURIComponent(v.key) === location.hash); if (i >= 0 && i !== current) show(i, true); });
 
   const start = DATA.views.findIndex(v => '#' + encodeURIComponent(v.key) === location.hash);
   show(start >= 0 ? start : 0, true);
+  if (EMBED) post({ type: 'ready' });
   window.archlens = { show, fit, focusNode, trace, play, stop, present, preview, pinCard, data: DATA, get current() { return current; } };
 })();
 `;

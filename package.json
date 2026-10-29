@@ -17,7 +17,9 @@
     "version": "node scripts/sync-plugin.mjs && git add .claude-plugin",
     "check-plugin": "node scripts/sync-plugin.mjs --check",
     "ask": "node scripts/gen-ask.mjs",
-    "check-ask": "node scripts/gen-ask.mjs --check"
+    "check-ask": "node scripts/gen-ask.mjs --check",
+    "gui:build": "npm --prefix apps/gui ci && npm --prefix apps/gui run build",
+    "gui:test": "npm --prefix apps/gui test"
   },
   "optionalDependencies": { "playwright-core": "1.63.0" },
   "devDependencies": { "elkjs": "0.12.0" }
