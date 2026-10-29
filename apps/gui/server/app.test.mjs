@@ -125,3 +125,19 @@ test('estáticos: tipos, fallback para index.html e path traversal', async () =>
     assert.notEqual(await (await fetch(`${url}/..%2fsegredo.txt`)).text(), 'segredo');
   }, { staticDir: dir });
 });
+
+test('escuta em 127.0.0.1 por padrão e aceita config.host', async () => {
+  const a = await startServer({ config: config() });
+  try { assert.equal(a.address, '127.0.0.1'); assert.match(a.url, /^http:\/\/localhost:\d+$/); } finally { await a.close(); }
+  const b = await startServer({ config: { ...config(), host: '0.0.0.0' } });
+  try { assert.equal(b.address, '0.0.0.0'); assert.match(b.url, /^http:\/\/0\.0\.0\.0:\d+$/); } finally { await b.close(); }
+});
+
+test('importar index.mjs não inicia servidor e exporta a API', async () => {
+  const code = `const m = await import(${JSON.stringify(new URL('./index.mjs', import.meta.url).href)}); console.log(JSON.stringify([typeof m.startServer, typeof m.loadConfig, m.DIST_DIR]));`;
+  const { execFileSync } = await import('node:child_process');
+  const out = execFileSync(process.execPath, ['--input-type=module', '-e', code], { encoding: 'utf8', timeout: 10000 });
+  const [a, b, dist] = JSON.parse(out.trim());
+  assert.equal(a, 'function'); assert.equal(b, 'function');
+  assert.ok(dist.endsWith(join('apps', 'gui', 'dist')));
+});

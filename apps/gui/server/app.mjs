@@ -104,11 +104,14 @@ export async function startServer({ config, staticDir, registry } = {}) {
     }
   };
 
+  const host = config?.host ?? '127.0.0.1';
   const server = createServer(handler);
-  await new Promise((ok, fail) => { server.once('error', fail); server.listen(config?.port ?? 0, ok); });
-  const url = `http://localhost:${server.address().port}`;
+  await new Promise((ok, fail) => { server.once('error', fail); server.listen(config?.port ?? 0, host, ok); });
+  const { port, address } = server.address();
+  const url = `http://${host === '127.0.0.1' ? 'localhost' : host}:${port}`;
   return {
     url,
+    address,
     close() {
       return new Promise(done => {
         server.close(() => done());
