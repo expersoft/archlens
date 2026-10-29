@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawnSync, spawnSync as sp } from 'node:child_process';
+import { spawn, spawnSync, spawnSync as sp } from 'node:child_process';
 import { cpSync, mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync, chmodSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -981,4 +981,48 @@ test('help and the remote usage name the session check of a local base about to 
   const u = run(['remote']);
   assert.notEqual(u.status, 0);
   assert.match(u.stderr, /check --server S \[--prefix P\]/);
+});
+
+// ---- serve (GUI) ----
+const ROOT = fileURLToPath(new URL('..', import.meta.url));
+const fakeDist = () => { const d = mkdtempSync(join(tmpdir(), 'archlens-dist-')); writeFileSync(join(d, 'index.html'), '<!doctype html><title>gui</title>'); return d; };
+const serveEnv = dist => ({ ...process.env, ARCHLENS_GUI_DIST: dist });
+
+test('serve: sem a GUI construída sai com 1 e orienta', () => {
+  const empty = mkdtempSync(join(tmpdir(), 'archlens-dist-'));
+  const r = spawnSync(process.execPath, [CLI, 'serve', 'examples/loja-online/architecture', '--port', '0'],
+    { encoding: 'utf8', env: serveEnv(empty), timeout: 20000, cwd: ROOT });
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /a GUI não está construída; rode "npm run gui:build" na raiz do archlens/);
+});
+
+test('serve: imprime a URL, responde /api/bases e encerra no SIGTERM', { timeout: 30000 }, async () => {
+  const child = spawn(process.execPath, [CLI, 'serve', 'examples/loja-online/architecture', '--port', '0'],
+    { cwd: ROOT, env: serveEnv(fakeDist()), stdio: ['ignore', 'pipe', 'pipe'] });
+  const done = new Promise(res => child.on('exit', code => res(code)));
+  let out = '';
+  try {
+    const url = await new Promise((res, rej) => {
+      const t = setTimeout(() => rej(new Error('sem URL: ' + out)), 20000);
+      child.stdout.on('data', d => { out += d; const m = out.match(/^archlens GUI: (http:\/\/\S+)$/m); if (m) { clearTimeout(t); res(m[1]); } });
+      child.on('exit', () => { clearTimeout(t); rej(new Error('saiu: ' + out)); });
+    });
+    const bases = await (await fetch(url + '/api/bases')).json();
+    assert.equal(bases.length, 1);
+    assert.equal(bases[0].ok, true);
+  } finally { child.kill('SIGTERM'); }
+  assert.equal(await done, 0);
+});
+
+test('serve: base única inválida sai com 1 e a mensagem do conector', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'archlens-'));
+  mkdirSync(join(dir, 'old'));
+  writeFileSync(join(dir, 'old', 'model.json'), JSON.stringify({ name: 'x', elements: [] }));
+  for (const base of ['old', 'nao-existe']) {
+    const r = spawnSync(process.execPath, [CLI, 'serve', base, '--port', '0'],
+      { encoding: 'utf8', cwd: dir, env: serveEnv(fakeDist()), timeout: 20000 });
+    assert.equal(r.status, 1, r.stdout + r.stderr);
+    assert.match(r.stderr, /archlens: \S/);
+    assert.doesNotMatch(r.stdout, /archlens GUI/);
+  }
 });

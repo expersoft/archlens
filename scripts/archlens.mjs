@@ -72,6 +72,8 @@ Consultar (nunca grava a base)
   validate  <base>                         valida schema, referências, hierarquia C4 e regras ArchiMate
   check     [base] [--json]               valida e confere se o ARCHITECTURE.md está em dia (CI / pre-commit)
   extract   <base> [--out m.json]          imprime o modelo canônico em JSON
+  serve     <base> [--port N] [--host H] [--open]   abre a GUI (navegador) sobre a base; padrão 127.0.0.1:5180
+            --config archlens-gui.json [--port N] [--host H] [--open]   a GUI sobre várias bases
 
 Atalhos
   merge     <base> <delta.json> --plan p.json  o mesmo que "plan"
@@ -432,6 +434,33 @@ async function main() {
   const load = () => (preview ? preview.raw : base.raw);
 
   switch (cmd) {
+    case 'serve': {
+      const gui = await import(new URL('../apps/gui/server/index.mjs', import.meta.url));
+      const { createBaseRegistry } = await import(new URL('../apps/gui/server/bases.mjs', import.meta.url));
+      const dist = process.env.ARCHLENS_GUI_DIST ?? gui.DIST_DIR;
+      if (!existsSync(join(dist, 'index.html'))) fail('a GUI não está construída; rode "npm run gui:build" na raiz do archlens');
+      const str = v => (v && v !== true ? v : undefined);
+      let port;
+      if (args.port !== undefined) {
+        port = Number(args.port);
+        if (!Number.isInteger(port) || port < 0 || port > 65535) fail('--port aceita um número de 0 a 65535');
+      }
+      let config;
+      try { config = gui.loadConfig({ file: str(args.config), base: str(file), port, host: str(args.host) }); } catch (e) { fail(e.message); }
+      if (!config.bases.length) fail('uso: archlens serve <base> [--port N] [--host H] [--open]\n      archlens serve --config archlens-gui.json [--port N]');
+      const registry = createBaseRegistry(config);
+      const bases = registry.list();
+      const bad = args.config ? (bases.some(b => b.ok) ? null : bases[0]) : bases.find(b => !b.ok);
+      if (bad || !bases.length) { registry.close(); fail(bad?.error ?? 'nenhuma base válida'); }
+      let srv;
+      try { srv = await gui.startServer({ config, staticDir: dist, registry }); } catch (e) { registry.close(); fail(e.message); }
+      console.log(`archlens GUI: ${srv.url}`);
+      if (args.open) openFile(srv.url);
+      const stop = () => { registry.close(); srv.close().finally(() => process.exit(0)); };
+      process.on('SIGINT', stop);
+      process.on('SIGTERM', stop);
+      break;
+    }
     case 'validate': {
       const { errors, warnings } = validateModel(base.raw);
       if (args.json) { console.log(JSON.stringify({ ok: !errors.length, errors, warnings }, null, 2)); }
