@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { normalizeModel } from '../scripts/lib/model.mjs';
 import { resolveView } from '../scripts/lib/query.mjs';
 import { layoutView, legibility, layoutQuality, AM_STYLES } from '../scripts/lib/layout.mjs';
-import { renderHtml } from '../scripts/lib/render.mjs';
+import { renderHtml, viewData } from '../scripts/lib/render.mjs';
 import { previewModel, annotateView } from '../scripts/lib/preview.mjs';
 import { asBase } from './helpers.mjs';
 
@@ -343,4 +343,34 @@ test('layer steps reveal a nested child with its outermost box\'s layer', async 
   assert.equal(data.views[0].nodes.app.band, 'technology');
   assert.equal(data.views[0].nodes.proc.band, 'business');
   assert.match(html, /n\.band === layer/);
+});
+
+const containerView = async () => {
+  const m = normalizeModel(asBase(raw()));
+  return layoutView(resolveView(m, { key: 'k', notation: 'c4', level: 'container', scope: 'loja' }));
+};
+
+test('embed omits the page chrome and keeps the diagram', async () => {
+  const html = renderHtml({ title: 'Loja Mini', views: [await containerView()], embed: true });
+  for (const c of ['class="bar"', 'class="drawer"', 'class="legibility"']) assert.ok(!html.includes(c), c);
+  assert.ok(html.includes('data-node="loja.api"'));
+  assert.ok(html.includes('class="hovercard"'));
+  assert.ok(html.includes('"embed":true'));
+});
+
+test('embed off is byte-identical to before', async () => {
+  const views = [await containerView()];
+  const html = renderHtml({ title: 'Loja Mini', views });
+  assert.equal(html, renderHtml({ title: 'Loja Mini', views, embed: false }));
+  // snapshot taken before embed existed; the interaction script itself had to grow, so compare the page without it
+  const noJs = h => h.replace(/<script>[\s\S]*<\/script>\n/, '<script></script>\n');
+  const before = readFileSync(new URL('./fixtures/render-page.html', import.meta.url), 'utf8');
+  assert.equal(noJs(html), noJs(before));
+  assert.ok(!html.includes('"embed"'), 'no embed key in the data when off');
+});
+
+test('viewData is exported', async () => {
+  const d = viewData(await containerView());
+  assert.equal(d.nodes['loja.api'].name, 'API');
+  assert.equal(typeof d.edges[0].help.sentence, 'string');
 });
