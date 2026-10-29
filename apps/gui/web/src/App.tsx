@@ -13,6 +13,7 @@ import { initialHistory, reducer, type Step } from './history';
 import { useTheme } from './theme';
 import { send, type BridgeEvent } from './bridge';
 import { typeHint } from './labels';
+import { allLabel, oneLabel, toggleAll, toggleOne } from './nesting';
 
 const totalMs = (v: ViewResult) => v.ms.resolve + v.ms.layout + v.ms.render;
 /** `items` null: as ações ainda estão chegando (o menu já abre com "Carregando…"). */
@@ -323,6 +324,16 @@ export function App() {
       .catch((err) => { if (t === ticket.current) fail(t, err); });
   };
 
+  const nest = view?.nest ?? null;
+  const onNestAll = () => {
+    if (!base || !view || !nest) return;
+    void run(reserve(), base, toggleAll(view.spec, nest), 'Visão', allLabel(nest));
+  };
+  const onNestOne = (id: string) => {
+    if (!base || !view || !nest) return;
+    void run(reserve(), base, toggleOne(view.spec, nest, id), 'Visão', `${oneLabel(nest, id)}: ${nameOf(id)}`);
+  };
+
   const viewData = (view?.data ?? null) as ViewData | null;
   const closeMenu = useCallback(() => setMenu(null), []);
   const trail = useMemo(() => hist.steps.slice(0, hist.cur + 1), [hist.steps, hist.cur]);
@@ -337,6 +348,8 @@ export function App() {
       status={shownStatus}
       notation={notation}
       onNotation={base && view ? onNotation : undefined}
+      nestLabel={nest ? allLabel(nest) : undefined}
+      onNestAll={onNestAll}
       bases={bases}
       base={base}
       onBase={onBase}
@@ -404,7 +417,7 @@ export function App() {
           <Diagram ref={frame} view={view} theme={theme} onEvent={onEvent} busy={loading} />
         </>
       ) : <div className="empty">{shownStatus}</div>}
-      {menu && <ContextMenu at={menu.at} title={menu.title} items={menu.items} onPick={(a) => openAction(a, menu.id, 'Menu')} onClose={closeMenu} />}
+      {menu && <ContextMenu at={menu.at} title={menu.title} items={menu.items} onPick={(a) => openAction(a, menu.id, 'Menu')} onClose={closeMenu} nest={nest} nodeId={menu.id} onNest={onNestOne} />}
     </Shell>
   );
 }

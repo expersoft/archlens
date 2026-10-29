@@ -18,6 +18,9 @@ export interface ShellProps {
   /** Notação da visão atual; o seletor ArchiMate | C4 só age se onNotation for informado. */
   notation?: 'archimate' | 'c4';
   onNotation?: (n: 'archimate' | 'c4') => void;
+  /** Botão da barra: Agrupar tudo / Desagrupar tudo. Ausente (ou rótulo vazio) esconde o botão. */
+  nestLabel?: string;
+  onNestAll?: () => void;
   bases?: BaseInfo[];
   base?: string | null;
   onBase?: (id: string) => void;
@@ -93,6 +96,7 @@ export function Shell(p: ShellProps) {
             <button className={p.notation !== 'c4' ? 'on' : ''} disabled={!p.onNotation} onClick={() => p.notation === 'c4' && p.onNotation?.('archimate')}>ArchiMate</button>
             <button className={p.notation === 'c4' ? 'on' : ''} disabled={!p.onNotation} onClick={() => p.notation !== 'c4' && p.onNotation?.('c4')}>C4</button>
           </div>
+          {p.nestLabel && <button type="button" className="nest" onClick={() => p.onNestAll?.()}>{p.nestLabel}</button>}
           <span className="status">{p.status}</span>
           <button className="icon" aria-label="Alternar tema" title="Alternar tema" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
             {theme === 'dark' ? '☀' : '☾'}

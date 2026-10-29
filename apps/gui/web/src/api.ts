@@ -19,6 +19,8 @@ export interface ElementEntry {
 export interface Catalog { id: string; name: string; views: ViewEntry[]; elements: ElementEntry[] }
 export interface FindHit { id: string; name: string; type: string; kind?: string | null; typeLabel?: string; c4Label?: string | null; score: number }
 export type ViewSpec = { level?: string; [k: string]: unknown };
+/** Estado do aninhamento da visão (null: C4 ou sem pai visual). */
+export interface NestState { mode: 'edges' | 'nested'; except: string[]; holders: string[]; open: string[] }
 export interface ViewResult {
   html: string;
   data: unknown;
@@ -28,6 +30,7 @@ export interface ViewResult {
   ms: { resolve: number; layout: number; render: number };
   spec: ViewSpec;
   title: string;
+  nest?: NestState | null;
   cached: boolean;
 }
 export interface Action { label: string; spec?: ViewSpec; sub?: Action[]; primary?: boolean; matrix?: boolean }

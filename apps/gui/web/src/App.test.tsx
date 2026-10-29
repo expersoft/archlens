@@ -266,6 +266,28 @@ describe('App', () => {
   });
 });
 
+describe('App: aninhamento', () => {
+  const nestOf = (open: string[]): api.NestState => ({ mode: 'edges', except: [], holders: ['A'], open });
+  it('agrupar tudo troca a visão e o voltar desfaz', async () => {
+    const spec = { notation: 'archimate', k: 'x' };
+    getView.mockImplementation(async (_b, s) => ({ ...mkView('Inicial', s), nest: s.nesting ? { ...nestOf(['A']), mode: 'nested' } : nestOf([]) }));
+    vi.mocked(api.getCatalog).mockResolvedValue({ id: 'b', name: 'Base', views: [{ key: 'v', title: 'Inicial', spec, saved: true }], elements: [] });
+    await boot();
+    await userEvent.click(screen.getByRole('button', { name: 'Agrupar tudo' }));
+    await waitFor(() => expect(getView).toHaveBeenLastCalledWith('b', { ...spec, nesting: 'nested' }));
+    await screen.findByRole('button', { name: 'Desagrupar tudo' });
+    expect(trail()).toBe('Inicial › Inicial');
+    getView.mockClear();
+    await userEvent.click(screen.getByRole('button', { name: 'Inicial' }));
+    expect(screen.getByRole('button', { name: 'Agrupar tudo' })).toBeTruthy();
+  });
+  it('numa visão C4 (nest null) o botão não aparece', async () => {
+    getView.mockImplementation(async (_b, s) => ({ ...mkView('Inicial', s), nest: null }));
+    await boot();
+    expect(screen.queryByRole('button', { name: /Agrupar tudo|Desagrupar tudo/ })).toBeNull();
+  });
+});
+
 describe('App: busca em texto', () => {
   type Ev = Record<string, unknown>;
   const bodies: Record<string, unknown>[] = [];
