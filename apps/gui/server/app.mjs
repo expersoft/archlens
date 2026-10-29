@@ -47,6 +47,19 @@ function hostAllowed(header, configured) {
 
 const httpError = (status, message, code) => Object.assign(new Error(message), { status, ...(code ? { code } : {}) });
 
+// CSRF guard for every POST: a cross-site page can send text/plain without a preflight and spend the user's LLM quota.
+function checkPostOrigin(req) {
+  if (!/^application\/json\s*(;|$)/i.test(req.headers['content-type'] ?? '')) {
+    throw httpError(415, 'envie o corpo como application/json', 'E_GUI_CONTENT_TYPE');
+  }
+  const { origin } = req.headers;
+  let cross = req.headers['sec-fetch-site'] === 'cross-site';
+  if (origin && !cross) {
+    try { cross = new URL(origin).host.toLowerCase() !== String(req.headers.host ?? '').toLowerCase(); } catch { cross = true; }
+  }
+  if (cross) throw httpError(403, 'origem não permitida', 'E_GUI_ORIGIN');
+}
+
 function send(res, status, body, headers = {}) {
   const buf = Buffer.isBuffer(body) ? body : Buffer.from(JSON.stringify(body));
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'content-length': buf.length, ...SAFE_HEADERS, ...headers });
@@ -105,6 +118,7 @@ export async function startServer({ config, staticDir, registry, provider } = {}
     if (question.length > QUESTION_MAX) throw httpError(400, `a pergunta passa de ${QUESTION_MAX} caracteres`);
     const ctx = registry.get(b);
     const ctl = new AbortController();
+    // res, not req: req 'close' also fires once the request body is read.
     res.on('close', () => { if (!res.writableEnded) ctl.abort(); });
     res.writeHead(200, { 'content-type': 'application/x-ndjson; charset=utf-8', 'cache-control': 'no-store', ...SAFE_HEADERS });
     const write = ev => { if (!res.destroyed && !res.writableEnded) res.write(JSON.stringify(ev) + '\n'); };
@@ -190,6 +204,7 @@ export async function startServer({ config, staticDir, registry, provider } = {}
       const url = new URL(req.url, 'http://localhost');
       const { pathname } = url;
       if (pathname === '/api' || pathname.startsWith('/api/')) {
+        if (req.method === 'POST') checkPostOrigin(req);
         for (const [method, re, fn] of routes) {
           const m = re.exec(pathname);
           if (!m) continue;

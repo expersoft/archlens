@@ -56,7 +56,7 @@ test('empty or huge question is 400', () => withServer({ provider: scripted([]) 
   assert.equal((await ask(url, { question: '  ' })).status, 400);
   assert.equal((await ask(url, {})).status, 400);
   assert.equal((await ask(url, { question: 'x'.repeat(2001) })).status, 400);
-  assert.equal((await fetch(`${url}/api/bases/nao-existe/ask`, { method: 'POST', body: JSON.stringify(Q) })).status, 400);
+  assert.equal((await fetch(`${url}/api/bases/nao-existe/ask`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(Q) })).status, 400);
 }));
 
 test('provider error ends the stream with error', () => withServer({
@@ -97,3 +97,23 @@ test('telemetry records without the question by default', () => withServer({ pro
   assert.equal(e.base, 'loja');
   assert.equal(e.rounds, 1);
 }));
+
+test('POST cross-site: text/plain é 415 e o provedor não é chamado; origem de fora é 403; a mesma origem passa', () => {
+  const provider = scripted([turn([['show_view', { spec: SUPORTE }]])]);
+  return withServer({ provider }, async url => {
+    const plain = await fetch(`${url}/api/bases/loja/ask`, { method: 'POST', headers: { 'content-type': 'text/plain' }, body: JSON.stringify(Q) });
+    assert.equal(plain.status, 415);
+    assert.equal((await plain.json()).code, 'E_GUI_CONTENT_TYPE');
+    assert.equal(provider.seen.length, 0);
+    const json = { 'content-type': 'application/json; charset=utf-8' };
+    const evil = await ask(url, Q, { headers: { ...json, origin: 'http://evil.example' } });
+    assert.equal(evil.status, 403);
+    assert.equal((await evil.json()).code, 'E_GUI_ORIGIN');
+    const site = await ask(url, Q, { headers: { ...json, 'sec-fetch-site': 'cross-site' } });
+    assert.equal(site.status, 403);
+    assert.equal(provider.seen.length, 0);
+    const ok = await ask(url, Q, { headers: { ...json, origin: new URL(url).origin } });
+    assert.equal(ok.status, 200);
+    await ok.text();
+  });
+});
