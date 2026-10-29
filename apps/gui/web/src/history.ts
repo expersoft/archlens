@@ -1,7 +1,7 @@
 import type { ViewResult } from './api';
 
 export type Step = {
-  kind: 'Visão' | 'Menu' | 'Clique duplo' | 'Notação' | 'Explorador' | 'Busca';
+  kind: 'Visão' | 'Menu' | 'Clique duplo' | 'Notação' | 'Explorador' | 'Busca' | 'Pergunta';
   label: string;
   view: ViewResult;
   ms: number;
@@ -14,6 +14,7 @@ export type HistoryAction =
   | { type: 'request'; ticket: number }
   | { type: 'loaded'; ticket: number; step: Step }
   | { type: 'failed'; ticket: number; error: string }
+  | { type: 'settle'; ticket: number }
   | { type: 'go'; index: number }
   | { type: 'reset' };
 
@@ -31,6 +32,8 @@ export function reducer(state: HistoryState, a: HistoryAction): HistoryState {
     case 'failed':
       if (a.ticket !== state.pending) return state;
       return { ...state, pending: null, error: a.error };
+    case 'settle': // pedido que terminou sem passo novo (pergunta que só esclarece)
+      return a.ticket === state.pending ? { ...state, pending: null } : state;
     case 'go':
       if (a.index < 0 || a.index >= state.steps.length) return state;
       // a escolha do usuário vence: uma resposta tardia não o tira deste passo

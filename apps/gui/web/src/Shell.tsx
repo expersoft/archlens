@@ -25,6 +25,8 @@ export interface ShellProps {
   onSearch?: (q: string) => void;
   /** Cada incremento abre a aba Conversa (ex.: lista de resultados da busca). */
   chatRequest?: number;
+  /** Cada incremento abre a lateral direita (ex.: cartão do elemento achado por uma pergunta). */
+  rightRequest?: number;
 }
 
 const narrow = () => typeof window !== 'undefined' && window.innerWidth < 1100;
@@ -49,6 +51,7 @@ export function Shell(p: ShellProps) {
 
   useEffect(() => { if (left) setLastLeft(left); }, [left, setLastLeft]);
   useEffect(() => { if (p.chatRequest) setLeft('chat'); }, [p.chatRequest, setLeft]);
+  useEffect(() => { if (p.rightRequest) setRight(true); }, [p.rightRequest, setRight]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -77,7 +80,7 @@ export function Shell(p: ShellProps) {
           <input
             ref={search}
             type="search"
-            placeholder="Buscar elemento… (Ctrl+K)"
+            placeholder="Buscar elemento ou perguntar… (Ctrl+K)"
             aria-label="Buscar"
             disabled={!p.onSearch}
             onKeyDown={(e) => {

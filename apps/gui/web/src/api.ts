@@ -79,3 +79,59 @@ export const getElement = (base: string, id: string) => call<ElementDetail>(`${b
 /** Só as ações (menu de contexto, duplo clique, Explorador), sem o cartão. */
 export const getActions = (base: string, id: string) => call<{ actions: Action[] }>(`${b(base)}/elements/${encodeURIComponent(id)}/actions`);
 export const flip = (base: string, spec: ViewSpec) => call<{ spec: ViewSpec }>(`${b(base)}/flip`, { spec });
+
+export interface Info { ask: { enabled: false } | { enabled: true; provider: string; model: string; mode: 'tools' | 'json' } }
+export const getInfo = () => call<Info>('/api/info');
+
+export interface AskOption { id: string; name: string; typeLabel?: string; c4Label?: string | null; type?: string }
+export type AskResult =
+  | { kind: 'view'; spec: ViewSpec; title?: string; answer?: boolean; warning?: string }
+  | { kind: 'element'; id: string; warning?: string }
+  | { kind: 'clarify'; question?: string; options: AskOption[]; warning?: string }
+  | { kind: 'none'; warning?: string };
+export interface AnswerRow { name: string; type: string; kind?: string | null; status?: string | null; technology?: string | null }
+export interface MatrixRow { name: string; typeLabel?: string; layerLabel?: string; role?: string; distance?: number | null; path: { via: string; name: string }[]; shown?: boolean }
+export interface ViewAnswer {
+  title: string; spec: ViewSpec;
+  sections: { label: string; rows: AnswerRow[] }[];
+  edges: { from: string; to: string; type: string; sentence: string }[];
+  matrix?: MatrixRow[];
+  notes: string[];
+}
+export interface AskRequest {
+  question: string;
+  context?: { spec?: ViewSpec; nodes?: string[]; selected?: string };
+  chosen?: string;
+  history?: { question: string; title?: string }[];
+}
+export type AskEvent =
+  | { type: 'stage'; stage: string }
+  | { type: 'tool'; name: string; ok: boolean; ms: number }
+  | { type: 'result'; result: AskResult; view?: ViewResult; answer?: ViewAnswer; markdown?: string }
+  | { type: 'error'; error: string; code?: string }
+  | { type: 'done'; metrics: { total: number; [k: string]: unknown } };
+
+/** A pergunta como fluxo NDJSON: um evento por linha. Abortar o sinal fecha a conexão (e o servidor para o agente). */
+export async function ask(base: string, body: AskRequest, onEvent: (e: AskEvent) => void, signal: AbortSignal): Promise<void> {
+  const res = await fetch(`${b(base)}/ask`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), signal,
+  });
+  if (!res.ok) {
+    let data: { error?: string; code?: string } = {};
+    try { data = await res.json(); } catch { /* corpo não JSON */ }
+    throw new ApiError(data.error ?? `HTTP ${res.status}`, data.code, res.status);
+  }
+  if (!res.body) throw new ApiError('resposta sem corpo', undefined, res.status);
+  const reader = res.body.getReader();
+  const dec = new TextDecoder();
+  let buf = '';
+  const flush = (line: string) => { if (line.trim()) onEvent(JSON.parse(line) as AskEvent); };
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    let i: number;
+    while ((i = buf.indexOf('\n')) >= 0) { flush(buf.slice(0, i)); buf = buf.slice(i + 1); }
+  }
+  flush(buf + dec.decode());
+}
