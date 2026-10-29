@@ -1,5 +1,6 @@
 // Spec → ViewResult, with a small LRU cache keyed by base version and canonical spec.
 import { buildView } from '../../../scripts/lib/view-build.mjs';
+import { titleFor } from './navigation.mjs';
 
 export const CACHE_MAX = 200;
 
@@ -37,7 +38,7 @@ export async function renderSpec(ctx, spec, cache = defaultCache) {
   const hit = cache.get(key);
   if (hit) return { ...hit, cached: true };
   const built = await buildView(ctx.model, spec);
-  const result = { ...built, spec, title: spec.title ?? spec.key ?? '', cached: false };
+  const result = { ...built, spec, title: spec.title ?? titleFor(ctx, spec), cached: false };
   cache.set(key, result);
   return result;
 }

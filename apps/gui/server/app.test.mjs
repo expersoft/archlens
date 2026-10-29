@@ -54,7 +54,7 @@ test('GET elements: id com ponto; id desconhecido codificado dá 400', () => wit
   assert.equal(r.status, 200);
   const j = await r.json();
   assert.equal(j.card.element.name, 'API de Agendamento');
-  assert.deepEqual(j.actions, []);
+  assert.ok(j.actions.some(a => a.label === 'Matriz de dependência'));
   const bad = await fetch(`${url}/api/bases/telemedicina/elements/${encodeURIComponent('a/b c')}`);
   assert.equal(bad.status, 400);
   assert.equal((await bad.json()).code, 'E_UNKNOWN_REF');
@@ -95,8 +95,10 @@ test('refresh invalida o cache', async () => {
   } finally { await srv.close(); registry.close(); }
 });
 
-test('flip ainda é 501; rota desconhecida é 404; sem staticDir não-api é 404', () => withServer(async url => {
-  assert.equal((await post(`${url}/api/bases/loja-online/flip`, { spec: LAND })).status, 501);
+test('flip: 400 sem spec, troca C4 por ArchiMate; rota desconhecida é 404; sem staticDir não-api é 404', () => withServer(async url => {
+  assert.equal((await post(`${url}/api/bases/loja-online/flip`, {})).status, 400);
+  assert.deepEqual((await (await post(`${url}/api/bases/loja-online/flip`, { spec: LAND })).json()).spec,
+    { notation: 'archimate', viewpoint: 'application', granularity: 'container' });
   assert.equal((await fetch(`${url}/api/nada`)).status, 404);
   assert.equal((await fetch(`${url}/`)).status, 404);
 }));

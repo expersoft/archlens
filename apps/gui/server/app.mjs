@@ -6,6 +6,7 @@ import { query } from '../../../scripts/lib/api.mjs';
 import { createBaseRegistry } from './bases.mjs';
 import { catalog, findElements } from './catalog.mjs';
 import { renderSpec, createViewCache } from './views.mjs';
+import { actionsFor, flipSpec } from './navigation.mjs';
 
 const BODY_LIMIT = 1024 * 1024;
 const TYPES = {
@@ -74,9 +75,13 @@ export async function startServer({ config, staticDir, registry } = {}) {
     }],
     ['GET', /^\/api\/bases\/([^/]+)\/elements\/([^/]+)$/, async (_req, [b, id]) => {
       const ctx = registry.get(b);
-      return { card: query(ctx.store, { element: id, format: 'json' }), actions: [] };
+      return { card: query(ctx.store, { element: id, format: 'json' }), actions: actionsFor(ctx, id) };
     }],
-    ['POST', /^\/api\/bases\/([^/]+)\/flip$/, async () => { throw httpError(501, 'ainda não implementado'); }],
+    ['POST', /^\/api\/bases\/([^/]+)\/flip$/, async (req, [b]) => {
+      const { spec } = await readJson(req);
+      if (!spec || typeof spec !== 'object' || Array.isArray(spec)) throw httpError(400, 'informe {spec} no corpo');
+      return { spec: flipSpec(registry.get(b), spec) };
+    }],
   ];
 
   const handler = async (req, res) => {
