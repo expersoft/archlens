@@ -157,4 +157,23 @@ describe('App', () => {
     await waitFor(() => expect(trail()).toBe('Nova'));
     expect(getView).toHaveBeenLastCalledWith('c', { level: 'landscape', z: 1 });
   });
+
+  it('(j) catálogo lento da base antiga não sobrescreve a base escolhida depois', async () => {
+    vi.mocked(api.getBases).mockResolvedValue([{ id: 'b', name: 'B', ok: true }, { id: 'c', name: 'C', ok: true }]);
+    const slow = deferred<api.Catalog>();
+    vi.mocked(api.getCatalog).mockImplementation((id) => (id === 'b' ? slow.promise : Promise.resolve({
+      id: 'c', name: 'Outra', views: [{ key: 'w', title: 'Nova', spec: { level: 'landscape', z: 1 }, saved: true }], elements: [],
+    })));
+    getView.mockImplementation(async (_b, spec) => mkView(spec.z ? 'Nova' : 'Antiga', spec));
+    render(<App />);
+    const sel = (await screen.findByLabelText('Base')) as HTMLSelectElement;
+    await waitFor(() => expect(sel.options.length).toBe(2));
+    await userEvent.selectOptions(sel, 'c');
+    await waitFor(() => expect(trail()).toBe('Nova'));
+    await act(async () => { slow.resolve({ id: 'b', name: 'Base', views: [{ key: 'v', title: 'Antiga', spec: { level: 'landscape' }, saved: true }], elements: [] }); });
+    await new Promise((r) => setTimeout(r, 50));
+    expect(trail()).toBe('Nova');
+    expect((screen.getByLabelText('Base') as HTMLSelectElement).value).toBe('c');
+    expect(getView).not.toHaveBeenCalledWith('b', expect.anything());
+  });
 });

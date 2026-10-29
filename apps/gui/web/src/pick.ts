@@ -1,6 +1,12 @@
 import type { ViewEntry } from './api';
 
-/** Primeira visão salva de nível landscape; senão a primeira visão. */
+const framed = (v: ViewEntry) => !!(v.spec?.groups as { frames?: unknown } | undefined)?.frames;
+
+/** Landscape salva; senão landscape sugerida (sem molduras, se houver); senão a primeira visão. */
 export function pickInitialView(views: ViewEntry[]): ViewEntry | undefined {
-  return views.find((v) => v.saved && v.spec?.level === 'landscape') ?? views[0];
+  const land = views.filter((v) => v.spec?.level === 'landscape');
+  return land.find((v) => v.saved)
+    ?? land.find((v) => !framed(v))
+    ?? land[0]
+    ?? views[0];
 }

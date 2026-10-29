@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { startServer, DIST_DIR } from '../server/index.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
-const INICIAL = 'Contexto — Plataforma de Teleconsulta';
+let INICIAL; // título da visão inicial (landscape), lido da própria tela
 let srv, browser, page, skip;
 
 before(async () => {
@@ -35,11 +35,14 @@ const frame = () => page.frameLocator('iframe[title="Diagrama"]');
 
 test('GUI ponta a ponta', async (t) => {
   if (skip) return t.skip(skip);
+  const first = page.waitForResponse((r) => r.url().endsWith('/view') && r.request().method() === 'POST');
   await page.goto(srv.url);
+  const v0 = await (await first).json();
+  INICIAL = v0.title;
 
-  await t.test('1. a visão inicial abre; página sem rolagem e moldura fixa', async () => {
+  await t.test('1. a paisagem abre; página sem rolagem e moldura fixa', async () => {
     await frame().locator('[data-node="tele"]').waitFor();
-    // pickInitialView: sem visão landscape salva, a base telemedicina abre na primeira (o Contexto)
+    assert.equal(v0.spec.level, 'landscape');
     assert.equal(await trail(), INICIAL);
     const css = await page.evaluate(() => ({
       html: getComputedStyle(document.documentElement).overflow,

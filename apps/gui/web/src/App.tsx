@@ -29,6 +29,7 @@ export function App() {
   const [menu, setMenu] = useState<Menu | null>(null);
   const frame = useRef<HTMLIFrameElement>(null);
   const ticket = useRef(0);
+  const baseGen = useRef(0);
   const menuTicket = useRef(0);
 
   const step: Step | undefined = hist.steps[hist.cur];
@@ -84,16 +85,18 @@ export function App() {
 
   useEffect(() => {
     let dead = false;
+    const gen = ++baseGen.current;
+    const stale = () => dead || gen !== baseGen.current;
     (async () => {
       try {
         const all = await getBases();
-        if (dead) return;
+        if (stale()) return;
         setBases(all);
         const bs = all.find((x) => x.ok);
         if (!bs) { setStatus('Nenhuma base disponível'); return; }
-        await loadBase(bs.id, () => dead);
+        await loadBase(bs.id, stale);
       } catch (e) {
-        if (!dead) setStatus(e instanceof Error ? e.message : String(e));
+        if (!stale()) setStatus(e instanceof Error ? e.message : String(e));
       }
     })();
     return () => { dead = true; };
@@ -112,7 +115,8 @@ export function App() {
     setCatalog(null);
     setBase(id);
     setStatus('Carregando…');
-    void loadBase(id);
+    const gen = ++baseGen.current;
+    void loadBase(id, () => gen !== baseGen.current);
   };
 
   // cartão da base para o elemento selecionado
