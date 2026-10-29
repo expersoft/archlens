@@ -1,8 +1,8 @@
 // Text-search evaluation: runs the archlens-ask questions through the agent and scores them against the answer key.
-//   node apps/gui/eval/run.mjs [--provider anthropic|openai] [--model M] [--mode tools|json] [--repeat N] [--only id,id] [--dry]
+//   node apps/gui/eval/run.mjs [--provider anthropic|openai] [--model M] [--mode tools|json] [--config archlens-gui.json] [--repeat N] [--only id,id] [--dry]
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { resolve, dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createBaseRegistry } from '../server/bases.mjs';
 import { createProvider } from '../server/ask/providers.mjs';
 import { scripted } from '../server/ask/scripted.mjs';
@@ -10,6 +10,7 @@ import { runAsk } from '../server/ask/agent.mjs';
 import { renderSpec } from '../server/views.mjs';
 import { summarize } from '../server/ask/telemetry.mjs';
 import { EVAL_BASE } from '../../../scripts/gen-ask.mjs';
+import { loadConfig } from '../server/config.mjs';
 import { score } from './compare.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -90,11 +91,11 @@ export function report({ rows, summary, meta }) {
 }
 
 function parseArgs(argv) {
-  const a = { repeat: 1, mode: 'tools', provider: 'anthropic' };
+  const a = { repeat: 1, mode: 'tools' };
   for (let i = 0; i < argv.length; i++) {
     const k = argv[i];
     if (k === '--dry') a.dry = true;
-    else if (['--provider', '--model', '--mode', '--repeat', '--only'].includes(k)) a[k.slice(2)] = argv[++i];
+    else if (['--provider', '--model', '--mode', '--repeat', '--only', '--config'].includes(k)) a[k.slice(2)] = argv[++i];
     else throw new Error(`argumento desconhecido: ${k}`);
   }
   a.repeat = Number(a.repeat);
@@ -104,10 +105,22 @@ function parseArgs(argv) {
   return a;
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+/** The provider of the CLI: `--config` reuses the GUI's llm block and its .env (the gateway in real use); flags override. */
+export function evalProvider(a, { env = process.env } = {}) {
+  let llm = { provider: 'anthropic' };
+  if (a.config) {
+    const cfg = loadConfig({ file: a.config });
+    if (!cfg.llm) throw new Error(`${a.config}: sem bloco "llm"`);
+    llm = cfg.llm;
+    env = cfg.env;
+  }
+  return createProvider({ ...llm, ...(a.provider ? { provider: a.provider } : {}), ...(a.model ? { model: a.model } : {}), tools: a.mode === 'tools' }, { env });
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
     const a = parseArgs(process.argv.slice(2));
-    const provider = a.dry ? undefined : createProvider({ provider: a.provider, ...(a.model ? { model: a.model } : {}), tools: a.mode === 'tools' }, { env: process.env });
+    const provider = a.dry ? undefined : evalProvider(a);
     const out = await runEval({ provider, mode: a.mode, repeat: a.repeat, only: a.only, dry: a.dry });
     const dir = join(here, 'results');
     mkdirSync(dir, { recursive: true });

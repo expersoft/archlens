@@ -9,7 +9,10 @@ export function nestState(ctx, spec) {
   // os pais visuais saem da visão sem aninhamento: aninhada, ela perde as arestas de composição/agregação
   const flat = resolveView(ctx.model, { ...spec, nesting: 'edges' });
   const parents = visualParents(new Set(flat.nodes.map(x => x.id)), flat.edges, ctx.model);
-  const holders = [...new Set(parents.values())];
+  // with a depth, a holder whose children all sit deeper has no visible toggle: leave it out
+  const level = id => { let n = 0; for (let c = id; parents.has(c); c = parents.get(c)) n++; return n; };
+  const effective = ([child]) => n.mode === 'edges' || n.depth == null || level(child) <= n.depth;
+  const holders = [...new Set([...parents].filter(effective).map(([, h]) => h))];
   if (!holders.length) return null;
   const view = n.mode === 'edges' && !n.except ? flat : resolveView(ctx.model, spec);
   const open = holders.filter(h => view.nodes.some(x => x.nestedIn === h));

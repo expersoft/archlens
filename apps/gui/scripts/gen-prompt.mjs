@@ -3,7 +3,7 @@
 // references/views.md and the query skill tables, so the view rules never drift. --check only reports.
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const ROOT = fileURLToPath(new URL('../../..', import.meta.url));
 const ASK = fileURLToPath(new URL('../server/ask/', import.meta.url));
@@ -32,7 +32,7 @@ export function checkPrompt() {
   return [];
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   if (process.argv.includes('--check')) {
     const problems = checkPrompt();
     for (const p of problems) console.error(`archlens-gui: ${p}`);

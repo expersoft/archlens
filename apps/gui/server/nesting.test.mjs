@@ -37,3 +37,12 @@ test('renderSpec puts nest in the (cached) result', async () => {
   assert.ok(r.nest.open.includes('loja'));
   assert.ok((await renderSpec(loja, app({ nesting: 'nested' }), cache)).nest.open.includes('loja'));
 });
+
+test('with a depth, holders whose children sit deeper are not listed', () => {
+  const all = nestState(loja, app({ nesting: 'nested' })).holders;
+  const shallow = nestState(loja, app({ nesting: { mode: 'nested', depth: 1 } })).holders;
+  assert.ok(shallow.includes('loja'));
+  assert.ok(shallow.length < all.length, `${shallow} vs ${all}`);
+  // edges mode ignores depth: every holder keeps its toggle
+  assert.deepEqual(nestState(loja, app({ nesting: { mode: 'edges' } })).holders, all);
+});

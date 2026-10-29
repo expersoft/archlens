@@ -203,9 +203,11 @@ O bloco `llm` (e `telemetry`) do `archlens-gui.json`:
   Atrás de um proxy reverso, preserve o cabeçalho `Host` original.
 
 **Avaliação.** `npm --prefix apps/gui run eval -- [--provider anthropic|openai] [--model M] [--mode tools|json]
-[--repeat 3] [--only id,id] [--dry]` roda as perguntas de `portable/archlens-ask/eval/perguntas.json` contra o
+[--config archlens-gui.json] [--repeat 3] [--only id,id] [--dry]` roda as perguntas de `portable/archlens-ask/eval/perguntas.json` contra o
 gabarito (mesma seleção de nós e arestas) e grava `apps/gui/eval/results/<data>-<modelo>-<modo>.{md,json}` com acerto,
-P50/P90 e fração em uma rodada. `--dry` confere o encanamento sem chave. Metas: P50 ≤ 15 s e P90 ≤ 60 s (alvo ~5 s);
+P50/P90 e fração em uma rodada. `--config` reusa o bloco `llm` e o `.env` da GUI (endpoint, autenticação, cabeçalhos e chave), para medir o gateway que
+será usado; sem `--config` a chave vem só do ambiente do processo, e `--provider`/`--model`/`--mode` sempre prevalecem.
+`--dry` confere o encanamento sem chave. Metas: P50 ≤ 15 s e P90 ≤ 60 s (alvo ~5 s);
 o acerto vem antes da velocidade.
 
 ## Manter o ARCHITECTURE.md em dia

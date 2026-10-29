@@ -20,6 +20,9 @@ test('llm inválido dá E_GUI_CONFIG', () => {
   bad({ provider: 'anthropic', headersEnv: { X: 1 } });
   bad({ provider: 'anthropic', headers: 'x' });
   bad({ provider: 'anthropic', query: { a: 1 } });
+  bad({ provider: 'anthropic', tools: 'false' });
+  bad({ provider: 'anthropic', effort: 5 });
+  bad({ provider: 'anthropic', effort: '' });
   bad('anthropic');
 });
 
