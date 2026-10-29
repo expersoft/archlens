@@ -2,10 +2,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, cpSync, writeFileSync, readFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve, dirname } from 'node:path';
+import { join, resolve, dirname, relative } from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createBaseRegistry } from './bases.mjs';
 import { loadConfig } from './config.mjs';
+import { openStore, resolveBase } from '../../../scripts/lib/store/index.mjs';
+import { initBase } from '../../../scripts/lib/store/config.mjs';
+import { diffRaw } from '../../../scripts/lib/store/ops.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const ex = n => join(root, 'examples', n, 'architecture');
@@ -91,4 +95,46 @@ test('loadConfig: valida id e path de cada base e recusa ids repetidos', () => {
   bad([{ id: 'a', path: 'x' }, { id: 'a', path: 'y' }], /base 2 \("a"\).*repetido/);
   bad(['oi'], /base 1/);
   bad({}, /lista/);
+});
+
+test('base gbrain git: a conferência roda numa worker thread e recarrega quando o remoto muda', async () => {
+  const env = { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1', LC_ALL: 'C' };
+  Object.assign(process.env, env); // a worker herda o ambiente: git hermético, sem identidade global
+  const sh = (cwd, ...args) => {
+    const r = spawnSync('git', ['-C', cwd, ...args], { encoding: 'utf8', env });
+    assert.equal(r.status, 0, `git ${args.join(' ')}: ${r.stderr}`);
+  };
+  const d = tmp();
+  const remote = join(d, 'remote.git');
+  sh(d, 'init', '-q', '--bare', '-b', 'main', remote);
+  const user = name => {
+    const clone = join(d, `${name}-clone`);
+    sh(d, 'clone', '-q', remote, clone);
+    sh(clone, 'config', 'user.name', name);
+    sh(clone, 'config', 'user.email', `${name}@example.com`);
+    const at = join(d, `${name}-base`);
+    initBase(at, { name: 'Empresa', store: { kind: 'gbrain', mode: 'git', repo: relative(at, clone), branch: 'main' } });
+    return { dir: at, store: () => openStore(resolveBase(at)) };
+  };
+  const write = (s, raw) => s.apply(diffRaw(s.read(), { raw, notes: {} }), { baseVersion: s.version() });
+  const raw = name => ({
+    archlens: '2.0', name: 'Empresa',
+    model: { elements: [{ id: 'vendas', type: 'application-component', name, c4: { kind: 'softwareSystem' } }], relationships: [] },
+    changelog: [{ id: '2026-10-01-01', date: '2026-10-01', summary: 'início', added: [], changed: [], status: {}, removed: [], decisions: [] }],
+  });
+  const ana = user('ana'), bia = user('bia');
+  write(ana.store(), raw('Vendas'));
+  const reg = createBaseRegistry({ port: 1, bases: [{ id: 'g', path: bia.dir }] }, { pollMs: 100000, remotePollMs: 100000 });
+  try {
+    const before = reg.get('g');
+    assert.equal(before.model.elements.get('vendas').name, 'Vendas');
+    assert.equal(before.snapshot.readSubgraph({ seeds: ['vendas'] }).raw.model.elements.length, 1);
+    await reg.refresh(); // sem mudança no remoto: o mesmo contexto
+    assert.equal(reg.get('g'), before);
+    write(ana.store(), raw('Vendas Online'));
+    await reg.refresh();
+    const after = reg.get('g');
+    assert.notEqual(after.version, before.version);
+    assert.equal(after.model.elements.get('vendas').name, 'Vendas Online');
+  } finally { reg.close(); }
 });

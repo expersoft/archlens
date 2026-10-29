@@ -5,7 +5,8 @@ import type { Action } from './api';
 export interface ContextMenuProps {
   at: { x: number; y: number };
   title: string;
-  items: Action[];
+  /** null: as ações ainda estão chegando; o menu já aparece, com "Carregando…". */
+  items: Action[] | null;
   onPick: (a: Action) => void;
   onClose: () => void;
 }
@@ -79,7 +80,9 @@ export function ContextMenu({ at, title, items, onPick, onClose }: ContextMenuPr
   return createPortal(
     <div ref={ref} className="menu" role="menu" style={{ left: pos.x, top: pos.y }} onContextMenu={(e) => e.preventDefault()}>
       <div className="mt">{title}</div>
-      {items.map((a, i) => row(a, i, false))}
+      {items
+        ? items.map((a, i) => row(a, i, false))
+        : <div className="mi off" role="menuitem" aria-disabled="true" aria-busy="true">Carregando…</div>}
     </div>,
     document.body,
   );

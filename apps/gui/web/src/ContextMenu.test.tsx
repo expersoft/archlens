@@ -44,4 +44,14 @@ describe('ContextMenu', () => {
     await u.keyboard('{Escape}');
     expect(onClose).toHaveBeenCalled();
   });
+  it('sem itens ainda (null) abre com "Carregando…" desabilitado', async () => {
+    const u = userEvent.setup();
+    const onPick = vi.fn();
+    render(<ContextMenu at={{ x: 0, y: 0 }} title="Pagamentos" items={null} onPick={onPick} onClose={() => {}} />);
+    expect(screen.getByText('Pagamentos')).toBeTruthy();
+    const loading = screen.getByText('Carregando…');
+    expect(loading.getAttribute('aria-disabled')).toBe('true');
+    await u.click(loading);
+    expect(onPick).not.toHaveBeenCalled();
+  });
 });

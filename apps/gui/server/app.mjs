@@ -99,10 +99,16 @@ export async function startServer({ config, staticDir, registry } = {}) {
     }],
     ['GET', /^\/api\/bases\/([^/]+)\/elements\/([^/]+)$/, async (_req, [b, id]) => {
       const ctx = registry.get(b);
-      const card = query(ctx.store, { element: id, format: 'json' });
+      const card = query(ctx.snapshot, { element: id, format: 'json' });
       const el = ctx.model.elements.get(id);
       if (card?.element && el) Object.assign(card.element, labelsOf(ctx, el));
       return { card, actions: actionsFor(ctx, id) };
+    }],
+    // Only the actions (context menu, double click): from the model in memory, no card.
+    ['GET', /^\/api\/bases\/([^/]+)\/elements\/([^/]+)\/actions$/, async (_req, [b, id]) => {
+      const ctx = registry.get(b);
+      if (!ctx.model.elements.has(id)) throw httpError(400, `"${id}" não existe na base`, 'E_UNKNOWN_REF');
+      return { actions: actionsFor(ctx, id) };
     }],
     ['POST', /^\/api\/bases\/([^/]+)\/flip$/, async (req, [b]) => {
       const { spec } = await readJson(req);
