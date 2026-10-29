@@ -1,4 +1,5 @@
 import type { Card, RelRef, ViewEdge, ViewNode } from './api';
+import { layerLabel } from './labels';
 
 export interface DetailsProps {
   card: Card | null;
@@ -20,12 +21,13 @@ export function Details({ card, viewNode, viewEdges, nodeId, onPick, onSelectInV
   if (!nodeId) return <div className="dp muted">Selecione um elemento no diagrama ou no Explorador.</div>;
   const e = card?.element;
   const rels = viewNode ? viewEdges.filter((x) => x.from === nodeId || x.to === nodeId) : [];
-  const relList = (groups: Record<string, RelRef[]> | undefined) =>
-    Object.entries(groups ?? {}).flatMap(([t, l]) => l.map((r) => (
-      <li key={t + r.id} className="go" onClick={() => onPick(r.id)}>
+  const relList = (dir: 'out' | 'in', groups: Record<string, RelRef[]> | undefined) =>
+    Object.entries(groups ?? {}).flatMap(([t, l]) => l.map((r, i) => (
+      <li key={`${dir}:${t}:${r.id}:${i}`} className="go" onClick={() => onPick(r.id)}>
         {r.sentence ?? `${t}: ${r.name}`}{r.technology && <span className="chip">{r.technology}</span>}
       </li>
     )));
+  const baseRels = card && !viewNode ? [...relList('out', card.outgoing), ...relList('in', card.incoming)] : [];
 
   return (
     <div className="dp">
@@ -39,7 +41,7 @@ export function Details({ card, viewNode, viewEdges, nodeId, onPick, onSelectInV
           {viewNode.description && <p>{viewNode.description}</p>}
           <dl>
             {viewNode.technology && <><dt>Tecnologia</dt><dd><span className="chip">{viewNode.technology}</span></dd></>}
-            {viewNode.layer && <><dt>Camada</dt><dd>{viewNode.layer}</dd></>}
+            {viewNode.layer && <><dt>Camada</dt><dd>{layerLabel(viewNode.layer)}</dd></>}
             {viewNode.role && <><dt>Papel</dt><dd>{ROLES[viewNode.role] ?? viewNode.role}</dd></>}
             {viewNode.distance != null && <><dt>Distância</dt><dd>{viewNode.distance}</dd></>}
           </dl>
@@ -63,7 +65,7 @@ export function Details({ card, viewNode, viewEdges, nodeId, onPick, onSelectInV
         <section className={viewNode ? 'sec' : undefined}>
           {viewNode ? <div className="tag">Na base</div> : (
             <>
-              <div className="kind">{e.kind ? `${e.kind} · ` : ''}{e.type}</div>
+              <div className="kind">{e.c4Label ? `${e.c4Label} · ` : ''}ArchiMate {e.typeLabel ?? e.type}</div>
               {e.description && <p>{e.description}</p>}
               {e.technology && <p><span className="chip">{e.technology}</span></p>}
             </>
@@ -74,9 +76,7 @@ export function Details({ card, viewNode, viewEdges, nodeId, onPick, onSelectInV
             <dt>Id</dt><dd><code>{e.id}</code></dd>
             {e.status && <><dt>Status</dt><dd>{e.status}</dd></>}
           </dl>
-          {!viewNode && (relList(card.outgoing).length + relList(card.incoming).length > 0) && (
-            <><h3>Relações</h3><ul>{relList(card.outgoing)}{relList(card.incoming)}</ul></>
-          )}
+          {baseRels.length > 0 && <><h3>Relações</h3><ul>{baseRels}</ul></>}
           {card.children.length > 0 && (
             <><h3>Filhos</h3><ul>{card.children.map((c) => <li key={c.id} className="go" onClick={() => onPick(c.id)}>{c.name}</li>)}</ul></>
           )}

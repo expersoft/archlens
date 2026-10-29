@@ -13,9 +13,11 @@ export interface BaseInfo { id: string; name: string; ok: boolean; error?: strin
 export interface ViewEntry { key: string; title: string; spec: ViewSpec; saved: boolean }
 export interface ElementEntry {
   id: string; name: string; type: string; layer: string; kind?: string | null; parent?: string | null; group?: string | null;
+  /** Nome ArchiMate do tipo e nome C4 do tipo (null sem tipo C4), já prontos para mostrar. */
+  typeLabel?: string; c4Label?: string | null;
 }
 export interface Catalog { id: string; name: string; views: ViewEntry[]; elements: ElementEntry[] }
-export interface FindHit { id: string; name: string; type: string; kind?: string | null; score: number }
+export interface FindHit { id: string; name: string; type: string; kind?: string | null; typeLabel?: string; c4Label?: string | null; score: number }
 export type ViewSpec = { level?: string; [k: string]: unknown };
 export interface ViewResult {
   html: string;
@@ -41,7 +43,7 @@ export interface ViewData { nodes: Record<string, ViewNode>; edges: ViewEdge[] }
 export interface Ref { id: string; name: string; type?: string }
 export interface RelRef extends Ref { label?: string | null; technology?: string | null; sentence?: string }
 export interface Card {
-  element: { id: string; name: string; type: string; kind?: string | null; status?: string; technology?: string | null; description?: string | null; aliases?: string[] };
+  element: { id: string; name: string; type: string; kind?: string | null; typeLabel?: string; c4Label?: string | null; status?: string; technology?: string | null; description?: string | null; aliases?: string[] };
   parent: Ref | null;
   children: Ref[];
   outgoing: Record<string, RelRef[]>;

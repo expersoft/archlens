@@ -106,4 +106,16 @@ test('GUI ponta a ponta', async (t) => {
   await t.test('7. não existe .drawer no iframe', async () => {
     assert.equal(await frame().locator('.drawer').count(), 0);
   });
+
+  await t.test('8. Fluxo ligado volta a desligado ao navegar pelo menu', async () => {
+    const fluxo = page.getByRole('toolbar', { name: 'Ferramentas do diagrama' }).getByRole('button', { name: 'Fluxo' });
+    await fluxo.click();
+    await page.waitForFunction(() => [...document.querySelectorAll('.toolbar button')].find((b) => b.textContent === 'Fluxo')?.getAttribute('aria-pressed') === 'true');
+    const antes = await trail();
+    await frame().locator('[data-node="tele.api"]').click({ button: 'right' });
+    await page.locator('.menu .mi:not(.off)').first().click();
+    await page.waitForFunction((x) => document.querySelector('nav[aria-label="Trilha"]')?.textContent !== x, antes);
+    await frame().locator('.node').first().waitFor();
+    assert.equal(await fluxo.getAttribute('aria-pressed'), 'false');
+  });
 });

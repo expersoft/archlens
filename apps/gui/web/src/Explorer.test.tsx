@@ -8,9 +8,9 @@ const catalog: Catalog = {
   id: 'b', name: 'B',
   views: [{ key: 's', title: 'Paisagem', spec: { level: 'landscape' }, saved: true }, { key: 'g', title: 'Sugerida', spec: { level: 'context' }, saved: false }],
   elements: [
-    { id: 'a', name: 'Sistema A', type: 'application-component', layer: 'application', kind: 'softwareSystem' },
+    { id: 'a', name: 'Sistema A', type: 'application-component', layer: 'application', kind: 'softwareSystem', typeLabel: 'Application Component', c4Label: 'Software System' },
     { id: 'a.x', name: 'Container X', type: 'application-component', layer: 'application', parent: 'a' },
-    { id: 'n', name: 'Servidor', type: 'node', layer: 'technology' },
+    { id: 'n', name: 'Servidor', type: 'node', layer: 'technology', typeLabel: 'Node', c4Label: null },
   ],
 };
 
@@ -35,5 +35,11 @@ describe('Explorer', () => {
     expect(screen.queryByText('Sistema A')).toBeNull();
     await userEvent.click(screen.getByText('Servidor'));
     expect(onPick).toHaveBeenCalledWith('n');
+  });
+  it('a dica de tipo mostra o rótulo C4 ou o ArchiMate, não o identificador', () => {
+    render(<Explorer catalog={catalog} selected={null} onOpenView={() => {}} onPick={() => {}} />);
+    expect(screen.getByText('Software System')).toBeTruthy();
+    expect(screen.getByText('Node')).toBeTruthy();
+    expect(screen.queryByText('softwareSystem')).toBeNull();
   });
 });

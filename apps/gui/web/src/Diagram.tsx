@@ -6,11 +6,14 @@ import { isGuiShortcut } from './shortcuts';
 
 export interface DiagramProps {
   view: ViewResult;
+  /** Uma visão nova está sendo carregada: escurece o diagrama e marca aria-busy. */
+  busy?: boolean;
   theme: Theme;
   onEvent: (e: BridgeEvent) => void;
 }
 
 type Flags = { flowing: boolean; labels: boolean; legend: boolean; matrix: boolean };
+const OFF: Flags = { flowing: false, labels: false, legend: false, matrix: false };
 
 const BUTTONS: { act: Act; label: string; flag?: keyof Flags }[] = [
   { act: 'play', label: 'Animar' },
@@ -24,10 +27,12 @@ const BUTTONS: { act: Act; label: string; flag?: keyof Flags }[] = [
   { act: 'present', label: 'Apresentar' },
 ];
 
-export const Diagram = forwardRef<HTMLIFrameElement, DiagramProps>(function Diagram({ view, theme, onEvent }, ref) {
+export const Diagram = forwardRef<HTMLIFrameElement, DiagramProps>(function Diagram({ view, theme, onEvent, busy = false }, ref) {
   const frame = useRef<HTMLIFrameElement>(null);
   useImperativeHandle(ref, () => frame.current as HTMLIFrameElement);
-  const [flags, setFlags] = useState<Flags>({ flowing: false, labels: false, legend: false, matrix: false });
+  const [flags, setFlags] = useState<Flags>(OFF);
+  // Cada visão (e cada carga do iframe) começa com tudo desligado; o iframe reporta o estado real por `state`.
+  useEffect(() => { setFlags(OFF); }, [view]);
   const themeRef = useRef(theme);
   themeRef.current = theme;
   const onEventRef = useRef(onEvent);
@@ -44,7 +49,7 @@ export const Diagram = forwardRef<HTMLIFrameElement, DiagramProps>(function Diag
       const e = parseMessage(ev, frame.current);
       if (!e) return;
       if (e.type === 'state') setFlags({ flowing: e.flowing, labels: e.labels, legend: e.legend, matrix: e.matrix });
-      if (e.type === 'ready') send(frame.current, { type: 'theme', theme: themeRef.current });
+      if (e.type === 'ready') { setFlags(OFF); send(frame.current, { type: 'theme', theme: themeRef.current }); }
       onEventRef.current(e);
     };
     window.addEventListener('message', onMsg);
@@ -84,7 +89,7 @@ export const Diagram = forwardRef<HTMLIFrameElement, DiagramProps>(function Diag
   useEffect(() => () => cleanup.current(), []);
 
   return (
-    <div className="diagram">
+    <div className="diagram" aria-busy={busy || undefined}>
       <div className="toolbar" role="toolbar" aria-label="Ferramentas do diagrama">
         {BUTTONS.map((b) => (
           <button
@@ -103,6 +108,9 @@ export const Diagram = forwardRef<HTMLIFrameElement, DiagramProps>(function Diag
           {view.alerts.map((a, i) => <div key={i}>{a}</div>)}
         </div>
       )}
+      {busy && <div className="busy" aria-hidden="true" />}
+      {/* allow-same-origin só existe para o iframe ler o mesmo localStorage `archlens-theme` do host;
+          com allow-scripts junto ele NÃO isola nada (o srcdoc é da base, conteúdo confiável). */}
       <iframe ref={frame} title="Diagrama" srcDoc={view.html} sandbox="allow-scripts allow-same-origin allow-downloads allow-modals" allow="fullscreen" onLoad={onLoad} />
     </div>
   );

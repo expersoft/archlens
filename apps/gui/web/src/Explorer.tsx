@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { Catalog, ElementEntry, ViewSpec } from './api';
+import { LAYERS, typeHint } from './labels';
 
 export interface ExplorerProps {
   catalog: Catalog;
@@ -7,11 +8,6 @@ export interface ExplorerProps {
   onOpenView: (spec: ViewSpec, title: string) => void;
   onPick: (id: string) => void;
 }
-
-const LAYERS: [string, string][] = [
-  ['business', 'Negócio'], ['application', 'Aplicação'], ['technology', 'Tecnologia'], ['strategy', 'Estratégia'],
-  ['motivation', 'Motivação'], ['implementation', 'Implementação'], ['physical', 'Física'], ['other', 'Outros'],
-];
 
 export function Explorer({ catalog, selected, onOpenView, onPick }: ExplorerProps) {
   const [filter, setFilter] = useState('');
@@ -26,7 +22,7 @@ export function Explorer({ catalog, selected, onOpenView, onPick }: ExplorerProp
       <span className="tg" onClick={(ev) => { if (!toggle) return; ev.stopPropagation(); setOpen((o) => ({ ...o, [e.id]: !o[e.id] })); }}>
         {toggle && kids[e.id] ? (open[e.id] ? '▾' : '▸') : ''}
       </span>
-      {e.name}<span className="t">{e.kind ?? e.type}</span>
+      {e.name}<span className="t">{typeHint(e)}</span>
     </div>
   );
   const node = (e: ElementEntry): JSX.Element => (

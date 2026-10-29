@@ -1,5 +1,5 @@
 import { expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Diagram } from './Diagram';
 import type { ViewResult } from './api';
@@ -34,4 +34,22 @@ it('reencaminha atalhos da GUI do iframe para o window do host', () => {
   expect(ev.defaultPrevented).toBe(true);
   expect(got).toHaveLength(1);
   expect(got[0]).toMatchObject({ code: 'KeyB', ctrlKey: true, altKey: true });
+});
+
+it('os botões de alternância voltam a desligado a cada nova visão (ready)', () => {
+  const { container, rerender } = render(<Diagram view={view} theme="light" onEvent={() => {}} />);
+  const frame = container.querySelector('iframe')!;
+  const post = (data: Record<string, unknown>) => act(() => {
+    window.dispatchEvent(new MessageEvent('message', { data: { source: 'archlens', ...data }, source: frame.contentWindow }));
+  });
+  post({ type: 'state', flowing: true, labels: true, legend: false, matrix: false });
+  const fluxo = () => screen.getByRole('button', { name: 'Fluxo' }).getAttribute('aria-pressed');
+  expect(fluxo()).toBe('true');
+  rerender(<Diagram view={{ ...view, html: '<p>y</p>' } as ViewResult} theme="light" onEvent={() => {}} />);
+  expect(fluxo()).toBe('false');
+  post({ type: 'state', flowing: true, labels: false, legend: false, matrix: false });
+  expect(fluxo()).toBe('true');
+  post({ type: 'ready' });
+  expect(fluxo()).toBe('false');
+  expect(screen.getByRole('button', { name: 'Rótulos' }).getAttribute('aria-pressed')).toBe('false');
 });

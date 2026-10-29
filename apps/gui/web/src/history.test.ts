@@ -31,4 +31,12 @@ describe('history reducer', () => {
     expect(s.error).toBe('x');
     expect(reducer(s, { type: 'request', ticket: 3 }).error).toBeUndefined();
   });
+  it('ir a um passo descarta a carga pendente: a resposta tardia não tira o usuário dali', () => {
+    const a = run({ type: 'request', ticket: 1 }, { type: 'loaded', ticket: 1, step: step('a') },
+      { type: 'request', ticket: 2 }, { type: 'loaded', ticket: 2, step: step('b') }, { type: 'request', ticket: 3 });
+    const s = reducer(reducer(a, { type: 'go', index: 0 }), { type: 'loaded', ticket: 3, step: step('c') });
+    expect(s.pending).toBeNull();
+    expect(s.steps.map((x) => x.label)).toEqual(['a', 'b']);
+    expect(s.cur).toBe(0);
+  });
 });

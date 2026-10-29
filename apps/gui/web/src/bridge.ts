@@ -11,7 +11,8 @@ export type Act = 'play' | 'flow' | 'labels' | 'legend' | 'matrix' | 'fit' | 'sv
 export type HostMessage =
   | { type: 'act'; act: Act }
   | { type: 'theme'; theme: 'light' | 'dark' }
-  | { type: 'select'; id: string | null };
+  /** `focus`: além de destacar, centra o nó (escolha no Explorador ou na busca). */
+  | { type: 'select'; id: string | null; focus?: boolean };
 
 /** Aceita só mensagens `source: 'archlens'` vindas do iframe atual. */
 export function parseMessage(ev: MessageEvent, frame: HTMLIFrameElement | null | undefined): BridgeEvent | null {

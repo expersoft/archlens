@@ -127,7 +127,7 @@ describe('App', () => {
     getElement.mockResolvedValue({ card: null, actions: [{ label: 'Contexto (C4)', spec: { k: 'ctx' } }] });
     await userEvent.click(screen.getByRole('button', { name: 'Explorador' }));
     await userEvent.click(await screen.findByText('Elem A'));
-    expect(send).toHaveBeenCalledWith(expect.anything(), { type: 'select', id: 'A' });
+    expect(send).toHaveBeenCalledWith(expect.anything(), { type: 'select', id: 'A', focus: true });
     expect(trail()).toBe('Inicial');
   });
 
@@ -175,5 +175,70 @@ describe('App', () => {
     expect(trail()).toBe('Nova');
     expect((screen.getByLabelText('Base') as HTMLSelectElement).value).toBe('c');
     expect(getView).not.toHaveBeenCalledWith('b', expect.anything());
+  });
+  it('(k) carga em andamento: "Carregando…" na barra e aria-busy no diagrama, some ao chegar ou falhar', async () => {
+    const { post } = await boot();
+    const status = () => document.querySelector('.status')!.textContent;
+    const busy = () => document.querySelector('.diagram')!.getAttribute('aria-busy');
+    expect(busy()).not.toBe('true');
+    const v = deferred<api.ViewResult>();
+    getView.mockReturnValueOnce(v.promise);
+    getElement.mockResolvedValue({ card: null, actions: [{ label: 'Ver', spec: { k: 'lenta' } }] });
+    post({ type: 'context', id: 'A', x: 5, y: 5 });
+    await userEvent.click(await screen.findByText('Ver'));
+    await waitFor(() => expect(status()).toBe('Carregando…'));
+    expect(busy()).toBe('true');
+    await act(async () => { v.resolve(mkView('lenta')); });
+    await waitFor(() => expect(trail()).toContain('lenta'));
+    expect(status()).not.toBe('Carregando…');
+    expect(busy()).not.toBe('true');
+    const w = deferred<api.ViewResult>();
+    getView.mockReturnValueOnce(w.promise);
+    post({ type: 'context', id: 'A', x: 5, y: 5 });
+    await userEvent.click(await screen.findByText('Ver'));
+    await waitFor(() => expect(busy()).toBe('true'));
+    await act(async () => { w.reject(new Error('quebrou')); });
+    await waitFor(() => expect(status()).toBe('quebrou'));
+    expect(busy()).not.toBe('true');
+  });
+
+  it('(l) duplo clique numa folha (sem ação primária) não derruba a carga em andamento', async () => {
+    const { post } = await boot();
+    const v = deferred<api.ViewResult>();
+    getView.mockReturnValueOnce(v.promise);
+    getElement.mockResolvedValue({ card: null, actions: [{ label: 'Ver', spec: { k: 'menu' } }] });
+    post({ type: 'context', id: 'A', x: 5, y: 5 });
+    await userEvent.click(await screen.findByText('Ver'));
+    post({ type: 'expand', id: 'C' });
+    await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+    await act(async () => { v.resolve(mkView('menu')); });
+    await waitFor(() => expect(trail()).toBe('Inicial › menu'));
+  });
+
+  it('(m) resultado tardio de um duplo clique superado não abre nada', async () => {
+    const { post } = await boot();
+    const ea = deferred<api.ElementDetail>();
+    getElement.mockImplementation((_b, id) => (id === 'A' ? ea.promise : Promise.resolve({ card: null, actions: [{ label: 'Ver', spec: { k: 'menu' } }] })));
+    post({ type: 'expand', id: 'A' });
+    post({ type: 'context', id: 'B', x: 5, y: 5 });
+    await userEvent.click(await screen.findByText('Ver'));
+    await waitFor(() => expect(trail()).toBe('Inicial › menu'));
+    await act(async () => { ea.resolve(primary('va')); });
+    expect(trail()).toBe('Inicial › menu');
+  });
+
+  it('(n) uma nova busca limpa o aviso "nada encontrado" mesmo quando acha um só', async () => {
+    vi.mocked(api.getView).mockResolvedValue({ ...mkView('Inicial', { level: 'landscape' }), data: { nodes: { A: { name: 'Elem A' } }, edges: [] } });
+    await boot();
+    getElement.mockResolvedValue({ card: null, actions: [] });
+    const box = screen.getByLabelText('Buscar');
+    find.mockResolvedValueOnce([]);
+    await userEvent.type(box, 'zzz{Enter}');
+    await waitFor(() => expect(document.querySelector('.status')!.textContent).toBe('nada encontrado para "zzz"'));
+    find.mockResolvedValueOnce([{ id: 'A', name: 'Elem A', type: 't', score: 1 }]);
+    await userEvent.clear(box);
+    await userEvent.type(box, 'elem a{Enter}');
+    await waitFor(() => expect(send).toHaveBeenCalledWith(expect.anything(), { type: 'select', id: 'A', focus: true }));
+    expect(document.querySelector('.status')!.textContent).not.toContain('nada encontrado');
   });
 });

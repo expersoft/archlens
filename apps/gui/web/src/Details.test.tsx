@@ -5,7 +5,7 @@ import { Details } from './Details';
 import type { Card, ViewEdge, ViewNode } from './api';
 
 const card: Card = {
-  element: { id: 'tele.api', name: 'API de Agendamento', type: 'application-component', kind: 'container', status: 'active', technology: 'REST', description: 'Agenda', aliases: ['api'] },
+  element: { id: 'tele.api', name: 'API de Agendamento', type: 'application-component', kind: 'container', typeLabel: 'Application Component', c4Label: 'Container', status: 'active', technology: 'REST', description: 'Agenda', aliases: ['api'] },
   parent: { id: 'tele', name: 'Plataforma de Teleconsulta', type: 'application-component' },
   children: [{ id: 'tele.api.x', name: 'Filho X', type: 'application-component' }],
   outgoing: {}, incoming: {}, properties: {},
@@ -46,5 +46,23 @@ describe('Details', () => {
     render(<Details {...props} card={card} viewNode={null} viewEdges={edges} />);
     expect(screen.queryByText('Nesta visão')).toBeNull();
     expect(screen.getByText('API de Agendamento')).toBeTruthy();
+  });
+  it('Camada em pt-BR e a linha de tipo da base com rótulos, não identificadores', () => {
+    const { unmount } = render(<Details {...props} card={card} viewNode={node} viewEdges={edges} />);
+    expect(screen.getByText('Aplicação')).toBeTruthy();
+    expect(screen.queryByText('application')).toBeNull();
+    unmount();
+    render(<Details {...props} card={card} viewNode={null} viewEdges={edges} />);
+    expect(screen.getByText('Container · ArchiMate Application Component')).toBeTruthy();
+    expect(screen.queryByText(/application-component/)).toBeNull();
+  });
+
+  it('relações de saída e de entrada iguais não repetem a chave', () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const r = { id: 'tele.app', name: 'App', sentence: 'mesma' };
+    render(<Details {...props} card={{ ...card, outgoing: { serving: [r] }, incoming: { serving: [r] } }} viewNode={null} viewEdges={[]} />);
+    expect(screen.getAllByText('mesma')).toHaveLength(2);
+    expect(err.mock.calls.some((c) => String(c[0]).includes('same key'))).toBe(false);
+    err.mockRestore();
   });
 });

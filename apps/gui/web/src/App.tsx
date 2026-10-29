@@ -10,6 +10,7 @@ import { Details } from './Details';
 import { initialHistory, reducer, type Step } from './history';
 import { useTheme } from './theme';
 import { send, type BridgeEvent } from './bridge';
+import { typeHint } from './labels';
 
 const totalMs = (v: ViewResult) => v.ms.resolve + v.ms.layout + v.ms.render;
 type Menu = { id: string; at: { x: number; y: number }; title: string; items: Action[] };
@@ -145,6 +146,7 @@ export function App() {
 
   const inView = (id: string) => !!(stateRef.current.step?.view.data as ViewData | null)?.nodes?.[id];
   const selectInView = (id: string) => { setSelected(id); send(frame.current, { type: 'select', id }); };
+  const expandTicket = useRef(0);
 
   /** Escolha no Explorador/busca: seleciona se está na visão; senão abre a primeira ação de contexto. */
   const pickElement = (id: string) => {
@@ -152,7 +154,7 @@ export function App() {
     if (!b) return;
     setHits([]);
     setSelected(id);
-    if (inView(id)) { send(frame.current, { type: 'select', id }); return; }
+    if (inView(id)) { send(frame.current, { type: 'select', id, focus: true }); return; }
     const t = reserve();
     getElement(b, id).then((d) => {
       if (t !== ticket.current) return;
@@ -166,6 +168,7 @@ export function App() {
   const onSearch = (q: string) => {
     const b = stateRef.current.base;
     if (!b) return;
+    setNotice(null);
     find(b, q).then((r) => {
       if (b !== stateRef.current.base) return;
       if (r.length === 0) { setHits([]); setNotice(`nada encontrado para "${q}"`); }
@@ -202,12 +205,15 @@ export function App() {
     } else if (e.type === 'expand' && b) {
       menuTicket.current++;
       setMenu(null);
-      const t = reserve();
+      // Só reserva ticket se houver ação primária: numa folha o duplo clique não derruba a carga em andamento.
+      const xt = ++expandTicket.current;
+      const live = () => xt === expandTicket.current && b === stateRef.current.base;
+      const t0 = ticket.current;
       getElement(b, e.id).then((d) => {
-        if (t !== ticket.current) return;
+        if (!live() || ticket.current !== t0) return; // superado por outro duplo clique ou por outra navegação
         const p = d.actions.find((a) => a.primary && a.spec);
-        if (p) void run(t, b, p.spec!, 'Clique duplo', `${p.label}: ${nameOf(e.id)}`, p.matrix);
-      }).catch((err) => { if (t === ticket.current) fail(t, err); });
+        if (p) void run(reserve(), b, p.spec!, 'Clique duplo', `${p.label}: ${nameOf(e.id)}`, p.matrix);
+      }).catch((err) => { if (live() && ticket.current === t0) setNotice(err instanceof Error ? err.message : String(err)); });
     }
   };
 
@@ -223,7 +229,8 @@ export function App() {
   const viewData = (view?.data ?? null) as ViewData | null;
   const closeMenu = useCallback(() => setMenu(null), []);
   const trail = useMemo(() => hist.steps.slice(0, hist.cur + 1), [hist.steps, hist.cur]);
-  const shownStatus = hist.error ?? notice ?? (view && catalog ? `${catalog.name} · ${view.title}` : status);
+  const loading = hist.pending != null;
+  const shownStatus = loading ? 'Carregando…' : hist.error ?? notice ?? (view && catalog ? `${catalog.name} · ${view.title}` : status);
 
   return (
     <Shell
@@ -245,7 +252,7 @@ export function App() {
             {hits.length > 0 && (
               <ul className="hits" aria-label="Resultados da busca">
                 {hits.map((h) => (
-                  <li key={h.id}><button type="button" onClick={() => pickElement(h.id)}>{h.name}<span className="t">{h.kind ?? h.type}</span></button></li>
+                  <li key={h.id}><button type="button" onClick={() => pickElement(h.id)}>{h.name}<span className="t">{typeHint(h)}</span></button></li>
                 ))}
               </ul>
             )}
@@ -288,7 +295,7 @@ export function App() {
               </span>
             ))}
           </nav>
-          <Diagram ref={frame} view={view} theme={theme} onEvent={onEvent} />
+          <Diagram ref={frame} view={view} theme={theme} onEvent={onEvent} busy={loading} />
         </>
       ) : <div className="empty">{shownStatus}</div>}
       {menu && <ContextMenu at={menu.at} title={menu.title} items={menu.items} onPick={(a) => openAction(a, menu.id, 'Menu')} onClose={closeMenu} />}

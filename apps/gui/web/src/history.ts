@@ -33,7 +33,8 @@ export function reducer(state: HistoryState, a: HistoryAction): HistoryState {
       return { ...state, pending: null, error: a.error };
     case 'go':
       if (a.index < 0 || a.index >= state.steps.length) return state;
-      return { ...state, cur: a.index };
+      // a escolha do usuário vence: uma resposta tardia não o tira deste passo
+      return { ...state, cur: a.index, pending: null };
     case 'reset':
       return initialHistory;
   }
