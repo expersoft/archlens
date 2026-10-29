@@ -16,6 +16,7 @@
     "test:e2e": "npm run build && node --test e2e/*.test.mjs"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "0.133.0",
     "react": "18.3.1",
     "react-dom": "18.3.1"
   },
