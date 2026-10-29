@@ -14,6 +14,9 @@ export interface ShellProps {
   /** Se informado, o tema é controlado por quem chama (App); senão o Shell guarda o seu. */
   theme?: Theme;
   onThemeChange?: (t: Theme) => void;
+  /** Notação da visão atual; o seletor ArchiMate | C4 só age se onNotation for informado. */
+  notation?: 'archimate' | 'c4';
+  onNotation?: (n: 'archimate' | 'c4') => void;
 }
 
 const narrow = () => typeof window !== 'undefined' && window.innerWidth < 1100;
@@ -58,8 +61,8 @@ export function Shell(p: ShellProps) {
           <select aria-label="Base" disabled><option>Base</option></select>
           <input type="search" placeholder="Buscar elemento…" aria-label="Buscar" disabled />
           <div className="seg" role="group" aria-label="Notação">
-            <button className="on" disabled>ArchiMate</button>
-            <button disabled>C4</button>
+            <button className={p.notation !== 'c4' ? 'on' : ''} disabled={!p.onNotation} onClick={() => p.notation === 'c4' && p.onNotation?.('archimate')}>ArchiMate</button>
+            <button className={p.notation === 'c4' ? 'on' : ''} disabled={!p.onNotation} onClick={() => p.notation !== 'c4' && p.onNotation?.('c4')}>C4</button>
           </div>
           <span className="status">{p.status}</span>
           <button className="icon" aria-label="Alternar tema" title="Alternar tema" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>

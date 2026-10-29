@@ -28,7 +28,8 @@ export interface ViewResult {
   title: string;
   cached: boolean;
 }
-export interface ElementDetail { card: unknown; actions: unknown }
+export interface Action { label: string; spec?: ViewSpec; sub?: Action[]; primary?: boolean; matrix?: boolean }
+export interface ElementDetail { card: unknown; actions: Action[] }
 
 async function call<T>(path: string, body?: unknown): Promise<T> {
   const res = await fetch(path, body === undefined ? undefined : {
