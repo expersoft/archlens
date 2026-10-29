@@ -1032,3 +1032,33 @@ test('serve: base única 1.x sai com 1 e a mensagem do conector', () => {
 test('serve: base única inexistente sai com 1 e a mensagem do conector', () => {
   serveFails('nao-existe', mkdtempSync(join(tmpdir(), 'archlens-')), /E_STORE_NOT_FOUND: .*base não encontrada/);
 });
+
+test('serve --llm: sem chave (ambiente vazio e sem .env) sai com 1 citando ANTHROPIC_API_KEY e .env', () => {
+  const cwd = mkdtempSync(join(tmpdir(), 'archlens-'));
+  const r = spawnSync(process.execPath, [CLI, 'serve', join(ROOT, 'examples/loja-online/architecture'), '--port', '0', '--llm', 'anthropic'],
+    { encoding: 'utf8', cwd, env: { ...serveEnv(fakeDist()), ANTHROPIC_API_KEY: '' }, timeout: 20000 });
+  assert.equal(r.status, 1, r.stdout + r.stderr);
+  assert.match(r.stderr, /ANTHROPIC_API_KEY/);
+  assert.match(r.stderr, /\.env/);
+  assert.doesNotMatch(r.stdout, /archlens GUI/);
+});
+
+test('serve --llm --env-file: sobe, cita o arquivo e nunca a chave', { timeout: 30000 }, async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'archlens-'));
+  const envFile = join(dir, 'chave.env');
+  writeFileSync(envFile, 'ANTHROPIC_API_KEY=sk-x\n');
+  const child = spawn(process.execPath, [CLI, 'serve', join(ROOT, 'examples/loja-online/architecture'), '--port', '0', '--llm', 'anthropic', '--env-file', envFile],
+    { cwd: dir, env: { ...serveEnv(fakeDist()), ANTHROPIC_API_KEY: '' }, stdio: ['ignore', 'pipe', 'pipe'] });
+  let out = '';
+  child.stderr.on('data', d => { out += d; });
+  try {
+    const url = await new Promise((res, rej) => {
+      const t = setTimeout(() => rej(new Error('sem URL: ' + out)), 20000);
+      child.stdout.on('data', d => { out += d; const m = out.match(/^archlens GUI: (http:\/\/\S+)$/m); if (m) { clearTimeout(t); res(m[1]); } });
+      child.on('exit', () => { clearTimeout(t); rej(new Error('saiu: ' + out)); });
+    });
+    assert.equal((await (await fetch(url + '/api/info')).json()).ask.enabled, true);
+  } finally { child.kill('SIGTERM'); }
+  assert.ok(out.includes(`busca em texto: anthropic claude-haiku-5-5 (chave de ANTHROPIC_API_KEY, ${envFile})`), out);
+  assert.ok(!out.includes('sk-x'));
+});

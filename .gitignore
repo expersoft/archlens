@@ -6,3 +6,4 @@ node_modules/
 .superpowers/
 .archlens/
 apps/gui/dist/
+.env

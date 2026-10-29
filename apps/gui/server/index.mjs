@@ -7,8 +7,9 @@ import { existsSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { loadConfig } from './config.mjs';
 import { startServer } from './app.mjs';
+import { envFileWarning } from './envfile.mjs';
 
-export { startServer, loadConfig };
+export { startServer, loadConfig, envFileWarning };
 /** Where the built front lives (apps/gui/dist). */
 export const DIST_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '../dist');
 
