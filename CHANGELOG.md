@@ -19,7 +19,8 @@ versões seguem [SemVer](https://semver.org/lang/pt-BR/).
   configuráveis); chave só por ambiente ou `.env`; tetos de rodadas e de tempo; respostas em visão, cartão de elemento,
   tabela ou esclarecimento; conversa com cancelamento da pergunta anterior; telemetria sem o texto da pergunta por
   padrão.
-- **`archlens serve --llm anthropic|openai [--model M] [--endpoint URL] [--env-file PATH]`** liga a busca em texto.
+- **`archlens serve --llm anthropic|openai [--model M] [--endpoint URL] [--env-file PATH]`** liga a busca em texto. Sem a chave, `--llm` impede a subida; o `llm` do `archlens-gui.json` só
+  desliga a busca, com aviso no terminal e na caixa de pergunta.
 - **Avaliação da busca** (`npm --prefix apps/gui run eval`): roda as perguntas do archlens-ask contra o gabarito, com
   `--dry` para conferir o encanamento sem chave.
 - **`nesting.except` na view spec:** aninha ou desaninha elementos um a um, no sentido contrário ao do `nesting` da

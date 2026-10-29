@@ -48,6 +48,30 @@ test('ask disabled is 503', () => withServer({}, async url => {
   assert.equal((await (await fetch(`${url}/api/info`)).json()).ask.enabled, false);
 }));
 
+test('llm from the config file without a key starts with the search off and says why', async () => {
+  const srv = await startServer({ config: { ...config(), llm: { provider: 'anthropic' }, llmSource: 'file', env: {} } });
+  try {
+    assert.match(srv.askOff, /ANTHROPIC_API_KEY/);
+    const info = (await (await fetch(`${srv.url}/api/info`)).json()).ask;
+    assert.equal(info.enabled, false);
+    assert.match(info.reason, /defina ANTHROPIC_API_KEY \(ambiente ou \.env\)/);
+    const res = await ask(srv.url, Q);
+    assert.equal(res.status, 503);
+    assert.match((await res.json()).error, /ANTHROPIC_API_KEY/);
+    assert.equal((await fetch(`${srv.url}/api/bases/loja/catalog`)).status, 200);
+  } finally { await srv.close(); }
+});
+
+test('llm from the command line without a key still refuses to start', async () => {
+  await assert.rejects(startServer({ config: { ...config(), llm: { provider: 'anthropic' }, llmSource: 'cli', env: {} } }),
+    e => e.code === 'E_GUI_CONFIG' && /ANTHROPIC_API_KEY/.test(e.message));
+});
+
+test('a malformed llm in the config file is still fatal', async () => {
+  await assert.rejects(startServer({ config: { ...config(), llm: { provider: 'openai' }, llmSource: 'file', env: { OPENAI_API_KEY: 'k' } } }),
+    e => e.code === 'E_GUI_CONFIG' && /model/.test(e.message));
+});
+
 test('info describes the enabled search', () => withServer({ provider: scripted([]) }, async url => {
   assert.deepEqual((await (await fetch(`${url}/api/info`)).json()).ask, { enabled: true, provider: 'scripted', model: 'scripted', mode: 'tools' });
 }));

@@ -372,6 +372,7 @@ export function App() {
               turns={turns}
               enabled={info?.ask.enabled === true}
               model={info?.ask.enabled ? info.ask.model : undefined}
+              offReason={info?.ask.enabled === false ? info.ask.reason : undefined}
               onAsk={(q) => askQuestion(q)}
               onChoose={(turn, id) => askQuestion(turn.question, id)}
               onOpen={openTurn}

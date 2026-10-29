@@ -83,7 +83,7 @@ export const getElement = (base: string, id: string) => call<ElementDetail>(`${b
 export const getActions = (base: string, id: string) => call<{ actions: Action[] }>(`${b(base)}/elements/${encodeURIComponent(id)}/actions`);
 export const flip = (base: string, spec: ViewSpec) => call<{ spec: ViewSpec }>(`${b(base)}/flip`, { spec });
 
-export interface Info { ask: { enabled: false } | { enabled: true; provider: string; model: string; mode: 'tools' | 'json' } }
+export interface Info { ask: { enabled: false; reason?: string } | { enabled: true; provider: string; model: string; mode: 'tools' | 'json' } }
 export const getInfo = () => call<Info>('/api/info');
 
 export interface AskOption { id: string; name: string; typeLabel?: string; c4Label?: string | null; type?: string }

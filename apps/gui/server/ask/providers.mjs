@@ -29,7 +29,8 @@ function resolveConfig(cfg, env) {
   };
   if (!c.model) throw configError('defina llm.model para o provedor openai');
   const need = name => {
-    if (!env[name]) throw configError(`defina ${name} (ambiente ou .env) para a busca em texto`);
+    // `missing` marks a credential gap (not a malformed config): a config file may then start with the search off.
+    if (!env[name]) throw Object.assign(configError(`defina ${name} (ambiente ou .env) para a busca em texto`), { missing: name });
     return env[name];
   };
   c.key = c.auth === 'none' ? null : need(cfg.apiKeyEnv ?? d.apiKeyEnv);

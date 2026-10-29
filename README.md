@@ -167,6 +167,11 @@ aparece em erro, log ou telemetria. O ambiente do processo vence o `.env`. O `.e
 `archlens-gui.json` (ou na pasta atual em `serve <base>`); `--env-file` (ou `envFile` no JSON) aponta outro. Se o
 arquivo não estiver no `.gitignore`, o `serve` avisa, porque a chave poderia ir para o repositório.
 
+**Sem a chave:** com `--llm` na linha de comando, o `serve` não sobe e diz qual variável falta. Com o `llm` vindo do
+`archlens-gui.json` (que o time pode versionar), a GUI sobe com a busca desligada: o terminal avisa e a caixa de
+pergunta diz qual variável definir; diagramas e navegação seguem normais. Um `llm` malformado no arquivo continua
+impedindo a subida.
+
 O bloco `llm` (e `telemetry`) do `archlens-gui.json`:
 
 ```json

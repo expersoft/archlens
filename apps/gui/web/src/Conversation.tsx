@@ -6,6 +6,8 @@ export interface ConversationProps {
   turns: Turn[];
   enabled: boolean;
   model?: string;
+  /** Why a configured search is off (e.g. the missing key variable). */
+  offReason?: string;
   onAsk: (q: string) => void;
   onChoose: (turn: Turn, id: string) => void;
   onOpen: (turn: Turn) => void;
@@ -98,7 +100,7 @@ function TurnView({ turn, onChoose, onOpen }: { turn: Turn; onChoose: Conversati
   );
 }
 
-export function Conversation({ turns, enabled, model, onAsk, onChoose, onOpen }: ConversationProps) {
+export function Conversation({ turns, enabled, model, offReason, onAsk, onChoose, onOpen }: ConversationProps) {
   const [text, setText] = useState('');
   return (
     <div className="conversation">
@@ -126,7 +128,9 @@ export function Conversation({ turns, enabled, model, onAsk, onChoose, onOpen }:
         />
         {enabled
           ? model && <span className="hint">via {model}</span>
-          : <span className="hint">Busca em texto desligada. Suba com archlens serve &lt;base&gt; --llm anthropic.</span>}
+          : <span className="hint">{offReason
+            ? `Busca em texto desligada: ${offReason}.`
+            : 'Busca em texto desligada. Suba com archlens serve <base> --llm anthropic.'}</span>}
       </div>
     </div>
   );

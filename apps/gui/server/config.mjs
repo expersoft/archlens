@@ -57,13 +57,13 @@ function checkTelemetry(t, dir) {
  * The LLM part: `llm` + the environment for the provider (process env over the .env file). Without `llm` nothing is
  * read: the text search is opt-in.
  */
-function llmPart(llm, envFile, dir) {
+function llmPart(llm, envFile, dir, source) {
   if (!llm) return {};
   const { env, file } = loadEnv({ envFile, dir });
-  return { llm: checkLlm(llm), env, envFile: file };
+  return { llm: checkLlm(llm), llmSource: source, env, envFile: file };
 }
 
-/** @returns {{ port: number, bases: { id: string, name?: string, path: string }[], llm?: object, env?: object, envFile?: string|null, telemetry?: object }} */
+/** @returns {{ port: number, bases: { id: string, name?: string, path: string }[], llm?: object, llmSource?: 'cli'|'file', env?: object, envFile?: string|null, telemetry?: object }} */
 export function loadConfig({ file, base, port, host, llm, envFile } = {}) {
   if (file) {
     const abs = resolve(file);
@@ -80,12 +80,12 @@ export function loadConfig({ file, base, port, host, llm, envFile } = {}) {
     const ef = envFile ? resolve(envFile) : cfg.envFile ? resolve(dir, cfg.envFile) : undefined;
     return {
       port: port ?? cfg.port ?? DEFAULT_PORT, ...(h ? { host: h } : {}), bases,
-      ...llmPart(llm ?? cfg.llm, ef, dir),
+      ...llmPart(llm ?? cfg.llm, ef, dir, llm ? 'cli' : 'file'),
       ...(cfg.telemetry !== undefined ? { telemetry: checkTelemetry(cfg.telemetry, dir) } : {}),
     };
   }
   const common = { port: port ?? DEFAULT_PORT, ...(host ? { host } : {}) };
-  const llmCfg = llmPart(llm, envFile ? resolve(envFile) : undefined, process.cwd());
+  const llmCfg = llmPart(llm, envFile ? resolve(envFile) : undefined, process.cwd(), 'cli');
   if (base) {
     const abs = resolve(base);
     return { ...common, bases: [{ id: basename(abs), path: abs }], ...llmCfg };

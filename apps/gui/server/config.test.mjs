@@ -39,6 +39,9 @@ test('llm dos argumentos vence o do arquivo; envFile relativo resolve pela pasta
   writeFileSync(join(dir, 'chave.env'), 'ANTHROPIC_API_KEY=k\n');
   const c = loadConfig({ file: f, llm: { provider: 'anthropic', model: 'do-arg' } });
   assert.equal(c.llm.model, 'do-arg');
+  assert.equal(c.llmSource, 'cli');
+  assert.equal(loadConfig({ file: f }).llmSource, 'file');
+  assert.equal(loadConfig({ base: 'x', llm: { provider: 'anthropic' } }).llmSource, 'cli');
   assert.equal(c.envFile, join(dir, 'chave.env'));
   assert.equal(c.env.ANTHROPIC_API_KEY, 'k');
   assert.throws(() => loadConfig({ file: write({ llm: { provider: 'anthropic' }, envFile: 'nao.env' }) }), e => e.code === 'E_GUI_CONFIG');

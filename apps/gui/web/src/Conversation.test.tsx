@@ -30,6 +30,12 @@ describe('Conversation', () => {
     expect((screen.getByLabelText('Pergunta') as HTMLTextAreaElement).disabled).toBe(true);
   });
 
+  it('desligada por falta de chave cita a variável', () => {
+    render(<Conversation {...props} enabled={false} offReason="defina ANTHROPIC_API_KEY (ambiente ou .env) para a busca em texto" />);
+    expect(screen.getByText('Busca em texto desligada: defina ANTHROPIC_API_KEY (ambiente ou .env) para a busca em texto.')).toBeTruthy();
+    expect((screen.getByLabelText('Pergunta') as HTMLTextAreaElement).disabled).toBe(true);
+  });
+
   it('turno clarify mostra um botão por opção e o clique escolhe', async () => {
     const onChoose = vi.fn();
     const turn: Turn = {

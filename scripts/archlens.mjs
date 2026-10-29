@@ -462,6 +462,7 @@ async function main() {
       let srv;
       try { srv = await gui.startServer({ config, staticDir: dist, registry }); } catch (e) { registry.close(); fail(e.message); }
       console.log(`archlens GUI: ${srv.url}`);
+      if (srv.askOff) console.warn(`aviso: busca em texto desligada: ${srv.askOff}`);
       if (srv.provider && config.llm) {
         const keyVar = config.llm.apiKeyEnv ?? (config.llm.provider === 'anthropic' ? 'ANTHROPIC_API_KEY' : 'OPENAI_API_KEY');
         const from = process.env[keyVar] ? 'ambiente' : config.envFile;

@@ -1043,6 +1043,28 @@ test('serve --llm: sem chave (ambiente vazio e sem .env) sai com 1 citando ANTHR
   assert.doesNotMatch(r.stdout, /archlens GUI/);
 });
 
+test('serve --config com llm e sem chave: sobe com a busca desligada e avisa a variável', { timeout: 30000 }, async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'archlens-'));
+  const cfg = join(dir, 'archlens-gui.json');
+  writeFileSync(cfg, JSON.stringify({ bases: [{ id: 'loja', path: join(ROOT, 'examples/loja-online/architecture') }], llm: { provider: 'anthropic' } }));
+  const child = spawn(process.execPath, [CLI, 'serve', '--config', cfg, '--port', '0'],
+    { cwd: dir, env: { ...serveEnv(fakeDist()), ANTHROPIC_API_KEY: '' }, stdio: ['ignore', 'pipe', 'pipe'] });
+  let out = '';
+  child.stderr.on('data', d => { out += d; });
+  try {
+    const url = await new Promise((res, rej) => {
+      const t = setTimeout(() => rej(new Error('sem URL: ' + out)), 20000);
+      child.stdout.on('data', d => { out += d; const m = out.match(/^archlens GUI: (http:\/\/\S+)$/m); if (m) { clearTimeout(t); res(m[1]); } });
+      child.on('exit', () => { clearTimeout(t); rej(new Error('saiu: ' + out)); });
+    });
+    const info = (await (await fetch(url + '/api/info')).json()).ask;
+    assert.equal(info.enabled, false);
+    assert.match(info.reason, /ANTHROPIC_API_KEY/);
+    await new Promise(r => setTimeout(r, 100));
+  } finally { child.kill('SIGTERM'); }
+  assert.match(out, /aviso: busca em texto desligada: defina ANTHROPIC_API_KEY/);
+});
+
 test('serve --llm --env-file: sobe, cita o arquivo e nunca a chave', { timeout: 30000 }, async () => {
   const dir = mkdtempSync(join(tmpdir(), 'archlens-'));
   const envFile = join(dir, 'chave.env');

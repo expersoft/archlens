@@ -103,7 +103,16 @@ async function serveStatic(res, staticDir, pathname) {
 
 export async function startServer({ config, staticDir, registry, provider } = {}) {
   // Throws E_GUI_CONFIG (no key) before anything listens; a test/e2e provider replaces the configured one.
-  provider ??= config?.llm ? createProvider(config.llm, { env: config.env ?? {} }) : null;
+  // A missing key for an `llm` from the config file only turns the search off (`askOff`): the diagrams stay usable.
+  let askOff = null;
+  if (!provider && config?.llm) {
+    try { provider = createProvider(config.llm, { env: config.env ?? {} }); } catch (e) {
+      if (!(e.missing && config.llmSource === 'file')) throw e;
+      provider = null;
+      askOff = e.message;
+    }
+  }
+  provider ??= null;
   const ownRegistry = !registry;
   registry ??= createBaseRegistry(config);
   const cache = createViewCache();
@@ -111,7 +120,7 @@ export async function startServer({ config, staticDir, registry, provider } = {}
 
   // The question as an NDJSON stream: agent events, then result (or error), then done. A closed connection aborts.
   async function ask(req, res, b) {
-    if (!provider) throw httpError(503, 'busca em texto desligada: suba com --llm anthropic', 'E_GUI_ASK_OFF');
+    if (!provider) throw httpError(503, `busca em texto desligada: ${askOff ?? 'suba com --llm anthropic'}`, 'E_GUI_ASK_OFF');
     const body = await readJson(req);
     const question = typeof body.question === 'string' ? body.question.trim() : '';
     if (!question) throw httpError(400, 'informe a pergunta em {question}');
@@ -164,7 +173,7 @@ export async function startServer({ config, staticDir, registry, provider } = {}
 
   const routes = [
     ['GET', /^\/api\/info$/, async () => ({
-      ask: provider ? { enabled: true, provider: provider.name, model: provider.model, mode: provider.tools ? 'tools' : 'json' } : { enabled: false },
+      ask: provider ? { enabled: true, provider: provider.name, model: provider.model, mode: provider.tools ? 'tools' : 'json' } : { enabled: false, ...(askOff ? { reason: askOff } : {}) },
     })],
     ['GET', /^\/api\/telemetry$/, async () => summarize(telemetry.recent())],
     ['POST', /^\/api\/bases\/([^/]+)\/ask$/, (req, [b], _url, res) => ask(req, res, b)],
@@ -236,6 +245,7 @@ export async function startServer({ config, staticDir, registry, provider } = {}
     address,
     telemetry,
     provider,
+    askOff,
     close() {
       return new Promise(done => {
         server.close(() => done());
