@@ -4,7 +4,7 @@ import { readFile, stat } from 'node:fs/promises';
 import { join, resolve, sep, extname } from 'node:path';
 import { query } from '../../../scripts/lib/api.mjs';
 import { createBaseRegistry } from './bases.mjs';
-import { catalog, findElements } from './catalog.mjs';
+import { catalog, findElements, labelsOf } from './catalog.mjs';
 import { renderSpec, createViewCache } from './views.mjs';
 import { actionsFor, flipSpec } from './navigation.mjs';
 
@@ -15,11 +15,35 @@ const TYPES = {
   '.png': 'image/png', '.ico': 'image/x-icon',
 };
 
+// Every response: no framing by another origin.
+const SAFE_HEADERS = { 'x-frame-options': 'SAMEORIGIN', 'content-security-policy': "frame-ancestors 'self'" };
+const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '[::1]']);
+
+/** Hostname part of a Host header, lowercased (keeps the brackets of an IPv6 literal). */
+function hostnameOf(header) {
+  const h = String(header ?? '').trim().toLowerCase();
+  if (h.startsWith('[')) { const end = h.indexOf(']'); return end < 0 ? h : h.slice(0, end + 1); }
+  const colon = h.indexOf(':');
+  return colon < 0 ? h : h.slice(0, colon);
+}
+
+/**
+ * DNS rebinding guard: a page on another name that resolves to this machine must not read the API.
+ * Bound to 0.0.0.0 (team mode, behind a proxy) any Host is accepted.
+ */
+function hostAllowed(header, configured) {
+  if (configured === '0.0.0.0') return true;
+  const h = hostnameOf(header);
+  if (LOCAL_HOSTS.has(h)) return true;
+  const c = String(configured ?? '').toLowerCase();
+  return !!c && (h === c || h === `[${c}]`);
+}
+
 const httpError = (status, message, code) => Object.assign(new Error(message), { status, ...(code ? { code } : {}) });
 
 function send(res, status, body, headers = {}) {
   const buf = Buffer.isBuffer(body) ? body : Buffer.from(JSON.stringify(body));
-  res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'content-length': buf.length, ...headers });
+  res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'content-length': buf.length, ...SAFE_HEADERS, ...headers });
   res.end(buf);
 }
 
@@ -75,7 +99,10 @@ export async function startServer({ config, staticDir, registry } = {}) {
     }],
     ['GET', /^\/api\/bases\/([^/]+)\/elements\/([^/]+)$/, async (_req, [b, id]) => {
       const ctx = registry.get(b);
-      return { card: query(ctx.store, { element: id, format: 'json' }), actions: actionsFor(ctx, id) };
+      const card = query(ctx.store, { element: id, format: 'json' });
+      const el = ctx.model.elements.get(id);
+      if (card?.element && el) Object.assign(card.element, labelsOf(ctx, el));
+      return { card, actions: actionsFor(ctx, id) };
     }],
     ['POST', /^\/api\/bases\/([^/]+)\/flip$/, async (req, [b]) => {
       const { spec } = await readJson(req);
@@ -84,8 +111,10 @@ export async function startServer({ config, staticDir, registry } = {}) {
     }],
   ];
 
+  const host = config?.host ?? '127.0.0.1';
   const handler = async (req, res) => {
     try {
+      if (!hostAllowed(req.headers.host, host)) throw httpError(403, `Host não permitido: ${req.headers.host ?? '(ausente)'}`);
       const url = new URL(req.url, 'http://localhost');
       const { pathname } = url;
       if (pathname === '/api' || pathname.startsWith('/api/')) {
@@ -109,7 +138,6 @@ export async function startServer({ config, staticDir, registry } = {}) {
     }
   };
 
-  const host = config?.host ?? '127.0.0.1';
   const server = createServer(handler);
   await new Promise((ok, fail) => { server.once('error', fail); server.listen(config?.port ?? 0, host, ok); });
   const { port, address } = server.address();

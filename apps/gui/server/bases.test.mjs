@@ -77,3 +77,18 @@ test('loadConfig: arquivo, base única e porta padrão', () => {
   assert.equal(b.bases[0].id, 'minha-base');
   assert.equal(loadConfig({ base: '/a/b' }).port, 5180);
 });
+
+test('loadConfig: valida id e path de cada base e recusa ids repetidos', () => {
+  const d = tmp();
+  const bad = (bases, re) => {
+    writeFileSync(join(d, 'gui.json'), JSON.stringify({ bases }));
+    assert.throws(() => loadConfig({ file: join(d, 'gui.json') }), e => e.code === 'E_GUI_CONFIG' && re.test(e.message));
+  };
+  bad([{ path: 'x' }], /base 1.*id/);
+  bad([{ id: '', path: 'x' }], /base 1.*id/);
+  bad([{ id: 'a', path: 'x' }, { id: 'b' }], /base 2 \("b"\).*path/);
+  bad([{ id: 'a', path: 7 }], /base 1 \("a"\).*path/);
+  bad([{ id: 'a', path: 'x' }, { id: 'a', path: 'y' }], /base 2 \("a"\).*repetido/);
+  bad(['oi'], /base 1/);
+  bad({}, /lista/);
+});

@@ -4,6 +4,7 @@ import { mkdtempSync, cpSync, writeFileSync, readFileSync, mkdirSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { request } from 'node:http';
 import { startServer } from './app.mjs';
 import { createBaseRegistry } from './bases.mjs';
 
@@ -143,3 +144,61 @@ test('importar index.mjs não inicia servidor e exporta a API', async () => {
   assert.equal(a, 'function'); assert.equal(b, 'function');
   assert.ok(dist.endsWith(join('apps', 'gui', 'dist')));
 });
+
+const rawGet = (url, host) => new Promise((ok, fail) => {
+  const u = new URL(url);
+  const req = request({ hostname: u.hostname, port: u.port, path: u.pathname, headers: { host } }, res => {
+    const chunks = [];
+    res.on('data', c => chunks.push(c));
+    res.on('end', () => ok({ status: res.statusCode, headers: res.headers, body: Buffer.concat(chunks).toString('utf8') }));
+  });
+  req.on('error', fail);
+  req.end();
+});
+
+test('Host: recusa nomes estranhos (DNS rebinding) e aceita localhost, 127.0.0.1 e [::1]', () => withServer(async url => {
+  const port = new URL(url).port;
+  const evil = await rawGet(`${url}/api/bases`, 'evil.example');
+  assert.equal(evil.status, 403);
+  assert.ok(JSON.parse(evil.body).error);
+  assert.equal((await rawGet(`${url}/api/bases`, `EVIL.example:${port}`)).status, 403);
+  for (const h of [`localhost:${port}`, `LocalHost:${port}`, `127.0.0.1:${port}`, `[::1]:${port}`, 'localhost']) {
+    assert.equal((await rawGet(`${url}/api/bases`, h)).status, 200, h);
+  }
+}));
+
+test('Host: com host configurado aceita esse nome; com 0.0.0.0 aceita qualquer um', async () => {
+  const a = await startServer({ config: { ...config(), host: '127.0.0.1' } });
+  try {
+    assert.equal((await rawGet(`${a.url}/api/bases`, 'evil.example')).status, 403);
+    assert.equal((await rawGet(`${a.url}/api/bases`, `127.0.0.1:${new URL(a.url).port}`)).status, 200);
+  } finally { await a.close(); }
+  const b = await startServer({ config: { ...config(), host: '0.0.0.0' } });
+  try {
+    const port = new URL(b.url).port;
+    assert.equal((await rawGet(`http://127.0.0.1:${port}/api/bases`, 'arquitetura.empresa.com')).status, 200);
+  } finally { await b.close(); }
+});
+
+test('toda resposta proíbe o enquadramento por outra origem', () => withServer(async url => {
+  for (const r of [await fetch(`${url}/api/bases`), await fetch(`${url}/api/nada`), await rawGet(`${url}/api/bases`, 'evil.example')]) {
+    const h = r.headers instanceof Headers ? k => r.headers.get(k) : k => r.headers[k];
+    assert.equal(h('x-frame-options'), 'SAMEORIGIN');
+    assert.equal(h('content-security-policy'), "frame-ancestors 'self'");
+  }
+}));
+
+test('catálogo, busca e cartão trazem typeLabel e c4Label', () => withServer(async url => {
+  const c = await (await fetch(`${url}/api/bases/telemedicina/catalog`)).json();
+  const api = c.elements.find(e => e.id === 'tele.api');
+  assert.equal(api.typeLabel, 'Application Component');
+  assert.equal(api.c4Label, 'Container');
+  assert.ok(c.elements.every(e => typeof e.typeLabel === 'string' && 'c4Label' in e));
+  const hits = await (await fetch(`${url}/api/bases/telemedicina/find?q=agendamento`)).json();
+  const h = hits.find(e => e.id === 'tele.api');
+  assert.equal(h.typeLabel, 'Application Component');
+  assert.equal(h.c4Label, 'Container');
+  const el = await (await fetch(`${url}/api/bases/telemedicina/elements/tele.api`)).json();
+  assert.equal(el.card.element.typeLabel, 'Application Component');
+  assert.equal(el.card.element.c4Label, 'Container');
+}));

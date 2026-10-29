@@ -1,6 +1,16 @@
 // What the GUI lists for a base: its views (saved and suggested) and its elements; plus search by name.
 import { suggestViews } from '../../../scripts/lib/suggest.mjs';
 import { similarity } from '../../../scripts/lib/match.mjs';
+import { ELEMENT_TYPES, C4_LABELS } from '../../../scripts/lib/registry.mjs';
+
+/**
+ * Display labels of an element, from the same core tables the diagram uses: the ArchiMate type name
+ * (singular, as in the diagram's details) and the C4 kind name, or null when it has no C4 kind.
+ */
+export function labelsOf(ctx, e) {
+  const k = ctx.kind(e);
+  return { typeLabel: ELEMENT_TYPES[e.type]?.label ?? e.type, c4Label: k ? C4_LABELS[k] ?? k : null };
+}
 
 export function catalog(ctx) {
   const { model } = ctx;
@@ -9,7 +19,7 @@ export function catalog(ctx) {
   const suggested = suggestViews(model).filter(v => !keys.has(v.key))
     .map(({ why, ...spec }) => ({ key: spec.key, title: why, spec, saved: false }));
   const elements = [...model.elements.values()].map(e => ({
-    id: e.id, name: e.name, type: e.type, layer: e.layer, kind: ctx.kind(e), parent: e.parent, group: e.group,
+    id: e.id, name: e.name, type: e.type, layer: e.layer, kind: ctx.kind(e), ...labelsOf(ctx, e), parent: e.parent, group: e.group,
   }));
   return { id: ctx.id, name: ctx.name, views: [...saved, ...suggested], elements };
 }
@@ -30,7 +40,7 @@ export function findElements(ctx, text, limit = 8) {
       const s = Math.max(similarity(text, e.name ?? ''), ...(e.aliases ?? []).map(a => similarity(text, a)));
       if (s >= 0.5) score = s;
     }
-    if (score > 0) out.push({ id: e.id, name: e.name, type: e.type, kind: ctx.kind(e), score: Math.round(score * 100) / 100 });
+    if (score > 0) out.push({ id: e.id, name: e.name, type: e.type, kind: ctx.kind(e), ...labelsOf(ctx, e), score: Math.round(score * 100) / 100 });
   }
   return out.sort((a, b) => b.score - a.score || a.name.localeCompare(b.name)).slice(0, limit);
 }
