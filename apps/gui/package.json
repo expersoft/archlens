@@ -4,11 +4,28 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "npm run test:server",
+    "test": "npm run test:server && npm run test:web",
     "test:server": "node --test server/*.test.mjs",
     "test:sweep": "GUI_SWEEP=full node --test server/navigation.test.mjs",
-    "test:web": "echo 'front: Task 7'",
-    "build": "echo 'front: Task 7'",
-    "dev": "echo 'front: Task 7'"
+    "test:web": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "build": "npm run typecheck && vite build",
+    "dev": "vite"
+  },
+  "dependencies": {
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
+  "devDependencies": {
+    "@testing-library/dom": "10.4.2",
+    "@testing-library/react": "16.3.3",
+    "@testing-library/user-event": "14.6.8",
+    "@types/react": "18.3.31",
+    "@types/react-dom": "18.3.7",
+    "@vitejs/plugin-react": "4.7.0",
+    "jsdom": "25.0.1",
+    "typescript": "5.9.3",
+    "vite": "5.4.21",
+    "vitest": "2.1.9"
   }
 }
