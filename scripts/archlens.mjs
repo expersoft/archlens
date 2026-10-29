@@ -7,7 +7,8 @@ import { normalizeModel, c4KindOf } from './lib/model.mjs';
 import { validateModel } from './lib/validate.mjs';
 import { generateDoc } from './lib/doc.mjs';
 import { resolveView } from './lib/query.mjs';
-import { layoutView, legibility } from './lib/layout.mjs';
+import { layoutView } from './lib/layout.mjs';
+import { viewAlerts } from './lib/view-build.mjs';
 import { renderHtml } from './lib/render.mjs';
 import { suggestViews } from './lib/suggest.mjs';
 import { inspectHtml } from './lib/deliver.mjs';
@@ -208,12 +209,9 @@ async function buildHtml(raw, specs, title, preview) {
     }
     if (preview) annotateView(view, preview);
     if (!view.nodes.length) { console.warn(`  aviso: visão "${spec.key}" ficou vazia — revise scope/anchor/filtros`); continue; }
-    if (view.nodes.length > 40) console.warn(`  aviso: visão "${spec.key}" tem ${view.nodes.length} nós; considere focus/depth, collapse ou layers`);
     const l = await layoutView(view);
     if (l.layoutStyle) console.log(`  layout "${spec.key}": ${l.layoutStyle}${l.layoutAuto ? ` (auto; ${Object.entries(l.layoutScores).map(([k, q]) => `${k} ${q.score}`).join(', ')})` : ' (pedido na visão)'}`);
-    if (l.layoutNote) console.warn(`  aviso: "${spec.key}": ${l.layoutNote}`);
-    const leg = legibility(l, 1920, 1080 - 56);
-    if (!leg.ok) console.warn(`  aviso: "${spec.key}": ${leg.suggestion}`);
+    for (const a of viewAlerts(view, l)) console.warn(`  aviso: ${a}`);
     laid.push(l);
   }
   if (!laid.length) fail('nenhuma visão com conteúdo', 2);
