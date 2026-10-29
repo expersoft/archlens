@@ -100,6 +100,7 @@ tag é criada no commit do merge:
 git checkout -b chore/release-<x>
 npm version minor --no-git-tag-version   # ou patch / major: package.json, package-lock.json e .claude-plugin/*.json
 # o npm reformata o package.json: mantenha só a linha da versão (git diff package.json)
+npm run ask                              # o REFERENCE.md do archlens-ask cita a versão
 # CHANGELOG.md: "[Não lançado]" vira "[<x>] — pré-release", com o link de comparação no fim
 claude plugin validate .
 npm test

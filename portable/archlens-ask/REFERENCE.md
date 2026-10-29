@@ -1,6 +1,6 @@
 # archlens-ask — referência
 
-> Gerado por `scripts/gen-ask.mjs` a partir do archlens 0.4.0; não edite. Formato de base: `2.0`.
+> Gerado por `scripts/gen-ask.mjs` a partir do archlens 0.5.0; não edite. Formato de base: `2.0`.
 
 ## Tipos de elemento (ArchiMate 3.2)
 
