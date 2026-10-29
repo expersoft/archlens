@@ -175,3 +175,58 @@ test('scripted: replies in order, records input, errors past the end', async () 
   assert.equal(p.seen.length, 4);
   assert.deepEqual(p.seen[0], { system: ['s'], tools: TOOLS, input: { text: '1' } });
 });
+
+test('anthropic: SDK ignores ambient credentials and custom headers', async () => {
+  const saved = { t: process.env.ANTHROPIC_AUTH_TOKEN, h: process.env.ANTHROPIC_CUSTOM_HEADERS };
+  process.env.ANTHROPIC_AUTH_TOKEN = 'ambient-tok';
+  process.env.ANTHROPIC_CUSTOM_HEADERS = 'X-Ambient: leak';
+  const s = await serve(() => aMsg([{ type: 'text', text: 'x' }]));
+  try {
+    const env = { ANTHROPIC_API_KEY: 'k1' };
+    await ask(anth(s.url, {}, env));
+    await ask(anth(s.url, { auth: { header: 'api-key' } }, env));
+    await ask(anth(s.url, { auth: 'none' }, {}));
+    await ask(anth(s.url, { auth: 'bearer' }, env));
+    const [x, h, n, b] = s.seen.map(r => r.headers);
+    assert.equal(x['x-api-key'], 'k1');
+    assert.equal(h['api-key'], 'k1');
+    for (const hd of [x, h, n, b]) assert.equal(hd['x-ambient'], undefined);
+    for (const hd of [x, h, n]) assert.equal(hd.authorization, undefined);
+    for (const hd of [h, n, b]) assert.equal(hd['x-api-key'], undefined);
+    assert.equal(b.authorization, 'Bearer k1');
+  } finally {
+    for (const [k, v] of [['ANTHROPIC_AUTH_TOKEN', saved.t], ['ANTHROPIC_CUSTOM_HEADERS', saved.h]]) {
+      if (v === undefined) delete process.env[k]; else process.env[k] = v;
+    }
+    s.close();
+  }
+});
+
+for (const [name, make] of [['anthropic', anth], ['openai', oai]]) {
+  test(`redaction covers the 300-char cut and JSON escapes (${name})`, async () => {
+    const key = 'sk-' + 'a"b\\c'.repeat(4);
+    const pad = 'x'.repeat(295);
+    const s = await serve(() => ({ status: 500, body: JSON.stringify({ error: pad + key }) }));
+    try {
+      const p = make(s.url, {}, { ANTHROPIC_API_KEY: key, OPENAI_API_KEY: key });
+      await assert.rejects(ask(p), e => {
+        assert.doesNotMatch(e.message, /sk-|a"b|a\\"b/);
+        assert.ok(e.message.length < 400);
+        return true;
+      });
+    } finally { s.close(); }
+  });
+}
+
+test('openai: stalled body is a timeout or abort error', async () => {
+  const server = http.createServer((req, res) => { req.resume(); res.writeHead(200); res.write('{'); });
+  await new Promise(ok => server.listen(0, '127.0.0.1', ok));
+  const url = `http://127.0.0.1:${server.address().port}`;
+  try {
+    const p = oai(url, { timeoutMs: 150 });
+    await assert.rejects(ask(p), e => e.code === 'E_LLM_HTTP' && /a tempo/.test(e.message));
+    const ctl = new AbortController();
+    setTimeout(() => ctl.abort(), 50);
+    await assert.rejects(oai(url).open({ system: ['s'], tools: null }).send({ text: 'x' }, { signal: ctl.signal }), e => e.code === 'E_LLM_ABORT');
+  } finally { server.closeAllConnections(); server.close(); }
+});

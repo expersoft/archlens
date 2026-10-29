@@ -11,11 +11,12 @@ const DEFAULTS = {
   openai: { model: null, auth: 'bearer', apiKeyEnv: 'OPENAI_API_KEY', endpoint: 'https://api.openai.com/v1' },
 };
 
+// Replaces each secret, raw and JSON-escaped (a body may carry it escaped).
 export const redact = (text, secrets) =>
-  secrets.filter(Boolean).reduce((t, s) => t.split(s).join('***'), String(text));
+  secrets.filter(Boolean).flatMap(s => [s, JSON.stringify(s).slice(1, -1)]).reduce((t, s) => t.split(s).join('***'), String(text));
 
 const httpError = (status, body, secrets) =>
-  llmError('E_LLM_HTTP', redact(`o provedor de LLM respondeu ${status}: ${String(body).slice(0, BODY_LIMIT)}`, secrets));
+  llmError('E_LLM_HTTP', `o provedor de LLM respondeu ${status}: ${redact(body, secrets).slice(0, BODY_LIMIT)}`);
 const abortError = () => llmError('E_LLM_ABORT', 'busca cancelada');
 
 function resolveConfig(cfg, env) {
@@ -45,17 +46,25 @@ const resultText = r => r.content;
 
 function anthropicClient(c, fetch) {
   const defaultHeaders = { ...c.headers, ...c.extra };
-  const opts = { baseURL: c.endpoint, maxRetries: 1, timeout: c.timeoutMs, defaultHeaders };
+  // The SDK reads ANTHROPIC_CUSTOM_HEADERS from process.env, bypassing our env: null those names.
+  for (const line of (process.env.ANTHROPIC_CUSTOM_HEADERS ?? '').split('\n')) {
+    const name = line.slice(0, Math.max(line.indexOf(':'), 0)).trim();
+    if (name && !(name in defaultHeaders)) defaultHeaders[name] = null;
+  }
+  // logLevel is explicit so ANTHROPIC_LOG=debug cannot log secret header values.
+  const opts = { baseURL: c.endpoint, maxRetries: 1, timeout: c.timeoutMs, defaultHeaders, logLevel: 'off' };
   if (Object.keys(c.query).length) opts.defaultQuery = c.query;
   if (fetch) opts.fetch = fetch;
-  if (c.auth === 'x-api-key') opts.apiKey = c.key;
+  // apiKey and authToken are always explicit: the SDK would otherwise read ANTHROPIC_AUTH_TOKEN and its
+  // profile/credential chain. A non-null placeholder keeps the chain off; the header is then stripped.
+  if (c.auth === 'x-api-key') { opts.apiKey = c.key; opts.authToken = null; }
   else if (c.auth === 'bearer') { opts.apiKey = null; opts.authToken = c.key; }
   else {
-    // Custom header or none: the SDK must not demand its own credentials.
-    opts.apiKey = null;
+    opts.apiKey = 'unused'; opts.authToken = null;
+    defaultHeaders['x-api-key'] = null;
     if (c.auth !== 'none') defaultHeaders[c.auth.header] = c.key;
-    defaultHeaders['x-api-key'] ??= null;
   }
+  if (c.auth !== 'bearer') defaultHeaders.authorization ??= null;
   return new Anthropic(opts);
 }
 
@@ -140,18 +149,18 @@ function openaiProvider(c, fetch) {
           const timer = setTimeout(() => { ctl.timedOut = true; ctl.abort(); }, c.timeoutMs);
           const t0 = Date.now();
           try {
-            let res;
+            let res, raw;
             try {
               res = await fetch(url, {
                 method: 'POST', headers, signal: ctl.signal,
                 body: JSON.stringify({ model: c.model, messages, ...(toolDefs ? { tools: toolDefs, tool_choice: 'auto' } : {}) }),
               });
+              raw = await res.text();
             } catch (e) {
               if (signal?.aborted) throw abortError();
               if (ctl.timedOut) throw llmError('E_LLM_HTTP', 'o provedor de LLM não respondeu a tempo');
               throw llmError('E_LLM_HTTP', redact(`sem conexão com o provedor de LLM: ${e.cause?.code ?? e.message}`, c.secrets));
             }
-            const raw = await res.text();
             if (!res.ok) throw httpError(res.status, raw, c.secrets);
             let data;
             try { data = JSON.parse(raw); } catch { throw httpError(res.status, raw, c.secrets); }
