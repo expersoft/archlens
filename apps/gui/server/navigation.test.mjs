@@ -46,23 +46,34 @@ test('flipSpec e titleFor', () => {
   assert.equal(titleFor(loja, { notation: 'c4', level: 'container', scope: 'loja' }), 'Containers de Plataforma de E-commerce');
 });
 
-test('varredura: toda ação de todo elemento renderiza', { timeout: 300000 }, async t => {
+const FULL = process.env.GUI_SWEEP === 'full';
+const MODE = FULL ? 'varredura' : 'amostra';
+
+test(`${MODE}: ações e trocas de notação renderizam`, { timeout: 300000 }, async t => {
   const cache = createViewCache(100000);
   const times = [];
   let failures = 0;
+  const run = async (ctx, where, spec) => {
+    const t0 = performance.now();
+    try { await renderSpec(ctx, spec, cache); } catch (e) {
+      failures++; t.diagnostic(`FALHA ${ctx.id}/${where}: ${e.message} ${JSON.stringify(spec)}`);
+    }
+    times.push(performance.now() - t0);
+  };
   for (const ctx of [loja, tele]) {
-    for (const id of ctx.model.elements.keys()) {
+    const ids = [...ctx.model.elements.keys()].sort();
+    for (const [i, id] of ids.entries()) {
+      if (!FULL && i % 5 !== 0) continue;
       for (const a of flat(actionsFor(ctx, id))) {
         if (!a.spec) continue;
-        const t0 = performance.now();
-        try { await renderSpec(ctx, a.spec, cache); } catch (e) { failures++; t.diagnostic(`FALHA ${ctx.id}/${id}/${a.label}: ${e.message}`); }
-        times.push(performance.now() - t0);
+        await run(ctx, `${id}/${a.label}`, a.spec);
+        await run(ctx, `${id}/${a.label}/flip`, flipSpec(ctx, a.spec));
       }
     }
   }
   times.sort((a, b) => a - b);
   const p95 = times[Math.floor(times.length * 0.95)];
-  t.diagnostic(`varredura: ${times.length} visões, ${failures} falhas, p95 ${p95.toFixed(0)} ms, max ${times.at(-1).toFixed(0)} ms`);
+  t.diagnostic(`${MODE}: ${times.length} visões, ${failures} falhas, p95 ${p95.toFixed(0)} ms, max ${times.at(-1).toFixed(0)} ms`);
   assert.equal(failures, 0);
   assert.ok(p95 < 1000, `p95 ${p95}`);
 });

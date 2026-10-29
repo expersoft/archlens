@@ -6,6 +6,7 @@
   "scripts": {
     "test": "npm run test:server",
     "test:server": "node --test server/*.test.mjs",
+    "test:sweep": "GUI_SWEEP=full node --test server/navigation.test.mjs",
     "test:web": "echo 'front: Task 7'",
     "build": "echo 'front: Task 7'",
     "dev": "echo 'front: Task 7'"
