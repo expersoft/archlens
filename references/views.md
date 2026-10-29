@@ -61,7 +61,7 @@ Exemplo, containers com foco na API e seus vizinhos imediatos:
 | `granularity` | `component` (tudo), `container` (esconde componentes C4 e o sistema-pai quando seus containers aparecem), `system`. Padrão: `container` em `product-support`/`impact`, `component` nos demais |
 | `collapse` | tipos a esconder, com derivação através deles (ex.: `["application-service"]`) |
 | `derive` | cria relações derivadas através do que ficou oculto (padrão true) |
-| `nesting` | `"edges"` (padrão: pai e filho ligados pelo losango de composição), `"nested"` (filhos dentro da caixa do pai) ou `{ "mode": "edges" \| "nested", "depth": <inteiro ≥ 1> }` (aninha só até esse nível; abaixo dele, o elemento fica na caixa do ancestral aninhado mais próximo, ligado pelo losango). Valor inválido: `E_VIEW_NESTING` |
+| `nesting` | `"edges"` (padrão: pai e filho ligados pelo losango de composição), `"nested"` (filhos dentro da caixa do pai) ou `{ "mode": "edges" \| "nested", "depth": <inteiro ≥ 1>, "except": ["id", …] }` (`depth` aninha só até esse nível; abaixo dele, o elemento fica na caixa do ancestral aninhado mais próximo, ligado pelo losango. `except` lista os elementos que **fazem o contrário** do `mode`: em `nested`, não guardam os filhos, que ficam ao lado dele, ligados pelo losango; em `edges`, são os únicos que guardam os filhos dentro. Id inexistente: `E_UNKNOWN_REF`; id fora da visão é ignorado). Valor inválido: `E_VIEW_NESTING` |
 | `output` | `["diagram","matrix"]` gera a matriz de dependência (sempre ativa em `impact`) |
 
 ### Travessia por suporte
@@ -121,6 +121,13 @@ Camada de aplicação com os containers dentro do sistema e os componentes ao la
 ```json
 { "key": "aplicacao-aninhada", "notation": "archimate", "viewpoint": "application", "include": ["loja"],
   "nesting": { "mode": "nested", "depth": 1 } }
+```
+
+Tudo aninhado, menos dentro de `loja.api` (os filhos dele ficam ao lado, ligados pelo losango):
+
+```json
+{ "key": "aplicacao-quase-aninhada", "notation": "archimate", "viewpoint": "application", "include": ["loja"],
+  "nesting": { "mode": "nested", "except": ["loja.api"] } }
 ```
 
 Só negócio × tecnologia (a aplicação vira relações derivadas):
