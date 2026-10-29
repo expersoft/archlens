@@ -4,9 +4,12 @@ import { mkdtempSync, readFileSync, writeFileSync, mkdirSync, existsSync } from 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { loadFolder, saveFolder } from '../scripts/lib/store/folder.mjs';
-import { resolveBase, openStore } from '../scripts/lib/store/index.mjs';
+import { resolveBase, openStore, assertWritable } from '../scripts/lib/store/index.mjs';
+import { diffRaw } from '../scripts/lib/store/ops.mjs';
+import { asBase } from './helpers.mjs';
 
-const shop = () => JSON.parse(readFileSync(new URL('./fixtures/shop.json', import.meta.url)));
+const shop = () => asBase(JSON.parse(readFileSync(new URL('./fixtures/shop.json', import.meta.url))));
+const shopRaw = () => JSON.parse(readFileSync(new URL('./fixtures/shop.json', import.meta.url)));
 const tmp = () => mkdtempSync(join(tmpdir(), 'archlens-store-'));
 const read = (dir, f) => readFileSync(join(dir, f), 'utf8');
 
@@ -45,21 +48,24 @@ test('saving the same raw twice writes the same bytes, in the stable format', ()
 const splitBase = () => {
   const dir = tmp();
   mkdirSync(join(dir, 'model'));
-  writeFileSync(join(dir, 'archlens.json'), JSON.stringify({ archlens: '1.0', name: 'Split', layout: { model: 'model/' } }));
+  writeFileSync(join(dir, 'archlens.json'), JSON.stringify({ archlens: '2.0', name: 'Split', layout: { model: 'model/' } }));
   writeFileSync(join(dir, 'model/b-pag.json'), JSON.stringify({
-    elements: [{ id: 'pag', type: 'c4:softwareSystem', name: 'Pagamentos', children: [{ id: 'pag.api', type: 'c4:container', name: 'API Pag' }] }],
+    elements: [
+      { id: 'pag', type: 'application-component', name: 'Pagamentos', c4: { kind: 'softwareSystem' } },
+      { id: 'pag.api', type: 'application-component', name: 'API Pag', parent: 'pag', c4: { kind: 'container' } },
+    ],
     relationships: [],
   }));
   writeFileSync(join(dir, 'model/a-loja.json'), JSON.stringify({
-    elements: [{ id: 'loja', type: 'c4:softwareSystem', name: 'Loja' }],
-    relationships: [{ from: 'loja', to: 'pag', type: 'uses' }],
+    elements: [{ id: 'loja', type: 'application-component', name: 'Loja', c4: { kind: 'softwareSystem' } }],
+    relationships: [{ from: 'pag', to: 'loja', type: 'serving' }],
   }));
   return dir;
 };
 
 test('model/*.json files are joined in name order and remember where each item came from', () => {
   const { raw, origins, layout } = loadFolder(splitBase());
-  assert.deepEqual(raw.model.elements.map(e => e.id), ['loja', 'pag']);
+  assert.deepEqual(raw.model.elements.map(e => e.id), ['loja', 'pag', 'pag.api']);
   assert.equal(raw.model.relationships.length, 1);
   assert.equal(origins.elements.get('pag'), 'model/b-pag.json');
   assert.equal([...origins.relationships.values()][0], 'model/a-loja.json');
@@ -70,17 +76,16 @@ test('model/*.json files are joined in name order and remember where each item c
 test('saving a split model: new items next to their parent, relations with their source, the rest in the default file', () => {
   const dir = splitBase();
   const { raw, origins, notes, layout } = loadFolder(dir);
-  raw.model.elements.push({ id: 'pag.worker', type: 'c4:container', name: 'Worker', parent: 'pag' });
-  raw.model.elements.find(e => e.id === 'pag').children[0].children = [{ id: 'pag.api.auth', type: 'c4:component', name: 'Auth' }];
-  raw.model.elements.push({ id: 'erp', type: 'c4:softwareSystem', name: 'ERP' });
-  raw.model.relationships.push({ from: 'pag.api', to: 'erp', type: 'uses' });
+  raw.model.elements.push({ id: 'pag.worker', type: 'application-component', name: 'Worker', parent: 'pag', c4: { kind: 'container' } });
+  raw.model.elements.push({ id: 'pag.api.auth', type: 'application-component', name: 'Auth', parent: 'pag.api', c4: { kind: 'component' } });
+  raw.model.elements.push({ id: 'erp', type: 'application-component', name: 'ERP', c4: { kind: 'softwareSystem' } });
+  raw.model.relationships.push({ from: 'erp', to: 'pag.api', type: 'serving' });
   raw.model.elements = raw.model.elements.filter(e => e.id !== 'loja');
-  raw.model.relationships = raw.model.relationships.filter(r => r.from !== 'loja');
+  raw.model.relationships = raw.model.relationships.filter(r => r.to !== 'loja' && r.from !== 'loja');
   saveFolder(dir, raw, { notes, origins, layout });
   const file = f => JSON.parse(read(dir, f));
-  assert.deepEqual(file('model/b-pag.json').elements.map(e => e.id), ['pag', 'pag.worker']);
-  assert.equal(file('model/b-pag.json').elements[0].children[0].children[0].id, 'pag.api.auth');
-  assert.deepEqual(file('model/b-pag.json').relationships, [{ from: 'pag.api', to: 'erp', type: 'uses' }]);
+  assert.deepEqual(file('model/b-pag.json').elements.map(e => e.id), ['pag', 'pag.api', 'pag.worker', 'pag.api.auth']);
+  assert.deepEqual(file('model/b-pag.json').relationships, [{ from: 'erp', to: 'pag.api', type: 'serving' }]);
   assert.deepEqual(file('model/geral.json').elements.map(e => e.id), ['erp']);
   assert.deepEqual(file('model/a-loja.json'), { elements: [], relationships: [] });
   assert.deepEqual(file('archlens.json').layout, { model: 'model/' });
@@ -88,7 +93,7 @@ test('saving a split model: new items next to their parent, relations with their
 
 test('the same element id in two model files is refused', () => {
   const dir = splitBase();
-  writeFileSync(join(dir, 'model/c-dup.json'), JSON.stringify({ elements: [{ id: 'pag.api', type: 'c4:container' }], relationships: [] }));
+  writeFileSync(join(dir, 'model/c-dup.json'), JSON.stringify({ elements: [{ id: 'pag.api', type: 'application-component' }], relationships: [] }));
   assert.throws(() => loadFolder(dir), e => e.code === 'E_STORE_DUP_ID' && /model\/b-pag\.json/.test(e.message) && /model\/c-dup\.json/.test(e.message));
 });
 
@@ -119,12 +124,12 @@ test('legacy: reads the block and the hand-written keep blocks (guide texts drop
   assert.equal(loc.kind, 'legacy');
   assert.equal(loc.docPath, join(dir, 'ARCHITECTURE.md'));
   const store = openStore(loc);
-  const { raw, notes } = store.load();
+  const { raw, notes } = store.read();
   assert.deepEqual(raw, shop());
   assert.deepEqual(notes, { overview: 'Visão à mão.', assumptions: '- p1' });
   assert.equal(store.writable, false);
-  assert.throws(() => store.save(raw), e => e.code === 'E_STORE_LEGACY' && /archlens migrate/.test(e.message));
-  assert.throws(() => store.assertWritable(), e => e.code === 'E_STORE_LEGACY');
+  assert.throws(() => store.apply(diffRaw(store.read(), { raw, notes }), { baseVersion: store.version() }), e => e.code === 'E_STORE_LEGACY' && /archlens migrate/.test(e.message));
+  assert.throws(() => assertWritable(store), e => e.code === 'E_STORE_LEGACY');
 });
 
 test('legacy: a raw model .json is read-only too', () => {
@@ -132,8 +137,8 @@ test('legacy: a raw model .json is read-only too', () => {
   writeFileSync(join(dir, 'm.json'), JSON.stringify(shop()));
   const store = openStore(resolveBase('m.json', { cwd: dir }));
   assert.equal(store.kind, 'legacy');
-  assert.deepEqual(store.load().raw, shop());
-  assert.deepEqual(store.load().notes, {});
+  assert.deepEqual(store.read().raw, shop());
+  assert.deepEqual(store.read().notes, {});
 });
 
 test('resolveBase: folder, manifest, generated .md (source:), and the folder found from a subdirectory', () => {
@@ -149,14 +154,14 @@ test('resolveBase: folder, manifest, generated .md (source:), and the folder fou
     assert.equal(loc.docPath, join(dir, 'ARCHITECTURE.md'), String(arg));
     assert.equal(loc.exists, true);
   }
-  assert.deepEqual(openStore(resolveBase('architecture', { cwd: dir })).load().raw, shop());
+  assert.deepEqual(openStore(resolveBase('architecture', { cwd: dir })).read().raw, shop());
 });
 
 test('resolveBase: a hand-written .md is not a base, and the message says what to do', () => {
   const dir = tmp();
   writeFileSync(join(dir, 'ARCHITECTURE.md'), '# Minha arquitetura\n\nTexto livre.\n');
   assert.throws(() => resolveBase('ARCHITECTURE.md', { cwd: dir }),
-    e => e.code === 'E_STORE_NOT_BASE' && /texto livre/.test(e.message) && /merge/.test(e.message));
+    e => e.code === 'E_STORE_NOT_BASE' && /texto livre/.test(e.message) && /archlens plan architecture\/ delta\.json --out plano\.json/.test(e.message));
 });
 
 test('resolveBase: missing bases are created only when asked', () => {
@@ -165,7 +170,7 @@ test('resolveBase: missing bases are created only when asked', () => {
   assert.throws(() => resolveBase('architecture', { cwd: dir }), e => e.code === 'E_STORE_NOT_FOUND');
   const viaMd = resolveBase('ARCHITECTURE.md', { cwd: dir, create: true });
   assert.deepEqual([viaMd.kind, viaMd.path, viaMd.exists, viaMd.docPath], ['folder', join(dir, 'architecture'), false, join(dir, 'ARCHITECTURE.md')]);
-  assert.equal(openStore(viaMd).load().raw, null);
+  assert.equal(openStore(viaMd).read(), null);
   assert.equal(resolveBase(undefined, { cwd: dir, create: true }).path, join(dir, 'architecture'));
   writeFileSync(join(dir, 'ARCHITECTURE.md'), '---\nsource: architecture/\n---\n');
   assert.throws(() => resolveBase('ARCHITECTURE.md', { cwd: dir }), e => e.code === 'E_STORE_NOT_FOUND');
@@ -198,7 +203,7 @@ test('a layout that would write model files the folder never reads is refused (E
   }
   const up = tmp();
   saveFolder(up, shop());
-  writeFileSync(join(up, 'archlens.json'), JSON.stringify({ archlens: '1.0', name: 'x', layout: { model: '../x/' } }));
+  writeFileSync(join(up, 'archlens.json'), JSON.stringify({ archlens: '2.0', name: 'x', layout: { model: '../x/' } }));
   assert.throws(() => loadFolder(up), e => e.code === 'E_STORE_LAYOUT');
 });
 
@@ -210,4 +215,31 @@ test('a note file without a trailing newline is left untouched by save', () => {
   const { raw, notes, origins, layout } = loadFolder(dir);
   saveFolder(dir, raw, { notes, origins, layout });
   assert.equal(read(dir, 'notes/notes.md'), 'Sem quebra no fim.');
+});
+
+test('a 1.x folder is refused with E_STORE_FORMAT unless the caller asks for any format', () => {
+  const dir = tmp();
+  saveFolder(dir, shopRaw()); // 1.x, free vocabulary
+  assert.throws(() => loadFolder(dir), e => e.code === 'E_STORE_FORMAT' && /archlens migrate/.test(e.message));
+  assert.equal(loadFolder(dir, { anyFormat: true }).raw.archlens, '1.0');
+  const store = openStore(resolveBase(dir));
+  assert.throws(() => store.read(), e => e.code === 'E_STORE_FORMAT');
+  assert.equal(store.read({ anyFormat: true }).raw.archlens, '1.0');
+});
+
+test('an odd "store" value is refused the same way by openStore and loadFolder, with a clear message', () => {
+  for (const store of [null, 'json', ['json'], { kind: 3 }, { kind: 'neo4j' }]) {
+    const dir = tmp();
+    saveFolder(dir, shop());
+    writeFileSync(join(dir, 'archlens.json'), JSON.stringify({ archlens: '2.0', name: 'x', store }));
+    const clear = e => e.code === 'E_STORE_UNSUPPORTED' && /"store"/.test(e.message) && !/undefined/.test(e.message);
+    assert.throws(() => openStore(resolveBase(dir)), clear, JSON.stringify(store));
+    assert.throws(() => loadFolder(dir), clear, JSON.stringify(store));
+  }
+  for (const store of [{}, { kind: 'json' }]) {
+    const dir = tmp();
+    saveFolder(dir, shop());
+    writeFileSync(join(dir, 'archlens.json'), JSON.stringify({ ...JSON.parse(read(dir, 'archlens.json')), store }));
+    assert.equal(openStore(resolveBase(dir)).read().raw.name, shop().name, JSON.stringify(store));
+  }
 });

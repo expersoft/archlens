@@ -25,6 +25,7 @@ de visões novas sem remodelar. Campos comuns:
 | `depth` | saltos a partir do foco (padrão 1) |
 | `expand` | `container`/`dynamic` com scope num sistema: outros software systems a abrir também, cada um no seu boundary (ex.: mostrar o tópico do produtor num fluxo do consumidor) |
 | `steps` | só `dynamic`: `[{ "from", "to", "description"?, "technology"? }]` ou `[{ "rel": "<id>" }]` |
+| `derive` | `false` desliga as setas derivadas através de `application-service`, `application-interface`, `application-function` e `application-process` (padrão ligado; veja `c4.md`) |
 
 Semântica:
 
@@ -56,10 +57,11 @@ Exemplo, containers com foco na API e seus vizinhos imediatos:
 | `traverse.mode` | `supporters` (o que sustenta a âncora), `dependents` (o que depende dela), `both` |
 | `traverse.via` | relações percorridas (padrão: composition, aggregation, assignment, realization, serving, access, influence). Acrescente `flow`/`triggering` para seguir processos |
 | `traverse.maxDepth` | padrão 12 |
-| `traverse.hierarchy` | considera o aninhamento (children) como composição (padrão true) |
+| `traverse.hierarchy` | considera a hierarquia (`parent`) como composição (padrão true) |
 | `granularity` | `component` (tudo), `container` (esconde componentes C4 e o sistema-pai quando seus containers aparecem), `system`. Padrão: `container` em `product-support`/`impact`, `component` nos demais |
 | `collapse` | tipos a esconder, com derivação através deles (ex.: `["application-service"]`) |
 | `derive` | cria relações derivadas através do que ficou oculto (padrão true) |
+| `nesting` | `"edges"` (padrão: pai e filho ligados pelo losango de composição), `"nested"` (filhos dentro da caixa do pai) ou `{ "mode": "edges" \| "nested", "depth": <inteiro ≥ 1> }` (aninha só até esse nível; abaixo dele, o elemento fica na caixa do ancestral aninhado mais próximo, ligado pelo losango). Valor inválido: `E_VIEW_NESTING` |
 | `output` | `["diagram","matrix"]` gera a matriz de dependência (sempre ativa em `impact`) |
 
 ### Travessia por suporte
@@ -114,6 +116,13 @@ Matriz de dependência de um application component (negócio impactado + tecnolo
 { "key": "impacto-api", "notation": "archimate", "viewpoint": "impact", "anchor": "loja.pedidos" }
 ```
 
+Camada de aplicação com os containers dentro do sistema e os componentes ao lado, ligados pelo losango:
+
+```json
+{ "key": "aplicacao-aninhada", "notation": "archimate", "viewpoint": "application", "include": ["loja"],
+  "nesting": { "mode": "nested", "depth": 1 } }
+```
+
 Só negócio × tecnologia (a aplicação vira relações derivadas):
 
 ```json
@@ -157,7 +166,7 @@ Camada de aplicação sem ruído de componentes:
 Desenho. **C4:** moldura → fronteira do sistema → containers; a fronteira do sistema aberto fica dentro da moldura
 do grupo dele, e as setas ligam elementos, nunca a moldura. **ArchiMate:** uma moldura por grupo × camada (nenhuma
 atravessa faixas). `bands` não agrupa: com molduras, `auto` escolhe entre `flow` e `bands-flow`, e `bands` pedido
-vira `bands-flow` com aviso no build.
+vira `bands-flow` com aviso no build. Com `nesting` aninhado, `bands` também vira `bands-flow`.
 
 ## Layout
 
@@ -175,6 +184,32 @@ vira `bands-flow` com aviso no build.
 
   O build mostra o estilo escolhido e as notas (`layout "k": bands-flow (auto; …)`). Se o usuário pedir
   um estilo, grave-o na visão e ele deixa de ser automático.
+
+## Consulta em markdown
+
+`archlens query` responde em texto o que o `deliver` desenha, sem gravar nada (skill archlens-query). Resolve a
+mesma view spec que o `resolve` (o mesmo view IR) e escreve markdown (padrão) ou JSON (`--format json`, as mesmas
+estruturas sem formatação); `--out f` grava num arquivo (fora da base).
+
+```bash
+node scripts/archlens.mjs query architecture/ --view containers                                   # visão salva
+node scripts/archlens.mjs query architecture/ --spec '{"notation":"archimate","viewpoint":"impact","anchor":"loja.pedidos"}'
+node scripts/archlens.mjs query architecture/ --element loja.pedidos --depth 1                    # cartão do elemento
+```
+
+**Visão** (`--view k` ou `--spec J`):
+
+- título e a spec usada (uma linha de JSON);
+- elementos agrupados por camada (ArchiMate) ou por nível (C4): tabela `nome · tipo/kind · status · tecnologia`;
+- relações: uma linha por aresta, com a frase da ajuda sobre relações (abaixo);
+- viewpoint `impact`: a matriz de dependência como tabela markdown;
+- visões com mais de 40 nós: nota no fim sugerindo recortar.
+
+**Cartão de elemento** (`--element id [--depth N] [--via t1,t2]`): nome, tipo, perfil C4, status, tecnologia,
+descrição, pai e filhos, relações de saída e de entrada agrupadas por tipo, propriedades, fontes (proveniência) e as
+rodadas do histórico que citam o id. Lê só o subgrafo em volta do elemento (padrão `depth: 1`); `--depth N` inclui os
+vizinhos a N saltos numa seção "Em volta", e `--via` limita a travessia a esses tipos de relação. Id inexistente:
+`E_UNKNOWN_REF` com sugestões por nome e alias.
 
 ## Ajuda sobre relações
 

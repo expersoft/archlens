@@ -5,7 +5,7 @@ import { previewMerge, relationshipIds, relationshipKeys, canonicalJson, mergeEr
 import { indexTree, attach } from './raw-tree.mjs';
 import { describeItem } from './merge-report.mjs';
 
-const ELEMENT_COMPARED = ['name', 'type', 'description', 'technology', 'external', 'archimate', 'parent', 'group', 'status', 'statusReason', 'tags', 'aliases', 'properties', 'owner', 'url'];
+const ELEMENT_COMPARED = ['name', 'type', 'description', 'technology', 'external', 'c4', 'parent', 'group', 'status', 'statusReason', 'tags', 'aliases', 'properties', 'owner', 'url'];
 const REL_COMPARED = ['description', 'technology', 'accessType', 'status', 'statusReason', 'tags', 'properties'];
 const OPTIONS = { conflict: ['keep', 'take', 'value:<x>'], 'view-conflict': ['keep', 'take'], 'possible-duplicate': ['same', 'different'], op: ['yes', 'no'] };
 const ASSUMED = { conflict: 'take', 'possible-duplicate': 'different', op: 'yes' };
@@ -34,8 +34,16 @@ export function previewModel(baseRaw, { delta, plan } = {}) {
     throw mergeError('E_PREVIEW_BLOCKED', `o plano está bloqueado (${merged.plan.errors.length} erro(s)); corrija o delta antes de pré-visualizar`,
       { errors: merged.plan.errors, plan: merged.plan });
   }
-  const raw = merged.raw; // a private clone: runMerge never shares objects with the base or the delta
+  // merged.raw is a private clone: runMerge never shares objects with the base or the delta
+  const d = diffModels(baseRaw, merged.raw, { deltaViews: (plan ? plan.delta : delta).views });
+  return { ...d, pending: pendingByTarget(merged.plan, merged.idMap, d.relMap), plan: merged.plan };
+}
 
+/**
+ * What changed between two bases (`raw` is the result): the comparison part of previewModel, with no open questions.
+ * Mutates `raw` (ghosts of what went away are put back) and returns it; `relMap` maps base relationship ids to the preview's.
+ */
+export function diffModels(baseRaw, raw, { deltaViews = [] } = {}) {
   const before = baseRaw ? indexTree(baseRaw) : new Map();
   const after = indexTree(raw);
   const changes = new Map();
@@ -48,12 +56,12 @@ export function previewModel(baseRaw, { delta, plan } = {}) {
   // Ghosts: removed elements go back under their old parent (indexTree walks top-down, so parents come first).
   for (const [id, b] of before) {
     if (after.has(id)) continue;
-    const { children, ...el } = structuredClone(b.el);
+    const el = structuredClone(b.el);
     attach(raw, after, el, b.parent ?? null);
     changes.set(id, { kind: 'removed' });
   }
   // Members of a removed grouping keep it in the preview, so its frame shows as removed around them.
-  const removedGroups = new Set([...before].filter(([id, b]) => changes.get(id)?.kind === 'removed' && String(b.el.type).replace(/^archimate:/, '') === 'grouping').map(([id]) => id));
+  const removedGroups = new Set([...before].filter(([id, b]) => changes.get(id)?.kind === 'removed' && b.el.type === 'grouping').map(([id]) => id));
   if (removedGroups.size) {
     for (const [id, a] of after) {
       const b = before.get(id);
@@ -64,7 +72,7 @@ export function previewModel(baseRaw, { delta, plan } = {}) {
 
   const { relChanges, relMap } = diffRelationships(baseRaw, raw);
 
-  const { views, droppedViews } = previewViews(baseRaw?.views ?? [], raw.views ?? [], (plan ? plan.delta : delta).views ?? []);
+  const { views, droppedViews } = previewViews(baseRaw?.views ?? [], raw.views ?? [], deltaViews ?? []);
 
   const gone = ([, c]) => c.kind === 'removed' || c.kind === 'retired';
   const keep = new Set([...[...changes].filter(gone), ...[...relChanges].filter(gone)].map(([id]) => id));
@@ -79,7 +87,7 @@ export function previewModel(baseRaw, { delta, plan } = {}) {
     return false;
   };
   if (retired.size) for (const id of after.keys()) if (underRetired(id)) keep.add(id);
-  return { raw, changes, relChanges, pending: pendingByTarget(merged.plan, merged.idMap, relMap), keep, views, droppedViews, plan: merged.plan };
+  return { raw, changes, relChanges, relMap, pending: new Map(), keep, views, droppedViews };
 }
 
 /**

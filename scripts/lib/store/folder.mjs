@@ -3,16 +3,42 @@
 import { readFileSync, writeFileSync, existsSync, renameSync, mkdirSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { relationshipIds } from '../merge.mjs';
+import { c4Orientation } from '../model.mjs';
 import { NOTE_NAMES } from '../doc.mjs';
 import { storeError } from './errors.mjs';
+import { isCanonicalFormat, FORMAT } from '../canonical.mjs';
+import { fileConnector } from './contract.mjs';
 
 export const MANIFEST = 'archlens.json';
 const json = v => JSON.stringify(v, null, 2) + '\n';
 
-function readJson(path) {
-  try { return JSON.parse(readFileSync(path, 'utf8')); } catch (e) {
+/** Parses `text` as JSON; `path` names it in the error. */
+export function parseJson(text, path) {
+  try { return JSON.parse(text); } catch (e) {
     throw storeError('E_STORE_JSON', `${path}: JSON inválido: ${e.message}`, { file: path });
   }
+}
+
+export function readJson(path) {
+  let text;
+  try { text = readFileSync(path, 'utf8'); } catch (e) {
+    throw storeError('E_STORE_JSON', `${path}: JSON inválido: ${e.message}`, { file: path });
+  }
+  return parseJson(text, path);
+}
+
+/**
+ * The connector the manifest's `store` names: "json" when it is absent or has no kind, "markdown", "gbrain", or
+ * E_STORE_UNSUPPORTED for anything else (a non-object `store`, another kind).
+ */
+export function storeKind(manifest, file = MANIFEST) {
+  const { store } = manifest ?? {};
+  if (store === undefined) return 'json';
+  const kind = store && typeof store === 'object' && !Array.isArray(store) ? store.kind ?? 'json' : null;
+  if (kind === 'json' || kind === 'markdown' || kind === 'gbrain') return kind;
+  throw storeError('E_STORE_UNSUPPORTED', kind === null
+    ? `"store" em ${file} deve ser um objeto como { "kind": "json" } (recebido ${JSON.stringify(store)})`
+    : `"store.kind" ${JSON.stringify(kind)} em ${file} não é suportado ("store" aceita "json", "markdown" ou "gbrain")`);
 }
 
 /** Writes through a temp file and rename; leaves the file alone when the content is the same. */
@@ -69,12 +95,17 @@ function rootIndex(elements) {
   return root;
 }
 
-export function loadFolder(dir) {
+export function loadFolder(dir, { anyFormat = false } = {}) {
   const manifestPath = join(dir, MANIFEST);
   if (!existsSync(manifestPath)) throw storeError('E_STORE_NOT_BASE', `${dir} não é uma base archlens (falta ${MANIFEST})`);
   const { layout, store, ...top } = readJson(manifestPath);
-  if (store !== undefined) {
-    throw storeError('E_STORE_UNSUPPORTED', `"store" em ${MANIFEST} (fonte externa) ainda não é suportado; remova o campo para usar a pasta`);
+  const kind = storeKind({ store }, manifestPath);
+  if (kind !== 'json') {
+    throw storeError('E_STORE_UNSUPPORTED', `"store" em ${manifestPath} indica o conector "${kind}"; esta pasta não é uma base json`);
+  }
+  if (!anyFormat && !isCanonicalFormat(top.archlens)) {
+    throw storeError('E_STORE_FORMAT', `${dir} está no formato ${top.archlens ?? '1.x'}; o archlens lê só o formato ${FORMAT}. `
+      + `Rode "archlens migrate ${dir}" para converter (a skill pergunta antes de gravar)`);
   }
   const elements = [];
   const relationships = [];
@@ -99,15 +130,36 @@ export function loadFolder(dir) {
   if (existsSync(join(dir, 'changelog.json'))) raw.changelog = readJson(join(dir, 'changelog.json'));
   const ids = relationshipIds(raw);
   relationships.forEach((r, i) => origins.relationships.set(ids.get(r), relFiles[i]));
+  const notes = readNotes(dir);
+  return { raw, notes, origins, layout, store };
+}
+
+/** The notes of a base folder (notes/<name>.md), without the trailing newline. */
+export function readNotes(dir) {
   const notes = {};
   for (const name of NOTE_NAMES) {
     const p = join(dir, 'notes', `${name}.md`);
     if (existsSync(p)) notes[name] = readFileSync(p, 'utf8').replace(/\n$/, '');
   }
-  return { raw, notes, origins, layout };
+  return notes;
 }
 
-export function saveFolder(dir, raw, { notes = {}, origins, layout } = {}) {
+/**
+ * Note files for `notes`; a note file without its trailing newline that already holds the note stays as written.
+ * `read(rel)` gives the current text of a file (undefined when absent); by default it reads from `dir`.
+ */
+export function noteFiles(dir, notes = {}, read = rel => (existsSync(join(dir, rel)) ? readFileSync(join(dir, rel), 'utf8') : undefined)) {
+  const files = new Map();
+  for (const name of NOTE_NAMES) {
+    if (notes[name] == null) continue;
+    const rel = `notes/${name}.md`;
+    files.set(rel, read(rel) === notes[name] ? notes[name] : `${notes[name]}\n`);
+  }
+  return files;
+}
+
+/** Every file of the base for `raw` (relative path → text), without writing: each item goes back to its file. */
+export function folderContents(dir, raw, { notes = {}, origins, layout, store } = {}) {
   const { model, views, changelog, ...top } = raw;
   const L = modelLayout(layout);
   const parts = new Map(); // relative file → { elements, relationships }
@@ -141,19 +193,33 @@ export function saveFolder(dir, raw, { notes = {}, origins, layout } = {}) {
   const ids = relationshipIds(raw);
   for (const r of model?.relationships ?? []) {
     let rel = L.split ? origins?.relationships.get(ids.get(r)) : L.model;
-    if (!rel) rel = rootOf.has(r?.from) ? fileFor(rootOf.get(r.from)) : L.defaultFile;
+    // A new relationship goes with the side that depends on it (the consumer of a serving), like a C4 "uses".
+    const owner = r && typeof r === 'object' ? (c4Orientation(r)?.from ?? r.from) : undefined;
+    if (!rel) rel = rootOf.has(owner) ? fileFor(rootOf.get(owner)) : L.defaultFile;
     part(rel).relationships.push(r);
   }
 
-  writeIfChanged(join(dir, MANIFEST), json({ ...top, ...(layout ? { layout } : {}) }));
-  for (const [rel, content] of parts) writeIfChanged(join(dir, rel), json(content));
-  if (views !== undefined) writeIfChanged(join(dir, 'views.json'), json(views));
-  if (changelog !== undefined) writeIfChanged(join(dir, 'changelog.json'), json(changelog));
-  for (const name of NOTE_NAMES) {
-    if (notes[name] == null) continue;
-    const p = join(dir, 'notes', `${name}.md`);
-    // A note file without its trailing newline already holds this note: leave it as the user wrote it.
-    if (existsSync(p) && readFileSync(p, 'utf8') === notes[name]) continue;
-    writeIfChanged(p, `${notes[name]}\n`);
-  }
+  const files = new Map();
+  files.set(MANIFEST, json({ ...top, ...(store ? { store } : {}), ...(layout ? { layout } : {}) }));
+  for (const [rel, content] of parts) files.set(rel, json(content));
+  if (views !== undefined) files.set('views.json', json(views));
+  if (changelog !== undefined) files.set('changelog.json', json(changelog));
+  for (const [rel, text] of noteFiles(dir, notes)) files.set(rel, text);
+  return files;
 }
+
+export function saveFolder(dir, raw, opts = {}) {
+  for (const [rel, text] of folderContents(dir, raw, opts)) writeIfChanged(join(dir, rel), text);
+}
+
+/** The json connector: model.json (or model/*.json) next to the manifest, views, changelog and notes. */
+export function jsonConnector(locator, describe) {
+  const dir = locator.path;
+  const load = opts => (existsSync(join(dir, MANIFEST)) ? toBase(loadFolder(dir, opts)) : null);
+  return fileConnector({
+    kind: 'json', dir, locator, describe, load, versioning: 'base',
+    contents: (next, cur) => folderContents(dir, next.raw, { notes: next.notes, ...cur?.ctx }),
+  });
+}
+
+const toBase = ({ raw, notes, origins, layout, store }) => ({ raw, notes, ctx: { origins, layout, store } });

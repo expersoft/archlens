@@ -1,0 +1,49 @@
+{
+  "title": "Visão em Camadas — Registro clínico",
+  "spec": {
+    "key": "view",
+    "notation": "archimate",
+    "viewpoint": "layered",
+    "anchor": "as-registro",
+    "traverse": {
+      "mode": "supporters"
+    },
+    "status": [
+      "planned",
+      "active"
+    ]
+  },
+  "sections": [
+    {
+      "label": "Aplicação",
+      "rows": [
+        {
+          "id": "as-registro",
+          "name": "Registro clínico",
+          "type": "application-service",
+          "kind": null,
+          "status": "active",
+          "technology": null
+        },
+        {
+          "id": "pep-nuvem",
+          "name": "PEP em nuvem",
+          "type": "application-component",
+          "kind": "softwareSystem",
+          "status": "planned",
+          "technology": null
+        }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "from": "pep-nuvem",
+      "to": "as-registro",
+      "type": "realization",
+      "sentence": "PEP em nuvem realiza Registro clínico.",
+      "derived": false
+    }
+  ],
+  "notes": []
+}

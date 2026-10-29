@@ -6,17 +6,18 @@ import { norm, repoKey, toDelta, repoElement } from '../scripts/lib/scan/to-delt
 import { validateModel } from '../scripts/lib/validate.mjs';
 import { planMerge, applyPlan } from '../scripts/lib/merge.mjs';
 import { resolveView } from '../scripts/lib/query.mjs';
+import { asBase } from './helpers.mjs';
 
 const inv = (facts, repo = {}) => ({ 'archlens-inventory': '1.0', repo: { path: '/r/terminus-assignment-api', name: 'terminus-assignment-api', commit: 'abcdef1234', dirty: false, scannedAt: '2026-10-03', ...repo },
   files: { compose: 0, k8s: 0, helm: 0, terraform: 0, openapi: 0, asyncapi: 0, graphify: 0, build: 0, ignored: 0 }, facts });
 const at = { file: 'x', line: 1 };
-const terminus = (extra = {}) => normalizeModel({ archlens: '1.0', name: 'T', model: { elements: [
+const terminus = (extra = {}) => normalizeModel(asBase({ archlens: '1.0', name: 'T', model: { elements: [
   { id: 'terminus', type: 'c4:softwareSystem', name: 'Terminus', children: [
     { id: 'terminus.assignment', type: 'c4:container', name: 'Assignment API' },
     { id: 'terminus.scheduler', type: 'c4:container', name: 'Scheduler' }] },
   { id: 'topic.assignment-requested', type: 'c4:container', name: 'assignment-requested', tags: ['topic'] },
   { id: 'billing', type: 'c4:softwareSystem', name: 'Billing' }, ...(extra.elements ?? [])],
-  relationships: [{ from: 'terminus.scheduler', to: 'topic.assignment-requested', type: 'archimate:flow' }] } });
+  relationships: [{ from: 'terminus.scheduler', to: 'topic.assignment-requested', type: 'archimate:flow' }] } }));
 
 test('norm and repoKey', () => {
   assert.equal(norm('Pedidos API (v2)'), 'pedidos-api-v2');
@@ -88,7 +89,7 @@ test('service role: the repo is one container in the given system; infra, api an
   assert.deepEqual([own.type, own.parent, own.properties], ['c4:container', 'loja', { repo: '/r/pedidos', repoRole: 'service' }]);
   assert.deepEqual(el(d, 'loja.pedidos-pedidos-db').tags, ['database']);
   assert.deepEqual([el(d, 'tech.postgres-16').type, el(d, 'tech.postgres-16').name], ['archimate:system-software', 'PostgreSQL 16']);
-  assert.equal(rel(d, 'tech.postgres-16', 'loja.pedidos-pedidos-db').type, 'archimate:realization');
+  assert.equal(rel(d, 'tech.postgres-16', 'loja.pedidos-pedidos-db').type, 'archimate:serving');
   assert.equal(rel(d, 'loja.pedidos', 'loja.pedidos-pedidos-db').type, 'uses');
   assert.equal(rel(d, 'loja.pedidos', 'loja.pedidos.api-api-de-pedidos').type, 'archimate:realization');
   assert.equal(rel(d, 'loja.pedidos', 'topic.pedido-criado').type, 'archimate:flow', 'publishing is a flow to the topic');
@@ -209,7 +210,7 @@ test('consumer first, then producer: the producer reading claims ext.pedidos-api
   let raw = applyNew(readCons(null));
   const before = normalizeModel(raw);
   assert.ok(before.elements.has('ext.pedidos-api'));
-  const baseRel = before.relationships.find(r => r.c4?.from === 'financeiro.pagamentos' && r.c4?.to === 'ext.pedidos-api');
+  const baseRel = before.relationships.find(r => r.type === 'serving' && r.from === 'ext.pedidos-api' && r.to === 'financeiro.pagamentos');
   const d = readProd(before);
   assert.deepEqual((d.ops ?? []).map(o => [o.op, o.id]), [['remove', 'ext.pedidos-api']]);
   assert.match(d.ops[0].reason, /substituído por loja\.pedidos \(lido em \/r\/pedidos@abcdef1\)/);
@@ -226,12 +227,20 @@ test('consumer first, then producer: the producer reading claims ext.pedidos-api
   assert.ok(!m.elements.has('ext.pedidos-api'));
   const own = m.elements.get('loja.pedidos');
   assert.ok(!own.c4.external && !own.inferred, 'the real container is neither external nor inferred');
-  assert.ok(m.relationships.some(r => r.c4?.from === 'financeiro.pagamentos' && r.c4?.to === 'loja.pedidos'));
-  assert.ok(m.relationships.some(r => r.c4?.from === 'loja.pedidos' && r.c4?.to === 'financeiro.pagamentos'));
+  assert.ok(m.relationships.some(r => r.type === 'serving' && r.from === 'loja.pedidos' && r.to === 'financeiro.pagamentos'));
+  assert.ok(m.relationships.some(r => r.type === 'serving' && r.from === 'financeiro.pagamentos' && r.to === 'loja.pedidos'));
   assert.deepEqual(placeholdersFor(m, ['pedidos', 'pedidos-api', 'pagamentos']), []);
   const impact = resolveView(m, { key: 'i', notation: 'archimate', viewpoint: 'impact', anchor: 'loja.pedidos' });
   assert.ok(impact.nodes.some(n => n.id === 'financeiro.pagamentos'));
   assert.ok(!impact.nodes.some(n => n.id.startsWith('ext.')));
+});
+
+test('a claimed placeholder re-emits its relationships with their properties', () => {
+  const raw = applyNew(readCons(null));
+  const r = raw.model.relationships.find(x => x.type === 'serving' && x.from === 'ext.pedidos-api' && x.to === 'financeiro.pagamentos');
+  r.properties = { accessType: 'read', dono: 'time-pagamentos' };
+  const moved = rel(readProd(normalizeModel(raw)), 'financeiro.pagamentos', 'loja.pedidos');
+  assert.deepEqual(moved?.properties, { accessType: 'read', dono: 'time-pagamentos' });
 });
 
 test('producer first, then consumer: the consumer reading claims ext.pagamentos and links to loja.pedidos by its runtime name', () => {
@@ -246,8 +255,8 @@ test('producer first, then consumer: the consumer reading claims ext.pagamentos 
   const m = normalizeModel(raw);
   assert.deepEqual(validateModel(raw).errors, []);
   assert.deepEqual(placeholdersFor(m, ['pedidos', 'pedidos-api', 'pagamentos']), []);
-  assert.ok(m.relationships.some(r => r.c4?.from === 'loja.pedidos' && r.c4?.to === 'financeiro.pagamentos'));
-  assert.ok(m.relationships.some(r => r.c4?.from === 'financeiro.pagamentos' && r.c4?.to === 'loja.pedidos'));
+  assert.ok(m.relationships.some(r => r.type === 'serving' && r.from === 'financeiro.pagamentos' && r.to === 'loja.pedidos'));
+  assert.ok(m.relationships.some(r => r.type === 'serving' && r.from === 'loja.pedidos' && r.to === 'financeiro.pagamentos'));
   assert.ok(!m.elements.get('financeiro.pagamentos').c4.external);
 });
 
@@ -324,8 +333,8 @@ test('sibling-image compose services are not this repo\'s deployables: hosts, ne
   // same image name as the repository: it is this repo's own image
   assert.deepEqual(deployablesOf(inv([{ kind: 'service', name: 'web', image: 'acme/pedidos:1', ports: [], at }], { name: 'pedidos' })), ['web']);
   // system role: the sibling is not a container of the system; a known base element is reused
-  const base = normalizeModel({ archlens: '1.0', name: 'T', model: { elements: [{ id: 'financeiro', type: 'c4:softwareSystem', name: 'Financeiro',
-    children: [{ id: 'financeiro.pagamentos', type: 'c4:container', name: 'Pagamentos' }] }], relationships: [] } });
+  const base = normalizeModel(asBase({ archlens: '1.0', name: 'T', model: { elements: [{ id: 'financeiro', type: 'c4:softwareSystem', name: 'Financeiro',
+    children: [{ id: 'financeiro.pagamentos', type: 'c4:container', name: 'Pagamentos' }] }], relationships: [] } }));
   const ds = toDelta(inv([...facts, { kind: 'service', name: 'worker', build: 'worker', ports: [], at }], { path: '/r/pedidos', name: 'pedidos' }), { role: 'system', base });
   assert.ok(!el(ds, 'pedidos.pagamentos'));
   assert.equal(rel(ds, 'pedidos.pedidos-api', 'financeiro.pagamentos')?.description, 'depends_on');
@@ -360,4 +369,17 @@ test('W_INFERRED does not blame free text for inferences of a repository reading
   const raw = applyNew(toDelta(inv(pedidosFacts, { path: '/r/pedidos', name: 'pedidos' }), { role: 'service', system: 'loja' }));
   const w = validateModel(raw).warnings.find(x => x.code === 'W_INFERRED');
   assert.match(w.message, /inferidos \(texto livre ou leitura de repositório\)/);
+});
+
+test('a database engine serves its database, and a database that references a resource is served by it', () => {
+  const d = toDelta(inv([
+    { kind: 'infra-image', service: 'db', engine: 'postgres', version: '16', category: 'database', at },
+    { kind: 'cloud-resource', type: 'aws_db_instance', name: 'orders', category: 'database', attrs: {}, at },
+    { kind: 'cloud-resource', type: 'aws_s3_bucket', name: 'bkp', category: 'storage', attrs: {}, at },
+    { kind: 'tf-ref', from: 'aws_db_instance.orders', to: 'aws_s3_bucket.bkp', at },
+  ]), { role: 'system' });
+  const rels = d.model.relationships;
+  assert.ok(rels.some(r => r.type === 'archimate:serving' && /postgres/.test(r.from) && /db$/.test(r.to)), JSON.stringify(rels));
+  assert.ok(!rels.some(r => r.type === 'archimate:realization'));
+  assert.ok(rels.some(r => r.type === 'archimate:serving' && /bkp/.test(r.from) && /orders/.test(r.to)), 'a tf-ref from a database is no longer dropped');
 });

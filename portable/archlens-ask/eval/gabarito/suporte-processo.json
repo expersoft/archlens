@@ -1,0 +1,436 @@
+{
+  "title": "Visão em Camadas — Checkout",
+  "spec": {
+    "key": "view",
+    "notation": "archimate",
+    "viewpoint": "layered",
+    "anchor": "bp-checkout",
+    "traverse": {
+      "mode": "supporters"
+    },
+    "granularity": "container"
+  },
+  "sections": [
+    {
+      "label": "Negócio",
+      "rows": [
+        {
+          "id": "bp-checkout",
+          "name": "Checkout",
+          "type": "business-process",
+          "kind": null,
+          "status": "active",
+          "technology": null
+        },
+        {
+          "id": "bo-pedido",
+          "name": "Pedido",
+          "type": "business-object",
+          "kind": null,
+          "status": "active",
+          "technology": null
+        }
+      ]
+    },
+    {
+      "label": "Aplicação",
+      "rows": [
+        {
+          "id": "loja.pedidos",
+          "name": "API de Pedidos",
+          "type": "application-component",
+          "kind": "container",
+          "status": "active",
+          "technology": "Java / Spring Boot"
+        },
+        {
+          "id": "loja.catalogo",
+          "name": "API de Catálogo",
+          "type": "application-component",
+          "kind": "container",
+          "status": "active",
+          "technology": "Go"
+        },
+        {
+          "id": "loja.busca",
+          "name": "Índice de Busca",
+          "type": "application-component",
+          "kind": "container",
+          "status": "active",
+          "technology": "Elasticsearch"
+        },
+        {
+          "id": "loja.cache",
+          "name": "Cache de Carrinho",
+          "type": "application-component",
+          "kind": "container",
+          "status": "active",
+          "technology": "Redis"
+        },
+        {
+          "id": "loja.db-pedidos",
+          "name": "DB Pedidos",
+          "type": "application-component",
+          "kind": "container",
+          "status": "active",
+          "technology": "PostgreSQL"
+        },
+        {
+          "id": "loja.db-catalogo",
+          "name": "DB Catálogo",
+          "type": "application-component",
+          "kind": "container",
+          "status": "active",
+          "technology": "MongoDB"
+        },
+        {
+          "id": "loja.eventos",
+          "name": "Barramento de Eventos",
+          "type": "application-component",
+          "kind": "container",
+          "status": "active",
+          "technology": "Kafka"
+        },
+        {
+          "id": "gateway",
+          "name": "Gateway de Pagamentos",
+          "type": "application-component",
+          "kind": "softwareSystem",
+          "status": "active",
+          "technology": null
+        },
+        {
+          "id": "antifraude",
+          "name": "Serviço Antifraude",
+          "type": "application-component",
+          "kind": "softwareSystem",
+          "status": "active",
+          "technology": null
+        },
+        {
+          "id": "as-checkout",
+          "name": "Serviço de Checkout",
+          "type": "application-service",
+          "kind": null,
+          "status": "active",
+          "technology": null
+        },
+        {
+          "id": "as-catalogo",
+          "name": "Serviço de Catálogo",
+          "type": "application-service",
+          "kind": null,
+          "status": "active",
+          "technology": null
+        },
+        {
+          "id": "as-pagamento",
+          "name": "Serviço de Pagamento",
+          "type": "application-service",
+          "kind": null,
+          "status": "active",
+          "technology": null
+        },
+        {
+          "id": "do-pedido",
+          "name": "Registro de Pedido",
+          "type": "data-object",
+          "kind": null,
+          "status": "active",
+          "technology": null
+        },
+        {
+          "id": "do-produto",
+          "name": "Registro de Produto",
+          "type": "data-object",
+          "kind": null,
+          "status": "active",
+          "technology": null
+        }
+      ]
+    },
+    {
+      "label": "Tecnologia",
+      "rows": [
+        {
+          "id": "tn-k8s",
+          "name": "Cluster Kubernetes (EKS)",
+          "type": "node",
+          "kind": null,
+          "status": "active",
+          "technology": null
+        },
+        {
+          "id": "ts-hosting",
+          "name": "Hospedagem de contêineres",
+          "type": "technology-service",
+          "kind": null,
+          "status": "active",
+          "technology": null
+        },
+        {
+          "id": "ts-mensageria",
+          "name": "Mensageria",
+          "type": "technology-service",
+          "kind": null,
+          "status": "active",
+          "technology": null
+        },
+        {
+          "id": "ss-postgres",
+          "name": "PostgreSQL 16 (RDS)",
+          "type": "system-software",
+          "kind": null,
+          "status": "active",
+          "technology": null
+        },
+        {
+          "id": "ss-mongo",
+          "name": "MongoDB Atlas",
+          "type": "system-software",
+          "kind": null,
+          "status": "active",
+          "technology": null
+        },
+        {
+          "id": "ss-redis",
+          "name": "Redis (ElastiCache)",
+          "type": "system-software",
+          "kind": null,
+          "status": "active",
+          "technology": null
+        },
+        {
+          "id": "ss-kafka",
+          "name": "Apache Kafka (MSK)",
+          "type": "system-software",
+          "kind": null,
+          "status": "active",
+          "technology": null
+        },
+        {
+          "id": "ss-elastic",
+          "name": "Elasticsearch",
+          "type": "system-software",
+          "kind": null,
+          "status": "active",
+          "technology": null
+        },
+        {
+          "id": "art-pedidos",
+          "name": "pedidos-api.jar",
+          "type": "artifact",
+          "kind": null,
+          "status": "active",
+          "technology": null
+        }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "from": "loja.db-catalogo",
+      "to": "loja.catalogo",
+      "type": "serving",
+      "sentence": "DB Catálogo serve API de Catálogo.",
+      "derived": false
+    },
+    {
+      "from": "loja.busca",
+      "to": "loja.catalogo",
+      "type": "serving",
+      "sentence": "Índice de Busca serve API de Catálogo.",
+      "derived": false
+    },
+    {
+      "from": "bp-checkout",
+      "to": "bo-pedido",
+      "type": "access",
+      "sentence": "Checkout grava Pedido.",
+      "derived": false
+    },
+    {
+      "from": "as-checkout",
+      "to": "bp-checkout",
+      "type": "serving",
+      "sentence": "Serviço de Checkout serve Checkout.",
+      "derived": false
+    },
+    {
+      "from": "loja.catalogo",
+      "to": "as-catalogo",
+      "type": "realization",
+      "sentence": "API de Catálogo realiza Serviço de Catálogo.",
+      "derived": false
+    },
+    {
+      "from": "as-catalogo",
+      "to": "bp-checkout",
+      "type": "serving",
+      "sentence": "Serviço de Catálogo serve Checkout.",
+      "derived": false
+    },
+    {
+      "from": "as-pagamento",
+      "to": "bp-checkout",
+      "type": "serving",
+      "sentence": "Serviço de Pagamento serve Checkout.",
+      "derived": false
+    },
+    {
+      "from": "do-pedido",
+      "to": "bo-pedido",
+      "type": "realization",
+      "sentence": "Registro de Pedido realiza Pedido.",
+      "derived": false
+    },
+    {
+      "from": "loja.catalogo",
+      "to": "do-produto",
+      "type": "access",
+      "sentence": "API de Catálogo lê e grava Registro de Produto.",
+      "derived": false
+    },
+    {
+      "from": "tn-k8s",
+      "to": "ts-hosting",
+      "type": "realization",
+      "sentence": "Cluster Kubernetes (EKS) realiza Hospedagem de contêineres.",
+      "derived": false
+    },
+    {
+      "from": "ts-hosting",
+      "to": "loja.pedidos",
+      "type": "serving",
+      "sentence": "Hospedagem de contêineres serve API de Pedidos.",
+      "derived": false
+    },
+    {
+      "from": "ts-hosting",
+      "to": "loja.catalogo",
+      "type": "serving",
+      "sentence": "Hospedagem de contêineres serve API de Catálogo.",
+      "derived": false
+    },
+    {
+      "from": "ss-kafka",
+      "to": "ts-mensageria",
+      "type": "realization",
+      "sentence": "Apache Kafka (MSK) realiza Mensageria.",
+      "derived": false
+    },
+    {
+      "from": "ts-mensageria",
+      "to": "loja.pedidos",
+      "type": "serving",
+      "sentence": "Mensageria serve API de Pedidos.",
+      "derived": false
+    },
+    {
+      "from": "ss-postgres",
+      "to": "loja.pedidos",
+      "type": "serving",
+      "sentence": "PostgreSQL 16 (RDS) serve API de Pedidos.",
+      "derived": false
+    },
+    {
+      "from": "ss-redis",
+      "to": "loja.pedidos",
+      "type": "serving",
+      "sentence": "Redis (ElastiCache) serve API de Pedidos.",
+      "derived": false
+    },
+    {
+      "from": "ss-mongo",
+      "to": "loja.catalogo",
+      "type": "serving",
+      "sentence": "MongoDB Atlas serve API de Catálogo.",
+      "derived": false
+    },
+    {
+      "from": "ss-elastic",
+      "to": "loja.catalogo",
+      "type": "serving",
+      "sentence": "Elasticsearch serve API de Catálogo.",
+      "derived": false
+    },
+    {
+      "from": "art-pedidos",
+      "to": "loja.pedidos",
+      "type": "realization",
+      "sentence": "pedidos-api.jar realiza API de Pedidos.",
+      "derived": false
+    },
+    {
+      "from": "tn-k8s",
+      "to": "art-pedidos",
+      "type": "assignment",
+      "sentence": "pedidos-api.jar roda em Cluster Kubernetes (EKS).",
+      "derived": false
+    },
+    {
+      "from": "loja.pedidos",
+      "to": "as-checkout",
+      "type": "realization",
+      "sentence": "API de Pedidos realiza Serviço de Checkout.",
+      "derived": true,
+      "via": [
+        "Checkout Controller"
+      ]
+    },
+    {
+      "from": "antifraude",
+      "to": "as-pagamento",
+      "type": "serving",
+      "sentence": "Serviço Antifraude serve Serviço de Pagamento.",
+      "derived": true,
+      "via": [
+        "Pagamento Adapter"
+      ]
+    },
+    {
+      "from": "gateway",
+      "to": "as-pagamento",
+      "type": "serving",
+      "sentence": "Gateway de Pagamentos serve Serviço de Pagamento.",
+      "derived": true,
+      "via": [
+        "Pagamento Adapter"
+      ]
+    },
+    {
+      "from": "loja.cache",
+      "to": "as-checkout",
+      "type": "serving",
+      "sentence": "Cache de Carrinho serve Serviço de Checkout.",
+      "derived": true,
+      "via": [
+        "Carrinho Service",
+        "Checkout Controller"
+      ]
+    },
+    {
+      "from": "loja.db-pedidos",
+      "to": "as-checkout",
+      "type": "serving",
+      "sentence": "DB Pedidos serve Serviço de Checkout.",
+      "derived": true,
+      "via": [
+        "Pedido Repository",
+        "Checkout Controller"
+      ]
+    },
+    {
+      "from": "loja.eventos",
+      "to": "as-checkout",
+      "type": "serving",
+      "sentence": "Barramento de Eventos serve Serviço de Checkout.",
+      "derived": true,
+      "via": [
+        "Publicador de Eventos",
+        "Checkout Controller"
+      ]
+    }
+  ],
+  "notes": []
+}

@@ -307,6 +307,102 @@
         "external": {
           "type": "boolean"
         },
+        "c4": {
+          "type": "object",
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "enum": [
+                "person",
+                "softwareSystem",
+                "container",
+                "component",
+                "deploymentNode",
+                "infrastructureNode"
+              ]
+            }
+          }
+        },
+        "parent": {
+          "type": "string"
+        },
+        "group": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "properties": {
+          "type": "object",
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            ]
+          }
+        },
+        "owner": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        },
+        "inferred": {
+          "type": "boolean"
+        },
+        "confidence": {
+          "enum": [
+            "alta",
+            "média",
+            "baixa",
+            "high",
+            "medium",
+            "low"
+          ]
+        },
+        "source": {
+          "type": "string"
+        },
+        "aliases": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "status": {
+          "enum": [
+            "draft",
+            "planned",
+            "active",
+            "deprecated",
+            "retired"
+          ]
+        },
+        "statusReason": {
+          "type": "string"
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/source"
+          }
+        },
         "archimate": {
           "enum": [
             "resource",
@@ -431,75 +527,10 @@
             "archimate:location"
           ]
         },
-        "parent": {
-          "type": "string"
-        },
-        "group": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
         "children": {
           "type": "array",
           "items": {
             "$ref": "#/$defs/element"
-          }
-        },
-        "properties": {
-          "type": "object",
-          "additionalProperties": {
-            "type": [
-              "string",
-              "number",
-              "boolean"
-            ]
-          }
-        },
-        "owner": {
-          "type": "string"
-        },
-        "url": {
-          "type": "string"
-        },
-        "inferred": {
-          "type": "boolean"
-        },
-        "confidence": {
-          "enum": [
-            "alta",
-            "média",
-            "baixa",
-            "high",
-            "medium",
-            "low"
-          ]
-        },
-        "source": {
-          "type": "string"
-        },
-        "aliases": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "status": {
-          "enum": [
-            "draft",
-            "planned",
-            "active",
-            "deprecated",
-            "retired"
-          ]
-        },
-        "statusReason": {
-          "type": "string"
-        },
-        "sources": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/source"
           }
         }
       }
@@ -570,7 +601,26 @@
           }
         },
         "properties": {
-          "type": "object"
+          "type": "object",
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            ]
+          }
         },
         "inferred": {
           "type": "boolean"

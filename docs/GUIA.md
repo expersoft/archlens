@@ -8,6 +8,7 @@ feitos para apresentação em tela cheia.
 - [Usando com o Claude](#usando-com-o-claude)
 - [Evoluindo a base](#evoluindo-a-base)
 - [Usando pela linha de comando](#usando-pela-linha-de-comando)
+- [Base compartilhada no gbrain](#base-compartilhada-no-gbrain)
 - [Apresentando](#apresentando)
 - [Os cenários, com exemplos](#os-cenários-com-exemplos)
 - [Problemas comuns](#problemas-comuns)
@@ -19,9 +20,18 @@ git clone <repo> ~/repos/github.com/expersoft/archlens
 cd ~/repos/github.com/expersoft/archlens
 npm install                    # playwright-core (opcional, para as checagens visuais)
 npx playwright install chromium
-ln -s "$PWD" ~/.claude/skills/archlens   # disponibiliza a skill no Claude Code
 npm test
 ```
+
+Para usar com o Claude Code, instale as três skills (`archlens-plan`, `archlens-apply`, `archlens-query`) como plugin:
+
+```bash
+claude plugin marketplace add <repo>
+claude plugin install archlens
+```
+
+ou ligue-as à mão: `ln -s <repo>/skills/archlens-* ~/.claude/skills/`. Quem tinha `~/.claude/skills/archlens → <repo>`
+precisa remover esse link: o `SKILL.md` da raiz não existe mais.
 
 Requisitos: Node ≥ 18. O layout usa o ELK, já incluído em `scripts/vendor/` (licença EPL-2.0).
 Sem o Chromium, tudo funciona, exceto os screenshots e a medição de largura e fonte do `deliver`.
@@ -31,9 +41,23 @@ Sem o Chromium, tudo funciona, exceto os screenshots e a medição de largura e 
 **Onde a base mora.** O modelo fica na pasta `architecture/` (manifesto, `model.json`, `views.json`,
 `changelog.json`, notas em `notes/`). O `ARCHITECTURE.md` é o documento legível gerado dela: não se edita; o texto
 autoral vai em `architecture/notes/*.md`. `archlens check` confere se o documento está em dia (útil no CI) e
-`archlens migrate` converte uma base antiga, com o modelo dentro do `.md`.
+`archlens migrate` converte uma base antiga (formato 1.x): a pasta no mesmo lugar, ou o modelo que vivia dentro do `.md`.
+A base guarda o **formato 2.0** (tipos ArchiMate, perfil C4 em `c4.kind`, hierarquia por `parent`, só relações
+ArchiMate); uma base 1.x é recusada por todos os comandos com `E_STORE_FORMAT` até ser migrada. Deltas e prompts
+continuam usando `c4:*`, `uses` e `children`: a entrada é traduzida.
 
-A skill é acionada por pedidos como:
+**Onde criar a base.** Na primeira conversa sem base, o Claude pergunta onde ela vai morar: `model.json` (padrão), um
+vault markdown (Obsidian) ou um gbrain compartilhado pelo time (veja [Base compartilhada no gbrain](#base-compartilhada-no-gbrain)),
+e cria o `archlens.json` com `archlens init`.
+
+Há **três skills**, cada uma com um papel:
+
+- **`archlens-plan`** recebe informação nova e monta o plano, sem gravar nada;
+- **`archlens-apply`** grava um plano final e regenera documento e diagramas;
+- **`archlens-query`** consulta a base e responde com diagramas ou markdown, sem gravar.
+
+O fluxo é `plan` → `plan --answers` → `apply` → `build`, com `show` para ler o plano e `query` para consultar
+(veja "Evoluindo a base" e "Consultando"). As skills são acionadas por pedidos como:
 
 > Tenho esta arquitetura: *(texto)*. Gere o C4 de contexto e containers, e um ArchiMate com tudo que
 > sustenta a oferta "Teleconsulta".
@@ -64,15 +88,30 @@ A base cresce por rodadas. A cada informação nova, diga ao Claude o que mudou:
 
 > A API de Pedidos agora é Kotlin, e existe um worker novo que consome o tópico de pedidos.
 
-O Claude escreve um **delta**, roda `archlens merge … --plan`, mostra o que é novo e pergunta, **um item por vez**,
+O Claude escreve um **delta**, roda `archlens plan`, mostra o que é novo e pergunta, **um item por vez**,
 só o que exige decisão: conflitos ("a base diz Java, você disse Kotlin"), possíveis duplicatas ("'API Agendamento' é
-a mesma 'API de Agendamento'?"), remoções e desativações. Depois aplica, e o `ARCHITECTURE.md` ganha:
+a mesma 'API de Agendamento'?"), remoções e desativações. Depois grava com `archlens apply`, e o `ARCHITECTURE.md` ganha:
 
 - a coluna **Fontes** e a seção **Fontes** (de onde veio cada fato);
 - a seção **Ciclo de vida** (`planned`, `deprecated`, `retired`) e visões as-is/to-be;
 - a seção **Histórico** com a rodada, e um commit sugerido.
 
-Pela linha de comando:
+Pela linha de comando, o fluxo é `plan` → `plan --answers` → `apply` → `build`:
+
+```bash
+$A plan architecture/ delta.json --out plano.json             # plano aberto, com as perguntas
+# edite "resolution" nos itens pendentes: keep | take | value:<x> | same | different | yes | no
+$A plan architecture/ --answers plano.json --out plano-2.json # replaneja com as respostas (repita até sair "final")
+$A show architecture/ plano-2.json --out plano-2.md           # relatório: decisões, mudanças, relações e visões
+$A apply architecture/ plano-2.json                           # grava; o plano final leva as operações da base
+$A build architecture/                                        # ARCHITECTURE.md + HTML
+```
+
+O plano final carrega as operações no store e a versão da base: se a base mudou depois do plano, o `apply` recusa e
+você refaz o plano com `--answers`. Exemplo pronto: `examples/telemedicina/plano-02.json` (aberto),
+`plano-02-final.json` e `plano-02-final.md`.
+
+O mesmo fluxo com o comando antigo, que continua valendo (`merge` é o mesmo que `plan` e `apply`):
 
 ```bash
 $A merge architecture/ delta.json --plan plano.json   # relatório + plano com as perguntas
@@ -85,6 +124,16 @@ $A merge architecture/ --apply plano2.json           # grava, regenera e registr
 Aplicar de novo um delta que já entrou não muda nada: o apply imprime `= nada mudou; a base não foi regravada`.
 
 Veja `examples/telemedicina/delta-01.json` e `plano-01.json`, e o formato completo em `references/merge.md`.
+
+### Consultando
+
+```bash
+$A query architecture/ --view containers                       # markdown (padrão): elementos por camada, relações
+$A query architecture/ --spec '{"notation":"c4","level":"context","scope":"tele"}' --format json
+$A query architecture/ --element tele.api --depth 1            # cartão do elemento: pai, filhos, relações, fontes
+```
+
+`query` nunca grava a base. Para o diagrama animado use `render`/`deliver`.
 
 ### Ler repositórios
 
@@ -123,7 +172,8 @@ $A views    examples/loja-online/architecture               # visões definidas 
 $A doc      examples/loja-online/architecture               # regenera o ARCHITECTURE.md
 $A build    examples/loja-online/architecture
 $A check    examples/loja-online/architecture               # modelo válido e ARCHITECTURE.md em dia (CI)
-$A migrate  ARCHITECTURE.md                                 # formato antigo → architecture/
+$A migrate  examples/loja-online/architecture               # base 1.x → 2.0, no mesmo lugar
+$A migrate  ARCHITECTURE.md                                 # modelo dentro do .md → architecture/ (formato 2.0)
 $A deliver  examples/loja-online/architecture --view impacto-api-pedidos --out out/impacto.html --open
 $A deliver  examples/loja-online/architecture --spec '{"key":"erp","notation":"archimate","viewpoint":"impact","anchor":"erp"}' --out out/erp.html
 $A resolve  architecture/ --view containers --json        # IR da visão (nós e arestas), para depuração
@@ -133,18 +183,72 @@ $A resolve  architecture/ --view containers --json        # IR da visão (nós e
 |---|---|
 | `validate` | erros (`E_*`) e avisos (`W_*`) com caminho e dica |
 | `doc` | regenera o `ARCHITECTURE.md` a partir da pasta |
-| `migrate` | converte uma base antiga (modelo dentro do `.md`) para `architecture/` e confere que o modelo é idêntico |
+| `migrate` | converte uma base 1.x para o formato 2.0 (pasta no mesmo lugar, após copiá-la; ou o `.md`/`.json` antigo para uma pasta nova) e confere que o modelo não muda de sentido (`E_MIGRATE_EQUIV`). Planos feitos antes deixam de valer |
 | `check` | valida o modelo e confere se o `ARCHITECTURE.md` está em dia; código 1 se não (CI, pre-commit) |
 | `extract` | imprime o modelo canônico (JSON) da base |
 | `views` | lista as visões definidas e sugere outras (contexto por sistema, suporte por produto, impacto por aplicação…) |
 | `render` | HTML, sem checagem |
 | `deliver` | HTML + screenshots 1920×1080 e 1280×720 + checagem de largura (≥ 90%) e fonte (≥ 14px). `--strict` não substitui a saída se falhar |
 | `build` | `doc` + `deliver` de todas as visões |
+| `init` | cria a base (`archlens.json`) no repositório escolhido: `--store json\|markdown\|gbrain` |
+| `remote … pull` / `remote … check` | base gbrain no modo MCP: atualiza o espelho local / confere a sessão do MCP (o Claude faz as chamadas) |
 | `merge … --plan p.json [--answers antigo.json]` | compara um delta com a base e grava o plano com as perguntas; `--answers` reaproveita as respostas de um plano anterior |
 | `merge … --apply p.json` | aplica o plano respondido: valida, grava `architecture/`, regenera o `ARCHITECTURE.md` e registra o histórico |
 
-Todos aceitam a pasta, o `ARCHITECTURE.md` gerado ou nada (procura a partir do diretório atual); bases antigas
-são só lidas até o `migrate`. O `migrate` é a exceção: recebe o `.md` antigo ou um `model.json`.
+Todos aceitam a pasta, o `ARCHITECTURE.md` gerado ou nada (procura a partir do diretório atual); bases 1.x são
+recusadas (`E_STORE_FORMAT`) até o `migrate`. O `migrate` é a exceção: recebe a pasta 1.x, o `.md` antigo ou um
+`model.json`.
+
+## Base em markdown (Obsidian, gbrain)
+
+Por padrão a base é `model.json`. Para ler e navegar nela como um vault, converta-a para o conector `markdown`:
+
+```bash
+node scripts/archlens.mjs store convert architecture --to markdown   # volta com --to json
+```
+
+A pasta passa a ter uma subpasta por tipo ArchiMate e um `.md` por elemento (`application-component/loja.pedidos.md`),
+com as relações como wikilinks. Abra `architecture/` como vault no Obsidian; o `gbrain-pack.yaml` da pasta é o schema pack
+para o gbrain (`gbrain schema use`). A versão da base não muda, o
+`ARCHITECTURE.md` é regenerado e `notes/`, `diagrams/`, `.obsidian/` e anexos ficam onde estão. Edite à vontade o texto
+depois do bloco `archlens:end` de cada página; o resto é regravado pelo archlens. Esse texto sobrevive a toda gravação (se o elemento sai da base, a página sai e o texto vai para `notes/removidos/<tipo>/<id>.md`, e o `merge --apply` mostra o caminho), mas o `json` não tem onde guardá-lo: `store convert --to json` recusa (`E_STORE_CONVERT`, listando as páginas) enquanto houver texto das pessoas, e só com `--force` converte, descartando-o e avisando quais páginas o perderam. Exemplo pronto:
+`examples/loja-online-vault/`.
+
+## Base compartilhada no gbrain
+
+Para um time de arquitetura, a base pode morar num [gbrain](https://github.com/garrytan/gbrain): arquitetos planejam e
+aplicam pelo archlens, muitas vezes em domínios paralelos, e stakeholders consultam pelo plugin ou direto no gbrain (a IA
+corporativa lê as páginas). Cada elemento vira uma página, com as relações como ligações tipadas; manifesto, visões, notas e
+histórico também viram páginas legíveis.
+
+```bash
+# modo git: o CLI grava um commit por apply num clone do repositório que o gbrain sincroniza
+$A init architecture --store gbrain --mode git --repo ../gbrain-arquitetura [--remote origin] [--branch main] [--prefix archlens]
+# modo MCP: o Claude chama as ferramentas do MCP do gbrain configurado no Claude Code; o CLI prepara e confere
+$A init architecture --store gbrain --mode mcp --server gbrain-corp [--source-id arquitetura] [--prefix archlens]
+# uma base local que já existe vai para o gbrain (e volta com --to json|markdown)
+$A store convert architecture --to gbrain --mode git --repo ../gbrain-arquitetura
+```
+
+A pasta `architecture/` fica só com a configuração, o `ARCHITECTURE.md`, as notas e os diagramas: ponha-a no repositório
+do time, e quem clona já aponta para a mesma base. O `archlens.json` não guarda credenciais; o acesso ao git e o MCP
+são configurados por cada um no próprio ambiente.
+
+- **Em paralelo:** o plano guarda a versão de cada objeto que altera ou em que se apoiou. Dois planos que não se cruzam
+  passam um depois do outro; se o segundo mexe ou se apoia no que o primeiro mudou, o apply recusa
+  (`E_STORE_CONFLICT`, com os objetos) e você refaz com `plan --answers`. Um elemento parecido criado em paralelo também
+  vira a pergunta de duplicata.
+- **Modo git:** cada apply é um commit com push; o clone e a branch de quem roda não mudam. Rode o sync do gbrain para
+  indexar.
+- **Modo MCP:** o Claude faz as chamadas que o CLI pede e devolve os resultados. Antes de ler a base, ele roda
+  `remote <base> pull` (o espelho local); uma vez por sessão, `remote <base> check`. O apply tem passos (releitura do que o
+  plano leu, gravação, recibos); um apply interrompido é completado por `apply <base> --resume` ou desfeito por
+  `apply <base> --undo`. Cada página lida ou gravada passa pelo contexto do Claude: bases grandes são mais baratas no modo
+  git. Para a IA corporativa ver os tipos ArchiMate no grafo, o servidor precisa rodar `gbrain sweep`.
+- **Uma base por fonte do gbrain**, um só caminho de gravação (git ou MCP), ids em minúsculas e sem acento. Dá para
+  editar direto no gbrain só o texto depois de `<!-- archlens:end -->` de cada página.
+
+Detalhes e limites conhecidos em `references/base.md`, `references/merge.md` e `references/knowledge-doc.md`.
 
 ## Apresentando
 
@@ -223,6 +327,13 @@ A partir de texto livre (itens inferidos aparecem tracejados):
 
 ![Texto livre](img/texto-livre-suporte.png)
 
+### Aninhamento e C4 derivado
+
+Nas visões ArchiMate, peça "containers dentro do sistema" (`"nesting": "nested"`, com `depth` para limitar os níveis):
+o pai vira uma caixa grande com os filhos dentro. A visão `aplicacao-aninhada` do exemplo mostra o caso. Nas visões C4,
+um modelo escrito em ArchiMate (componente realiza serviço, serviço serve outro componente) gera setas tracejadas
+"via serviço"; `"derive": false` as desliga.
+
 ### Plataformas e agrupamentos
 
 Quando os sistemas formam plataformas, modele cada uma como `grouping` e preencha `group` nos membros. Peça, por
@@ -235,7 +346,12 @@ uma numa moldura. A visão `plataformas` traz o panorama C4 com as molduras.
 | Sintoma | Causa provável |
 |---|---|
 | visão de suporte para no negócio | faltam `realization`/`serving` ligando containers a application services e estes a processos |
-| visão C4 vazia ou só com o sistema | relações declaradas com `archimate:*` em vez de `uses` entre elementos C4 |
+| visão C4 vazia ou só com o sistema | os elementos não têm `c4.kind`, ou as relações ligam só intermediários (serviços, interfaces) sem dono com `c4.kind` (o dono realiza, compõe ou recebe a atribuição do intermediário) |
+| `E_STORE_FORMAT` | base no formato 1.x: rode `archlens migrate <base>` |
+| `E_STORE_CONFLICT` no apply | outro apply mudou um objeto do plano (ou criou um elemento parecido): refaça com `plan --answers` (no modo MCP, `remote pull` antes) |
+| `E_REMOTE_STALE` | base gbrain no modo MCP sem espelho: `archlens remote <base> pull` |
+| `E_STORE_GBRAIN_SURFACE` | o MCP do gbrain não liberou as ferramentas de gravação: `remote <base> check`, ou use o modo git |
+| `E_STORE_GBRAIN_SLUG` | id com maiúscula ou acento numa base gbrain: use minúsculas sem acento |
 | `W_REL_DIRECTION` | serving/realization invertido (quem serve é a origem) |
 | texto pequeno no telão | visão grande demais: use `focus`, `granularity:"container"`, `collapse` ou divida em várias visões |
 | checagem visual pulada | faltam `npm install` e `npx playwright install chromium` |

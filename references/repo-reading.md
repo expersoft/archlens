@@ -9,7 +9,7 @@ Use quando o usuário apontar um repositório (pasta ou URL git) como fonte de a
 
 1. `archlens scan <repo> --base <base>`: imprime o resumo (fatos por fonte, avisos, papel sugerido, elemento já
    existente, sistemas prováveis com o motivo). Sem base, avisa e segue. Na primeira leitura, `--base` pode apontar a
-   base que o primeiro `merge --apply` vai criar (pasta ausente ou vazia): o aviso de base nova sai e o delta é para
+   base que o primeiro `apply` vai criar (pasta ausente ou vazia): o aviso de base nova sai e o delta é para
    uma base nova (o aviso diz onde a base será criada).
 2. **Pergunte o papel e o sistema** mostrando a sugestão e os motivos. Nunca assuma pelo nome. Se o resumo mostrar
    `já na base: <nome> (<id>), semelhança de nome <n>`, confirme com o usuário se é o mesmo elemento e, se for, passe
@@ -103,8 +103,9 @@ Regras comuns:
 
 - **Tópico** (`channel`): container com tag `topic` e id global `topic.<nome>`. **Publicar** = `archimate:flow` do
   produtor para o tópico; **assinar** = `flow` do tópico para o consumidor.
-- **Motor de banco** (`infra-image`, `cloud-resource`): `archimate:system-software` que **realiza** o container do
-  banco. Fila, cache e storage são **servidos** (`serving`) pelo componente de tecnologia.
+- **Motor de banco** (`infra-image`, `cloud-resource`): `archimate:system-software` que **serve** (`serving`) o container
+  do banco, assim como serve fila, cache e storage. O banco é `application-component` com `c4.kind: container` e tag
+  `database` na base (o delta continua escrevendo `c4:container`), então a relação não é descartada.
 - **`tf-ref`** só liga recursos achados nos arquivos lidos (também entre arquivos).
 - **Fluxo do graphify** = `archimate:business-process` `inferred`, servido pelos containers dos participantes. Como o
   graphify costuma ligar fluxos só a documentos, um fluxo pode não ter módulos como participantes; nesse caso ele se

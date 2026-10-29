@@ -193,7 +193,7 @@ export function toDelta(inv, { role, system, id, base = null } = {}) {
   for (const f of facts.filter(x => x.kind === 'infra-image')) {
     const iid = put({ id: infraIdOf(f.service), type: 'c4:container', parent: sysId, name: f.service, tags: [tagOf(f.category)] }, f.at);
     infra.set(f.service, iid);
-    link(engine(f.engine, f.version, f.at), iid, f.category === 'database' ? 'archimate:realization' : 'archimate:serving', f.at);
+    link(engine(f.engine, f.version, f.at), iid, 'archimate:serving', f.at);
   }
   for (const f of facts.filter(x => x.kind === 'cloud-resource')) {
     const rk = `${f.type}.${f.name}`;
@@ -206,9 +206,7 @@ export function toDelta(inv, { role, system, id, base = null } = {}) {
     }
     infra.set(rk, put({ id: infraIdOf(f.name), type: 'c4:container', parent: sysId, name: f.name, technology: f.type, tags: [tagOf(f.category)] }, f.at));
   }
-  const cloud = new Map(facts.filter(x => x.kind === 'cloud-resource').map(f => [`${f.type}.${f.name}`, f]));
   for (const f of facts.filter(x => x.kind === 'tf-ref')) {
-    if (cloud.get(f.from)?.category === 'database') continue; // serving cannot target a data object
     link(infra.get(f.to), infra.get(f.from), 'archimate:serving', f.at);
   }
 
@@ -282,13 +280,15 @@ export function toDelta(inv, { role, system, id, base = null } = {}) {
   for (const [pid, realId] of claims) {
     ops.push({ op: 'remove', id: pid, reason: `substituído por ${realId} (lido em ${ref})` });
     for (const r of base.relationships) {
-      const ends = r.c4 ?? r;
+      // A serving between two C4 elements is re-emitted as the "uses" the readings write (consumer → provider).
+      const uses = r.type === 'serving' && !!base.elements.get(r.from)?.c4 && !!base.elements.get(r.to)?.c4;
+      const ends = uses ? { from: r.to, to: r.from } : r;
       if (!claims.has(ends.from) && !claims.has(ends.to)) continue;
       if (ends.from !== pid && ends.to !== pid) continue; // moved once, by the placeholder at its "from" or "to"
       const from = claims.get(ends.from) ?? ends.from;
       const to = claims.get(ends.to) ?? ends.to;
       if (from === to) continue;
-      const type = r.c4 ? 'uses' : `archimate:${r.type}`;
+      const type = uses ? 'uses' : `archimate:${r.type}`;
       const k = `${from}|${type}|${to}`;
       const sources = r.sources.map(x => ({ ...x }));
       const known = rels.find(x => `${x.from}|${x.type}|${x.to}` === k);
@@ -298,6 +298,7 @@ export function toDelta(inv, { role, system, id, base = null } = {}) {
       }
       relSeen.add(k);
       rels.push({ from, to, type, ...pick(r, ['description', 'technology', 'inferred', 'accessType']),
+        ...(r.properties && Object.keys(r.properties).length ? { properties: structuredClone(r.properties) } : {}),
         ...(r.status && r.status !== 'active' ? pick(r, ['status', 'statusReason']) : {}), sources });
     }
   }

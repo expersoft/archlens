@@ -1,4 +1,4 @@
-// Metamodel registry: ArchiMate 3.2 element/relationship catalogue plus the C4 profile on top of it.
+// Metamodel registry: ArchiMate 3.2 element/relationship catalogue plus the C4 profile on top of it (C4_KIND_TYPES).
 
 const el = (layer, aspect, label, icon) => ({ layer, aspect, label, icon });
 
@@ -100,53 +100,24 @@ export const LAYER_LABELS = {
 // Abstraction rank used to judge the direction of serving/realization across layers.
 export const LAYER_RANK = { physical: 0, technology: 1, application: 2, business: 3, strategy: 4, motivation: 5, implementation: 2.5, other: 2.5 };
 
+// Tags that make a C4 container a data store (cylinder in C4, 🛢 in the document; a 1.x data-object container).
+export const STORE_TAGS = ['database', 'datastore', 'data-store', 'bucket', 'storage'];
+
 export const C4_KINDS = ['person', 'softwareSystem', 'container', 'component', 'deploymentNode', 'infrastructureNode'];
 export const C4_LABELS = {
   person: 'Person', softwareSystem: 'Software System', container: 'Container', component: 'Component',
   deploymentNode: 'Deployment Node', infrastructureNode: 'Infrastructure Node',
 };
 
-const C4_TO_ARCHIMATE = {
-  person: 'business-actor',
-  softwareSystem: 'application-component',
-  container: 'application-component',
-  component: 'application-component',
-  deploymentNode: 'node',
-  infrastructureNode: 'node',
+/** The C4 profile: which ArchiMate types each C4 kind may sit on. */
+export const C4_KIND_TYPES = {
+  person: ['business-actor', 'business-role'],
+  softwareSystem: ['application-component'],
+  container: ['application-component', 'application-event'],
+  component: ['application-component'],
+  deploymentNode: ['node', 'device', 'system-software', 'technology-service', 'communication-network'],
+  infrastructureNode: ['node', 'device', 'system-software', 'technology-service', 'communication-network'],
 };
-
-// Tags that turn a C4 container into a passive data store in ArchiMate.
-export const DATA_TAGS = ['database', 'datastore', 'data-store', 'bucket', 'storage'];
-
-/**
- * Resolve a raw element type ("c4:container", "archimate:node" or bare "node") onto the
- * ArchiMate metamodel. `hints` may carry `tags` and an explicit `archimate` override.
- */
-export function resolveType(raw, hints = {}) {
-  if (typeof raw !== 'string') return { error: 'E_UNKNOWN_TYPE' };
-  const [ns, name] = raw.includes(':') ? raw.split(':', 2) : ['archimate', raw];
-  if (ns === 'c4') {
-    if (!C4_TO_ARCHIMATE[name]) return { error: 'E_UNKNOWN_TYPE' };
-    let type = C4_TO_ARCHIMATE[name];
-    if (name === 'container' && (hints.tags || []).some(t => DATA_TAGS.includes(String(t).toLowerCase()))) type = 'data-object';
-    if (hints.archimate) {
-      const override = hints.archimate.replace(/^archimate:/, '');
-      if (!ELEMENT_TYPES[override]) return { error: 'E_UNKNOWN_TYPE' };
-      type = override;
-    }
-    return { type, c4Kind: name };
-  }
-  if (ns === 'archimate' && ELEMENT_TYPES[name]) return { type: name, c4Kind: null };
-  return { error: 'E_UNKNOWN_TYPE' };
-}
-
-export function resolveRelType(raw) {
-  if (typeof raw !== 'string') return { error: 'E_REL_TYPE' };
-  const [ns, name] = raw.includes(':') ? raw.split(':', 2) : [null, raw];
-  if ((ns === 'c4' || ns === null) && name === 'uses') return { type: 'uses' };
-  if ((ns === 'archimate' || ns === null) && RELATIONSHIP_TYPES[name]) return { type: name };
-  return { error: 'E_REL_TYPE' };
-}
 
 export const isPassive = t => ELEMENT_TYPES[t]?.aspect === 'passive';
 export const isMotivation = t => ELEMENT_TYPES[t]?.layer === 'motivation';

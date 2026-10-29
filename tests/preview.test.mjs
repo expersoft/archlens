@@ -1,13 +1,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { previewModel, previewSummary, annotateView } from '../scripts/lib/preview.mjs';
+import { previewModel, diffModels, previewSummary, annotateView } from '../scripts/lib/preview.mjs';
 import { planMerge, applyPlan, canonicalJson } from '../scripts/lib/merge.mjs';
 import { normalizeModel } from '../scripts/lib/model.mjs';
 import { resolveView } from '../scripts/lib/query.mjs';
 import { validateModel } from '../scripts/lib/validate.mjs';
+import { asBase } from './helpers.mjs';
 
-const shop = () => JSON.parse(readFileSync(new URL('./fixtures/shop.json', import.meta.url)));
+const shop = () => asBase(JSON.parse(readFileSync(new URL('./fixtures/shop.json', import.meta.url))));
 const SRC = { kind: 'prompt', ref: 'rodada 1', date: '2026-10-01' };
 const delta = (model = {}, extra = {}) => ({ 'archlens-delta': '1.0', source: SRC, summary: 'teste',
   model: { elements: [], relationships: [], ...model }, ...extra });
@@ -35,8 +36,8 @@ test('added, changed, removed and retired elements are told apart', () => {
 
 test('removed elements come back as ghosts under their parent, with the relationships that fall with them', () => {
   const p = previewModel(shop(), { delta: delta({}, { ops: [{ op: 'remove', id: 'loja.api' }] }) });
-  assert.ok(find(p.raw, 'loja').children.some(c => c.id === 'loja.api'), 'ghost nested in its old parent');
-  assert.ok(find(p.raw, 'loja.api').children.some(c => c.id === 'loja.api.checkout'), 'descendants come back nested too');
+  assert.equal(find(p.raw, 'loja.api').parent, 'loja', 'ghost under its old parent');
+  assert.equal(find(p.raw, 'loja.api.checkout').parent, 'loja.api', 'descendants come back too');
   assert.equal(p.changes.get('loja.api.checkout').kind, 'removed');
   assert.equal([...p.relChanges.values()].filter(c => c.kind === 'removed').length, 7);
   assert.deepEqual(validateModel(p.raw).errors, [], 'the preview model is valid');
@@ -104,28 +105,13 @@ test('a delta on a missing base previews everything as added', () => {
   assert.equal(previewSummary(p), '+1 ~0 −0');
 });
 
-test('a relationship whose canonical id flips is one changed relationship, not removed + added', () => {
-  const base = { archlens: '1.0', name: 'X', model: {
-    elements: [{ id: 'sys', type: 'c4:softwareSystem', name: 'Sys', children: [
-      { id: 'app', type: 'c4:container', name: 'App' }, { id: 'store', type: 'c4:container', name: 'Store' }] }],
-    relationships: [{ from: 'app', to: 'store', type: 'uses' }] } };
-  const p = previewModel(base, { delta: delta({ elements: [{ id: 'store', type: 'archimate:data-object' }] }) });
-  const kinds = [...p.relChanges.values()].map(c => c.kind);
-  assert.deepEqual(kinds, ['changed']);
-  const [c] = p.relChanges.values();
-  assert.equal(c.fields[0].field, 'id');
-  assert.notEqual(c.fields[0].before, c.fields[0].after);
-  assert.equal(p.raw.model.relationships.filter(r => [r.from, r.to].sort().join() === 'app,store').length, 1);
-});
-
 test('ghosts keep a top-level parent when the child is listed before it', () => {
-  const base = { archlens: '1.0', name: 'X', model: {
+  const base = asBase({ archlens: '1.0', name: 'X', model: {
     elements: [{ id: 'c', type: 'c4:container', name: 'C', parent: 'a' }, { id: 'a', type: 'c4:softwareSystem', name: 'A' }],
-    relationships: [] } };
+    relationships: [] } });
   const p = previewModel(base, { delta: delta({}, { ops: [{ op: 'remove', id: 'a' }] }) });
-  const a = find(p.raw, 'a');
   const c = find(p.raw, 'c');
-  assert.ok(c.parent === 'a' || (a.children || []).some(x => x.id === 'c'));
+  assert.equal(c.parent, 'a');
   assert.deepEqual(validateModel(p.raw).errors, []);
 });
 
@@ -148,13 +134,13 @@ test('views keep ghosts and retired-in-this-delta items visible, and are annotat
 
 test('removing one of two parallel relationships ghosts that one and leaves the survivor unchanged', () => {
   const base = shop();
-  base.model.relationships.splice(1, 0, { from: 'cliente', to: 'loja.web', type: 'uses', description: 'Volta a comprar', technology: 'HTTPS' });
+  base.model.relationships.splice(1, 0, { from: 'loja.web', to: 'cliente', type: 'serving', description: 'Volta a comprar', technology: 'HTTPS' });
   const p = previewModel(base, { delta: delta({}, { ops: [{ op: 'remove', id: 'loja.web-serving-cliente' }] }) });
   const kinds = [...p.relChanges].map(([id, c]) => [id, c.kind]);
   assert.equal(kinds.length, 1, JSON.stringify(kinds));
   const [[ghostId, kind]] = kinds;
   assert.equal(kind, 'removed');
-  const parallel = p.raw.model.relationships.filter(r => r.from === 'cliente' && r.to === 'loja.web');
+  const parallel = p.raw.model.relationships.filter(r => r.from === 'loja.web' && r.to === 'cliente');
   assert.deepEqual(parallel.map(r => r.description).sort(), ['Compra', 'Volta a comprar']);
   assert.equal(parallel.find(r => r.id === ghostId)?.description, 'Compra', 'the ghost is the removed relationship');
   assert.equal(p.pending.get(ghostId)?.[0].key, 'op:0', 'the open removal question sits on the ghost');
@@ -205,7 +191,7 @@ test('without ghosts, the preview of a fully answered plan that removes an eleme
   for (const it of plan.items) if ('resolution' in it) it.resolution = it.class === 'op' ? 'yes' : 'take';
   const p = previewModel(base, { plan });
   const ghost = (map, id) => map.get(id)?.kind === 'removed';
-  const strip = list => list.filter(e => !ghost(p.changes, e.id)).map(e => (e.children ? { ...e, children: strip(e.children) } : e));
+  const strip = list => list.filter(e => !ghost(p.changes, e.id));
   const raw = structuredClone(p.raw);
   raw.model.elements = strip(raw.model.elements);
   raw.model.relationships = raw.model.relationships.filter(r => !(r.id && ghost(p.relChanges, r.id)));
@@ -215,17 +201,33 @@ test('without ghosts, the preview of a fully answered plan that removes an eleme
 });
 
 test('preview lists a group change as a changed field', () => {
-  const base = JSON.parse(readFileSync(new URL('./fixtures/platforms.json', import.meta.url)));
+  const base = asBase(JSON.parse(readFileSync(new URL('./fixtures/platforms.json', import.meta.url))));
   const p = previewModel(base, { delta: { 'archlens-delta': '1.0', model: { elements: [{ id: 'kafka', group: 'plat-cred' }] } } });
   assert.ok(p.changes.get('kafka').fields.some(f => f.field === 'group' && f.before === 'plat-aut' && f.after === 'plat-cred'));
 });
 
 test('preview of removing a grouping shows its frame as removed, around its former members', () => {
-  const base = JSON.parse(readFileSync(new URL('./fixtures/platforms.json', import.meta.url)));
+  const base = asBase(JSON.parse(readFileSync(new URL('./fixtures/platforms.json', import.meta.url))));
   const p = previewModel(base, { delta: { 'archlens-delta': '1.0', ops: [{ op: 'remove', id: 'plat-cred' }] } });
   assert.equal(p.changes.get('plat-cred').kind, 'removed');
   assert.ok(p.changes.get('motor').fields.some(f => f.field === 'group' && f.before === 'plat-cred' && f.after === undefined));
   const v = annotateView(resolveView(normalizeModel(p.raw), { key: 'l', notation: 'c4', level: 'landscape', groups: { frames: true } }), p);
   assert.equal(v.groups.find(g => g.id === 'plat-cred')?.change, 'removed');
   assert.equal(v.nodes.find(n => n.id === 'motor').group, 'plat-cred');
+});
+
+test('diffModels agrees with previewModel on a fully answered plan', () => {
+  const d = delta(
+    { elements: [{ id: 'loja.worker', type: 'c4:container', name: 'Worker', parent: 'loja' }, { id: 'loja.web', type: 'c4:container', technology: 'Next.js 15' }] },
+    { ops: [{ op: 'remove', id: 'loja.db' }] },
+  );
+  const open = planMerge(shop(), d, TODAY);
+  const answers = new Map(open.items.filter(i => 'resolution' in i).map(i => [i.key, i.class === 'op' ? 'yes' : 'take']));
+  const answered = planMerge(shop(), d, { ...TODAY, answers });
+  const via = previewModel(shop(), { plan: answered });
+  const merged = applyPlan(shop(), answered, TODAY).raw;
+  const dm = diffModels(shop(), merged);
+  assert.deepEqual([...dm.changes], [...via.changes]);
+  assert.deepEqual([...dm.relChanges], [...via.relChanges]);
+  assert.equal(dm.pending.size, 0);
 });

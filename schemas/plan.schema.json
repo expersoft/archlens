@@ -19,6 +19,12 @@
     "baseHash": {
       "type": "string"
     },
+    "storeVersion": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
     "created": {
       "type": "string"
     },
@@ -85,6 +91,60 @@
     },
     "errors": {
       "type": "array"
+    },
+    "state": {
+      "enum": [
+        "open",
+        "final"
+      ]
+    },
+    "entry": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "ops": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "op"
+        ],
+        "properties": {
+          "op": {
+            "enum": [
+              "setManifest",
+              "upsertElement",
+              "removeElement",
+              "upsertRelationship",
+              "removeRelationship",
+              "putView",
+              "removeView",
+              "putNote",
+              "appendHistory"
+            ]
+          }
+        }
+      }
+    },
+    "objects": {
+      "type": "object",
+      "additionalProperties": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "knownCandidates": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      }
     }
   }
 }

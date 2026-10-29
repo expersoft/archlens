@@ -2,166 +2,234 @@
   "elements": [
     {
       "id": "cliente",
-      "type": "c4:person",
+      "type": "business-actor",
       "name": "Cliente",
-      "description": "Compra produtos pela web ou pelo app"
+      "description": "Compra produtos pela web ou pelo app",
+      "c4": {
+        "kind": "person"
+      }
     },
     {
       "id": "atendente",
-      "type": "c4:person",
+      "type": "business-actor",
       "name": "Atendente SAC",
-      "description": "Resolve dúvidas e problemas de pedidos"
+      "description": "Resolve dúvidas e problemas de pedidos",
+      "c4": {
+        "kind": "person"
+      }
     },
     {
       "id": "operador",
-      "type": "c4:person",
+      "type": "business-actor",
       "name": "Operador de Logística",
-      "description": "Separa e despacha pedidos"
+      "description": "Separa e despacha pedidos",
+      "c4": {
+        "kind": "person"
+      }
     },
     {
       "id": "loja",
-      "type": "c4:softwareSystem",
+      "type": "application-component",
       "name": "Plataforma de E-commerce",
       "description": "Vitrine, carrinho e checkout",
       "properties": {
         "owner": "Squad Checkout",
         "criticidade": "alta"
       },
-      "children": [
-        {
-          "id": "loja.web",
-          "type": "c4:container",
-          "name": "Web Storefront",
-          "technology": "Next.js",
-          "description": "Vitrine e checkout web"
-        },
-        {
-          "id": "loja.app",
-          "type": "c4:container",
-          "name": "App Mobile",
-          "technology": "React Native",
-          "description": "App iOS/Android"
-        },
-        {
-          "id": "loja.bff",
-          "type": "c4:container",
-          "name": "BFF",
-          "technology": "Node.js / GraphQL",
-          "description": "Agrega APIs para os canais"
-        },
-        {
-          "id": "loja.pedidos",
-          "type": "c4:container",
-          "name": "API de Pedidos",
-          "technology": "Java / Spring Boot",
-          "description": "Carrinho, checkout e ciclo de vida do pedido",
-          "children": [
-            {
-              "id": "loja.pedidos.checkout",
-              "type": "c4:component",
-              "name": "Checkout Controller",
-              "technology": "Spring MVC",
-              "description": "Orquestra o fechamento do pedido"
-            },
-            {
-              "id": "loja.pedidos.carrinho",
-              "type": "c4:component",
-              "name": "Carrinho Service",
-              "technology": "Spring Bean",
-              "description": "Itens, preços e cupons"
-            },
-            {
-              "id": "loja.pedidos.pagamento",
-              "type": "c4:component",
-              "name": "Pagamento Adapter",
-              "technology": "Spring Bean",
-              "description": "Antifraude + autorização no gateway"
-            },
-            {
-              "id": "loja.pedidos.repo",
-              "type": "c4:component",
-              "name": "Pedido Repository",
-              "technology": "Spring Data JPA",
-              "description": "Persistência de pedidos"
-            },
-            {
-              "id": "loja.pedidos.eventos",
-              "type": "c4:component",
-              "name": "Publicador de Eventos",
-              "technology": "Kafka client",
-              "description": "Publica eventos de domínio"
-            }
-          ]
-        },
-        {
-          "id": "loja.catalogo",
-          "type": "c4:container",
-          "name": "API de Catálogo",
-          "technology": "Go",
-          "description": "Produtos, preços e estoque"
-        },
-        {
-          "id": "loja.busca",
-          "type": "c4:container",
-          "name": "Índice de Busca",
-          "technology": "Elasticsearch",
-          "tags": [
-            "database"
-          ],
-          "description": "Busca textual de produtos"
-        },
-        {
-          "id": "loja.cache",
-          "type": "c4:container",
-          "name": "Cache de Carrinho",
-          "technology": "Redis",
-          "tags": [
-            "database"
-          ],
-          "description": "Carrinhos ativos"
-        },
-        {
-          "id": "loja.db-pedidos",
-          "type": "c4:container",
-          "name": "DB Pedidos",
-          "technology": "PostgreSQL",
-          "tags": [
-            "database"
-          ],
-          "description": "Pedidos e pagamentos"
-        },
-        {
-          "id": "loja.db-catalogo",
-          "type": "c4:container",
-          "name": "DB Catálogo",
-          "technology": "MongoDB",
-          "tags": [
-            "database"
-          ],
-          "description": "Produtos e atributos"
-        },
-        {
-          "id": "loja.eventos",
-          "type": "c4:container",
-          "name": "Barramento de Eventos",
-          "technology": "Kafka",
-          "tags": [
-            "queue"
-          ],
-          "description": "Tópicos de pedidos e estoque"
-        }
-      ],
       "group": "plat-vendas",
       "sources": [
         {
           "kind": "prompt",
           "ref": "agrupamentos"
         }
-      ]
+      ],
+      "c4": {
+        "kind": "softwareSystem"
+      }
+    },
+    {
+      "id": "loja.web",
+      "type": "application-component",
+      "name": "Web Storefront",
+      "technology": "Next.js",
+      "description": "Vitrine e checkout web",
+      "parent": "loja",
+      "c4": {
+        "kind": "container"
+      }
+    },
+    {
+      "id": "loja.app",
+      "type": "application-component",
+      "name": "App Mobile",
+      "technology": "React Native",
+      "description": "App iOS/Android",
+      "parent": "loja",
+      "c4": {
+        "kind": "container"
+      }
+    },
+    {
+      "id": "loja.bff",
+      "type": "application-component",
+      "name": "BFF",
+      "technology": "Node.js / GraphQL",
+      "description": "Agrega APIs para os canais",
+      "parent": "loja",
+      "c4": {
+        "kind": "container"
+      }
+    },
+    {
+      "id": "loja.pedidos",
+      "type": "application-component",
+      "name": "API de Pedidos",
+      "technology": "Java / Spring Boot",
+      "description": "Carrinho, checkout e ciclo de vida do pedido",
+      "parent": "loja",
+      "c4": {
+        "kind": "container"
+      }
+    },
+    {
+      "id": "loja.pedidos.checkout",
+      "type": "application-component",
+      "name": "Checkout Controller",
+      "technology": "Spring MVC",
+      "description": "Orquestra o fechamento do pedido",
+      "parent": "loja.pedidos",
+      "c4": {
+        "kind": "component"
+      }
+    },
+    {
+      "id": "loja.pedidos.carrinho",
+      "type": "application-component",
+      "name": "Carrinho Service",
+      "technology": "Spring Bean",
+      "description": "Itens, preços e cupons",
+      "parent": "loja.pedidos",
+      "c4": {
+        "kind": "component"
+      }
+    },
+    {
+      "id": "loja.pedidos.pagamento",
+      "type": "application-component",
+      "name": "Pagamento Adapter",
+      "technology": "Spring Bean",
+      "description": "Antifraude + autorização no gateway",
+      "parent": "loja.pedidos",
+      "c4": {
+        "kind": "component"
+      }
+    },
+    {
+      "id": "loja.pedidos.repo",
+      "type": "application-component",
+      "name": "Pedido Repository",
+      "technology": "Spring Data JPA",
+      "description": "Persistência de pedidos",
+      "parent": "loja.pedidos",
+      "c4": {
+        "kind": "component"
+      }
+    },
+    {
+      "id": "loja.pedidos.eventos",
+      "type": "application-component",
+      "name": "Publicador de Eventos",
+      "technology": "Kafka client",
+      "description": "Publica eventos de domínio",
+      "parent": "loja.pedidos",
+      "c4": {
+        "kind": "component"
+      }
+    },
+    {
+      "id": "loja.catalogo",
+      "type": "application-component",
+      "name": "API de Catálogo",
+      "technology": "Go",
+      "description": "Produtos, preços e estoque",
+      "parent": "loja",
+      "c4": {
+        "kind": "container"
+      }
+    },
+    {
+      "id": "loja.busca",
+      "type": "application-component",
+      "name": "Índice de Busca",
+      "technology": "Elasticsearch",
+      "tags": [
+        "database"
+      ],
+      "description": "Busca textual de produtos",
+      "parent": "loja",
+      "c4": {
+        "kind": "container"
+      }
+    },
+    {
+      "id": "loja.cache",
+      "type": "application-component",
+      "name": "Cache de Carrinho",
+      "technology": "Redis",
+      "tags": [
+        "database"
+      ],
+      "description": "Carrinhos ativos",
+      "parent": "loja",
+      "c4": {
+        "kind": "container"
+      }
+    },
+    {
+      "id": "loja.db-pedidos",
+      "type": "application-component",
+      "name": "DB Pedidos",
+      "technology": "PostgreSQL",
+      "tags": [
+        "database"
+      ],
+      "description": "Pedidos e pagamentos",
+      "parent": "loja",
+      "c4": {
+        "kind": "container"
+      }
+    },
+    {
+      "id": "loja.db-catalogo",
+      "type": "application-component",
+      "name": "DB Catálogo",
+      "technology": "MongoDB",
+      "tags": [
+        "database"
+      ],
+      "description": "Produtos e atributos",
+      "parent": "loja",
+      "c4": {
+        "kind": "container"
+      }
+    },
+    {
+      "id": "loja.eventos",
+      "type": "application-component",
+      "name": "Barramento de Eventos",
+      "technology": "Kafka",
+      "tags": [
+        "queue"
+      ],
+      "description": "Tópicos de pedidos e estoque",
+      "parent": "loja",
+      "c4": {
+        "kind": "container"
+      }
     },
     {
       "id": "erp",
-      "type": "c4:softwareSystem",
+      "type": "application-component",
       "name": "ERP",
       "technology": "SAP ECC",
       "description": "Faturamento, fiscal e expedição (legado on-premises)",
@@ -174,11 +242,14 @@
           "kind": "prompt",
           "ref": "agrupamentos"
         }
-      ]
+      ],
+      "c4": {
+        "kind": "softwareSystem"
+      }
     },
     {
       "id": "crm",
-      "type": "c4:softwareSystem",
+      "type": "application-component",
       "name": "CRM",
       "external": true,
       "description": "Atendimento (SaaS)",
@@ -188,18 +259,24 @@
           "kind": "prompt",
           "ref": "agrupamentos"
         }
-      ]
+      ],
+      "c4": {
+        "kind": "softwareSystem"
+      }
     },
     {
       "id": "gateway",
-      "type": "c4:softwareSystem",
+      "type": "application-component",
       "name": "Gateway de Pagamentos",
       "external": true,
-      "description": "Autoriza cartões e Pix"
+      "description": "Autoriza cartões e Pix",
+      "c4": {
+        "kind": "softwareSystem"
+      }
     },
     {
       "id": "antifraude",
-      "type": "c4:softwareSystem",
+      "type": "application-component",
       "name": "Serviço Antifraude",
       "external": true,
       "description": "Score de risco da transação",
@@ -209,196 +286,205 @@
           "kind": "prompt",
           "ref": "agrupamentos"
         }
-      ]
+      ],
+      "c4": {
+        "kind": "softwareSystem"
+      }
     },
     {
       "id": "transportadora",
-      "type": "c4:softwareSystem",
+      "type": "application-component",
       "name": "API da Transportadora",
       "external": true,
-      "description": "Coleta e rastreio"
+      "description": "Coleta e rastreio",
+      "c4": {
+        "kind": "softwareSystem"
+      }
     },
     {
       "id": "prod-venda",
-      "type": "archimate:product",
+      "type": "product",
       "name": "Venda Online",
       "description": "Oferta principal: comprar pela web/app e receber em casa"
     },
     {
       "id": "prod-expressa",
-      "type": "archimate:product",
+      "type": "product",
       "name": "Entrega Expressa",
       "description": "Entrega em até 24h nas capitais"
     },
     {
       "id": "ct-termos",
-      "type": "archimate:contract",
+      "type": "contract",
       "name": "Termos de Compra"
     },
     {
       "id": "bs-compra",
-      "type": "archimate:business-service",
+      "type": "business-service",
       "name": "Compra online"
     },
     {
       "id": "bs-pagamento",
-      "type": "archimate:business-service",
+      "type": "business-service",
       "name": "Pagamento seguro"
     },
     {
       "id": "bs-entrega",
-      "type": "archimate:business-service",
+      "type": "business-service",
       "name": "Entrega do pedido"
     },
     {
       "id": "bs-atendimento",
-      "type": "archimate:business-service",
+      "type": "business-service",
       "name": "Atendimento pós-venda"
     },
     {
       "id": "br-comprador",
-      "type": "archimate:business-role",
-      "name": "Comprador"
+      "type": "business-role",
+      "name": "Comprador",
+      "c4": {
+        "kind": "person"
+      }
     },
     {
       "id": "bp-checkout",
-      "type": "archimate:business-process",
+      "type": "business-process",
       "name": "Checkout",
       "description": "Do carrinho ao pedido pago"
     },
     {
       "id": "bp-faturamento",
-      "type": "archimate:business-process",
+      "type": "business-process",
       "name": "Faturamento"
     },
     {
       "id": "bp-expedicao",
-      "type": "archimate:business-process",
+      "type": "business-process",
       "name": "Expedição"
     },
     {
       "id": "bp-atendimento",
-      "type": "archimate:business-process",
+      "type": "business-process",
       "name": "Tratar solicitação"
     },
     {
       "id": "bo-pedido",
-      "type": "archimate:business-object",
+      "type": "business-object",
       "name": "Pedido"
     },
     {
       "id": "bo-nota",
-      "type": "archimate:business-object",
+      "type": "business-object",
       "name": "Nota Fiscal"
     },
     {
       "id": "as-checkout",
-      "type": "archimate:application-service",
+      "type": "application-service",
       "name": "Serviço de Checkout"
     },
     {
       "id": "as-catalogo",
-      "type": "archimate:application-service",
+      "type": "application-service",
       "name": "Serviço de Catálogo"
     },
     {
       "id": "as-pagamento",
-      "type": "archimate:application-service",
+      "type": "application-service",
       "name": "Serviço de Pagamento"
     },
     {
       "id": "as-faturamento",
-      "type": "archimate:application-service",
+      "type": "application-service",
       "name": "Serviço de Faturamento"
     },
     {
       "id": "as-logistica",
-      "type": "archimate:application-service",
+      "type": "application-service",
       "name": "Serviço de Logística"
     },
     {
       "id": "as-consulta",
-      "type": "archimate:application-service",
+      "type": "application-service",
       "name": "Consulta de Pedidos"
     },
     {
       "id": "do-pedido",
-      "type": "archimate:data-object",
+      "type": "data-object",
       "name": "Registro de Pedido"
     },
     {
       "id": "do-produto",
-      "type": "archimate:data-object",
+      "type": "data-object",
       "name": "Registro de Produto"
     },
     {
       "id": "tn-k8s",
-      "type": "archimate:node",
+      "type": "node",
       "name": "Cluster Kubernetes (EKS)"
     },
     {
       "id": "ts-hosting",
-      "type": "archimate:technology-service",
+      "type": "technology-service",
       "name": "Hospedagem de contêineres"
     },
     {
       "id": "ts-mensageria",
-      "type": "archimate:technology-service",
+      "type": "technology-service",
       "name": "Mensageria"
     },
     {
       "id": "ss-postgres",
-      "type": "archimate:system-software",
+      "type": "system-software",
       "name": "PostgreSQL 16 (RDS)"
     },
     {
       "id": "ss-mongo",
-      "type": "archimate:system-software",
+      "type": "system-software",
       "name": "MongoDB Atlas"
     },
     {
       "id": "ss-redis",
-      "type": "archimate:system-software",
+      "type": "system-software",
       "name": "Redis (ElastiCache)"
     },
     {
       "id": "ss-kafka",
-      "type": "archimate:system-software",
+      "type": "system-software",
       "name": "Apache Kafka (MSK)"
     },
     {
       "id": "ss-elastic",
-      "type": "archimate:system-software",
+      "type": "system-software",
       "name": "Elasticsearch"
     },
     {
       "id": "tn-cdn",
-      "type": "archimate:node",
+      "type": "node",
       "name": "CDN CloudFront"
     },
     {
       "id": "tn-sap",
-      "type": "archimate:node",
+      "type": "node",
       "name": "Servidor SAP (on-premises)"
     },
     {
       "id": "cn-vpn",
-      "type": "archimate:communication-network",
+      "type": "communication-network",
       "name": "VPN site-to-site"
     },
     {
       "id": "art-pedidos",
-      "type": "archimate:artifact",
+      "type": "artifact",
       "name": "pedidos-api.jar"
     },
     {
       "id": "goal-abandono",
-      "type": "archimate:goal",
+      "type": "goal",
       "name": "Reduzir abandono de carrinho"
     },
     {
       "id": "req-latencia",
-      "type": "archimate:requirement",
+      "type": "requirement",
       "name": "Checkout < 2s (p95)"
     },
     {
@@ -428,441 +514,441 @@
   ],
   "relationships": [
     {
-      "from": "cliente",
-      "to": "loja.web",
-      "type": "uses",
+      "from": "loja.web",
+      "to": "cliente",
+      "type": "serving",
       "description": "Navega e compra",
       "technology": "HTTPS"
     },
     {
-      "from": "cliente",
-      "to": "loja.app",
-      "type": "uses",
+      "from": "loja.app",
+      "to": "cliente",
+      "type": "serving",
       "description": "Compra pelo celular",
       "technology": "HTTPS"
     },
     {
-      "from": "loja.web",
-      "to": "loja.bff",
-      "type": "uses",
-      "description": "Consulta e envia pedidos",
-      "technology": "GraphQL"
-    },
-    {
-      "from": "loja.app",
-      "to": "loja.bff",
-      "type": "uses",
+      "from": "loja.bff",
+      "to": "loja.web",
+      "type": "serving",
       "description": "Consulta e envia pedidos",
       "technology": "GraphQL"
     },
     {
       "from": "loja.bff",
-      "to": "loja.catalogo",
-      "type": "uses",
+      "to": "loja.app",
+      "type": "serving",
+      "description": "Consulta e envia pedidos",
+      "technology": "GraphQL"
+    },
+    {
+      "from": "loja.catalogo",
+      "to": "loja.bff",
+      "type": "serving",
       "description": "Consulta produtos",
       "technology": "REST"
     },
     {
-      "from": "loja.bff",
-      "to": "loja.busca",
-      "type": "uses",
+      "from": "loja.busca",
+      "to": "loja.bff",
+      "type": "serving",
       "description": "Busca textual",
       "technology": "HTTP"
     },
     {
-      "from": "loja.bff",
-      "to": "loja.pedidos.carrinho",
-      "type": "uses",
+      "from": "loja.pedidos.carrinho",
+      "to": "loja.bff",
+      "type": "serving",
       "description": "Gerencia carrinho",
       "technology": "REST"
     },
     {
-      "from": "loja.bff",
-      "to": "loja.pedidos.checkout",
-      "type": "uses",
+      "from": "loja.pedidos.checkout",
+      "to": "loja.bff",
+      "type": "serving",
       "description": "Fecha pedido",
       "technology": "REST"
     },
     {
-      "from": "loja.catalogo",
-      "to": "loja.db-catalogo",
-      "type": "uses",
+      "from": "loja.db-catalogo",
+      "to": "loja.catalogo",
+      "type": "serving",
       "description": "Lê e grava produtos",
       "technology": "MongoDB wire"
     },
     {
-      "from": "loja.catalogo",
-      "to": "loja.busca",
-      "type": "uses",
+      "from": "loja.busca",
+      "to": "loja.catalogo",
+      "type": "serving",
       "description": "Indexa produtos",
       "technology": "HTTP"
     },
     {
-      "from": "loja.pedidos.checkout",
-      "to": "loja.pedidos.carrinho",
-      "type": "uses",
+      "from": "loja.pedidos.carrinho",
+      "to": "loja.pedidos.checkout",
+      "type": "serving",
       "description": "Obtém itens"
     },
     {
-      "from": "loja.pedidos.checkout",
-      "to": "loja.pedidos.pagamento",
-      "type": "uses",
+      "from": "loja.pedidos.pagamento",
+      "to": "loja.pedidos.checkout",
+      "type": "serving",
       "description": "Solicita autorização"
     },
     {
-      "from": "loja.pedidos.checkout",
-      "to": "loja.pedidos.repo",
-      "type": "uses",
+      "from": "loja.pedidos.repo",
+      "to": "loja.pedidos.checkout",
+      "type": "serving",
       "description": "Persiste pedido"
     },
     {
-      "from": "loja.pedidos.checkout",
-      "to": "loja.pedidos.eventos",
-      "type": "uses",
+      "from": "loja.pedidos.eventos",
+      "to": "loja.pedidos.checkout",
+      "type": "serving",
       "description": "Publica PedidoCriado"
     },
     {
-      "from": "loja.pedidos.carrinho",
-      "to": "loja.cache",
-      "type": "uses",
+      "from": "loja.cache",
+      "to": "loja.pedidos.carrinho",
+      "type": "serving",
       "description": "Lê e grava carrinho",
       "technology": "RESP"
     },
     {
-      "from": "loja.pedidos.repo",
-      "to": "loja.db-pedidos",
-      "type": "uses",
+      "from": "loja.db-pedidos",
+      "to": "loja.pedidos.repo",
+      "type": "serving",
       "description": "Lê e grava pedidos",
       "technology": "JDBC"
     },
     {
-      "from": "loja.pedidos.pagamento",
-      "to": "antifraude",
-      "type": "uses",
+      "from": "antifraude",
+      "to": "loja.pedidos.pagamento",
+      "type": "serving",
       "description": "Avalia risco",
       "technology": "HTTPS"
     },
     {
-      "from": "loja.pedidos.pagamento",
-      "to": "gateway",
-      "type": "uses",
+      "from": "gateway",
+      "to": "loja.pedidos.pagamento",
+      "type": "serving",
       "description": "Autoriza pagamento",
       "technology": "HTTPS"
     },
     {
-      "from": "loja.pedidos.eventos",
-      "to": "loja.eventos",
-      "type": "uses",
+      "from": "loja.eventos",
+      "to": "loja.pedidos.eventos",
+      "type": "serving",
       "description": "Publica eventos",
       "technology": "Kafka"
     },
     {
-      "from": "erp",
-      "to": "loja.eventos",
-      "type": "uses",
+      "from": "loja.eventos",
+      "to": "erp",
+      "type": "serving",
       "description": "Consome pedidos pagos",
       "technology": "Kafka"
     },
     {
-      "from": "erp",
-      "to": "transportadora",
-      "type": "uses",
+      "from": "transportadora",
+      "to": "erp",
+      "type": "serving",
       "description": "Solicita coleta",
       "technology": "REST"
     },
     {
-      "from": "crm",
-      "to": "loja.pedidos",
-      "type": "uses",
+      "from": "loja.pedidos",
+      "to": "crm",
+      "type": "serving",
       "description": "Consulta pedidos",
       "technology": "REST"
     },
     {
-      "from": "atendente",
-      "to": "crm",
-      "type": "uses",
+      "from": "crm",
+      "to": "atendente",
+      "type": "serving",
       "description": "Atende clientes"
     },
     {
-      "from": "operador",
-      "to": "erp",
-      "type": "uses",
+      "from": "erp",
+      "to": "operador",
+      "type": "serving",
       "description": "Gerencia expedição"
     },
     {
       "from": "prod-venda",
       "to": "bs-compra",
-      "type": "archimate:aggregation"
+      "type": "aggregation"
     },
     {
       "from": "prod-venda",
       "to": "bs-pagamento",
-      "type": "archimate:aggregation"
+      "type": "aggregation"
     },
     {
       "from": "prod-venda",
       "to": "bs-entrega",
-      "type": "archimate:aggregation"
+      "type": "aggregation"
     },
     {
       "from": "prod-venda",
       "to": "bs-atendimento",
-      "type": "archimate:aggregation"
+      "type": "aggregation"
     },
     {
       "from": "prod-venda",
       "to": "ct-termos",
-      "type": "archimate:aggregation"
+      "type": "aggregation"
     },
     {
       "from": "prod-expressa",
       "to": "bs-entrega",
-      "type": "archimate:aggregation"
+      "type": "aggregation"
     },
     {
       "from": "bp-checkout",
       "to": "bs-compra",
-      "type": "archimate:realization"
+      "type": "realization"
     },
     {
       "from": "bp-checkout",
       "to": "bs-pagamento",
-      "type": "archimate:realization"
+      "type": "realization"
     },
     {
       "from": "bp-expedicao",
       "to": "bs-entrega",
-      "type": "archimate:realization"
+      "type": "realization"
     },
     {
       "from": "bp-atendimento",
       "to": "bs-atendimento",
-      "type": "archimate:realization"
+      "type": "realization"
     },
     {
       "from": "bp-checkout",
       "to": "bp-faturamento",
-      "type": "archimate:triggering"
+      "type": "triggering"
     },
     {
       "from": "bp-faturamento",
       "to": "bp-expedicao",
-      "type": "archimate:triggering"
+      "type": "triggering"
     },
     {
       "from": "bs-compra",
       "to": "br-comprador",
-      "type": "archimate:serving"
+      "type": "serving"
     },
     {
       "from": "cliente",
       "to": "br-comprador",
-      "type": "archimate:assignment"
+      "type": "assignment"
     },
     {
       "from": "atendente",
       "to": "bp-atendimento",
-      "type": "archimate:assignment"
+      "type": "assignment"
     },
     {
       "from": "operador",
       "to": "bp-expedicao",
-      "type": "archimate:assignment"
+      "type": "assignment"
     },
     {
       "from": "bp-checkout",
       "to": "bo-pedido",
-      "type": "archimate:access",
+      "type": "access",
       "accessType": "write"
     },
     {
       "from": "bp-faturamento",
       "to": "bo-pedido",
-      "type": "archimate:access",
+      "type": "access",
       "accessType": "read"
     },
     {
       "from": "bp-faturamento",
       "to": "bo-nota",
-      "type": "archimate:access",
+      "type": "access",
       "accessType": "write"
     },
     {
       "from": "loja.pedidos.checkout",
       "to": "as-checkout",
-      "type": "archimate:realization"
+      "type": "realization"
     },
     {
       "from": "as-checkout",
       "to": "bp-checkout",
-      "type": "archimate:serving"
+      "type": "serving"
     },
     {
       "from": "loja.catalogo",
       "to": "as-catalogo",
-      "type": "archimate:realization"
+      "type": "realization"
     },
     {
       "from": "as-catalogo",
       "to": "bp-checkout",
-      "type": "archimate:serving"
+      "type": "serving"
     },
     {
       "from": "loja.pedidos.pagamento",
       "to": "as-pagamento",
-      "type": "archimate:realization"
+      "type": "realization"
     },
     {
       "from": "as-pagamento",
       "to": "bp-checkout",
-      "type": "archimate:serving"
+      "type": "serving"
     },
     {
       "from": "erp",
       "to": "as-faturamento",
-      "type": "archimate:realization"
+      "type": "realization"
     },
     {
       "from": "as-faturamento",
       "to": "bp-faturamento",
-      "type": "archimate:serving"
+      "type": "serving"
     },
     {
       "from": "erp",
       "to": "as-logistica",
-      "type": "archimate:realization"
+      "type": "realization"
     },
     {
       "from": "as-logistica",
       "to": "bp-expedicao",
-      "type": "archimate:serving"
+      "type": "serving"
     },
     {
       "from": "loja.pedidos",
       "to": "as-consulta",
-      "type": "archimate:realization"
+      "type": "realization"
     },
     {
       "from": "as-consulta",
       "to": "bp-atendimento",
-      "type": "archimate:serving"
+      "type": "serving"
     },
     {
       "from": "crm",
       "to": "bp-atendimento",
-      "type": "archimate:serving"
+      "type": "serving"
     },
     {
       "from": "do-pedido",
       "to": "bo-pedido",
-      "type": "archimate:realization"
+      "type": "realization"
     },
     {
       "from": "loja.pedidos.repo",
       "to": "do-pedido",
-      "type": "archimate:access",
+      "type": "access",
       "accessType": "write"
     },
     {
       "from": "loja.catalogo",
       "to": "do-produto",
-      "type": "archimate:access",
+      "type": "access",
       "accessType": "readwrite"
     },
     {
       "from": "tn-k8s",
       "to": "ts-hosting",
-      "type": "archimate:realization"
+      "type": "realization"
     },
     {
       "from": "ts-hosting",
       "to": "loja.pedidos",
-      "type": "archimate:serving"
+      "type": "serving"
     },
     {
       "from": "ts-hosting",
       "to": "loja.catalogo",
-      "type": "archimate:serving"
+      "type": "serving"
     },
     {
       "from": "ts-hosting",
       "to": "loja.bff",
-      "type": "archimate:serving"
+      "type": "serving"
     },
     {
       "from": "ss-kafka",
       "to": "ts-mensageria",
-      "type": "archimate:realization"
+      "type": "realization"
     },
     {
       "from": "ts-mensageria",
       "to": "loja.pedidos",
-      "type": "archimate:serving"
+      "type": "serving"
     },
     {
       "from": "ts-mensageria",
       "to": "erp",
-      "type": "archimate:serving"
+      "type": "serving"
     },
     {
       "from": "ss-postgres",
       "to": "loja.pedidos",
-      "type": "archimate:serving"
+      "type": "serving"
     },
     {
       "from": "ss-redis",
       "to": "loja.pedidos",
-      "type": "archimate:serving"
+      "type": "serving"
     },
     {
       "from": "ss-mongo",
       "to": "loja.catalogo",
-      "type": "archimate:serving"
+      "type": "serving"
     },
     {
       "from": "ss-elastic",
       "to": "loja.catalogo",
-      "type": "archimate:serving"
+      "type": "serving"
     },
     {
       "from": "tn-cdn",
       "to": "loja.web",
-      "type": "archimate:serving"
+      "type": "serving"
     },
     {
       "from": "tn-sap",
       "to": "erp",
-      "type": "archimate:serving"
+      "type": "serving"
     },
     {
       "from": "cn-vpn",
       "to": "erp",
-      "type": "archimate:serving"
+      "type": "serving"
     },
     {
       "from": "art-pedidos",
       "to": "loja.pedidos",
-      "type": "archimate:realization"
+      "type": "realization"
     },
     {
       "from": "tn-k8s",
       "to": "art-pedidos",
-      "type": "archimate:assignment"
+      "type": "assignment"
     },
     {
       "from": "bp-checkout",
       "to": "goal-abandono",
-      "type": "archimate:realization"
+      "type": "realization"
     },
     {
       "from": "loja.pedidos",
       "to": "req-latencia",
-      "type": "archimate:realization"
+      "type": "realization"
     },
     {
       "from": "req-latencia",
       "to": "goal-abandono",
-      "type": "archimate:influence"
+      "type": "influence"
     }
   ]
 }

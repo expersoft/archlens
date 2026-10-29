@@ -5,8 +5,9 @@ import { normalizeModel } from '../scripts/lib/model.mjs';
 import { resolveView } from '../scripts/lib/query.mjs';
 import { validateModel } from '../scripts/lib/validate.mjs';
 import { suggestViews } from '../scripts/lib/suggest.mjs';
+import { asBase } from './helpers.mjs';
 
-const model = () => normalizeModel(JSON.parse(readFileSync(new URL('./fixtures/shop.json', import.meta.url))));
+const model = () => normalizeModel(asBase(JSON.parse(readFileSync(new URL('./fixtures/shop.json', import.meta.url)))));
 const ids = v => v.nodes.map(n => n.id).sort();
 const edge = (v, a, b) => v.edges.find(e => e.from === a && e.to === b);
 
@@ -163,7 +164,7 @@ const findRaw = (r, id) => {
 const modelWith = mut => {
   const r = JSON.parse(readFileSync(new URL('./fixtures/shop.json', import.meta.url)));
   mut(r);
-  return normalizeModel(r);
+  return normalizeModel(asBase(r));
 };
 
 test('views hide retired elements by default and show them on request', () => {
@@ -228,7 +229,7 @@ test('dynamic steps over parallel relationships use them in order', () => {
 // ---------- groupings ----------
 
 
-const plat = () => normalizeModel(JSON.parse(readFileSync(new URL('./fixtures/platforms.json', import.meta.url))));
+const plat = () => normalizeModel(asBase(JSON.parse(readFileSync(new URL('./fixtures/platforms.json', import.meta.url)))));
 const BOTH = ['plat-aut', 'plat-cred'];
 
 test('groups.only keeps the members of the listed groups and the relations among them, with frames', () => {
@@ -288,13 +289,13 @@ test('E_VIEW_GROUP: unknown or non-grouping ids, crossOnly with one group; saved
   const m = plat();
   assert.throws(() => resolveView(m, { key: 'x', notation: 'c4', level: 'landscape', groups: { only: ['motor'] } }), /E_VIEW_GROUP/);
   assert.throws(() => resolveView(m, { key: 'x', notation: 'c4', level: 'landscape', groups: { only: ['plat-aut'], crossOnly: true } }), /E_VIEW_GROUP/);
-  const r = JSON.parse(readFileSync(new URL('./fixtures/platforms.json', import.meta.url)));
+  const r = asBase(JSON.parse(readFileSync(new URL('./fixtures/platforms.json', import.meta.url))));
   r.views = [{ key: 'x', notation: 'c4', level: 'landscape', groups: { only: ['nada'] } }];
   assert.ok(validateModel(r).errors.some(e => e.code === 'E_VIEW_GROUP'));
 });
 
 test('a retired grouping draws no frame and cannot be listed in only', () => {
-  const r = JSON.parse(readFileSync(new URL('./fixtures/platforms.json', import.meta.url)));
+  const r = asBase(JSON.parse(readFileSync(new URL('./fixtures/platforms.json', import.meta.url))));
   r.model.elements.find(e => e.id === 'plat-cred').status = 'retired';
   const m = normalizeModel(r);
   const v = resolveView(m, { key: 'a', notation: 'c4', level: 'landscape', groups: { frames: true } });
@@ -305,8 +306,8 @@ test('a retired grouping draws no frame and cannot be listed in only', () => {
 });
 
 test('crossOnly with no relation between the groups gives an empty view, not an error', () => {
-  const r = JSON.parse(readFileSync(new URL('./fixtures/platforms.json', import.meta.url)));
-  r.model.relationships = r.model.relationships.filter(x => x.from !== 'autorizador.regras');
+  const r = asBase(JSON.parse(readFileSync(new URL('./fixtures/platforms.json', import.meta.url))));
+  r.model.relationships = r.model.relationships.filter(x => !(x.from === 'motor' && x.to === 'autorizador.regras'));
   const v = resolveView(normalizeModel(r), { key: 'x', notation: 'c4', level: 'landscape', groups: { only: BOTH, crossOnly: true } });
   assert.deepEqual(v.nodes, []);
 });
@@ -343,7 +344,7 @@ for (const form of ['nested', 'parent']) {
     delete motor.group; delete limites.group;
     if (form === 'nested') cred.children = [motor, limites];
     else { motor.parent = 'plat-cred'; limites.parent = 'plat-cred'; r.model.elements.push(motor, limites); }
-    const v = resolveView(normalizeModel(r), { key: 'l', notation: 'c4', level: 'landscape', groups: { frames: true } });
+    const v = resolveView(normalizeModel(asBase(r)), { key: 'l', notation: 'c4', level: 'landscape', groups: { frames: true } });
     assert.equal(v.nodes.find(n => n.id === 'motor')?.group, 'plat-cred');
     assert.equal(v.nodes.find(n => n.id === 'limites')?.group, 'plat-cred');
     assert.ok(edge(v, 'motor', 'limites'));
@@ -352,7 +353,7 @@ for (const form of ['nested', 'parent']) {
 }
 
 test('E_VIEW_GROUP tells a missing id from a non-grouping one and from one hidden by the status filter', () => {
-  const r = JSON.parse(readFileSync(new URL('./fixtures/platforms.json', import.meta.url)));
+  const r = asBase(JSON.parse(readFileSync(new URL('./fixtures/platforms.json', import.meta.url))));
   r.model.elements.find(e => e.id === 'plat-cred').status = 'retired';
   const m = normalizeModel(r);
   const spec = only => ({ key: 'x', notation: 'c4', level: 'landscape', groups: { only } });
@@ -393,7 +394,179 @@ test('the impact viewpoint follows flow by default; other viewpoints do not', ()
   const r = JSON.parse(readFileSync(new URL('./fixtures/shop.json', import.meta.url)));
   r.model.elements.push({ id: 'topic.x', type: 'c4:container', name: 'x', tags: ['topic'] }, { id: 'consumidor', type: 'c4:softwareSystem', name: 'Consumidor' });
   r.model.relationships.push({ from: 'loja.api', to: 'topic.x', type: 'archimate:flow' }, { from: 'topic.x', to: 'consumidor', type: 'archimate:flow' });
-  const m = normalizeModel(r);
+  const m = normalizeModel(asBase(r));
   assert.ok(resolveView(m, { key: 'i', notation: 'archimate', viewpoint: 'impact', anchor: 'loja.api' }).nodes.some(n => n.id === 'consumidor'));
   assert.ok(!resolveView(m, { key: 'l', notation: 'archimate', viewpoint: 'layered', anchor: 'loja.api', traverse: { mode: 'dependents' } }).nodes.some(n => n.id === 'consumidor'));
+});
+
+// ---------- C4 derived through intermediaries ----------
+
+// A 2.0 base written only with ArchiMate types and relationships: no "uses" at all.
+const pure = () => normalizeModel({ archlens: '2.0', name: 'Puro', model: {
+  elements: [
+    { id: 'loja', type: 'application-component', name: 'Loja', c4: { kind: 'softwareSystem' } },
+    { id: 'loja.web', type: 'application-component', name: 'Web', parent: 'loja', c4: { kind: 'container' } },
+    { id: 'loja.api', type: 'application-component', name: 'API', parent: 'loja', c4: { kind: 'container' } },
+    { id: 'loja.db', type: 'application-component', name: 'Banco', parent: 'loja', c4: { kind: 'container' }, tags: ['database'] },
+    { id: 'pedidos', type: 'data-object', name: 'Pedidos', parent: 'loja.db' },
+    { id: 'pag', type: 'application-component', name: 'Pagamentos', c4: { kind: 'softwareSystem' }, external: true },
+    { id: 'svc-pag', type: 'application-service', name: 'Autorização' },
+    { id: 'if-api', type: 'application-interface', name: 'REST' },
+    { id: 'fn-preco', type: 'application-function', name: 'Precificar' },
+    { id: 'svc-preco', type: 'application-service', name: 'Preço' },
+    { id: 'orfao', type: 'application-service', name: 'Sem dono' },
+  ],
+  relationships: [
+    { from: 'pag', to: 'svc-pag', type: 'realization' },
+    { from: 'svc-pag', to: 'loja.api', type: 'serving', description: 'autoriza' },
+    { from: 'loja.api', to: 'if-api', type: 'composition' },
+    { from: 'if-api', to: 'loja.web', type: 'serving' },
+    { from: 'loja.api', to: 'fn-preco', type: 'assignment' },
+    { from: 'fn-preco', to: 'svc-preco', type: 'realization' },
+    { from: 'svc-preco', to: 'loja.web', type: 'serving' },
+    { from: 'orfao', to: 'loja.web', type: 'serving' },
+    { from: 'loja.api', to: 'pedidos', type: 'access', accessType: 'write' },
+  ],
+} });
+const pureEdge = (v, a, b) => v.edges.find(e => e.from === a && e.to === b);
+
+test('C4 from pure ArchiMate: services, interfaces and assigned functions lead to their owners', () => {
+  const v = resolveView(pure(), { key: 'k', notation: 'c4', level: 'container', scope: 'loja' });
+  const pagamento = pureEdge(v, 'loja.api', 'pag');
+  assert.ok(pagamento, JSON.stringify(v.edges));
+  assert.equal(pagamento.derived, true);
+  assert.deepEqual(pagamento.via, ['Autorização']);
+  assert.equal(pagamento.label, 'autoriza');
+  const web = pureEdge(v, 'loja.web', 'loja.api');
+  assert.ok(web, 'via the interface and via the function chain');
+  assert.equal(web.count, 2);
+  assert.match(web.label, /Preço/, 'no description: the intermediary name');
+  assert.ok(pureEdge(v, 'loja.api', 'loja.db'), 'a data-object inside a container lifts to it');
+  assert.ok(!v.edges.some(e => e.from === 'loja.web' && e.to !== 'loja.api'), 'an intermediary without owner is dropped');
+  assert.equal(v.nodes.find(n => n.id === 'loja.db').database, true);
+});
+
+test('a derived edge joins a direct one between the same pair, which keeps its plain style', () => {
+  const m = pure();
+  m.relationships.push({ id: 'direta', from: 'pag', to: 'loja.api', type: 'serving', description: 'webhook', tags: [], properties: {}, status: 'active', sources: [] });
+  const e = pureEdge(resolveView(m, { key: 'k', notation: 'c4', level: 'container', scope: 'loja' }), 'loja.api', 'pag');
+  assert.equal(e.count, 2);
+  assert.equal(e.derived, undefined);
+  assert.match(e.label, /webhook/);
+  assert.match(e.label, /autoriza/);
+});
+
+test('"derive": false turns derivation off', () => {
+  const v = resolveView(pure(), { key: 'k', notation: 'c4', level: 'container', scope: 'loja', derive: false });
+  assert.ok(pureEdge(resolveView(pure(), { key: 'k', notation: 'c4', level: 'container', scope: 'loja' }), 'loja.api', 'pag'), 'derived by default');
+  assert.equal(pureEdge(v, 'loja.api', 'pag'), undefined);
+  assert.ok(pureEdge(v, 'loja.api', 'loja.db'), 'hierarchy lifting is not derivation');
+});
+
+const small = (elements, relationships) => normalizeModel({ archlens: '2.0', name: 'S', model: {
+  elements: [
+    { id: 's', type: 'application-component', name: 'S', c4: { kind: 'softwareSystem' } },
+    ...['a', 'b', 'c'].map(x => ({ id: `s.${x}`, type: 'application-component', name: x.toUpperCase(), parent: 's', c4: { kind: 'container' } })),
+    ...elements,
+  ], relationships } });
+const box = m => resolveView(m, { key: 'k', notation: 'c4', level: 'container', scope: 's' });
+
+test('an intermediary with two C4 owners yields one arrow per owner', () => {
+  const v = box(small([{ id: 'svc', type: 'application-service', name: 'Compartilhado' }], [
+    { from: 's.a', to: 'svc', type: 'realization' },
+    { from: 's.b', to: 'svc', type: 'realization' },
+    { from: 'svc', to: 's.c', type: 'serving' },
+  ]));
+  assert.ok(pureEdge(v, 's.c', 's.a'));
+  assert.ok(pureEdge(v, 's.c', 's.b'));
+  assert.equal(v.edges.filter(e => e.derived).length, 2);
+});
+
+test('a cycle between intermediaries terminates and reaches the owner once', () => {
+  const v = box(small([
+    { id: 'f1', type: 'application-function', name: 'F1' },
+    { id: 'f2', type: 'application-function', name: 'F2' },
+  ], [
+    { from: 'f1', to: 'f2', type: 'realization' },
+    { from: 'f2', to: 'f1', type: 'realization' },
+    { from: 's.a', to: 'f1', type: 'assignment' },
+    { from: 'f2', to: 's.c', type: 'serving' },
+  ]));
+  const arrows = v.edges.filter(e => e.from === 's.c' && e.to === 's.a');
+  assert.equal(arrows.length, 1);
+  assert.equal(arrows[0].derived, true);
+  assert.equal(new Set(v.edges.map(e => e.id)).size, v.edges.length);
+});
+
+const odin = () => normalizeModel({ archlens: '2.0', name: 'Odin', model: {
+  elements: [
+    { id: 'odin', type: 'application-component', name: 'Odin', c4: { kind: 'softwareSystem' } },
+    { id: 'odin.api', type: 'application-component', name: 'odin-api', parent: 'odin', c4: { kind: 'container' } },
+    { id: 'odin.worker', type: 'application-component', name: 'odin-message-worker', parent: 'odin', c4: { kind: 'container' } },
+    { id: 'odin.api.rest', type: 'application-component', name: 'REST', parent: 'odin.api', c4: { kind: 'component' } },
+    { id: 'crm', type: 'application-component', name: 'CRM', c4: { kind: 'softwareSystem' } },
+    { id: 'bus', type: 'application-component', name: 'Barramento' },
+    { id: 'bus.adapter', type: 'application-component', name: 'Adapter' },
+  ],
+  relationships: [
+    { from: 'odin.api', to: 'odin.worker', type: 'flow', description: 'mensagem' },
+    { from: 'odin.worker', to: 'crm', type: 'serving' },
+    { from: 'bus', to: 'bus.adapter', type: 'aggregation', description: 'reúne adaptadores' },
+    { from: 'crm', to: 'bus.adapter', type: 'composition' },
+  ],
+} });
+const appView = extra => resolveView(odin(), { key: 'a', notation: 'archimate', viewpoint: 'application', ...extra });
+const node = (v, id) => v.nodes.find(n => n.id === id);
+
+test('nesting "edges" (default) keeps today\'s view', () => {
+  const v = appView();
+  assert.deepEqual(v.nesting, { mode: 'edges', depth: null });
+  assert.ok(v.edges.some(e => e.implicit && e.from === 'odin' && e.to === 'odin.api'));
+  assert.ok(v.nodes.every(n => n.nestedIn === undefined));
+});
+
+test('nesting "nested": parent and composition/aggregation nest, and the edges that made them disappear', () => {
+  const v = appView({ nesting: 'nested' });
+  assert.equal(node(v, 'odin.api').nestedIn, 'odin');
+  assert.equal(node(v, 'odin.api.rest').nestedIn, 'odin.api');
+  assert.equal(node(v, 'bus.adapter').nestedIn, 'bus', 'aggregation nests; the later composition from crm stays an edge');
+  assert.equal(node(v, 'bus.adapter').nestTip, 'reúne adaptadores');
+  assert.ok(!v.edges.some(e => e.type === 'composition' && e.implicit));
+  assert.ok(!v.edges.some(e => e.from === 'bus' && e.to === 'bus.adapter'));
+  assert.ok(v.edges.some(e => e.from === 'crm' && e.to === 'bus.adapter' && e.type === 'composition'));
+  assert.ok(v.edges.some(e => e.from === 'odin.api' && e.to === 'odin.worker'), 'other edges stay');
+});
+
+test('nesting depth 1: deeper elements sit in the box of the nearest nested ancestor, linked by the diamond', () => {
+  const v = appView({ nesting: { mode: 'nested', depth: 1 } });
+  assert.equal(node(v, 'odin.api').nestedIn, 'odin');
+  assert.equal(node(v, 'odin.api.rest').nestedIn, 'odin', 'next to odin-api, inside Odin');
+  assert.ok(v.edges.some(e => e.implicit && e.from === 'odin.api' && e.to === 'odin.api.rest'));
+  assert.deepEqual(v.nesting, { mode: 'nested', depth: 1 });
+});
+
+test('an invalid nesting is E_VIEW_NESTING', () => {
+  for (const bad of ['dentro', { mode: 'nested', depth: 0 }, { mode: 'x' }]) {
+    assert.throws(() => appView({ nesting: bad }), e => e.code === 'E_VIEW_NESTING', JSON.stringify(bad));
+  }
+});
+
+test('C4 containers tagged bucket, storage or data-store draw as a data store; a queue tag still wins', () => {
+  const m = normalizeModel({ archlens: '2.0', name: 'Lojas', model: {
+    elements: [
+      { id: 's', type: 'application-component', name: 'S', c4: { kind: 'softwareSystem' } },
+      { id: 's.bucket', type: 'application-component', name: 'Bucket', parent: 's', c4: { kind: 'container' }, tags: ['bucket'] },
+      { id: 's.files', type: 'application-component', name: 'Files', parent: 's', c4: { kind: 'container' }, tags: ['storage'] },
+      { id: 's.lake', type: 'application-component', name: 'Lake', parent: 's', c4: { kind: 'container' }, tags: ['data-store'] },
+      { id: 's.q', type: 'application-component', name: 'Q', parent: 's', c4: { kind: 'container' }, tags: ['queue', 'storage'] },
+    ],
+    relationships: [],
+  } });
+  const v = resolveView(m, { key: 'k', notation: 'c4', level: 'container', scope: 's' });
+  const n = id => v.nodes.find(x => x.id === id);
+  assert.equal(n('s.bucket').database, true);
+  assert.equal(n('s.files').database, true);
+  assert.equal(n('s.lake').database, true);
+  assert.equal(n('s.q').database, false);
+  assert.equal(n('s.q').queue, true);
 });

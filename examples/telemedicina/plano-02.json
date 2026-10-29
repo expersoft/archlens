@@ -1,0 +1,228 @@
+{
+  "archlens-plan": "1.0",
+  "base": "architecture",
+  "baseHash": "sha256:271d0874ff944935ec5b032163baccc0d1aebb618e12c2fbec3ed8c81100569d",
+  "storeVersion": "sha256:a6a5d2d0620045ff8a81cec95d4729cb2f42f46bea47a8883f9b5dd14c56b39e",
+  "created": "2026-10-18",
+  "delta": {
+    "archlens-delta": "1.0",
+    "source": {
+      "kind": "prompt",
+      "ref": "rodada 2026-10-05: lembretes por SMS (em avaliação)",
+      "date": "2026-10-05"
+    },
+    "summary": "Proposta: lembretes por SMS via fila, chatbot de triagem em discussão",
+    "model": {
+      "elements": [
+        {
+          "id": "tele.fila",
+          "type": "c4:container",
+          "name": "Fila de Lembretes",
+          "parent": "tele",
+          "technology": "Amazon SQS",
+          "tags": [
+            "queue"
+          ],
+          "description": "Lembretes a enviar"
+        },
+        {
+          "id": "sms",
+          "type": "c4:softwareSystem",
+          "name": "Gateway SMS",
+          "external": true,
+          "description": "Envio de SMS"
+        },
+        {
+          "id": "tele.notificador",
+          "type": "c4:container",
+          "technology": "Node.js 22"
+        },
+        {
+          "id": "agendamento-api",
+          "type": "c4:container",
+          "name": "Agendamento API",
+          "parent": "tele",
+          "technology": "Node.js"
+        },
+        {
+          "id": "tele.chatbot",
+          "type": "c4:container",
+          "name": "Chatbot de Triagem",
+          "parent": "tele",
+          "technology": "Python",
+          "status": "draft",
+          "statusReason": "em discussão com a equipe médica"
+        }
+      ],
+      "relationships": [
+        {
+          "from": "tele.api",
+          "to": "tele.fila",
+          "type": "uses",
+          "description": "Agenda lembrete",
+          "technology": "SQS"
+        },
+        {
+          "from": "tele.notificador",
+          "to": "tele.fila",
+          "type": "uses",
+          "description": "Consome lembretes",
+          "technology": "SQS"
+        },
+        {
+          "from": "tele.notificador",
+          "to": "sms",
+          "type": "uses",
+          "description": "Envia lembrete",
+          "technology": "HTTPS"
+        }
+      ]
+    },
+    "ops": [
+      {
+        "op": "remove",
+        "id": "whatsapp"
+      }
+    ]
+  },
+  "items": [
+    {
+      "n": 1,
+      "key": "el:tele.fila",
+      "class": "new",
+      "kind": "element",
+      "target": "tele.fila",
+      "type": "application-component",
+      "name": "Fila de Lembretes",
+      "parent": "tele"
+    },
+    {
+      "n": 2,
+      "key": "el:sms",
+      "class": "new",
+      "kind": "element",
+      "target": "sms",
+      "type": "application-component",
+      "name": "Gateway SMS",
+      "parent": null
+    },
+    {
+      "n": 3,
+      "key": "el:tele.notificador:technology",
+      "class": "conflict",
+      "kind": "element",
+      "target": "tele.notificador",
+      "field": "technology",
+      "base": "Node.js",
+      "delta": "Node.js 22",
+      "resolution": null
+    },
+    {
+      "n": 4,
+      "key": "el:tele.notificador",
+      "class": "enrich",
+      "kind": "element",
+      "target": "tele.notificador"
+    },
+    {
+      "n": 5,
+      "key": "dup:agendamento-api",
+      "class": "possible-duplicate",
+      "kind": "element",
+      "target": "agendamento-api",
+      "candidate": "tele.api",
+      "score": 1,
+      "why": "mesmo tipo; nome parecido; mesmo pai e mesma tecnologia",
+      "resolution": null
+    },
+    {
+      "n": 6,
+      "key": "el:agendamento-api:name",
+      "class": "conflict",
+      "kind": "element",
+      "target": "tele.api",
+      "field": "name",
+      "base": "API de Agendamento",
+      "delta": "Agendamento API",
+      "when": "dup:agendamento-api=same",
+      "resolution": null
+    },
+    {
+      "n": 7,
+      "key": "el:agendamento-api",
+      "class": "new",
+      "kind": "element",
+      "target": "agendamento-api",
+      "type": "application-component",
+      "name": "Agendamento API",
+      "parent": "tele"
+    },
+    {
+      "n": 8,
+      "key": "el:tele.chatbot",
+      "class": "new",
+      "kind": "element",
+      "target": "tele.chatbot",
+      "type": "application-component",
+      "name": "Chatbot de Triagem",
+      "parent": "tele"
+    },
+    {
+      "n": 9,
+      "key": "rel:0",
+      "class": "new",
+      "kind": "relationship",
+      "target": "tele.fila-serving-tele.api",
+      "from": "tele.fila",
+      "to": "tele.api",
+      "type": "serving"
+    },
+    {
+      "n": 10,
+      "key": "rel:1",
+      "class": "new",
+      "kind": "relationship",
+      "target": "tele.fila-serving-tele.notificador",
+      "from": "tele.fila",
+      "to": "tele.notificador",
+      "type": "serving"
+    },
+    {
+      "n": 11,
+      "key": "rel:2",
+      "class": "new",
+      "kind": "relationship",
+      "target": "sms-serving-tele.notificador",
+      "from": "sms",
+      "to": "tele.notificador",
+      "type": "serving"
+    },
+    {
+      "n": 12,
+      "key": "op:0",
+      "class": "op",
+      "op": "remove",
+      "target": "whatsapp",
+      "cascade": {
+        "elements": [
+          "whatsapp"
+        ],
+        "relationships": [
+          "whatsapp-serving-tele.notificador"
+        ],
+        "views": []
+      },
+      "resolution": null
+    }
+  ],
+  "summary": {
+    "new": 7,
+    "conflict": 1,
+    "enrich": 1,
+    "possible-duplicate": 1,
+    "op": 1
+  },
+  "blocked": false,
+  "errors": [],
+  "state": "open"
+}

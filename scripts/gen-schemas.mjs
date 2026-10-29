@@ -1,13 +1,16 @@
 #!/usr/bin/env node
 // Regenerates schemas/*.schema.json from the registry so enums never drift from the code.
 import { writeFileSync } from 'node:fs';
-import { ELEMENT_TYPES, RELATIONSHIP_TYPES, C4_KINDS, LAYER_ORDER, STATUSES } from './lib/registry.mjs';
+import { ELEMENT_TYPES, RELATIONSHIP_TYPES, C4_KINDS, C4_KIND_TYPES, LAYER_ORDER, STATUSES } from './lib/registry.mjs';
 import { ARCHIMATE_VIEWPOINTS } from './lib/query-archimate.mjs';
+import { OPS } from './lib/store/ops.mjs';
 import { SOURCE_KINDS } from './lib/sources.mjs';
 
 export function buildSchemas() {
-  const elementTypes = [...C4_KINDS.map(k => `c4:${k}`), ...Object.keys(ELEMENT_TYPES).flatMap(t => [`archimate:${t}`, t])];
-  const relTypes = ['uses', 'c4:uses', ...Object.keys(RELATIONSHIP_TYPES).flatMap(t => [`archimate:${t}`, t])];
+  // Free vocabulary: only accepted at the entrance (deltas, prompts, scan); the stored model is strict 2.0.
+  const freeElementTypes = [...C4_KINDS.map(k => `c4:${k}`), ...Object.keys(ELEMENT_TYPES).flatMap(t => [`archimate:${t}`, t])];
+  const freeRelTypes = ['uses', 'c4:uses', ...Object.keys(RELATIONSHIP_TYPES).flatMap(t => [`archimate:${t}`, t])];
+  const propertyValue = { anyOf: [{ type: 'string' }, { type: 'number' }, { type: 'boolean' }, { type: 'array', items: { type: 'string' } }] };
   const str = { type: 'string' };
   const status = { enum: STATUSES };
   const sources = { type: 'array', items: { $ref: '#/$defs/source' } };
@@ -27,10 +30,11 @@ export function buildSchemas() {
   const element = {
     type: 'object', required: ['id', 'type'], additionalProperties: false,
     properties: {
-      id: { type: 'string', minLength: 1 }, type: { enum: elementTypes }, name: str, description: str, technology: str,
-      tags: { type: 'array', items: str }, external: { type: 'boolean' }, archimate: { enum: Object.keys(ELEMENT_TYPES).flatMap(t => [t, `archimate:${t}`]) },
-      parent: str, group: { type: ['string', 'null'] }, children: { type: 'array', items: { $ref: '#/$defs/element' } },
-      properties: { type: 'object', additionalProperties: { type: ['string', 'number', 'boolean'] } },
+      id: { type: 'string', minLength: 1 }, type: { enum: Object.keys(ELEMENT_TYPES) }, name: str, description: str, technology: str,
+      tags: { type: 'array', items: str }, external: { type: 'boolean' },
+      c4: { type: 'object', required: ['kind'], additionalProperties: false, properties: { kind: { enum: Object.keys(C4_KIND_TYPES) } } },
+      parent: str, group: { type: ['string', 'null'] },
+      properties: { type: 'object', additionalProperties: propertyValue },
       owner: str, url: str, inferred: { type: 'boolean' }, confidence: { enum: ['alta', 'média', 'baixa', 'high', 'medium', 'low'] }, source: str,
       aliases: { type: 'array', items: str }, status, statusReason: str, sources,
     },
@@ -38,9 +42,9 @@ export function buildSchemas() {
   const relationship = {
     type: 'object', required: ['from', 'to'], additionalProperties: false,
     properties: {
-      id: str, from: str, to: str, type: { enum: relTypes }, description: str, technology: str,
+      id: str, from: str, to: str, type: { enum: Object.keys(RELATIONSHIP_TYPES) }, description: str, technology: str,
       accessType: { enum: ['read', 'write', 'readwrite', 'access'] }, tags: { type: 'array', items: str },
-      properties: { type: 'object' }, inferred: { type: 'boolean' },
+      properties: { type: 'object', additionalProperties: propertyValue }, inferred: { type: 'boolean' },
       status, statusReason: str, sources,
     },
   };
@@ -67,6 +71,7 @@ export function buildSchemas() {
         maxDepth: { type: 'integer', minimum: 1 }, hierarchy: { type: 'boolean' } } },
       granularity: { enum: ['component', 'container', 'system'] }, collapse: { type: 'array', items: str },
       status: { description: 'lifecycle statuses shown (default: all but retired)', type: 'array', items: status },
+      nesting: { anyOf: [{ enum: ['edges', 'nested'] }, { type: 'object', additionalProperties: false, required: ['mode'], properties: { mode: { enum: ['edges', 'nested'] }, depth: { type: 'integer', minimum: 1 } } }] },
       derive: { type: 'boolean' }, output: { type: 'array', items: { enum: ['diagram', 'matrix'] } },
     },
   };
@@ -76,8 +81,10 @@ export function buildSchemas() {
     title: 'archlens model',
     type: 'object', required: ['model'],
     properties: {
-      archlens: str, name: str, description: str, meta: { type: 'object' },
+      archlens: { type: 'string', pattern: '^2\\.\\d+$' }, name: str, description: str, meta: { type: 'object' },
       assumptions: { type: 'array', items: str },
+      properties: { description: 'property catalog (archlens.json)', type: 'object', additionalProperties: { type: 'object', additionalProperties: false, properties: {
+        label: str, type: { enum: ['string', 'number', 'boolean', 'string[]'] }, values: { type: 'array' }, appliesTo: { type: 'array', items: str } } } },
       model: { type: 'object', required: ['elements'], properties: {
         elements: { type: 'array', items: { $ref: '#/$defs/element' } },
         relationships: { type: 'array', items: { $ref: '#/$defs/relationship' } } } },
@@ -88,8 +95,11 @@ export function buildSchemas() {
   };
   const deltaElement = {
     ...element, required: ['id'],
-    properties: { ...element.properties, children: { type: 'array', items: { $ref: '#/$defs/element' } } },
+    properties: { ...element.properties, type: { enum: freeElementTypes },
+      archimate: { enum: Object.keys(ELEMENT_TYPES).flatMap(t => [t, `archimate:${t}`]) },
+      children: { type: 'array', items: { $ref: '#/$defs/element' } } },
   };
+  const deltaRelationship = { ...relationship, properties: { ...relationship.properties, type: { enum: freeRelTypes } } };
   const op = (name, props, required) => ({
     type: 'object', additionalProperties: false, required: ['op', 'id', ...required],
     properties: { op: { const: name }, id: str, ...props },
@@ -113,7 +123,7 @@ export function buildSchemas() {
         op('remove', {}, []),
       ] } },
     },
-    $defs: { element: deltaElement, relationship, source },
+    $defs: { element: deltaElement, relationship: deltaRelationship, source },
   };
   const plan = {
     $schema: 'https://json-schema.org/draft/2020-12/schema',
@@ -121,7 +131,7 @@ export function buildSchemas() {
     title: 'archlens merge plan',
     type: 'object', required: ['archlens-plan', 'baseHash', 'delta', 'items'],
     properties: {
-      'archlens-plan': { const: '1.0' }, base: str, baseHash: str, created: str, delta: { $ref: 'delta.schema.json' },
+      'archlens-plan': { const: '1.0' }, base: str, baseHash: str, storeVersion: { type: ['string', 'null'] }, created: str, delta: { $ref: 'delta.schema.json' },
       items: { type: 'array', items: { type: 'object', required: ['n', 'key', 'class'], properties: {
         n: { type: 'integer' }, key: str,
         class: { enum: ['new', 'unchanged', 'enrich', 'conflict', 'possible-duplicate', 'op'] },
@@ -129,6 +139,13 @@ export function buildSchemas() {
         field: str, when: str, resolution: { type: ['string', 'null'] } } } },
       summary: { type: 'object', additionalProperties: { type: 'integer' } },
       blocked: { type: 'boolean' }, errors: { type: 'array' },
+      // Only a final plan carries the store operations that apply it (the last one is appendHistory).
+      state: { enum: ['open', 'final'] }, entry: { type: ['object', 'null'] },
+      ops: { type: 'array', items: { type: 'object', required: ['op'], properties: { op: { enum: OPS } } } },
+      // ref ("element:<id>", "relationship:<id>", "view:<key>", "note:<name>", "manifest") → version read (null: absent).
+      objects: { type: 'object', additionalProperties: { type: ['string', 'null'] } },
+      // New element id → the possible duplicates found for it when the plan was made.
+      knownCandidates: { type: 'object', additionalProperties: { type: 'array', items: str } },
     },
   };
   return { model, view, delta, plan };

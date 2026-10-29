@@ -1,0 +1,84 @@
+{
+  "title": "Visão em Camadas — Registro clínico",
+  "spec": {
+    "key": "view",
+    "notation": "archimate",
+    "viewpoint": "layered",
+    "anchor": "as-registro",
+    "traverse": {
+      "mode": "supporters"
+    },
+    "status": [
+      "active",
+      "deprecated"
+    ]
+  },
+  "sections": [
+    {
+      "label": "Aplicação",
+      "rows": [
+        {
+          "id": "pep",
+          "name": "PEP (Tasy)",
+          "type": "application-component",
+          "kind": "softwareSystem",
+          "status": "deprecated",
+          "technology": null
+        },
+        {
+          "id": "as-registro",
+          "name": "Registro clínico",
+          "type": "application-service",
+          "kind": null,
+          "status": "active",
+          "technology": null
+        }
+      ]
+    },
+    {
+      "label": "Tecnologia",
+      "rows": [
+        {
+          "id": "tn-dc",
+          "name": "Datacenter da clínica",
+          "type": "node",
+          "kind": null,
+          "status": "active",
+          "technology": null
+        },
+        {
+          "id": "cn-vpn",
+          "name": "VPN AWS ↔ datacenter",
+          "type": "communication-network",
+          "kind": null,
+          "status": "active",
+          "technology": null
+        }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "from": "pep",
+      "to": "as-registro",
+      "type": "realization",
+      "sentence": "PEP (Tasy) realiza Registro clínico.",
+      "derived": false
+    },
+    {
+      "from": "tn-dc",
+      "to": "pep",
+      "type": "serving",
+      "sentence": "Datacenter da clínica serve PEP (Tasy).",
+      "derived": false
+    },
+    {
+      "from": "cn-vpn",
+      "to": "pep",
+      "type": "serving",
+      "sentence": "VPN AWS ↔ datacenter serve PEP (Tasy).",
+      "derived": false
+    }
+  ],
+  "notes": []
+}

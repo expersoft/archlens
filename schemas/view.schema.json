@@ -250,6 +250,35 @@
         ]
       }
     },
+    "nesting": {
+      "anyOf": [
+        {
+          "enum": [
+            "edges",
+            "nested"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "mode"
+          ],
+          "properties": {
+            "mode": {
+              "enum": [
+                "edges",
+                "nested"
+              ]
+            },
+            "depth": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        }
+      ]
+    },
     "derive": {
       "type": "boolean"
     },

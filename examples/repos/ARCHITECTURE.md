@@ -1,5 +1,5 @@
 ---
-archlens: "1.0"
+archlens: "2.0"
 name: "Arquitetura"
 source: architecture/
 revision: 4
@@ -11,7 +11,7 @@ relationships: 13
 
 # Arquitetura
 
-> Gerado por archlens a partir de `architecture/`. Não edite: escreva em `architecture/notes/*.md` e evolua a base com `archlens merge`.
+> Gerado por archlens a partir de `architecture/`. Não edite: escreva em `architecture/notes/*.md` e evolua a base com `archlens plan` e `archlens apply`.
 
 ## Visão geral
 
@@ -67,18 +67,18 @@ _Nenhum._
 | --- | --- | --- | --- | --- |
 | loja | Application Component (C4 Software System) | — | R | `loja` |
 | pedidos | Application Component (C4 Container) | — | R | `loja.pedidos` |
-| pedidos-db | Data Object (C4 Container) | — | R | `loja.pedidos-pedidos-db` |
+| pedidos-db | Application Component (C4 Container) | — | R | `loja.pedidos-pedidos-db` |
 | API de Pedidos | Application Interface | — | R | `loja.pedidos.api-api-de-pedidos` |
 | pedido-criado | Application Component (C4 Container) | — | R | `topic.pedido-criado` |
 | financeiro | Application Component (C4 Software System) | — | R | `financeiro` |
 | pagamentos | Application Component (C4 Container) | — | R | `financeiro.pagamentos` |
 | redis | Application Component (C4 Container) | — | R | `financeiro.pagamentos-redis` |
-| pagamentos-db | Data Object (C4 Container) | — | R | `financeiro.pagamentos-pagamentos-db` |
+| pagamentos-db | Application Component (C4 Container) | — | R | `financeiro.pagamentos-pagamentos-db` |
 | antifraude.acme.com ⚠︎ | Application Component (C4 Software System) | — | R | `ext.antifraude-acme-com` |
 | kafka ⚠︎ | Application Component (C4 Software System) | — | R | `ext.kafka` |
 | pagamento-aprovado | Application Component (C4 Container) | — | R | `topic.pagamento-aprovado` |
 | infra | Application Component (C4 Software System) | — | R | `infra-cloud` |
-| pedidos | Data Object (C4 Container) | — | R | `infra-cloud.pedidos` |
+| pedidos | Application Component (C4 Container) | — | R | `infra-cloud.pedidos` |
 | eventos | Application Component (C4 Container) | — | R | `infra-cloud.eventos` |
 
 ## Camada de Tecnologia
@@ -94,12 +94,12 @@ _Nenhum._
 
 | Origem | Relação | Destino | Descrição | Tecnologia |
 | --- | --- | --- | --- | --- |
-| PostgreSQL 16 | realization | pedidos-db | — | — |
+| PostgreSQL 16 | serving | pedidos-db | — | — |
 | pedidos | usa | pedidos-db | depends_on | — |
 | pedidos | realization | API de Pedidos | — | — |
 | pedidos | flow | pedido-criado | publica PedidoCriado | — |
 | Redis | serving | redis | — | — |
-| PostgreSQL 15 | realization | pagamentos-db | — | — |
+| PostgreSQL 15 | serving | pagamentos-db | — | — |
 | pagamentos | usa | antifraude.acme.com | via ANTIFRAUDE_URL | — |
 | pagamentos | usa | kafka | via KAFKA_BROKERS | — |
 | pagamentos | usa | pedidos | via PEDIDOS_URL | — |
@@ -118,12 +118,15 @@ Cadeias de suporte calculadas a partir do modelo (o que sustenta cada oferta, e 
 | --- | --- | --- |
 | loja | — | PostgreSQL 16 |
 | pedidos | — | PostgreSQL 16 |
+| pedidos-db | — | PostgreSQL 16 |
 | pedido-criado | — | — |
 | financeiro | — | PostgreSQL 16, Redis, PostgreSQL 15 |
 | pagamentos | — | PostgreSQL 16 |
 | redis | — | Redis |
+| pagamentos-db | — | PostgreSQL 15 |
 | pagamento-aprovado | — | — |
 | infra | — | — |
+| pedidos | — | — |
 | eventos | — | — |
 
 ## Ciclo de vida

@@ -16,7 +16,16 @@ Cada item tem o próprio spec e o próprio plano (`docs/superpowers/specs/`, `do
 | b | Leitura de repositórios (`archlens scan`): graphify, docker-compose, Kubernetes/Helm, Terraform, OpenAPI/AsyncAPI e build → inventário com arquivo e linha → delta com proveniência; papel do repositório sempre perguntado; correlação por tópicos e chamadas; o que sumiu vira pergunta | feito | [spec](specs/2026-10-03-repo-reading-design.md) · [plano](plans/2026-10-03-repo-reading.md) | PR #10 → `develop-v2` |
 | c | Lacunas de visões: nível deployment do C4, mapa de capacidades, foco de negócio projetado no C4, fluxos de eventos entre sistemas | depois | — | — |
 | d | Exportações: Structurizr DSL, PlantUML/Mermaid, ArchiMate Open Exchange | depois | — | — |
-| e | Fonte plugável do modelo canônico: outras pastas, buckets, um gbrain via MCP (novo adaptador do store; campo `store` reservado no manifesto pelo a.3) | futuro | — | — |
+| e | Fonte plugável do modelo canônico: outras pastas, buckets, um gbrain via MCP (novo adaptador do store; campo `store` reservado no manifesto pelo a.3) | detalhado em e.1–e.4 | — | — |
+| e.1 | Formato canônico unificado (2.0): tipos ArchiMate + perfil C4 gravado, hierarquia plana por `parent`, relações só ArchiMate, banco como `application-component`, propriedades com catálogo, `migrate` 1.x → 2.0, C4 derivado através de serviços, aninhamento visual no ArchiMate (`nesting`) | feito | [spec](specs/2026-10-17-canonical-format-design.md) · [plano](plans/2026-10-17-canonical-format.md) | PR #13 → `develop-v2` |
+| e.2 | Contrato de conector (store v2): subgrafos, gravação por operações atômicas, versão otimista, histórico no store; conectores `model.json` (padrão) e pasta com um markdown por nó | feito | [spec](specs/2026-10-17-store-connectors-design.md) · [plano](plans/2026-10-17-store-connectors.md) | PR #14 → `develop-v2` |
+| e.3 | Três skills sobre uma biblioteca comum, com `plan`/`apply`/`query`: plan (→ plano final resolvido contra o canônico, com prévia), apply (grava o plano final) e query (→ diagramas ou markdown) | feito | [spec](specs/2026-10-18-plan-apply-query-design.md) · [plano](plans/2026-10-18-plan-apply-query.md) | PR #15 → `develop-v2` |
+| e.4 | Conectores remotos: gbrain, neo4j, banco relacional, bucket S3 (um ciclo por conector) | detalhado em e.4.1–e.4.4 | — | — |
+| e.4.1 | Base compartilhada no gbrain: versão por objeto (conjunto de leitura e de escrita, duplicata criada em paralelo, rodada numerada ao gravar), `archlens init`, conector `gbrain` nos modos git (commit por apply) e MCP (o agente chama as ferramentas; `remote pull`/`check`, `apply --read-check/--receipts/--resume/--undo`), `store convert` para o gbrain | feito | [spec](specs/2026-10-18-gbrain-connector-design.md) · [plano](plans/2026-10-18-gbrain-connector.md) | PR #18 → `develop-v2` |
+| e.4.2 | Conector neo4j | depois de e.4.1 | — | — |
+| e.4.3 | Conector relacional | depois de e.4.1 | — | — |
+| e.4.4 | Conector S3 | depois de e.4.1 | — | — |
+| f | archlens-ask: consulta à base no gbrain para assistentes sem execução de código (M365 Copilot, Claude Desktop), em pacote de texto derivado do archlens completo (`portable/archlens-ask/`), com markdown e Mermaid | em andamento | [spec](specs/2026-10-25-archlens-ask-design.md) · [plano](plans/2026-10-25-archlens-ask.md) | branch `feat/archlens-ask` → `develop-v2` |
 
 ## Pendências registradas
 

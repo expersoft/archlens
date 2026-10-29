@@ -233,7 +233,11 @@ function amGroup(n) {
 
 function amNodeBox(n) {
   const name = wrap(n.name, FONT.amName, AM_W - 44, 3);
-  return { w: AM_W, h: Math.max(76, 30 + name.length * 22 + 18), lines: { title: name } };
+  // as a nesting box the name is one bold line at the top: 14px margin, room for the change/pending marks, the
+  // icon (44px); bold glyphs measured as in frameChipWidth (0.58 × size)
+  const marks = (n.change ? 26 : 0) + (n.pending?.length ? 26 : 0);
+  const nestW = Math.ceil(14 + marks + String(n.name).length * FONT.amName * 0.58 + 44);
+  return { w: AM_W, h: Math.max(76, 30 + name.length * 22 + 18), lines: { title: name }, nestW };
 }
 
 // ---------------------------------------------------------------- ArchiMate — style "flow" (ELK)
@@ -256,18 +260,44 @@ function amFrames(view) {
   const out = [];
   for (const layer of view.layers) {
     for (const g of view.groups ?? []) {
-      const members = view.nodes.filter(n => n.layer === layer && n.group === g.id).map(n => n.id);
+      const members = view.nodes.filter(n => !n.nestedIn && n.layer === layer && n.group === g.id).map(n => n.id);
       if (members.length) out.push({ ...g, layer, key: `frame:${g.id}@${layer}`, members });
     }
   }
   return out;
 }
 const AM_FRAME_PAD = '[top=60,left=24,bottom=24,right=24]';
+const AM_NEST_PAD = '[top=46,left=22,bottom=22,right=22]';
+
+/** id → ids nested directly in it (view order). */
+function nestedKids(view) {
+  const kids = new Map();
+  for (const n of view.nodes) if (n.nestedIn) { if (!kids.has(n.nestedIn)) kids.set(n.nestedIn, []); kids.get(n.nestedIn).push(n.id); }
+  return kids;
+}
+
+/** Layer a node is placed in: its outermost nesting box's (a nested child stays in its parent's band). */
+function placeLayers(view) {
+  const byId = new Map(view.nodes.map(n => [n.id, n]));
+  const top = n => (n.nestedIn && byId.has(n.nestedIn) ? top(byId.get(n.nestedIn)) : n);
+  return new Map(view.nodes.map(n => [n.id, top(n).layer]));
+}
+
+/** ELK node for `id`: a plain box, or a compound one holding its nested elements (at least a plain box's size). */
+function amElkNode(id, boxes, kids, layoutOptions = {}) {
+  const b = boxes.get(id);
+  if (!kids.has(id)) return { id, width: b.w, height: b.h, layoutOptions };
+  return {
+    id, children: kids.get(id).map(c => amElkNode(c, boxes, kids)),
+    layoutOptions: { 'elk.padding': AM_NEST_PAD, 'elk.nodeSize.constraints': 'MINIMUM_SIZE', 'elk.nodeSize.minimum': `(${Math.max(b.w, b.nestW)}, ${b.h})`, ...layoutOptions },
+  };
+}
 
 async function runAmElk(view, DIR) {
   const frames = amFrames(view);
   const framed = new Set(frames.flatMap(f => f.members));
   const boxes = new Map(view.nodes.map(n => [n.id, amNodeBox(n)]));
+  const kids = nestedKids(view);
   const part = new Map(view.nodes.map(n => [n.id, Math.max(0, view.layers.indexOf(n.layer)) * 3 + amGroup(n)]));
   const labels = new Map(view.edges.map(e => [e.id, edgeLabel(e)]));
   const edges = view.edges.filter(e => part.has(e.from) && part.has(e.to));
@@ -295,16 +325,15 @@ async function runAmElk(view, DIR) {
       'elk.layered.considerModelOrder.strategy': 'NODES_AND_EDGES',
       'elk.json.edgeCoords': 'ROOT',
       'elk.json.shapeCoords': 'ROOT',
-      ...(frames.length ? { 'elk.hierarchyHandling': 'INCLUDE_CHILDREN' } : {}),
+      ...(frames.length || kids.size ? { 'elk.hierarchyHandling': 'INCLUDE_CHILDREN' } : {}),
     },
     children: [
       ...frames.map(f => ({
         id: f.key,
         layoutOptions: { 'elk.partitioning.partition': String(Math.max(0, view.layers.indexOf(f.layer)) * 3 + 1), 'elk.padding': AM_FRAME_PAD, ...frameMin(f.name, true, !!f.change) },
-        children: f.members.map(id => ({ id, width: boxes.get(id).w, height: boxes.get(id).h })),
+        children: f.members.map(id => amElkNode(id, boxes, kids)),
       })),
-      ...view.nodes.filter(n => !framed.has(n.id)).map(n => ({ id: n.id, width: boxes.get(n.id).w, height: boxes.get(n.id).h,
-        layoutOptions: { 'elk.partitioning.partition': String(part.get(n.id)) } })),
+      ...view.nodes.filter(n => !n.nestedIn && !framed.has(n.id)).map(n => amElkNode(n.id, boxes, kids, { 'elk.partitioning.partition': String(part.get(n.id)) })),
     ],
     edges: edges.map(e => {
       const [src, dst] = flipped.has(e.id) ? [e.to, e.from] : [e.from, e.to];
@@ -322,7 +351,7 @@ async function runAmElk(view, DIR) {
   // Bands (or columns): split halfway between the last node of a layer and the first node of the next.
   const Y = H ? 'x' : 'y', S = H ? 'width' : 'height';
   const extent = view.layers.map(layer => {
-    const ps = [...view.nodes.filter(n => n.layer === layer).map(n => pos.get(n.id)), ...frames.filter(f => f.layer === layer).map(f => pos.get(f.key))];
+    const ps = [...view.nodes.filter(n => !n.nestedIn && n.layer === layer).map(n => pos.get(n.id)), ...frames.filter(f => f.layer === layer).map(f => pos.get(f.key))];
     return ps.length ? { layer, top: Math.min(...ps.map(p => p[Y])), bottom: Math.max(...ps.map(p => p[Y] + p[S])) } : null;
   }).filter(Boolean);
   const bands = extent.map((b, i) => {
@@ -332,8 +361,8 @@ async function runAmElk(view, DIR) {
       : { layer: b.layer, label: LAYER_LABELS[b.layer], x: 0, y: top, width, height: bottom - top };
   });
   const nodes = view.nodes.map(n => {
-    const p = pos.get(n.id), b = boxes.get(n.id);
-    return { ...n, x: p.x, y: p.y, w: b.w, h: b.h, lines: b.lines };
+    const p = pos.get(n.id), b = boxes.get(n.id), parent = kids.has(n.id);
+    return { ...n, x: p.x, y: p.y, w: parent ? p.width : b.w, h: parent ? p.height : b.h, lines: b.lines, ...(parent ? { isParent: true } : {}) };
   });
   const outEdges = edges.map(e => {
     const le = (res.edges || []).find(x => x.id === e.id);
@@ -574,17 +603,18 @@ const MIX_TRACK = 16, GRID = 10;
 
 async function layoutArchimateMix(view) {
   const boxes = new Map(view.nodes.map(n => [n.id, amNodeBox(n)]));
+  const kids = nestedKids(view), place = placeLayers(view);
   const labels = new Map(view.edges.map(e => [e.id, edgeLabel(e)]));
-  const layerOf = new Map(view.nodes.map(n => [n.id, n.layer]));
+  const layerOf = place;
   const edges = view.edges.filter(e => layerOf.has(e.from) && layerOf.has(e.to));
-  const layers = view.layers.filter(l => view.nodes.some(n => n.layer === l));
+  const layers = view.layers.filter(l => view.nodes.some(n => place.get(n.id) === l));
   const bandIx = new Map(layers.map((l, i) => [l, i]));
 
   // 1. each band on its own
   const bandsLaid = [];
   for (const layer of layers) {
-    const ids = view.nodes.filter(n => n.layer === layer).map(n => n.id);
-    const set = new Set(ids);
+    const ids = view.nodes.filter(n => !n.nestedIn && place.get(n.id) === layer).map(n => n.id);
+    const set = new Set(view.nodes.filter(n => place.get(n.id) === layer).map(n => n.id));
     const bandFrames = amFrames(view).filter(f => f.layer === layer);
     const framed = new Set(bandFrames.flatMap(f => f.members));
     const inner = edges.filter(e => set.has(e.from) && set.has(e.to));
@@ -600,12 +630,12 @@ async function layoutArchimateMix(view) {
         'elk.edgeLabels.placement': 'CENTER', 'elk.layered.nodePlacement.strategy': 'NETWORK_SIMPLEX',
         'elk.layered.considerModelOrder.strategy': 'NODES_AND_EDGES',
         'elk.json.edgeCoords': 'ROOT', 'elk.json.shapeCoords': 'ROOT',
-        ...(bandFrames.length ? { 'elk.hierarchyHandling': 'INCLUDE_CHILDREN' } : {}),
+        ...(bandFrames.length || ids.some(id => kids.has(id)) ? { 'elk.hierarchyHandling': 'INCLUDE_CHILDREN' } : {}),
       },
       children: [
         ...bandFrames.map(f => ({ id: f.key, layoutOptions: { 'elk.padding': AM_FRAME_PAD, ...frameMin(f.name, true, !!f.change) },
-          children: f.members.map(id => ({ id, width: boxes.get(id).w, height: boxes.get(id).h })) })),
-        ...ids.filter(id => !framed.has(id)).map(id => ({ id, width: boxes.get(id).w, height: boxes.get(id).h })),
+          children: f.members.map(id => amElkNode(id, boxes, kids)) })),
+        ...ids.filter(id => !framed.has(id)).map(id => amElkNode(id, boxes, kids)),
       ],
       edges: inner.map(e => ({ id: e.id, sources: [e.from], targets: [e.to],
         labels: e.label ? [{ id: e.id + ':label', text: labels.get(e.id).lines.join(' '), width: labels.get(e.id).w, height: labels.get(e.id).h }] : [] })),
@@ -630,7 +660,7 @@ async function layoutArchimateMix(view) {
         const [mine, other] = bandIx.get(layerOf.get(e.from)) === i ? [e.from, e.to] : bandIx.get(layerOf.get(e.to)) === i ? [e.to, e.from] : [];
         if (!mine) continue;
         const oi = bandIx.get(layerOf.get(other));
-        d.push((off[oi] + local.get(other).x + boxes.get(other).w / 2) - (off[i] + local.get(mine).x + boxes.get(mine).w / 2));
+        d.push((off[oi] + local.get(other).x + local.get(other).width / 2) - (off[i] + local.get(mine).x + local.get(mine).width / 2));
       }
       if (!d.length) return;
       d.sort((a, c) => a - c);
@@ -648,7 +678,7 @@ async function layoutArchimateMix(view) {
     if (i < bandsLaid.length - 1) { gaps[i] = Math.max(2 * BAND_PAD, (crossing(i) + 1) * MIX_TRACK + 40); y += gaps[i]; }
   });
   const height = Math.ceil(y + BAND_PAD);
-  const node = id => { const i = bandIx.get(layerOf.get(id)), p = local.get(id), b = boxes.get(id); return { x: off[i] + p.x, y: top[i] + p.y, w: b.w, h: b.h }; };
+  const node = id => { const i = bandIx.get(place.get(id)), p = local.get(id); return { x: off[i] + p.x, y: top[i] + p.y, w: p.width, h: p.height }; };
   const bands = bandsLaid.map((b, i) => {
     const y0 = i ? top[i] - gaps[i - 1] / 2 : 0, y1 = i < bandsLaid.length - 1 ? top[i] + b.h + gaps[i] / 2 : height;
     return { layer: b.layer, label: LAYER_LABELS[b.layer], x: 0, y: y0, width, height: y1 - y0 };
@@ -664,7 +694,8 @@ async function layoutArchimateMix(view) {
       out.set(e.id, { ...e, points: pts, labelBox: l ? { x: l.x + off[i], y: l.y + top[i], w: l.width, h: l.height } : null, labelLines: e.label ? labels.get(e.id).lines : [] });
     }
   });
-  const router = gridRouter(width, height, view.nodes.map(n => node(n.id)));
+  // only leaves are obstacles: a nesting box must let the edges of its children out
+  const router = gridRouter(width, height, view.nodes.filter(n => !kids.has(n.id)).map(n => node(n.id)));
   for (const e of out.values()) router.occupy(e.points);
   // ports: spread along the facing side, ordered by the other end's x
   const sideOf = e => bandIx.get(layerOf.get(e.from)) < bandIx.get(layerOf.get(e.to)) ? ['bottom', 'top'] : ['top', 'bottom'];
@@ -694,7 +725,7 @@ async function layoutArchimateMix(view) {
     }
     out.set(e.id, { ...e, points: pts, labelBox: lb, labelLines: wrap(e.label, FONT.edge, 200, 2) });
   }
-  const nodes = view.nodes.map(n => ({ ...n, ...node(n.id), lines: boxes.get(n.id).lines }));
+  const nodes = view.nodes.map(n => ({ ...n, ...node(n.id), lines: boxes.get(n.id).lines, ...(kids.has(n.id) ? { isParent: true } : {}) }));
   const outFrames = bandsLaid.flatMap((b, i) => b.bandFrames.map(({ members, ...f }) => {
     const p = local.get(f.key);
     return { ...f, x: off[i] + p.x, y: top[i] + p.y, w: p.width, h: p.height };
@@ -780,11 +811,11 @@ export const AM_STYLES = ['flow', 'bands', 'bands-flow'];
 const AM_ENGINES = { flow: layoutArchimateElk, bands: layoutArchimateRouted, 'bands-flow': layoutArchimateMix };
 
 async function layoutArchimateStyled(view) {
-  const framed = (view.groups?.length ?? 0) > 0;
+  const framed = (view.groups?.length ?? 0) > 0 || view.nodes.some(n => n.nestedIn);
   const want = view.layout?.style ?? 'auto';
   if (framed && want === 'bands') {
     return { ...(await AM_ENGINES['bands-flow'](view)), layoutStyle: 'bands-flow', layoutAuto: false,
-      layoutNote: 'o estilo "bands" não desenha molduras de agrupamento; usei "bands-flow"' };
+      layoutNote: 'o estilo "bands" não desenha molduras de agrupamento nem aninhamento; usei "bands-flow"' };
   }
   if (AM_ENGINES[want]) return { ...(await AM_ENGINES[want](view)), layoutStyle: want, layoutAuto: false };
   const tried = [];
@@ -809,11 +840,13 @@ export function layoutQuality(laid, vw = 1920, vh = 1024) {
     const [x0, x1] = [h.a.x, h.b.x].sort((p, q) => p - q), [y0, y1] = [v.a.y, v.b.y].sort((p, q) => p - q);
     if (v.a.x > x0 + 1 && v.a.x < x1 - 1 && h.a.y > y0 + 1 && h.a.y < y1 - 1) crossings++;
   }
+  const holder = new Map(laid.nodes.filter(n => n.nestedIn).map(n => [n.id, n.nestedIn]));
+  const holds = (box, id) => { for (let c = holder.get(id); c; c = holder.get(c)) if (c === box) return true; return false; };
   let through = 0;
   for (const s of segs) {
     const e = laid.edges.find(x => x.id === s.e);
     for (const n of laid.nodes) {
-      if (n.id === e.from || n.id === e.to) continue;
+      if (n.id === e.from || n.id === e.to || holds(n.id, e.from) || holds(n.id, e.to)) continue;
       const [x0, x1] = [s.a.x, s.b.x].sort((p, q) => p - q), [y0, y1] = [s.a.y, s.b.y].sort((p, q) => p - q);
       if (x1 > n.x + 2 && x0 < n.x + n.w - 2 && y1 > n.y + 2 && y0 < n.y + n.h - 2) through++;
     }

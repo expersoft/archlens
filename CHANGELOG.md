@@ -3,6 +3,91 @@
 Mudanças relevantes do archlens, por versão. Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/);
 versões seguem [SemVer](https://semver.org/lang/pt-BR/).
 
+## [Não lançado]
+
+## [0.5.0] — 2026-10-28
+
+### Adicionado
+
+- **archlens-ask** (`portable/archlens-ask/`, #21): pacote de texto puro para consultar a base no gbrain a partir de
+  assistentes sem execução de código (M365 Copilot, Claude Desktop), via MCP. Responde em markdown e/ou Mermaid
+  (ArchiMate em `flowchart` com as cores do archlens; C4 na sintaxe C4 do Mermaid) com a seleção da `archlens-query`.
+  `REFERENCE.md` e o gabarito de validação são gerados por `npm run ask`; `npm run check-ask` avisa quando o pacote
+  fica para trás (fora do `npm test`). `AGENTS.md`/`CLAUDE.md` pedem que toda mudança no archlens avalie e atualize o
+  pacote no mesmo PR.
+- **Versão por objeto** (#18): o plano final guarda em `objects` a versão de cada objeto que altera e de cada objeto em que suas
+  decisões se apoiaram; o `apply` só recusa (`E_STORE_CONFLICT`, com os objetos pelo nome e o `plan --answers`) se algum
+  deles mudou. Applies de domínios que não se cruzam passam em paralelo. `markdown` e `gbrain` versionam por objeto; `json`
+  continua com a versão da base inteira.
+- **Duplicata criada em paralelo**: o `apply` refaz a busca de possíveis duplicatas para os elementos que o plano cria; um
+  candidato que não estava na base do plano é conflito (`reason: "possible-duplicate"`).
+- **`archlens init <pasta> --store json|markdown|gbrain`**: cria a base com o repositório escolhido no `archlens.json`
+  (sem credenciais) e o `.gitignore` de `.archlens/`.
+- **Conector `gbrain`** (#18), com a base inteira (elementos, manifesto, visões, notas e histórico) em páginas legíveis sob um
+  `prefix`: **modo git** (o CLI lê a ponta remota numa worktree destacada e grava um commit com push por apply; o clone do
+  usuário não muda) e **modo MCP** (o agente chama as ferramentas do gbrain a partir de pedidos do CLI, que mantém um
+  espelho local em `.archlens/mirror/`).
+- **`archlens remote <base> pull`** (sincroniza o espelho do modo MCP, vendo também páginas removidas) e **`remote <base>
+  check`** (confere a sessão do MCP e se gravar está liberado).
+- **`apply` no modo MCP**: releitura do conjunto de leitura (`--read-check`), gravação com `expected_revision` e
+  `request_id`, conferência dos recibos (`--receipts`, com o pedido de seguimento das tags), `--resume` e `--undo` a partir
+  do registro do apply em `.archlens/applies/`.
+- **`store convert` para o gbrain** (`--to gbrain --mode git|mcp`) e de volta (`--to json|markdown`), levando o texto das
+  pessoas e `notes/removidos/`.
+- **`npm run test:gbrain`**: integração com um gbrain real (0.60.304) num ambiente temporário (PGLite, sem embeddings, nada
+  global), fora do `npm test`.
+- **Exemplo `loja-online-gbrain`** (#19): a loja-online como base compartilhada num gbrain local.
+
+### Mudado
+
+- **Container de tópico como evento** (#20): `c4.kind: container` aceita também `application-event`, para um tópico aparecer
+  como evento nas visões ArchiMate e como fila/tópico no C4 (antes, `E_C4_TYPE`; a migração de bases 1.x com o override
+  `archimate: application-event` em `c4:container` era recusada).
+- **Rodada do histórico numerada ao gravar** (#18): o id `<data>-<seq>` é atribuído pelo `apply`, contando as rodadas que já estão
+  no histórico; o `entry.id` do plano é provisório. Acrescentar a rodada nunca causa conflito.
+
+### Corrigido
+
+- **Skills instaladas por link simbólico** (#17, `ln -s <repo>/skills/archlens-* ~/.claude/skills/`): o CLI e as referências
+  eram citados como `$SKILL_DIR/../..`, que o Node e a leitura de arquivos resolvem como `~/.claude` (o `..` é cortado antes
+  de seguir o link). As skills agora definem `ARCHLENS="$(realpath "$SKILL_DIR/../..")"` e usam `$ARCHLENS`; um teste
+  instala uma skill por link e roda o CLI por ele.
+
+## [0.4.0] — pré-release
+
+### Mudado (incompatível)
+
+- **O `SKILL.md` da raiz saiu** (#15): a skill única virou três (`skills/archlens-plan`, `archlens-apply`, `archlens-query`).
+  Quem tem `~/.claude/skills/archlens → <repo>` troca o link: instale o plugin ou use
+  `ln -s <repo>/skills/archlens-* ~/.claude/skills/`.
+- **Formato canônico 2.0** (#13): a base guarda tipos ArchiMate, o perfil C4 em `c4.kind`, uma lista plana com `parent` e só
+  relações ArchiMate. `c4:*`, `uses` e `children` continuam aceitos na entrada (prompt, delta, scan) e são traduzidos.
+  Bases 1.x são recusadas com `E_STORE_FORMAT`; `archlens migrate <base>` converte, conferindo que o modelo não muda
+  de sentido. Bancos de dados passam a ser `application-component` com a tag `database`.
+
+### Adicionado
+
+- **`archlens plan` / `apply` / `show`** (#15): `plan` compara o delta com a base e grava um plano (aberto, com perguntas, ou
+  final); `plan --answers` reaproveita as respostas; `apply` grava um plano final; `show` imprime o relatório. O **plano
+  final carrega as operações do store** e a versão da base, e o `apply` recusa se a base mudou. `merge` segue como atalho.
+- **`archlens query`** (#15): responde em markdown (padrão) ou JSON (`--format`) a uma visão ou spec, e `--element <id>` dá o
+  cartão do elemento (pai, filhos, relações, fontes, rodadas; `--depth` inclui o que está em volta).
+- **Prévia de plano final**: `render`/`deliver`/`build`/`resolve`/`views` com `--plan <plano.json>` desenham a base com o plano, aberto ou final, já aplicado. `render` e `deliver` não gravam nada; `build` grava os diagramas em `architecture/diagrams/` (a base não muda).
+- **Plugin com três skills** (#15; `archlens-plan`, `archlens-apply`, `archlens-query`) em `.claude-plugin/`; exemplo em
+  `examples/telemedicina/plano-02*.json`.
+- **Versão do plugin sincronizada**: `npm version` regrava `.claude-plugin/plugin.json` e `marketplace.json` a partir do
+  `package.json` (`scripts/sync-plugin.mjs`); um teste recusa manifestos fora de sincronia. README com atualização e publicação.
+- **Conector `markdown`** (#14): a base vira um vault (uma pasta por tipo ArchiMate, um `.md` por elemento) que abre no Obsidian;
+  escolhido por `store.kind` no `archlens.json`. Exemplo em `examples/loja-online-vault/`.
+- **Contrato de conector** (#14) com gravação por operações atômicas e versão do conteúdo (`E_STORE_CONFLICT` quando a base muda
+  entre o plano e o `--apply`); os conectores `json` e `markdown` dão a mesma versão para a mesma base.
+- `archlens store convert <base> --to markdown|json`: troca o conector da base na mesma pasta, sem mudar a versão nem
+  apagar arquivos que a base não possui.
+- **Schema pack do gbrain** (`gbrain-pack.yaml`) gerado na base `markdown`.
+- Propriedades do usuário com listas de texto e catálogo opcional no `archlens.json` (`W_PROPERTY`).
+- C4 gerado de modelos ArchiMate: setas derivadas através de serviços, interfaces e funções de aplicação.
+- Aninhamento visual nas visões ArchiMate (`"nesting": "nested"`, com `depth`).
+
 ## [0.3.0] — pré-release
 
 ### Adicionado
@@ -57,6 +142,9 @@ Primeira versão: arquitetura como modelo (ArchiMate 3.2 com perfil C4), diagram
 - Relações explicadas em português, HTML animado num arquivo único, checagem visual com screenshots.
 - `\n` força quebra de linha em nomes; `expand` no schema da visão (#2). Zoom/pan na tela inteira (#3).
 
+[Não lançado]: https://github.com/expersoft/archlens/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/expersoft/archlens/compare/v0.4.0...v0.5.0
+[0.4.0]: https://github.com/expersoft/archlens/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/expersoft/archlens/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/expersoft/archlens/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/expersoft/archlens/releases/tag/v0.1.0

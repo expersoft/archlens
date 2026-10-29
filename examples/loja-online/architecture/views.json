@@ -195,5 +195,19 @@
       ],
       "crossOnly": true
     }
+  },
+  {
+    "key": "aplicacao-aninhada",
+    "notation": "archimate",
+    "viewpoint": "application",
+    "title": "Plataforma de E-commerce — containers dentro do sistema",
+    "description": "A mesma camada de aplicação com os containers dentro do sistema (nesting) e os componentes ao lado, ligados pelo losango (depth 1).",
+    "include": [
+      "loja"
+    ],
+    "nesting": {
+      "mode": "nested",
+      "depth": 1
+    }
   }
 ]

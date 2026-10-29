@@ -4,7 +4,13 @@ Um arquivo descreve **um modelo** e **as visões** que se quer extrair dele. Ins
 Structurizr (`model` + `views`), mas o metamodelo interno é o **ArchiMate 3.2**. Os tipos C4 são um
 perfil que mapeia para ele. Um mesmo modelo serve às duas notações.
 
-Schemas: `schemas/model.schema.json` (arquivo inteiro) e `schemas/view.schema.json` (uma visão).
+Schemas: `schemas/model.schema.json` (a base, formato 2.0 estrito), `schemas/delta.schema.json` (o delta, com o
+vocabulário livre descrito aqui) e `schemas/view.schema.json` (uma visão).
+
+**Este é o vocabulário de entrada** (deltas, prompts, `archlens scan`). A base grava o formato 2.0: tipos ArchiMate sem
+prefixo, `c4.kind`, lista plana com `parent` e só relações ArchiMate (`references/knowledge-doc.md`). A CLI traduz na
+entrada (`references/merge.md`, "Tradução na entrada"). Um modelo 1.x (`"archlens": "1.0"`, como no exemplo abaixo) é
+convertido por `archlens migrate`.
 
 ```json
 {
@@ -29,12 +35,12 @@ Schemas: `schemas/model.schema.json` (arquivo inteiro) e `schemas/view.schema.js
 | `name` | não | rótulo (padrão: `id`). `\n` força quebra de linha, ex.: `"Autorizador\n(Odin)"` põe o nome código embaixo |
 | `description` | não | frase curta, aparece no nó (C4) e no painel |
 | `technology` | não | ex.: `"Java / Spring Boot"` |
-| `tags` | não | lista de strings. `database`/`datastore`/`storage`/`bucket` num container C4 o torna data store |
+| `tags` | não | lista de strings. `database`/`datastore`/`storage`/`bucket` num container C4 o desenha como data store |
 | `external` | não | C4: sistema fora do seu controle (desenhado em cinza) |
 | `archimate` | não | C4: força o tipo ArchiMate (ex.: `"system-software"`) em vez do mapeamento padrão |
 | `children` | não | elementos aninhados (hierarquia C4 ou composição ArchiMate) |
 | `parent` | não | alternativa a `children`: id do pai |
-| `properties` | não | mapa livre (`owner`, `criticidade`, `sla`…), mostrado no painel |
+| `properties` | não | mapa livre (`owner`, `criticidade`, `sla`…), mostrado no painel; valores texto, número, booleano ou lista de textos. Catálogo opcional no `archlens.json` (`W_PROPERTY`) |
 | `owner`, `url` | não | metadados |
 | `inferred` | não | `true` quando veio de interpretação, não do texto explícito |
 | `confidence` | não | `"alta"`, `"média"` ou `"baixa"` (para itens inferidos) |
@@ -51,8 +57,8 @@ Schemas: `schemas/model.schema.json` (arquivo inteiro) e `schemas/view.schema.js
 | `c4:person` | business-actor | topo da hierarquia |
 | `c4:softwareSystem` | application-component | topo da hierarquia |
 | `c4:container` | application-component | filho de softwareSystem |
-| `c4:container` + tag `database` | data-object | desenhado como cilindro no C4 |
-| `c4:container` + tag `topic`/`queue`/`messaging` | application-component (ou o tipo de `archimate`) | desenhado como fila/tópico (cilindro horizontal, notação de mensageria) no C4 |
+| `c4:container` + tag `database` | application-component (+ `c4.kind: container`) | desenhado como cilindro no C4 pela tag; o conteúdo, quando conhecido, é `data-object` com `parent` no banco |
+| `c4:container` + tag `topic`/`queue`/`messaging` | application-component (ou `application-event`, pelo override `archimate`) | desenhado como fila/tópico (cilindro horizontal, notação de mensageria) no C4 |
 | `c4:component` | application-component | filho de container |
 | `c4:deploymentNode`, `c4:infrastructureNode` | node | |
 
@@ -93,7 +99,7 @@ Sempre **consumidor → provedor**: `{"from":"web","to":"api","type":"uses"}`. N
 - se o alvo é passivo (data store), vira `access` de `from` para `to`;
 - senão, vira `serving` **invertido** (`api serving web`), que é a leitura ArchiMate.
 
-A orientação original fica guardada, e as visões C4 desenham a seta como foi escrita.
+A base não guarda o `uses`: as visões C4 derivam a orientação do tipo (`serving` desenha a seta do consumidor para o provedor).
 
 ### Tipos ArchiMate
 

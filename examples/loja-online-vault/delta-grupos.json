@@ -1,0 +1,19 @@
+{
+  "archlens-delta": "1.0",
+  "source": { "kind": "prompt", "ref": "agrupamentos" },
+  "summary": "Plataformas de vendas e de back-office",
+  "model": {
+    "elements": [
+      { "id": "plat-vendas", "type": "grouping", "name": "Plataforma de Vendas", "description": "Sistemas que sustentam a jornada de compra: vitrine, checkout e análise de risco." },
+      { "id": "plat-backoffice", "type": "grouping", "name": "Plataforma de Back-office", "description": "Sistemas internos de faturamento, expedição e atendimento." },
+      { "id": "loja", "group": "plat-vendas" },
+      { "id": "antifraude", "group": "plat-vendas" },
+      { "id": "erp", "group": "plat-backoffice" },
+      { "id": "crm", "group": "plat-backoffice" }
+    ]
+  },
+  "views": [
+    { "key": "plataformas", "notation": "c4", "level": "landscape", "title": "Plataformas", "groups": { "frames": true } },
+    { "key": "vendas-x-backoffice", "notation": "archimate", "viewpoint": "application", "title": "Vendas × Back-office", "groups": { "only": ["plat-vendas", "plat-backoffice"], "crossOnly": true } }
+  ]
+}

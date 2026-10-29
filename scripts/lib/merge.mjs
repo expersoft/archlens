@@ -1,15 +1,15 @@
 // Incremental merge of a delta into the knowledge base. planMerge classifies and never decides;
 // applyPlan replays the same merge with the user's answers. Pure: no file I/O.
 import { createHash } from 'node:crypto';
-import { resolveType, STATUSES } from './registry.mjs';
+import { STATUSES, RELATIONSHIP_TYPES } from './registry.mjs';
 import { validateModel } from './validate.mjs';
 import { aliasKey, findCandidates } from './match.mjs';
 import { addSources, deltaSources } from './sources.mjs';
-import { canonicalRel } from './model.mjs';
 import { indexTree, orderDelta, attach, detach, descendantsOf } from './raw-tree.mjs';
+import { FORMAT, canonicalElements, canonicalRelationship, sortParentsFirst } from './canonical.mjs';
 
 export const PLAN_VERSION = '1.0';
-const ELEMENT_FIELDS = ['type', 'name', 'description', 'technology', 'external', 'archimate', 'owner', 'url', 'status', 'statusReason', 'group'];
+const ELEMENT_FIELDS = ['type', 'name', 'description', 'technology', 'external', 'c4', 'owner', 'url', 'status', 'statusReason', 'group'];
 const REL_FIELDS = ['description', 'technology', 'accessType', 'status', 'statusReason'];
 export const VIEW_REFS = ['scope', 'anchor'];
 export const VIEW_LISTS = ['focus', 'expand', 'include'];
@@ -58,7 +58,7 @@ export function previewMerge(baseRaw, delta, opts = {}) {
   return { plan, raw: ctx.raw, idMap: ctx.idMap };
 }
 
-function planContext(baseRaw, delta, { base = 'ARCHITECTURE.md', today, answers } = {}) {
+function planContext(baseRaw, delta, { base = 'ARCHITECTURE.md', today, answers, storeVersion } = {}) {
   checkDelta(delta);
   const earlier = answers instanceof Map ? answers : new Map(Object.entries(answers ?? {}));
   const ctx = runMerge(baseRaw, delta, { mode: 'plan', resolutions: earlier });
@@ -66,7 +66,7 @@ function planContext(baseRaw, delta, { base = 'ARCHITECTURE.md', today, answers 
   const summary = {};
   for (const it of ctx.items) if (!it.when) summary[it.class] = (summary[it.class] ?? 0) + 1;
   const plan = {
-    'archlens-plan': PLAN_VERSION, base, baseHash: hashRaw(baseRaw), created: today ?? isoToday(), delta,
+    'archlens-plan': PLAN_VERSION, base, baseHash: hashRaw(baseRaw), ...(storeVersion !== undefined ? { storeVersion } : {}), created: today ?? isoToday(), delta,
     items: ctx.items.map((it, i) => ({ n: i + 1, ...it })), summary, blocked: errors.length > 0, errors,
   };
   return { ctx, plan };
@@ -74,7 +74,27 @@ function planContext(baseRaw, delta, { base = 'ARCHITECTURE.md', today, answers 
 
 export function applyPlan(baseRaw, plan, { today } = {}) {
   if (plan?.['archlens-plan'] !== PLAN_VERSION) throw mergeError('E_PLAN_SCHEMA', 'o arquivo não é um plano do archlens (gere com "archlens merge --plan")');
-  if (hashRaw(baseRaw) !== plan.baseHash) throw mergeError('E_PLAN_STALE', 'a base mudou depois que o plano foi gerado; rode "archlens merge --plan" de novo');
+  // Plans made against a connector carry its version, which the connector checks when it applies the ops.
+  if (!('storeVersion' in plan) && hashRaw(baseRaw) !== plan.baseHash) throw mergeError('E_PLAN_STALE', 'a base mudou depois que o plano foi gerado; rode "archlens merge --plan" de novo');
+  const { applicable: open, resolutions } = questionsOf(plan);
+  const pending = open.filter(i => i.resolution == null);
+  if (pending.length) throw mergeError('E_PLAN_PENDING', `${pending.length} decisão(ões) sem resposta: item(ns) ${pending.map(i => i.n).join(', ')}`, { pending });
+  const bad = open.filter(i => !validResolution(i, i.resolution));
+  if (bad.length) throw mergeError('E_PLAN_RESOLUTION', `resposta inválida no(s) item(ns) ${bad.map(i => `${i.n} ("${i.resolution}")`).join(', ')}`);
+  const date = today ?? isoToday();
+  const ctx = runMerge(baseRaw, plan.delta, { mode: 'apply', resolutions });
+  const errors = [...ctx.errors, ...validateModel(ctx.raw).errors];
+  if (errors.length) throw mergeError('E_MERGE_INVALID', `o resultado do merge é inválido (${errors.length} erro(s)); nada foi gravado`, { errors });
+  // What the merge's decisions relied on, and the possible duplicates of each new element (answered or not).
+  const seen = { read: ctx.read, candidates: Object.fromEntries(ctx.candidates) };
+  if (baseRaw && canonicalJson(ctx.raw) === canonicalJson(baseRaw)) return { raw: baseRaw, entry: null, ...seen };
+  const entry = changelogEntry(ctx, date);
+  ctx.raw.changelog = [...(ctx.raw.changelog || []), entry];
+  return { raw: ctx.raw, entry, ...seen };
+}
+
+/** The questions of a plan that apply given its own answers (a `when` item only exists under its parent's answer). */
+function questionsOf(plan) {
   // Only questions take answers; a resolution written on an informational item is ignored.
   const questions = plan.items.filter(i => 'resolution' in i && isQuestion(i));
   const resolutions = new Map(questions.map(i => [i.key, i.resolution]));
@@ -83,20 +103,11 @@ export function applyPlan(baseRaw, plan, { today } = {}) {
     const at = it.when.lastIndexOf('=');
     return resolutions.get(it.when.slice(0, at)) === it.when.slice(at + 1);
   };
-  const open = questions.filter(applies);
-  const pending = open.filter(i => i.resolution == null);
-  if (pending.length) throw mergeError('E_PLAN_PENDING', `${pending.length} decisão(ões) sem resposta: item(ns) ${pending.map(i => i.n).join(', ')}`, { pending });
-  const bad = open.filter(i => !RESOLUTION[resolutionKind(i)].test(String(i.resolution)));
-  if (bad.length) throw mergeError('E_PLAN_RESOLUTION', `resposta inválida no(s) item(ns) ${bad.map(i => `${i.n} ("${i.resolution}")`).join(', ')}`);
-  const date = today ?? isoToday();
-  const ctx = runMerge(baseRaw, plan.delta, { mode: 'apply', resolutions });
-  const errors = [...ctx.errors, ...validateModel(ctx.raw).errors];
-  if (errors.length) throw mergeError('E_MERGE_INVALID', `o resultado do merge é inválido (${errors.length} erro(s)); nada foi gravado`, { errors });
-  if (baseRaw && canonicalJson(ctx.raw) === canonicalJson(baseRaw)) return { raw: baseRaw, entry: null };
-  const entry = changelogEntry(ctx, date);
-  ctx.raw.changelog = [...(ctx.raw.changelog || []), entry];
-  return { raw: ctx.raw, entry };
+  return { applicable: questions.filter(applies), resolutions };
 }
+
+/** The applicable questions of a plan whose answer is missing or invalid; none means apply can run. */
+export const openQuestions = plan => questionsOf(plan).applicable.filter(i => !validResolution(i, i.resolution));
 
 const isQuestion = it => it.class === 'conflict' || it.class === 'possible-duplicate'
   || (it.class === 'op' && !it.noop && !it.error && (it.op === 'remove' || (it.op === 'status' && it.status === 'retired')));
@@ -113,7 +124,7 @@ function checkDelta(delta) {
 
 function emptyBase(delta) {
   return {
-    archlens: '1.0', name: delta.name ?? 'Arquitetura', ...(delta.description ? { description: delta.description } : {}),
+    archlens: FORMAT, name: delta.name ?? 'Arquitetura', ...(delta.description ? { description: delta.description } : {}),
     model: { elements: [], relationships: [] }, views: [],
   };
 }
@@ -127,21 +138,31 @@ function runMerge(baseRaw, delta, { mode, resolutions = new Map() }) {
     raw, delta, mode, resolutions, items: [], errors: [],
     tree: indexTree(raw), aliases: new Map(), idMap: new Map(), fresh: new Set(), freshSources: new WeakSet(),
     log: { added: [], changed: new Set(), status: {}, removed: [], decisions: [] },
+    read: new Set(), candidates: new Map(),
   };
+  // The base's own objects, so that only they enter the read set (not what this delta adds).
+  ctx.inBase = { elements: new Set(ctx.tree.keys()), relationships: new Set(raw.model.relationships), views: new Set((raw.views || []).map(v => v?.key)) };
   // Fuzzy pool frozen before any merge, so simulated answers in plan mode cannot change what apply sees.
   ctx.pool = [...ctx.tree].map(([, { el, parent }]) => describe(el, parent));
   for (const [id, { el }] of ctx.tree) for (const a of aliasesOf(el)) if (!ctx.aliases.has(aliasKey(a))) ctx.aliases.set(aliasKey(a), id);
   // Ids the delta's ops remove (resolved against the base before any merge): never matched or offered as duplicates.
   ctx.removing = new Set((delta.ops || []).filter(o => o?.op === 'remove' && o.id).map(o => (ctx.tree.has(o.id) ? o.id : ctx.aliases.get(aliasKey(o.id)) ?? o.id)));
-  ctx.typeOf = id => {
-    const el = ctx.tree.get(id)?.el;
-    return el ? resolveType(el.type, { tags: el.tags || [], archimate: el.archimate }).type ?? null : null;
+  ctx.typeOf = id => ctx.tree.get(id)?.el.type ?? null;
+  // The delta in the 2.0 vocabulary: elements here (kinds inferred only for elements new to the base),
+  // relationships once their ends resolve (mergeRelationships). The caller's delta is kept as written.
+  const lookup = id => {
+    const el = ctx.tree.get(resolveRef(ctx, id))?.el;
+    return el ? { type: el.type, kind: el.c4?.kind ?? null } : null;
   };
+  const canon = canonicalElements(delta.model?.elements, { lookup });
+  ctx.inferredKinds = canon.inferred;
+  if (delta.model) delta.model.elements = canon.elements;
   mergeElements(ctx);
   mergeRelationships(ctx);
   mergeViews(ctx);
   mergeAssumptions(ctx);
   runOps(ctx);
+  raw.model.elements = sortParentsFirst(raw.model.elements);
   return ctx;
 }
 
@@ -169,35 +190,53 @@ function note(ctx, item) {
   ctx.items.push(item);
 }
 
+/** The tree entry of element `id`; a base element consulted for a decision enters the read set. */
+function readElement(ctx, id) {
+  if (ctx.inBase.elements.has(id)) ctx.read.add(`element:${id}`);
+  return ctx.tree.get(id);
+}
+
+function readRelationship(ctx, r, id) {
+  if (ctx.inBase.relationships.has(r)) ctx.read.add(`relationship:${id}`);
+}
+
+function readView(ctx, key) {
+  if (ctx.inBase.views.has(key)) ctx.read.add(`view:${key}`);
+}
+
 /** Delta reference → canonical base id (delta id already merged, base id, or base alias). */
 function resolveRef(ctx, ref) {
   if (ref == null) return ref;
-  if (ctx.idMap.has(ref)) return ctx.idMap.get(ref);
-  if (ctx.tree.has(ref)) return ref;
-  return ctx.aliases.get(aliasKey(ref)) ?? ref;
+  const id = ctx.idMap.has(ref) ? ctx.idMap.get(ref) : ctx.tree.has(ref) ? ref : ctx.aliases.get(aliasKey(ref)) ?? ref;
+  readElement(ctx, id);
+  return id;
 }
 
-const describe = (el, parent) => ({
+/** An element as findCandidates compares it (apply rechecks the elements a plan creates with it). */
+export const describe = (el, parent) => ({
   id: el.id, names: [el.name ?? el.id, ...aliasesOf(el)], parent: parent ?? null, technology: el.technology,
-  type: resolveType(el.type, { tags: el.tags || [], archimate: el.archimate }).type ?? null,
+  type: el.type ?? null,
 });
 
+/** The base element `el` is (`id`), or the possible duplicates found for it (`candidates`, best first; the best asked about). */
 function findMatch(ctx, el, parentId) {
-  if (ctx.tree.has(el.id)) return { id: el.id };
+  const matched = id => { readElement(ctx, id); return { id }; };
+  if (ctx.tree.has(el.id)) return matched(el.id);
   // An element this delta removes (e.g. a placeholder a repository reading replaces) is never the match.
   const removed = id => ctx.removing.has(id);
   for (const k of [el.id, el.name, ...aliasesOf(el)]) {
     const id = k == null ? null : ctx.aliases.get(aliasKey(k));
-    if (id && !removed(id)) return { id };
+    if (id && !removed(id)) return matched(id);
   }
-  for (const a of aliasesOf(el)) if (ctx.tree.has(a) && !removed(a)) return { id: a };
+  for (const a of aliasesOf(el)) if (ctx.tree.has(a) && !removed(a)) return matched(a);
   const pool = ctx.pool.filter(p => !ctx.fresh.has(p.id) && !removed(p.id));
-  const [best] = findCandidates(describe(el, parentId), pool);
-  return best ? { candidate: best } : {};
+  const found = findCandidates(describe(el, parentId), pool);
+  if (found[0]) readElement(ctx, found[0].id); // "same" and "different" both depend on the candidate as it is
+  return { candidate: found[0], candidates: found.map(c => c.id) };
 }
 
 function mergeElements(ctx) {
-  const isGrouping = el => resolveType(el.type, { tags: el.tags || [], archimate: el.archimate }).type === 'grouping';
+  const isGrouping = el => el.type === 'grouping';
   // Groupings first, so a member's "group" already resolves to the base id (duplicate answered same, alias, name).
   const list = orderDelta(ctx.delta.model?.elements);
   const ordered = [...list.filter(x => x.el.type && isGrouping(x.el)), ...list.filter(x => !(x.el.type && isGrouping(x.el)))];
@@ -225,15 +264,13 @@ function mergeElements(ctx) {
       }
       if (ctx.mode === 'apply') ctx.log.decisions.push(`duplicata descartada: ${el.id} ≠ ${c.id}`);
     }
+    ctx.candidates.set(el.id, match.candidates);
     insertElement(ctx, el, parentId);
   }
 }
 
-const normType = t => String(t).replace(/^archimate:/, '');
-
 function sameValue(field, a, b) {
   if (field === 'name') return aliasKey(a) === aliasKey(b);
-  if (field === 'type') return normType(a) === normType(b);
   return canonicalJson(a) === canonicalJson(b);
 }
 
@@ -323,12 +360,15 @@ function moveElement(ctx, baseId, newParent) {
 }
 
 function mergeElementInto(ctx, baseId, el, parentId, { dry = false, when, aliases = [] } = {}) {
-  const entry = ctx.tree.get(baseId);
+  const entry = readElement(ctx, baseId);
   const target = entry.el;
   // A delta name that is already an alias of the element is not a conflict (the user answered it before).
   const knownName = el.name != null && aliasesOf(target).some(a => aliasKey(a) === aliasKey(el.name));
-  const fields = fieldsOf(target, el, ELEMENT_FIELDS).filter(([f]) => !(f === 'name' && knownName));
+  // A kind the entrance inferred (the delta did not say it) is never written onto an element the base already has.
+  const inferredKind = ctx.inferredKinds?.has(el.id);
+  const fields = fieldsOf(target, el, ELEMENT_FIELDS).filter(([f]) => !(f === 'name' && knownName) && !(f === 'c4' && inferredKind));
   if (parentId != null && parentId !== entry.parent) {
+    readElement(ctx, entry.parent); // the old parent: the move is decided against it
     fields.push(['parent', entry.parent ?? undefined, parentId, v => moveElement(ctx, baseId, resolveRef(ctx, v))]);
   }
   const { filled, changed } = reconcile(ctx, { fields, keyPrefix: `el:${el.id}`, kind: 'element', target: baseId, dry, when });
@@ -359,15 +399,12 @@ function insertElement(ctx, el, parentId) {
 }
 
 function relKey(ctx, r) {
-  const c = canonicalRel(r, ctx.typeOf);
-  return c.error ? null : `${c.from}|${c.type}|${c.to}`;
+  return RELATIONSHIP_TYPES[r.type] ? `${r.from}|${r.type}|${r.to}` : null;
 }
 
-/** Generated id of a raw relationship (before de-duplication): explicit id, or from-type-to after reading `uses`. */
+/** Generated id of a raw relationship (before de-duplication): explicit id, or from-type-to. */
 export function relId(ctx, r) {
-  if (r.id) return r.id;
-  const c = canonicalRel(r, ctx.typeOf);
-  return c.error ? `${r.from}-${r.type}-${r.to}` : `${c.from}-${c.type}-${c.to}`;
+  return r.id ?? `${r.from}-${r.type}-${r.to}`;
 }
 
 /**
@@ -379,7 +416,7 @@ export function relIds(ctx) {
   const seen = new Map();
   for (const r of ctx.raw.model.relationships) {
     if (!r || typeof r !== 'object') continue;
-    const valid = r.from && r.to && ctx.tree.has(r.from) && ctx.tree.has(r.to) && !canonicalRel(r, ctx.typeOf).error;
+    const valid = r.from && r.to && ctx.tree.has(r.from) && ctx.tree.has(r.to) && !!RELATIONSHIP_TYPES[r.type];
     let id = relId(ctx, r);
     if (valid) {
       if (seen.has(id)) { seen.set(id, seen.get(id) + 1); id = `${id}#${seen.get(id)}`; } else seen.set(id, 1);
@@ -392,10 +429,7 @@ export function relIds(ctx) {
 function relContext(raw) {
   const model = { elements: raw?.model?.elements ?? [], relationships: raw?.model?.relationships ?? [] };
   const tree = indexTree({ model });
-  const typeOf = id => {
-    const el = tree.get(id)?.el;
-    return el ? resolveType(el.type, { tags: el.tags || [], archimate: el.archimate }).type ?? null : null;
-  };
+  const typeOf = id => tree.get(id)?.el.type ?? null;
   return { raw: { model }, tree, typeOf };
 }
 
@@ -421,10 +455,15 @@ function mergeRelationships(ctx) {
   };
   for (const [r, id] of ids) index(r, id, relKey(ctx, r));
   (ctx.delta.model?.relationships || []).forEach((dr, i) => {
-    const r = { ...dr, from: resolveRef(ctx, dr.from), to: resolveRef(ctx, dr.to) };
+    const ends = { ...dr, from: resolveRef(ctx, dr.from), to: resolveRef(ctx, dr.to) };
+    const r = canonicalRelationship(ends, ctx.typeOf) ?? ends; // an unknown type stays, so validation reports it
     const k = relKey(ctx, r);
     const base = (r.id && byId.get(r.id)) || (k && sameRelationship(byKey.get(k) ?? [], r, fresh));
-    if (base) { mergeRelInto(ctx, base, ids.get(base), r, i); return; }
+    if (base) {
+      readRelationship(ctx, base, ids.get(base));
+      mergeRelInto(ctx, base, ids.get(base), r, i);
+      return;
+    }
     const { source, sources, ...rest } = r;
     const generated = relId(ctx, { ...r, id: undefined });
     let id = r.id ?? generated;
@@ -437,7 +476,7 @@ function mergeRelationships(ctx) {
     fresh.add(node);
     index(node, id, k);
     ctx.log.added.push(id);
-    note(ctx, { key: `rel:${i}`, class: 'new', kind: 'relationship', target: id, from: r.from, to: r.to, type: r.type ?? 'uses' });
+    note(ctx, { key: `rel:${i}`, class: 'new', kind: 'relationship', target: id, from: r.from, to: r.to, type: r.type });
   });
 }
 
@@ -477,6 +516,7 @@ function mergeViews(ctx) {
     const v = rewriteView(ctx, dv);
     const key = `view:${v.key}`;
     const i = ctx.raw.views.findIndex(x => x.key === v.key);
+    readView(ctx, v.key);
     if (i < 0) {
       ctx.raw.views.push(v);
       ctx.log.added.push(key);
@@ -520,6 +560,7 @@ function runOps(ctx) {
     const rel = el ? null : findRelationship(ctx, op.id);
     if (!el && !rel) return opError('E_UNKNOWN_REF', `"${op.id}" não existe`, 'use o id (ou alias) de um elemento, ou o id de uma relação');
     const id = el ? elId : relIds(ctx).get(rel);
+    if (rel) readRelationship(ctx, rel, id);
     const target = el ?? rel;
     switch (op.op) {
       case 'rename': {
@@ -554,6 +595,10 @@ function runOps(ctx) {
       }
       case 'remove': {
         const { cascade, rels } = el ? removalCascade(ctx, id) : { cascade: { elements: [], relationships: [id], views: [] }, rels: [rel] };
+        // Everything the cascade reaches is read (cascade.relationships holds the ids of rels, in order).
+        for (const x of [...cascade.elements, ...(cascade.members || [])]) readElement(ctx, x);
+        rels.forEach((r, k) => readRelationship(ctx, r, cascade.relationships[k]));
+        for (const v of cascade.views) readView(ctx, v.key);
         if (decide(ctx, { key, class: 'op', op: 'remove', target: id, cascade }, 'yes') !== 'yes') {
           ctx.log.decisions.push(`remover ${id}: recusado`);
           return undefined;

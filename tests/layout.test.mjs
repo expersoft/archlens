@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { wrap, layoutView, frameChipWidth } from '../scripts/lib/layout.mjs';
 import { normalizeModel } from '../scripts/lib/model.mjs';
 import { resolveView } from '../scripts/lib/query.mjs';
+import { asBase } from './helpers.mjs';
 
 test('wrap honours "\\n" as a forced line break', () => {
   assert.deepEqual(wrap('Autorizador\n(Odin)', 20, 248, 3), ['Autorizador', '(Odin)']);
@@ -22,7 +23,7 @@ test('wrap without "\\n" is unchanged', () => {
 });
 
 // Frame layout tests
-const plat = () => normalizeModel(JSON.parse(readFileSync(new URL('./fixtures/platforms.json', import.meta.url))));
+const plat = () => normalizeModel(asBase(JSON.parse(readFileSync(new URL('./fixtures/platforms.json', import.meta.url)))));
 const inside = (a, b) => a.x >= b.x - 0.5 && a.y >= b.y - 0.5 && a.x + a.w <= b.x + b.w + 0.5 && a.y + a.h <= b.y + b.h + 0.5;
 const overlaps = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
 
@@ -45,7 +46,7 @@ test('C4 container: the opened boundary sits inside the frame of its group', asy
 test('C4: a container with its own group stays inside the opened boundary', async () => {
   const r = JSON.parse(readFileSync(new URL('./fixtures/platforms.json', import.meta.url)));
   r.model.elements.find(e => e.id === 'autorizador').children[1].group = 'plat-cred';
-  const laid = await layoutView(resolveView(normalizeModel(r), { key: 'c', notation: 'c4', level: 'container', scope: 'autorizador', groups: { frames: true } }));
+  const laid = await layoutView(resolveView(normalizeModel(asBase(r)), { key: 'c', notation: 'c4', level: 'container', scope: 'autorizador', groups: { frames: true } }));
   assert.ok(inside(laid.nodes.find(n => n.id === 'autorizador.regras'), laid.boundaries[0]));
 });
 
@@ -97,7 +98,7 @@ test('frames are at least as wide as their chip and stay inside the canvas margi
     { key: 'g', notation: 'archimate', viewpoint: 'layered', granularity: 'system', groups: { only: ['plat-aut', 'plat-cred'] }, layout: { style: 'bands-flow' } },
   ];
   for (const spec of specs) {
-    const laid = await layoutView(resolveView(normalizeModel(platRaw()), spec));
+    const laid = await layoutView(resolveView(normalizeModel(asBase(platRaw())), spec));
     assert.ok(laid.frames.length > 0, spec.layout?.style ?? spec.notation);
     for (const f of laid.frames) {
       const tag = `${spec.notation}/${spec.layout?.style} ${f.id}`;
@@ -113,9 +114,71 @@ test('a frame in a preview is wide enough for its chip with the change mark', as
   // one member and a long-ish name: the chip (not the members) decides the frame width
   raw.model.elements.find(e => e.id === 'plat-cred').name = 'Plataforma de Crédito Digital';
   delete raw.model.elements.find(e => e.id === 'limites').group;
-  const v = resolveView(normalizeModel(raw), { key: 'l', notation: 'c4', level: 'landscape', groups: { frames: true } });
+  const v = resolveView(normalizeModel(asBase(raw)), { key: 'l', notation: 'c4', level: 'landscape', groups: { frames: true } });
   v.groups.find(g => g.id === 'plat-cred').change = 'added';
   const laid = await layoutView(v);
   const fr = laid.frames.find(f => f.id === 'plat-cred');
   assert.ok(fr.w >= frameChipWidth(fr.name, false, true) + 28, `width ${fr.w}`);
+});
+
+const odinNested = () => normalizeModel({ archlens: '2.0', name: 'Odin', model: {
+  elements: [
+    { id: 'plat', type: 'grouping', name: 'Mensageria' },
+    { id: 'odin', type: 'application-component', name: 'Odin', c4: { kind: 'softwareSystem' }, group: 'plat' },
+    { id: 'odin.api', type: 'application-component', name: 'odin-api', parent: 'odin', c4: { kind: 'container' } },
+    { id: 'odin.worker', type: 'application-component', name: 'odin-message-worker', parent: 'odin', c4: { kind: 'container' } },
+    { id: 'odin.api.rest', type: 'application-component', name: 'REST', parent: 'odin.api', c4: { kind: 'component' } },
+    { id: 'svc', type: 'application-service', name: 'Envio de Notificações' },
+    { id: 'crm', type: 'application-component', name: 'CRM', c4: { kind: 'softwareSystem' } },
+    { id: 'kafka', type: 'system-software', name: 'Kafka' },
+  ],
+  relationships: [
+    { from: 'odin.api', to: 'svc', type: 'realization' },
+    { from: 'svc', to: 'crm', type: 'serving' },
+    { from: 'kafka', to: 'odin.worker', type: 'serving' },
+    { from: 'odin.api', to: 'odin.worker', type: 'flow' },
+  ],
+} });
+const box = (laid, id) => laid.nodes.find(n => n.id === id);
+const onBorder = (p, b) => Math.abs(p.x - b.x) < 2 || Math.abs(p.x - b.x - b.w) < 2 || Math.abs(p.y - b.y) < 2 || Math.abs(p.y - b.y - b.h) < 2;
+
+for (const style of ['flow', 'bands-flow']) {
+  test(`nested ArchiMate (${style}): children inside their parent, parents marked, edges start on the right boxes`, async () => {
+    const view = resolveView(odinNested(), { key: 'n', notation: 'archimate', viewpoint: 'implementation-deployment', nesting: 'nested', groups: { frames: true }, layout: { style } });
+    const laid = await layoutView(view);
+    assert.ok(inside(box(laid, 'odin.api'), box(laid, 'odin')));
+    assert.ok(inside(box(laid, 'odin.api.rest'), box(laid, 'odin.api')));
+    assert.ok(inside(box(laid, 'odin.worker'), box(laid, 'odin')));
+    assert.ok(box(laid, 'odin').isParent && box(laid, 'odin.api').isParent && !box(laid, 'odin.worker').isParent);
+    assert.ok(!overlaps(box(laid, 'odin.api'), box(laid, 'odin.worker')));
+    const frame = laid.frames.find(f => f.id === 'plat');
+    assert.ok(inside(box(laid, 'odin'), frame), 'the parent sits in its grouping frame');
+    for (const e of laid.edges) {
+      assert.ok(e.points.length >= 2, e.id);
+      assert.ok(onBorder(e.points[0], box(laid, e.from)) && onBorder(e.points.at(-1), box(laid, e.to)), `${style} ${e.id}`);
+    }
+  });
+}
+
+test('nested ArchiMate: "bands" falls back to bands-flow with a note; auto never picks bands', async () => {
+  const spec = { key: 'n', notation: 'archimate', viewpoint: 'implementation-deployment', nesting: 'nested' };
+  const laid = await layoutView(resolveView(odinNested(), { ...spec, layout: { style: 'bands' } }));
+  assert.equal(laid.layoutStyle, 'bands-flow');
+  assert.match(laid.layoutNote, /aninhamento/);
+  const auto = await layoutView(resolveView(odinNested(), spec));
+  assert.ok(!('bands' in auto.layoutScores));
+});
+
+test('a nesting box is at least as wide as its title (plus the icon)', async () => {
+  const name = 'Plataforma de Crédito Digital do Banco';
+  const m = normalizeModel({ archlens: '2.0', name: 'L', model: { elements: [
+    { id: 'p', type: 'application-component', name },
+    { id: 'p.a', type: 'application-component', name: 'A', parent: 'p' },
+  ], relationships: [] } });
+  for (const style of ['flow', 'bands-flow']) {
+    const laid = await layoutView(resolveView(m, { key: 'l', notation: 'archimate', viewpoint: 'application', nesting: 'nested', layout: { style } }));
+    const p = laid.nodes.find(n => n.id === 'p');
+    assert.ok(p.isParent);
+    assert.ok(p.w >= 14 + name.length * 17 * 0.56 + 44, `${style}: ${p.w}`);
+  }
 });

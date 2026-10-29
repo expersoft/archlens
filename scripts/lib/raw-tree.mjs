@@ -1,4 +1,4 @@
-// Index over the raw (un-normalized) model tree, so the merge edits it in place and keeps the nesting.
+// Index over the raw model, so the merge edits it in place (also reads 1.x "children").
 
 /** id → { el, list, parent }: the raw element, the array holding it and its parent id. */
 export function indexTree(raw) {
@@ -44,19 +44,11 @@ export function orderDelta(elements = []) {
   return out;
 }
 
-/** Puts `el` inside the children of `parentId` when it is in the tree, else at the top level (with "parent" if given). */
+/** Puts `el` in the flat element list with its "parent" (2.0 never nests elements). */
 export function attach(raw, index, el, parentId) {
-  const p = parentId != null ? index.get(parentId) : null;
-  let list;
-  if (p) {
-    list = (p.el.children ??= []);
-    delete el.parent;
-  } else {
-    list = raw.model.elements;
-    if (parentId != null) el.parent = parentId; else delete el.parent;
-  }
-  list.push(el);
-  index.set(el.id, { el, list, parent: parentId ?? null });
+  if (parentId != null) el.parent = parentId; else delete el.parent;
+  raw.model.elements.push(el);
+  index.set(el.id, { el, list: raw.model.elements, parent: parentId ?? null });
 }
 
 /** Takes `id` out of the array that holds it (nested children go with it). */
