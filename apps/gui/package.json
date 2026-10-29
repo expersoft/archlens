@@ -8,6 +8,8 @@
     "test:server": "node --test server/*.test.mjs",
     "test:sweep": "GUI_SWEEP=full node --test server/navigation.test.mjs",
     "test:web": "vitest run",
+    "prompt": "node scripts/gen-prompt.mjs",
+    "prompt:check": "node scripts/gen-prompt.mjs --check",
     "typecheck": "tsc --noEmit",
     "build": "npm run typecheck && vite build",
     "dev": "vite",
