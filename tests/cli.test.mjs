@@ -1014,15 +1014,21 @@ test('serve: imprime a URL, responde /api/bases e encerra no SIGTERM', { timeout
   assert.equal(await done, 0);
 });
 
-test('serve: base única inválida sai com 1 e a mensagem do conector', () => {
+const serveFails = (base, cwd, expected) => {
+  const r = spawnSync(process.execPath, [CLI, 'serve', base, '--port', '0'],
+    { encoding: 'utf8', cwd, env: serveEnv(fakeDist()), timeout: 20000 });
+  assert.equal(r.status, 1, r.stdout + r.stderr);
+  assert.match(r.stderr, expected);
+  assert.doesNotMatch(r.stdout, /archlens GUI/);
+};
+
+test('serve: base única 1.x sai com 1 e a mensagem do conector', () => {
   const dir = mkdtempSync(join(tmpdir(), 'archlens-'));
   mkdirSync(join(dir, 'old'));
   writeFileSync(join(dir, 'old', 'model.json'), JSON.stringify({ name: 'x', elements: [] }));
-  for (const base of ['old', 'nao-existe']) {
-    const r = spawnSync(process.execPath, [CLI, 'serve', base, '--port', '0'],
-      { encoding: 'utf8', cwd: dir, env: serveEnv(fakeDist()), timeout: 20000 });
-    assert.equal(r.status, 1, r.stdout + r.stderr);
-    assert.match(r.stderr, /archlens: \S/);
-    assert.doesNotMatch(r.stdout, /archlens GUI/);
-  }
+  serveFails('old', dir, /E_STORE_NOT_BASE: .*não é uma base archlens/);
+});
+
+test('serve: base única inexistente sai com 1 e a mensagem do conector', () => {
+  serveFails('nao-existe', mkdtempSync(join(tmpdir(), 'archlens-')), /E_STORE_NOT_FOUND: .*base não encontrada/);
 });
