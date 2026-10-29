@@ -5,9 +5,10 @@
   "type": "module",
   "scripts": {
     "test": "npm run test:server && npm run test:web",
-    "test:server": "node --test server/*.test.mjs",
+    "test:server": "node --test server/*.test.mjs eval/*.test.mjs",
     "test:sweep": "GUI_SWEEP=full node --test server/navigation.test.mjs",
     "test:web": "vitest run",
+    "eval": "node eval/run.mjs",
     "prompt": "node scripts/gen-prompt.mjs",
     "prompt:check": "node scripts/gen-prompt.mjs --check",
     "typecheck": "tsc --noEmit",

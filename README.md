@@ -142,8 +142,71 @@ O que faz:
   (apelidos, pai, filhos, fontes e rodadas).
 - **Busca por nome** (`Ctrl+K`), seletor de base, e a troca de base reinicia o histórico.
 
-O que não faz: **só lê**, nunca grava a base (mudanças continuam em `archlens-plan` e `archlens-apply`). A busca em
-linguagem natural, com LLM, vem numa fase seguinte. O teste ponta a ponta, em Chromium real, é `npm --prefix apps/gui run test:e2e`.
+- **Agrupar e desagrupar** (visões ArchiMate com elementos aninháveis): os botões `Agrupar tudo` e `Desagrupar tudo`
+  da barra do diagrama aninham ou desaninham todos os elementos de uma vez, e o menu de contexto do elemento traz
+  `Agrupar aqui dentro` e `Desagrupar` para um elemento só. Por baixo, a view spec ganha `nesting.except`, a lista dos
+  elementos que ficam no sentido contrário ao padrão da visão.
+- **Busca em texto** (opcional, com LLM): a caixa de pergunta da conversa transforma uma pergunta em linguagem natural
+  numa visão, no cartão de um elemento ou numa pergunta de esclarecimento. Veja a seção seguinte.
+
+O que não faz: **só lê**, nunca grava a base (mudanças continuam em `archlens-plan` e `archlens-apply`). O teste ponta
+a ponta, em Chromium real, é `npm --prefix apps/gui run test:e2e`.
+
+### Busca em texto (LLM)
+
+A busca é **opt-in**: sem `llm` na configuração (nem `--llm` no `serve`), nada sai da máquina e a caixa de pergunta
+mostra como ligar.
+
+```bash
+export ANTHROPIC_API_KEY=...        # ou ponha a chave num .env (abaixo)
+node scripts/archlens.mjs serve architecture --llm anthropic [--model claude-haiku-5-5] [--env-file .env]
+```
+
+**A chave** vem do ambiente ou de um arquivo `.env`, nunca do `archlens-gui.json`, e nunca chega ao navegador nem
+aparece em erro, log ou telemetria. O ambiente do processo vence o `.env`. O `.env` fica, por padrão, ao lado do
+`archlens-gui.json` (ou na pasta atual em `serve <base>`); `--env-file` (ou `envFile` no JSON) aponta outro. Se o
+arquivo não estiver no `.gitignore`, o `serve` avisa, porque a chave poderia ir para o repositório.
+
+O bloco `llm` (e `telemetry`) do `archlens-gui.json`:
+
+```json
+{
+  "bases": [{ "id": "loja", "path": "examples/loja-online/architecture" }],
+  "llm": { "provider": "anthropic", "model": "claude-haiku-5-5", "effort": "low", "maxRounds": 4, "timeoutMs": 45000 },
+  "telemetry": { "file": "telemetria.jsonl", "questions": false }
+}
+```
+
+| Destino | `llm` |
+|---|---|
+| Anthropic | `{ "provider": "anthropic" }` (padrão `claude-haiku-5-5`; chave em `ANTHROPIC_API_KEY`) |
+| OpenAI | `{ "provider": "openai", "model": "gpt-..." }` (chave em `OPENAI_API_KEY`) |
+| OpenRouter | `{ "provider": "openai", "endpoint": "https://openrouter.ai/api/v1", "model": "...", "apiKeyEnv": "OPENROUTER_API_KEY" }` |
+| Gateway compatível com OpenAI | `{ "provider": "openai", "endpoint": "https://gw.exemplo.com/v1", "model": "...", "apiKeyEnv": "GW_KEY" }` |
+| Gateway compatível com Anthropic | `{ "provider": "anthropic", "endpoint": "https://gw.exemplo.com", "apiKeyEnv": "GW_KEY" }` |
+| Azure OpenAI | `{ "provider": "openai", "endpoint": "https://x.openai.azure.com/openai/deployments/d", "model": "d", "auth": { "header": "api-key" }, "query": { "api-version": "2024-10-21" } }` |
+
+- `endpoint` (barras finais são ignoradas): no `openai`, a URL até a base da API, **com** o `/v1` quando o gateway o exige
+  (a busca acrescenta `/chat/completions`); no `anthropic`, **sem** `/v1` (o SDK acrescenta `/v1/messages`). `auth` é
+  `"x-api-key"`, `"bearer"`, `"none"` ou `{ "header": "nome" }`; `headers` põe cabeçalhos fixos e `query` parâmetros de
+  URL.
+- Segredos em cabeçalhos extras vão em `headersEnv` (`{ "x-tenant-key": "NOME_DA_VARIAVEL" }`), lidos do ambiente ou
+  do `.env`, nunca escritos no JSON.
+- `tools: false` para gateways que não fazem chamada de ferramentas: a busca passa ao modo sem ferramentas (o catálogo
+  e as relações vão no prompt e o modelo responde um objeto JSON).
+- **Tetos:** `maxRounds` (padrão 4 rodadas de modelo) e `timeoutMs` (padrão 45 s) por pergunta; ao bater o teto, a GUI
+  mostra o melhor resultado obtido, com aviso.
+- **O que sai da máquina:** o catálogo da base (elementos, tipos, visões) e a pergunta, somente para o provedor
+  configurado. A telemetria (`GET /api/telemetry` e, se houver `telemetry.file`, uma linha JSON por pergunta) guarda só
+  tempos e contagens; o texto da pergunta só entra com `telemetry.questions: true`.
+- **Proteção dos POSTs:** os POSTs da API exigem `Content-Type: application/json` e recusam `Origin` de outro site.
+  Atrás de um proxy reverso, preserve o cabeçalho `Host` original.
+
+**Avaliação.** `npm --prefix apps/gui run eval -- [--provider anthropic|openai] [--model M] [--mode tools|json]
+[--repeat 3] [--only id,id] [--dry]` roda as perguntas de `portable/archlens-ask/eval/perguntas.json` contra o
+gabarito (mesma seleção de nós e arestas) e grava `apps/gui/eval/results/<data>-<modelo>-<modo>.{md,json}` com acerto,
+P50/P90 e fração em uma rodada. `--dry` confere o encanamento sem chave. Metas: P50 ≤ 15 s e P90 ≤ 60 s (alvo ~5 s);
+o acerto vem antes da velocidade.
 
 ## Manter o ARCHITECTURE.md em dia
 
