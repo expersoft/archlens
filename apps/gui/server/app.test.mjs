@@ -61,6 +61,32 @@ test('GET elements: id com ponto; id desconhecido codificado dá 400', () => wit
   assert.equal((await bad.json()).code, 'E_UNKNOWN_REF');
 }));
 
+test('GET elements/:id/actions: só as ações; id desconhecido dá 400', () => withServer(async url => {
+  const r = await fetch(`${url}/api/bases/telemedicina/elements/${encodeURIComponent('tele.api')}/actions`);
+  assert.equal(r.status, 200);
+  const j = await r.json();
+  assert.deepEqual(Object.keys(j), ['actions']);
+  assert.ok(j.actions.some(a => a.label === 'Matriz de dependência'));
+  const bad = await fetch(`${url}/api/bases/telemedicina/elements/nao-existe/actions`);
+  assert.equal(bad.status, 400);
+  assert.equal((await bad.json()).code, 'E_UNKNOWN_REF');
+}));
+
+test('o cartão sai do snapshot em memória, sem reler o conector', async () => {
+  const dir = join(tmp(), 'arch');
+  cpSync(ex('loja-online'), dir, { recursive: true });
+  const cfg = { port: 0, bases: [{ id: 'l', path: dir }] };
+  const registry = createBaseRegistry(cfg, { pollMs: 100000 });
+  const srv = await startServer({ config: cfg, registry });
+  try {
+    const id = registry.get('l').model.elements.keys().next().value;
+    registry.get('l').store.read = () => { throw new Error('releu o conector'); };
+    const r = await fetch(`${srv.url}/api/bases/l/elements/${encodeURIComponent(id)}`);
+    assert.equal(r.status, 200);
+    assert.equal((await r.json()).card.element.id, id);
+  } finally { await srv.close(); registry.close(); }
+});
+
 test('GET find: busca por nome', () => withServer(async url => {
   const l = await (await fetch(`${url}/api/bases/telemedicina/find?q=agendamento`)).json();
   assert.ok(l.slice(0, 3).some(e => e.id === 'tele.api'));

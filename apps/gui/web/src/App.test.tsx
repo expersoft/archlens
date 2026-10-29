@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
-vi.mock('./api', async (orig) => ({ ...(await orig<typeof import('./api')>()), getBases: vi.fn(), getCatalog: vi.fn(), getView: vi.fn(), getElement: vi.fn(), flip: vi.fn(), find: vi.fn() }));
+vi.mock('./api', async (orig) => ({ ...(await orig<typeof import('./api')>()), getBases: vi.fn(), getCatalog: vi.fn(), getView: vi.fn(), getElement: vi.fn(), getActions: vi.fn(), flip: vi.fn(), find: vi.fn() }));
 vi.mock('./bridge', async (orig) => ({ ...(await orig<typeof import('./bridge')>()), send: vi.fn() }));
 
 import * as api from './api';
@@ -21,6 +21,7 @@ const mkView = (title: string, spec: api.ViewSpec = { k: title }): api.ViewResul
 
 const getView = vi.mocked(api.getView);
 const getElement = vi.mocked(api.getElement);
+const getActions = vi.mocked(api.getActions);
 const flip = vi.mocked(api.flip);
 const find = vi.mocked(api.find);
 const send = vi.mocked(bridge.send);
@@ -34,6 +35,7 @@ beforeEach(() => {
     elements: ['A', 'B', 'C'].map((n) => ({ id: n, name: `Elem ${n}`, type: 't', layer: 'l' })),
   });
   getView.mockImplementation(async (_b, spec) => mkView(spec.level === 'landscape' ? 'Inicial' : String(spec.k), spec));
+  getElement.mockResolvedValue({ card: null, actions: [] }); // o cartão da seleção
 });
 
 async function boot() {
@@ -47,13 +49,13 @@ async function boot() {
   return { frame, post };
 }
 const trail = () => screen.getByRole('navigation', { name: 'Trilha' }).textContent;
-const primary = (k: string) => ({ card: null, actions: [{ label: 'Abrir', spec: { k }, primary: true }] });
+const primary = (k: string) => ({ actions: [{ label: 'Abrir', spec: { k }, primary: true }] });
 
 describe('App', () => {
   it('(a) duplo clique em A e depois B, B resolve primeiro: termina em B sem A depois', async () => {
     const { post } = await boot();
-    const ea = deferred<api.ElementDetail>(); const eb = deferred<api.ElementDetail>();
-    getElement.mockImplementation((_b, id) => (id === 'A' ? ea.promise : eb.promise));
+    const ea = deferred<{ actions: api.Action[] }>(); const eb = deferred<{ actions: api.Action[] }>();
+    getActions.mockImplementation((_b, id) => (id === 'A' ? ea.promise : eb.promise));
     post({ type: 'expand', id: 'A' });
     post({ type: 'expand', id: 'B' });
     await act(async () => { eb.resolve(primary('vb')); });
@@ -67,7 +69,7 @@ describe('App', () => {
     const f = deferred<{ spec: api.ViewSpec }>();
     flip.mockReturnValue(f.promise);
     fireEvent.click(screen.getByRole('button', { name: 'C4' }));
-    getElement.mockResolvedValue({ card: null, actions: [{ label: 'Ver', spec: { k: 'menu' } }] });
+    getActions.mockResolvedValue({ actions: [{ label: 'Ver', spec: { k: 'menu' } }] });
     post({ type: 'context', id: 'A', x: 5, y: 5 });
     await userEvent.click(await screen.findByText('Ver'));
     await waitFor(() => expect(trail()).toContain('menu'));
@@ -76,9 +78,9 @@ describe('App', () => {
     expect(getView).not.toHaveBeenCalledWith('b', { k: 'flipped' });
   });
 
-  it('(c) getElement falho no duplo clique mostra erro na barra e mantém os passos', async () => {
+  it('(c) getActions falho no duplo clique mostra erro na barra e mantém os passos', async () => {
     const { post } = await boot();
-    getElement.mockRejectedValue(new Error('falhou geral'));
+    getActions.mockRejectedValue(new Error('falhou geral'));
     post({ type: 'expand', id: 'A' });
     await waitFor(() => expect(document.querySelector('.status')!.textContent).toBe('falhou geral'));
     expect(screen.getByRole('navigation', { name: 'Trilha' }).textContent).toBe('Inicial');
@@ -86,7 +88,7 @@ describe('App', () => {
 
   it('(d) o menu fecha quando chega um select do diagrama', async () => {
     const { post } = await boot();
-    getElement.mockResolvedValue({ card: null, actions: [{ label: 'Ver', spec: { k: 'x' } }] });
+    getActions.mockResolvedValue({ actions: [{ label: 'Ver', spec: { k: 'x' } }] });
     post({ type: 'context', id: 'A', x: 5, y: 5 });
     await screen.findByText('Ver');
     post({ type: 'select', id: 'B' });
@@ -95,7 +97,7 @@ describe('App', () => {
 
   it('(e) rever um passo de matriz reenvia act:matrix no ready', async () => {
     const { post } = await boot();
-    getElement.mockResolvedValue({ card: null, actions: [{ label: 'Ver matriz', spec: { k: 'm' }, matrix: true }] });
+    getActions.mockResolvedValue({ actions: [{ label: 'Ver matriz', spec: { k: 'm' }, matrix: true }] });
     post({ type: 'context', id: 'A', x: 5, y: 5 });
     await screen.findByText('Ver matriz');
     await userEvent.click(screen.getByText('Ver matriz'));
@@ -115,7 +117,7 @@ describe('App', () => {
 
   it('(f) escolher no Explorador um elemento fora da visão abre o Contexto pelo caminho com ticket', async () => {
     await boot();
-    getElement.mockResolvedValue({ card: null, actions: [{ label: 'Outra', spec: { k: 'o' } }, { label: 'Contexto (C4)', spec: { k: 'ctx' } }] });
+    getActions.mockResolvedValue({ actions: [{ label: 'Outra', spec: { k: 'o' } }, { label: 'Contexto (C4)', spec: { k: 'ctx' } }] });
     await userEvent.click(screen.getByRole('button', { name: 'Explorador' }));
     await userEvent.click(await screen.findByText('Elem A'));
     await waitFor(() => expect(trail()).toBe('Inicial › ctx'));
@@ -124,7 +126,7 @@ describe('App', () => {
   it('(g) elemento que está na visão só manda select pela ponte', async () => {
     vi.mocked(api.getView).mockResolvedValue({ ...mkView('Inicial', { level: 'landscape' }), data: { nodes: { A: { name: 'Elem A' } }, edges: [] } });
     await boot();
-    getElement.mockResolvedValue({ card: null, actions: [{ label: 'Contexto (C4)', spec: { k: 'ctx' } }] });
+    getActions.mockResolvedValue({ actions: [{ label: 'Contexto (C4)', spec: { k: 'ctx' } }] });
     await userEvent.click(screen.getByRole('button', { name: 'Explorador' }));
     await userEvent.click(await screen.findByText('Elem A'));
     expect(send).toHaveBeenCalledWith(expect.anything(), { type: 'select', id: 'A', focus: true });
@@ -133,7 +135,7 @@ describe('App', () => {
 
   it('(h) busca: nada, um e vários resultados', async () => {
     await boot();
-    getElement.mockResolvedValue({ card: null, actions: [{ label: 'Contexto (C4)', spec: { k: 'ctx' } }] });
+    getActions.mockResolvedValue({ actions: [{ label: 'Contexto (C4)', spec: { k: 'ctx' } }] });
     const box = screen.getByLabelText('Buscar');
     find.mockResolvedValueOnce([]);
     await userEvent.type(box, 'zzz{Enter}');
@@ -183,7 +185,7 @@ describe('App', () => {
     expect(busy()).not.toBe('true');
     const v = deferred<api.ViewResult>();
     getView.mockReturnValueOnce(v.promise);
-    getElement.mockResolvedValue({ card: null, actions: [{ label: 'Ver', spec: { k: 'lenta' } }] });
+    getActions.mockResolvedValue({ actions: [{ label: 'Ver', spec: { k: 'lenta' } }] });
     post({ type: 'context', id: 'A', x: 5, y: 5 });
     await userEvent.click(await screen.findByText('Ver'));
     await waitFor(() => expect(status()).toBe('Carregando…'));
@@ -206,7 +208,7 @@ describe('App', () => {
     const { post } = await boot();
     const v = deferred<api.ViewResult>();
     getView.mockReturnValueOnce(v.promise);
-    getElement.mockResolvedValue({ card: null, actions: [{ label: 'Ver', spec: { k: 'menu' } }] });
+    getActions.mockResolvedValue({ actions: [{ label: 'Ver', spec: { k: 'menu' } }] });
     post({ type: 'context', id: 'A', x: 5, y: 5 });
     await userEvent.click(await screen.findByText('Ver'));
     post({ type: 'expand', id: 'C' });
@@ -217,8 +219,8 @@ describe('App', () => {
 
   it('(m) resultado tardio de um duplo clique superado não abre nada', async () => {
     const { post } = await boot();
-    const ea = deferred<api.ElementDetail>();
-    getElement.mockImplementation((_b, id) => (id === 'A' ? ea.promise : Promise.resolve({ card: null, actions: [{ label: 'Ver', spec: { k: 'menu' } }] })));
+    const ea = deferred<{ actions: api.Action[] }>();
+    getActions.mockImplementation((_b, id) => (id === 'A' ? ea.promise : Promise.resolve({ actions: [{ label: 'Ver', spec: { k: 'menu' } }] })));
     post({ type: 'expand', id: 'A' });
     post({ type: 'context', id: 'B', x: 5, y: 5 });
     await userEvent.click(await screen.findByText('Ver'));
@@ -230,7 +232,7 @@ describe('App', () => {
   it('(n) uma nova busca limpa o aviso "nada encontrado" mesmo quando acha um só', async () => {
     vi.mocked(api.getView).mockResolvedValue({ ...mkView('Inicial', { level: 'landscape' }), data: { nodes: { A: { name: 'Elem A' } }, edges: [] } });
     await boot();
-    getElement.mockResolvedValue({ card: null, actions: [] });
+    getActions.mockResolvedValue({ actions: [] });
     const box = screen.getByLabelText('Buscar');
     find.mockResolvedValueOnce([]);
     await userEvent.type(box, 'zzz{Enter}');
@@ -240,5 +242,26 @@ describe('App', () => {
     await userEvent.type(box, 'elem a{Enter}');
     await waitFor(() => expect(send).toHaveBeenCalledWith(expect.anything(), { type: 'select', id: 'A', focus: true }));
     expect(document.querySelector('.status')!.textContent).not.toContain('nada encontrado');
+  });
+
+  it('(o) o menu abre na hora com "Carregando…" e troca pelas ações quando chegam', async () => {
+    const { post } = await boot();
+    const d = deferred<{ actions: api.Action[] }>();
+    getActions.mockReturnValue(d.promise);
+    post({ type: 'context', id: 'A', x: 5, y: 5 });
+    expect(screen.getByText('Carregando…')).toBeTruthy();
+    expect(screen.getByText('Elem A')).toBeTruthy();
+    await act(async () => { d.resolve({ actions: [{ label: 'Ver', spec: { k: 'menu' } }] }); });
+    expect(screen.queryByText('Carregando…')).toBeNull();
+    expect(screen.getByText('Ver')).toBeTruthy();
+    expect(getElement).not.toHaveBeenCalledWith('b', 'A');
+  });
+
+  it('(p) falha ao buscar as ações fecha o menu e mostra o erro na barra', async () => {
+    const { post } = await boot();
+    getActions.mockRejectedValue(new Error('sem ações'));
+    post({ type: 'context', id: 'A', x: 5, y: 5 });
+    await waitFor(() => expect(document.querySelector('.status')!.textContent).toBe('sem ações'));
+    expect(screen.queryByText('Carregando…')).toBeNull();
   });
 });

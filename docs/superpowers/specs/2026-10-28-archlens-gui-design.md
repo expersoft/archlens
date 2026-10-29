@@ -146,7 +146,9 @@ quando é preciso traduzir texto em spec.
 
 - **Modelo em memória.** Na subida, o servidor abre a base pelo conector e mantém o modelo normalizado em memória,
   junto com a `version` do conector. Ele confere a versão periodicamente e, quando ela muda, recarrega
-  *(decisão do agente: intervalo configurável)*. Cada resposta leva a versão da base que a produziu.
+  *(decisão do agente: intervalo configurável)*. Cada resposta leva a versão da base que a produziu. Com conector
+  remoto (gbrain git), cuja leitura faz `git fetch`, a conferência roda numa worker thread a cada 30 s (as locais, a
+  cada 5 s), e o cartão do elemento sai do snapshot em memória: entre uma conferência e outra a GUI não vai ao remoto.
 - **Endpoints** *(nomes indicativos; formato fica ao construtor)*:
   - `GET /api/catalog`: visões salvas e sugeridas (o mesmo de `archlens views`), árvore de elementos (hierarquia por
     `parent` e grupos) e a versão da base.

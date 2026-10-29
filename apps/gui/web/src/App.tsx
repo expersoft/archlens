@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
-import { find, flip, getBases, getCatalog, getElement, getView, type Action, type BaseInfo, type Card, type Catalog, type FindHit, type ViewData, type ViewResult, type ViewSpec } from './api';
+import { find, flip, getActions, getBases, getCatalog, getElement, getView, type Action, type BaseInfo, type Card, type Catalog, type FindHit, type ViewData, type ViewResult, type ViewSpec } from './api';
 import { pickInitialView } from './pick';
 import { Diagram } from './Diagram';
 import { Shell } from './Shell';
@@ -13,7 +13,8 @@ import { send, type BridgeEvent } from './bridge';
 import { typeHint } from './labels';
 
 const totalMs = (v: ViewResult) => v.ms.resolve + v.ms.layout + v.ms.render;
-type Menu = { id: string; at: { x: number; y: number }; title: string; items: Action[] };
+/** `items` null: as ações ainda estão chegando (o menu já abre com "Carregando…"). */
+type Menu = { id: string; at: { x: number; y: number }; title: string; items: Action[] | null };
 
 export function App() {
   const [theme, setTheme] = useTheme();
@@ -156,7 +157,7 @@ export function App() {
     setSelected(id);
     if (inView(id)) { send(frame.current, { type: 'select', id, focus: true }); return; }
     const t = reserve();
-    getElement(b, id).then((d) => {
+    getActions(b, id).then((d) => {
       if (t !== ticket.current) return;
       const withSpec = d.actions.filter((a) => a.spec);
       const a = withSpec.find((x) => /^(Contexto|Containers do sistema|Componentes do container)/.test(x.label)) ?? withSpec[0];
@@ -193,14 +194,16 @@ export function App() {
       }
     } else if (e.type === 'context' && b) {
       const mt = ++menuTicket.current;
-      setMenu(null);
       setNotice(null);
       const rect = frame.current?.getBoundingClientRect();
       const at = { x: (rect?.left ?? 0) + e.x, y: (rect?.top ?? 0) + e.y };
-      getElement(b, e.id).then((d) => {
+      setMenu({ id: e.id, at, title: nameOf(e.id), items: null });
+      getActions(b, e.id).then((d) => {
         if (mt === menuTicket.current) setMenu({ id: e.id, at, title: nameOf(e.id), items: d.actions });
       }).catch((err) => {
-        if (mt === menuTicket.current) setNotice(err instanceof Error ? err.message : String(err));
+        if (mt !== menuTicket.current) return;
+        setMenu(null);
+        setNotice(err instanceof Error ? err.message : String(err));
       });
     } else if (e.type === 'expand' && b) {
       menuTicket.current++;
@@ -209,7 +212,7 @@ export function App() {
       const xt = ++expandTicket.current;
       const live = () => xt === expandTicket.current && b === stateRef.current.base;
       const t0 = ticket.current;
-      getElement(b, e.id).then((d) => {
+      getActions(b, e.id).then((d) => {
         if (!live() || ticket.current !== t0) return; // superado por outro duplo clique ou por outra navegação
         const p = d.actions.find((a) => a.primary && a.spec);
         if (p) void run(reserve(), b, p.spec!, 'Clique duplo', `${p.label}: ${nameOf(e.id)}`, p.matrix);
