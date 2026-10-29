@@ -356,6 +356,8 @@ test('embed omits the page chrome and keeps the diagram', async () => {
   assert.ok(html.includes('data-node="loja.api"'));
   assert.ok(html.includes('class="hovercard"'));
   assert.ok(html.includes('"embed":true'));
+  assert.ok(html.includes(':root {--bar-h:0px}'), 'no blank band where the bar was');
+  assert.ok(!renderHtml({ title: 'Loja Mini', views: [await containerView()] }).includes('--bar-h:0px'));
 });
 
 test('embed off is byte-identical to before', async () => {

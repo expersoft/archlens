@@ -374,7 +374,7 @@ export function renderHtml({ title, subtitle = '', views, preview, embed = false
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(title)}</title>
-<style>${CSS}</style>
+<style>${CSS}</style>${embed ? '\n<style>:root {--bar-h:0px}</style>' : ''}
 </head>
 <body${preview ? ' class="preview"' : ''}>
 ${embed ? '' : `<header class="bar">
