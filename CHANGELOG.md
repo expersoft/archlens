@@ -5,16 +5,17 @@ versões seguem [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Não lançado]
 
+## [0.5.0] — 2026-10-28
+
 ### Adicionado
 
-- **archlens-ask** (`portable/archlens-ask/`): pacote de texto puro para consultar a base no gbrain a partir de
+- **archlens-ask** (`portable/archlens-ask/`, #21): pacote de texto puro para consultar a base no gbrain a partir de
   assistentes sem execução de código (M365 Copilot, Claude Desktop), via MCP. Responde em markdown e/ou Mermaid
   (ArchiMate em `flowchart` com as cores do archlens; C4 na sintaxe C4 do Mermaid) com a seleção da `archlens-query`.
   `REFERENCE.md` e o gabarito de validação são gerados por `npm run ask`; `npm run check-ask` avisa quando o pacote
   fica para trás (fora do `npm test`). `AGENTS.md`/`CLAUDE.md` pedem que toda mudança no archlens avalie e atualize o
   pacote no mesmo PR.
-
-- **Versão por objeto**: o plano final guarda em `objects` a versão de cada objeto que altera e de cada objeto em que suas
+- **Versão por objeto** (#18): o plano final guarda em `objects` a versão de cada objeto que altera e de cada objeto em que suas
   decisões se apoiaram; o `apply` só recusa (`E_STORE_CONFLICT`, com os objetos pelo nome e o `plan --answers`) se algum
   deles mudou. Applies de domínios que não se cruzam passam em paralelo. `markdown` e `gbrain` versionam por objeto; `json`
   continua com a versão da base inteira.
@@ -22,7 +23,7 @@ versões seguem [SemVer](https://semver.org/lang/pt-BR/).
   candidato que não estava na base do plano é conflito (`reason: "possible-duplicate"`).
 - **`archlens init <pasta> --store json|markdown|gbrain`**: cria a base com o repositório escolhido no `archlens.json`
   (sem credenciais) e o `.gitignore` de `.archlens/`.
-- **Conector `gbrain`**, com a base inteira (elementos, manifesto, visões, notas e histórico) em páginas legíveis sob um
+- **Conector `gbrain`** (#18), com a base inteira (elementos, manifesto, visões, notas e histórico) em páginas legíveis sob um
   `prefix`: **modo git** (o CLI lê a ponta remota numa worktree destacada e grava um commit com push por apply; o clone do
   usuário não muda) e **modo MCP** (o agente chama as ferramentas do gbrain a partir de pedidos do CLI, que mantém um
   espelho local em `.archlens/mirror/`).
@@ -35,18 +36,19 @@ versões seguem [SemVer](https://semver.org/lang/pt-BR/).
   pessoas e `notes/removidos/`.
 - **`npm run test:gbrain`**: integração com um gbrain real (0.60.304) num ambiente temporário (PGLite, sem embeddings, nada
   global), fora do `npm test`.
+- **Exemplo `loja-online-gbrain`** (#19): a loja-online como base compartilhada num gbrain local.
 
 ### Mudado
 
-- **Container de tópico como evento**: `c4.kind: container` aceita também `application-event`, para um tópico aparecer
+- **Container de tópico como evento** (#20): `c4.kind: container` aceita também `application-event`, para um tópico aparecer
   como evento nas visões ArchiMate e como fila/tópico no C4 (antes, `E_C4_TYPE`; a migração de bases 1.x com o override
   `archimate: application-event` em `c4:container` era recusada).
-- **Rodada do histórico numerada ao gravar**: o id `<data>-<seq>` é atribuído pelo `apply`, contando as rodadas que já estão
+- **Rodada do histórico numerada ao gravar** (#18): o id `<data>-<seq>` é atribuído pelo `apply`, contando as rodadas que já estão
   no histórico; o `entry.id` do plano é provisório. Acrescentar a rodada nunca causa conflito.
 
 ### Corrigido
 
-- **Skills instaladas por link simbólico** (`ln -s <repo>/skills/archlens-* ~/.claude/skills/`): o CLI e as referências
+- **Skills instaladas por link simbólico** (#17, `ln -s <repo>/skills/archlens-* ~/.claude/skills/`): o CLI e as referências
   eram citados como `$SKILL_DIR/../..`, que o Node e a leitura de arquivos resolvem como `~/.claude` (o `..` é cortado antes
   de seguir o link). As skills agora definem `ARCHLENS="$(realpath "$SKILL_DIR/../..")"` e usam `$ARCHLENS`; um teste
   instala uma skill por link e roda o CLI por ele.
@@ -140,7 +142,8 @@ Primeira versão: arquitetura como modelo (ArchiMate 3.2 com perfil C4), diagram
 - Relações explicadas em português, HTML animado num arquivo único, checagem visual com screenshots.
 - `\n` força quebra de linha em nomes; `expand` no schema da visão (#2). Zoom/pan na tela inteira (#3).
 
-[Não lançado]: https://github.com/expersoft/archlens/compare/v0.4.0...HEAD
+[Não lançado]: https://github.com/expersoft/archlens/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/expersoft/archlens/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/expersoft/archlens/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/expersoft/archlens/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/expersoft/archlens/compare/v0.1.0...v0.2.0
