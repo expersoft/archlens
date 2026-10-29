@@ -1,5 +1,6 @@
 import { useEffect, type ReactNode } from 'react';
 import { useStoredState } from './store';
+import { isGuiShortcut } from './shortcuts';
 import { useTheme, type Theme } from './theme';
 
 export type LeftTab = 'chat' | 'tree' | null;
@@ -38,7 +39,7 @@ export function Shell(p: ShellProps) {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'b') return;
+      if (!isGuiShortcut(e) || e.code !== 'KeyB') return;
       e.preventDefault();
       if (e.altKey) setRight((r) => !r);
       else setLeft((l) => (l ? null : lastLeft));

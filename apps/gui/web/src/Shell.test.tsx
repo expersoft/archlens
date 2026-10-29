@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Shell } from './Shell';
 
@@ -28,6 +28,13 @@ describe('Shell', () => {
     expect(screen.queryByTestId('side-right')).toBeNull();
     await u.keyboard('{Control>}{Alt>}b{/Alt}{/Control}');
     expect(screen.getByTestId('side-right')).toBeTruthy();
+  });
+
+  it('atalho re-despachado no window (vindo do iframe) alterna a lateral', () => {
+    setWidth(1600);
+    render(<Wrapped />);
+    act(() => { window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyB', key: '∫', ctrlKey: true })); });
+    expect(screen.queryByTestId('side-left')).toBeNull();
   });
 
   it('com innerWidth 1000 na montagem, as duas começam fechadas', () => {

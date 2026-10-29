@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { getBases, getCatalog, getView, type ViewResult } from './api';
+import { pickInitialView } from './pick';
 import { Diagram } from './Diagram';
 import { Shell } from './Shell';
 import { useTheme } from './theme';
@@ -24,7 +25,7 @@ export function App() {
         const base = (await getBases()).find((b) => b.ok);
         if (!base) { setStatus('Nenhuma base disponível'); return; }
         const cat = await getCatalog(base.id);
-        const v = cat.views.find((x) => x.spec?.level === 'landscape') ?? cat.views[0];
+        const v = pickInitialView(cat.views);
         if (!v) { setStatus(`${cat.name}: sem visões`); return; }
         const r = await getView(base.id, v.spec);
         if (dead) return;

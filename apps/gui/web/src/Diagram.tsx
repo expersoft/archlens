@@ -2,6 +2,7 @@ import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useSta
 import { parseMessage, send, type Act, type BridgeEvent } from './bridge';
 import type { ViewResult } from './api';
 import type { Theme } from './theme';
+import { isGuiShortcut } from './shortcuts';
 
 export interface DiagramProps {
   view: ViewResult;
@@ -52,11 +53,31 @@ export const Diagram = forwardRef<HTMLIFrameElement, DiagramProps>(function Diag
 
   const act = useCallback((a: Act) => {
     if (a === 'present') {
-      // requestFullscreen exige ativação do usuário: tem de sair deste clique, não do postMessage
+      // O host é o único dono do fullscreen: requestFullscreen exige ativação do usuário (este clique)
+      // e não se manda act:'present' ao iframe.
       try { void frame.current?.requestFullscreen?.()?.catch(() => {}); } catch { /* sem fullscreen */ }
+      return;
     }
     send(frame.current, { type: 'act', act: a });
   }, []);
+
+  // Atalhos da GUI com o foco dentro do iframe (srcdoc, mesma origem): reencaminha ao window do host.
+  const cleanup = useRef<() => void>(() => {});
+  const onLoad = useCallback(() => {
+    cleanup.current();
+    const w = frame.current?.contentWindow;
+    if (!w) return;
+    const h = (e: KeyboardEvent) => {
+      if (!isGuiShortcut(e)) return;
+      e.preventDefault();
+      window.dispatchEvent(new KeyboardEvent('keydown', {
+        code: e.code, key: e.key, ctrlKey: e.ctrlKey, metaKey: e.metaKey, altKey: e.altKey, shiftKey: e.shiftKey,
+      }));
+    };
+    w.addEventListener('keydown', h);
+    cleanup.current = () => w.removeEventListener('keydown', h);
+  }, []);
+  useEffect(() => () => cleanup.current(), []);
 
   return (
     <div className="diagram">
@@ -78,7 +99,7 @@ export const Diagram = forwardRef<HTMLIFrameElement, DiagramProps>(function Diag
           {view.alerts.map((a, i) => <div key={i}>{a}</div>)}
         </div>
       )}
-      <iframe ref={frame} title="Diagrama" srcDoc={view.html} sandbox="allow-scripts allow-same-origin allow-downloads allow-modals" allow="fullscreen" />
+      <iframe ref={frame} title="Diagrama" srcDoc={view.html} sandbox="allow-scripts allow-same-origin allow-downloads allow-modals" allow="fullscreen" onLoad={onLoad} />
     </div>
   );
 });
