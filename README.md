@@ -191,6 +191,9 @@ O bloco `llm` (e `telemetry`) do `archlens-gui.json`:
 | Gateway compatível com Anthropic | `{ "provider": "anthropic", "endpoint": "https://gw.exemplo.com", "apiKeyEnv": "GW_KEY" }` |
 | Azure OpenAI | `{ "provider": "openai", "endpoint": "https://x.openai.azure.com/openai/deployments/d", "model": "d", "auth": { "header": "api-key" }, "query": { "api-version": "2024-10-21" } }` |
 
+Exemplo pronto com OpenRouter: `examples/loja-online/archlens-gui.json`. Copie `examples/loja-online/.env.example` para
+`.env` na mesma pasta, preencha a chave e rode `node scripts/archlens.mjs serve --config examples/loja-online/archlens-gui.json --open`.
+
 - `endpoint` (barras finais são ignoradas): no `openai`, a URL até a base da API, **com** o `/v1` quando o gateway o exige
   (a busca acrescenta `/chat/completions`); no `anthropic`, **sem** `/v1` (o SDK acrescenta `/v1/messages`). `auth` é
   `"x-api-key"`, `"bearer"`, `"none"` ou `{ "header": "nome" }`; `headers` põe cabeçalhos fixos e `query` parâmetros de
