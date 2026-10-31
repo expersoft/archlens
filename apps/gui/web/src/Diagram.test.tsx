@@ -57,12 +57,12 @@ it('os botões de alternância voltam a desligado a cada nova visão (ready)', (
 it('botão de tema do diagrama alterna só o tema do diagrama', async () => {
   const onTheme = vi.fn();
   const { rerender } = render(<Diagram view={view} theme="light" onThemeChange={onTheme} onEvent={() => {}} />);
-  const b = screen.getByRole('button', { name: 'Diagrama escuro' });
-  expect(b.getAttribute('aria-pressed')).toBe('false');
+  const b = screen.getByRole('button', { name: 'Alternar tema do diagrama' });
+  expect(b.textContent).toBe('☾');
   expect(localStorage.getItem('archlens-theme')).toBe('light');
   await userEvent.click(b);
   expect(onTheme).toHaveBeenCalledWith('dark');
   rerender(<Diagram view={view} theme="dark" onThemeChange={onTheme} onEvent={() => {}} />);
-  expect(screen.getByRole('button', { name: 'Diagrama escuro' }).getAttribute('aria-pressed')).toBe('true');
+  expect(screen.getByRole('button', { name: 'Alternar tema do diagrama' }).textContent).toBe('☀');
   expect(localStorage.getItem('archlens-theme')).toBe('dark');
 });

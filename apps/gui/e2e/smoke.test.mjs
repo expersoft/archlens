@@ -85,12 +85,12 @@ test('GUI ponta a ponta', async (t) => {
     const app0 = await appTheme();
     const diag0 = await frameTheme();
     // barra do topo: só a interface muda
-    await page.getByRole('button', { name: 'Alternar tema' }).click();
+    await page.getByRole('button', { name: 'Alternar tema', exact: true }).click();
     const app1 = await appTheme();
     assert.notEqual(app1, app0);
     assert.equal(await frameTheme(), diag0);
     // botão da barra do diagrama: só o diagrama muda
-    await page.getByRole('button', { name: 'Diagrama escuro' }).click();
+    await page.getByRole('button', { name: 'Alternar tema do diagrama' }).click();
     const diag1 = diag0 === 'dark' ? 'light' : 'dark';
     await frameIs(diag1);
     assert.equal(await appTheme(), app1);
@@ -99,7 +99,7 @@ test('GUI ponta a ponta', async (t) => {
     await page.keyboard.press('t');
     await frameIs(diag0);
     assert.equal(await appTheme(), app1);
-    assert.equal(await page.getByRole('button', { name: 'Diagrama escuro' }).getAttribute('aria-pressed'), String(diag0 === 'dark'));
+    assert.equal(await page.getByRole('button', { name: 'Alternar tema do diagrama' }).textContent(), diag0 === 'dark' ? '☀' : '☾');
   });
 
   await t.test('6. ação que falha mostra o erro e a trilha não muda', async () => {

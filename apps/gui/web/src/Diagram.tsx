@@ -108,12 +108,11 @@ export const Diagram = forwardRef<HTMLIFrameElement, DiagramProps>(function Diag
         {onThemeChange && (
           <button
             type="button"
+            aria-label="Alternar tema do diagrama"
             title="Tema do diagrama, independente do tema da interface (T no diagrama)"
-            aria-pressed={theme === 'dark'}
-            className={theme === 'dark' ? 'on' : ''}
             onClick={() => onThemeChange(theme === 'dark' ? 'light' : 'dark')}
           >
-            Diagrama escuro
+            {theme === 'dark' ? '☀' : '☾'}
           </button>
         )}
       </div>

@@ -137,8 +137,8 @@ O que faz:
 
 - **Navega** pelas visões: botão direito no elemento abre o menu de visões (contexto, containers, componentes,
   suporte, impacto…), duplo clique expande, a trilha e o histórico voltam a qualquer passo. A notação alterna entre
-  ArchiMate e C4; o tema da interface (botão da barra do topo) e o do diagrama (botão "Diagrama escuro" ou `T` no
-  diagrama) são escolhidos em separado; o painel esquerdo (`Ctrl+B`) e o direito (`Ctrl+Alt+B`) seguem o seu gosto.
+  ArchiMate e C4; o tema da interface (botão da barra do topo) e o do diagrama (o mesmo botão ☀/☾ na barra do diagrama, ou `T`
+  no diagrama) são escolhidos em separado; o painel esquerdo (`Ctrl+B`) e o direito (`Ctrl+Alt+B`) seguem o seu gosto.
 - **Detalhes** do elemento: "Nesta visão" (tipo C4 e ArchiMate, papel, distância, relações como frases) e "Na base"
   (apelidos, pai, filhos, fontes e rodadas).
 - **Busca por nome** (`Ctrl+K`), seletor de base, e a troca de base reinicia o histórico.
