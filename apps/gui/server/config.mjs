@@ -42,6 +42,7 @@ function checkLlm(llm) {
   if (llm.tools !== undefined && typeof llm.tools !== 'boolean') bad('tools deve ser verdadeiro ou falso');
   if (llm.effort !== undefined && (typeof llm.effort !== 'string' || !llm.effort)) bad('effort deve ser texto (ex.: "low", "medium", "high")');
   if (llm.maxRounds !== undefined && !(Number.isInteger(llm.maxRounds) && llm.maxRounds >= 1 && llm.maxRounds <= 10)) bad('maxRounds deve ser um inteiro de 1 a 10');
+  if (llm.maxHistory !== undefined && !(Number.isInteger(llm.maxHistory) && llm.maxHistory >= 0 && llm.maxHistory <= 50)) bad('maxHistory deve ser um inteiro de 0 a 50');
   if (llm.timeoutMs !== undefined && !(Number.isInteger(llm.timeoutMs) && llm.timeoutMs >= 1000 && llm.timeoutMs <= 300000)) bad('timeoutMs deve ser um inteiro de 1000 a 300000');
   return llm;
 }

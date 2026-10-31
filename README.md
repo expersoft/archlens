@@ -137,7 +137,8 @@ O que faz:
 
 - **Navega** pelas visões: botão direito no elemento abre o menu de visões (contexto, containers, componentes,
   suporte, impacto…), duplo clique expande, a trilha e o histórico voltam a qualquer passo. A notação alterna entre
-  ArchiMate e C4, e o tema, o painel esquerdo (`Ctrl+B`) e o direito (`Ctrl+Alt+B`) seguem o seu gosto.
+  ArchiMate e C4; o tema da interface (botão da barra do topo) e o do diagrama (botão "Diagrama escuro" ou `T` no
+  diagrama) são escolhidos em separado; o painel esquerdo (`Ctrl+B`) e o direito (`Ctrl+Alt+B`) seguem o seu gosto.
 - **Detalhes** do elemento: "Nesta visão" (tipo C4 e ArchiMate, papel, distância, relações como frases) e "Na base"
   (apelidos, pai, filhos, fontes e rodadas).
 - **Busca por nome** (`Ctrl+K`), seletor de base, e a troca de base reinicia o histórico.
@@ -177,7 +178,7 @@ O bloco `llm` (e `telemetry`) do `archlens-gui.json`:
 ```json
 {
   "bases": [{ "id": "loja", "path": "examples/loja-online/architecture" }],
-  "llm": { "provider": "anthropic", "model": "claude-haiku-5-5", "effort": "low", "maxRounds": 4, "timeoutMs": 45000 },
+  "llm": { "provider": "anthropic", "model": "claude-haiku-5-5", "effort": "low", "maxRounds": 4, "maxHistory": 4, "timeoutMs": 45000 },
   "telemetry": { "file": "telemetria.jsonl", "questions": false }
 }
 ```
@@ -204,6 +205,8 @@ Exemplo pronto com OpenRouter: `examples/loja-online/archlens-gui.json`. Copie `
   e as relações vão no prompt e o modelo responde um objeto JSON).
 - **Tetos:** `maxRounds` (padrão 4 rodadas de modelo) e `timeoutMs` (padrão 45 s) por pergunta; ao bater o teto, a GUI
   mostra o melhor resultado obtido, com aviso.
+- **Histórico da conversa:** `maxHistory` (padrão 4, de 0 a 50) diz quantas perguntas anteriores da conversa vão junto
+  com a pergunta nova, para o modelo entender continuações ("e quem usa ele?"); `0` manda cada pergunta isolada.
 - **O que sai da máquina:** o catálogo da base (elementos, tipos, visões) e a pergunta, somente para o provedor
   configurado. A telemetria (`GET /api/telemetry` e, se houver `telemetry.file`, uma linha JSON por pergunta) guarda só
   tempos e contagens; o texto da pergunta só entra com `telemetry.questions: true`.

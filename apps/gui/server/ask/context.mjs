@@ -58,17 +58,18 @@ export function relationsDigest(ctx, { limit = CATALOG_LIMIT } = {}) {
 }
 
 const MAX_NODES = 60;
-const MAX_HISTORY = 4;
+/** Default number of previous questions sent along (`llm.maxHistory` in archlens-gui.json). */
+export const DEFAULT_MAX_HISTORY = 4;
 
 /** The question plus what the screen shows, the selection, the user's choice and the recent conversation. */
-export function userMessage(req, ctx) {
+export function userMessage(req, ctx, { maxHistory = DEFAULT_MAX_HISTORY } = {}) {
   const parts = [req.question];
   const c = req.context ?? {};
   if (c.spec) parts.push(`Visão atual: ${JSON.stringify(c.spec)}`);
   if (c.nodes?.length) parts.push(`Nós visíveis: ${c.nodes.slice(0, MAX_NODES).join(', ')}`);
   if (c.selected) parts.push(`Selecionado: ${c.selected}`);
   if (req.chosen) parts.push(`Escolha do usuário: ${req.chosen} (${ctx.model.elements.get(req.chosen)?.name ?? req.chosen})`);
-  const hist = (req.history ?? []).slice(-MAX_HISTORY);
+  const hist = maxHistory > 0 ? (req.history ?? []).slice(-maxHistory) : [];
   if (hist.length) parts.push(['Conversa recente:', ...hist.map(h => `- ${h.question} → ${h.title ?? '(sem resultado)'}`)].join('\n'));
   return parts.join('\n\n');
 }

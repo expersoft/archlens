@@ -14,6 +14,9 @@ test('llm inválido dá E_GUI_CONFIG', () => {
   bad({ provider: 'anthropic', maxRounds: 0 });
   bad({ provider: 'anthropic', maxRounds: 11 });
   bad({ provider: 'anthropic', timeoutMs: 999 });
+  bad({ provider: 'anthropic', maxHistory: -1 });
+  bad({ provider: 'anthropic', maxHistory: 51 });
+  bad({ provider: 'anthropic', maxHistory: 2.5 });
   bad({ provider: 'openai' });
   bad({ provider: 'anthropic', auth: 'basic' });
   bad({ provider: 'anthropic', auth: { header: 7 } });
@@ -27,10 +30,11 @@ test('llm inválido dá E_GUI_CONFIG', () => {
 });
 
 test('llm válido, formas de auth e padrões', () => {
-  const f = write({ llm: { provider: 'openai', model: 'm', auth: { header: 'api-key' }, maxRounds: 3, timeoutMs: 30000, headersEnv: { X: 'V' }, query: { v: '1' } } });
+  const f = write({ llm: { provider: 'openai', model: 'm', auth: { header: 'api-key' }, maxRounds: 3, maxHistory: 10, timeoutMs: 30000, headersEnv: { X: 'V' }, query: { v: '1' } } });
   const c = loadConfig({ file: f });
   assert.equal(c.llm.provider, 'openai');
   assert.deepEqual(c.llm.auth, { header: 'api-key' });
+  assert.equal(c.llm.maxHistory, 10);
   assert.equal(c.telemetry, undefined);
 });
 

@@ -52,6 +52,11 @@ test('user message carries view, selection, choice and history', () => {
     for (const s of ['o que sustenta?', 'Visão atual:', 'Nós visíveis:', 'Selecionado:', 'Escolha do usuário: loja.pedidos (API de Pedidos)']) assert.ok(m.includes(s), s);
     assert.equal(m.split('\n').filter(l => l.includes(' → ')).length, 4);
     assert.equal(userMessage({ question: 'x' }, ctx), 'x');
+    const turns = (o) => userMessage({ question: 'q', history }, ctx, o).split('\n').filter(l => l.includes(' → '));
+    assert.equal(turns({ maxHistory: 2 }).length, 2);
+    assert.match(turns({ maxHistory: 2 })[1], /p5/);
+    assert.equal(turns({ maxHistory: 10 }).length, 6);
+    assert.equal(turns({ maxHistory: 0 }).length, 0);
   } finally { registry.close(); }
 });
 

@@ -9,6 +9,7 @@ import { renderSpec, createViewCache } from './views.mjs';
 import { actionsFor, flipSpec } from './navigation.mjs';
 import { viewAnswer, formatViewAnswer } from '../../../scripts/lib/query-md.mjs';
 import { createProvider } from './ask/providers.mjs';
+import { DEFAULT_MAX_HISTORY } from './ask/context.mjs';
 import { runAsk } from './ask/agent.mjs';
 import { createTelemetry, summarize } from './ask/telemetry.mjs';
 
@@ -137,7 +138,7 @@ export async function startServer({ config, staticDir, registry, provider } = {}
     let outcome = 'error', render = 0;
     try {
       const out = await runAsk(ctx, { ...body, question }, {
-        provider, signal: ctl.signal, emit: write, maxRounds: config?.llm?.maxRounds, timeoutMs: config?.llm?.timeoutMs,
+        provider, signal: ctl.signal, emit: write, maxRounds: config?.llm?.maxRounds, maxHistory: config?.llm?.maxHistory, timeoutMs: config?.llm?.timeoutMs,
       });
       metrics = out.metrics;
       const { result } = out;
@@ -173,7 +174,7 @@ export async function startServer({ config, staticDir, registry, provider } = {}
 
   const routes = [
     ['GET', /^\/api\/info$/, async () => ({
-      ask: provider ? { enabled: true, provider: provider.name, model: provider.model, mode: provider.tools ? 'tools' : 'json' } : { enabled: false, ...(askOff ? { reason: askOff } : {}) },
+      ask: provider ? { enabled: true, provider: provider.name, model: provider.model, mode: provider.tools ? 'tools' : 'json', maxHistory: config?.llm?.maxHistory ?? DEFAULT_MAX_HISTORY } : { enabled: false, ...(askOff ? { reason: askOff } : {}) },
     })],
     ['GET', /^\/api\/telemetry$/, async () => summarize(telemetry.recent())],
     ['POST', /^\/api\/bases\/([^/]+)\/ask$/, (req, [b], _url, res) => ask(req, res, b)],
