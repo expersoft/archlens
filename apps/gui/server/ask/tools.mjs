@@ -39,19 +39,19 @@ const fail = content => ({ ok: false, content });
 const withKey = spec => ({ key: 'ask', ...spec });
 const isObject = v => v && typeof v === 'object' && !Array.isArray(v);
 
-function findTool(ctx, { text }) {
+export function findTool(ctx, { text }) {
   const found = findElements(ctx, text, FIND_LIMIT);
   if (!found.length) return { ok: true, content: `nenhum elemento para "${text}"` };
   return { ok: true, content: found.map(e => [e.id, e.name, e.type, e.kind ?? '-'].join(' | ')).join('\n') };
 }
 
-function cardTool(ctx, { id }) {
+export function cardTool(ctx, { id }) {
   try {
     return { ok: true, content: query(ctx.snapshot, { element: id, format: 'md' }) };
   } catch (e) { return fail(e.message); }
 }
 
-function relationsTool(ctx, { ids, via }) {
+export function relationsTool(ctx, { ids, via }) {
   const set = new Set(ids ?? []);
   const nodes = {};
   for (const e of ctx.model.elements.values()) nodes[e.id] = { name: e.name, type: e.type };
@@ -71,7 +71,7 @@ function countBy(nodes, label) {
   return [...m].map(([k, v]) => `${k} ${v}`).join(', ');
 }
 
-async function tryViewTool(ctx, { spec }) {
+export async function tryViewTool(ctx, { spec }) {
   if (!isObject(spec)) return fail('informe "spec" como objeto');
   const full = withKey(spec);
   let view;
