@@ -92,4 +92,28 @@ describe('PlanPreview', () => {
     await u.click(screen.getByRole('tab', { name: 'Delta' }));
     expect(screen.getByRole('list', { name: 'Mudanças' }).querySelectorAll('li')).toHaveLength(3);
   });
+
+  it('uma visão pedida inválida avisa e não esconde o resto da prévia', async () => {
+    const u = userEvent.setup();
+    const bad = { key: 'ruim', notation: 'c4', level: 'container', scope: 'nao-existe' };
+    planPreview.mockImplementation(async (_b, _d, specs) => { if (specs) throw new Error('escopo inexistente'); return result(); });
+    const { container } = render(<PlanPreview base="b" draft={withDelta} previews={[bad]} />);
+    expect(await screen.findByText(/não puderam ser desenhadas: escopo inexistente/)).toBeTruthy();
+    expect(frames(container)).toEqual(['<p>com-delta</p>']);
+    await u.click(screen.getByRole('tab', { name: 'Delta' }));
+    expect(screen.getByRole('list', { name: 'Mudanças' }).querySelectorAll('li')).toHaveLength(3);
+  });
+
+  it('re-renderizar com o mesmo html (tema) mantém um botão ligado', async () => {
+    const u = userEvent.setup();
+    const { container } = render(<PlanPreview base="b" draft={withDelta} previews={[]} />);
+    await waitFor(() => expect(frames(container)).toHaveLength(1));
+    const labels = screen.getByRole('button', { name: 'Rótulos' });
+    const frame = container.querySelector('iframe')!;
+    window.dispatchEvent(new MessageEvent('message', { data: { source: 'archlens', type: 'state', flowing: false, labels: true, legend: false, matrix: false }, source: frame.contentWindow }));
+    await waitFor(() => expect(labels.getAttribute('aria-pressed')).toBe('true'));
+    await u.click(screen.getByRole('button', { name: 'Alternar tema do diagrama' }));
+    expect(labels.getAttribute('aria-pressed')).toBe('true');
+    expect(frames(container)).toEqual(['<p>com-delta</p>']);
+  });
 });

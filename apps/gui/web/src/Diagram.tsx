@@ -5,7 +5,7 @@ import { DIAGRAM_THEME_KEY, type Theme } from './theme';
 import { isGuiShortcut } from './shortcuts';
 
 export interface DiagramProps {
-  view: ViewResult;
+  view: Pick<ViewResult, 'html' | 'alerts'>;
   /** Uma visão nova está sendo carregada: escurece o diagrama e marca aria-busy. */
   busy?: boolean;
   /** Tema do diagrama (independente do tema da interface). */
@@ -35,7 +35,7 @@ export const Diagram = forwardRef<HTMLIFrameElement, DiagramProps>(function Diag
   useImperativeHandle(ref, () => frame.current as HTMLIFrameElement);
   const [flags, setFlags] = useState<Flags>(OFF);
   // Cada visão (e cada carga do iframe) começa com tudo desligado; o iframe reporta o estado real por `state`.
-  useEffect(() => { setFlags(OFF); }, [view]);
+  useEffect(() => { setFlags(OFF); }, [view.html]);
   const themeRef = useRef(theme);
   themeRef.current = theme;
   const onEventRef = useRef(onEvent);

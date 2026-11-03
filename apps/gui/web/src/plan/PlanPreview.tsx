@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { getView, planPreview, type Draft, type PlanPreviewResult, type PreviewView, type ViewResult, type ViewSpec } from '../api';
+import { getView, planPreview, type Draft, type PlanPreviewResult, type PreviewView, type ViewSpec } from '../api';
 import { Diagram } from '../Diagram';
 import { useDiagramTheme } from '../theme';
 
@@ -9,10 +9,10 @@ const TABS: [Tab, string][] = [['diagram', 'Diagrama'], ['delta', 'Delta'], ['pl
 const MODES: [Mode, string][] = [['base', 'Base atual'], ['delta', 'Com o delta'], ['both', 'Lado a lado']];
 const NO_BASE = 'Esta visão não existe na base atual (só aparece com o delta).';
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
-const asView = (html: string) => ({ html, alerts: [] }) as unknown as ViewResult;
+const asView = (html: string) => ({ html, alerts: [] as string[] });
 const noop = () => {};
 
-type Loaded = { default: PlanPreviewResult; asked: PreviewView[] };
+type Loaded = { default: PlanPreviewResult; asked: PreviewView[]; failed: string[] };
 type Base = { id: string; html?: string; error?: string };
 
 /** The right pane of Planejar: the draft drawn with the delta, the delta list and the plan report. */
@@ -32,8 +32,14 @@ export function PlanPreview({ base, draft, previews }: { base: string; draft: Dr
     if (!draft || !planned) { setLoaded(null); setError(null); return; }
     let live = true;
     const specs = JSON.parse(askedKey) as ViewSpec[];
-    Promise.all([planPreview(base, draft), specs.length ? planPreview(base, draft, specs) : null])
-      .then(([d, a]) => { if (live) { setLoaded({ default: d, asked: a?.views ?? [] }); setError(null); } })
+    // One request per asked spec: a bad one is reported next to the list and does not hide the rest.
+    const askedOne = (sp: ViewSpec) => planPreview(base, draft, [sp]).then((r) => ({ views: r.views, failed: null as string | null }), (e) => ({ views: [] as PreviewView[], failed: errMsg(e) }));
+    Promise.all([planPreview(base, draft), Promise.all(specs.map(askedOne))])
+      .then(([d, a]) => {
+        if (!live) return;
+        setLoaded({ default: d, asked: a.flatMap((x) => x.views), failed: a.flatMap((x) => (x.failed ? [x.failed] : [])) });
+        setError(null);
+      })
       .catch((e) => { if (live) setError(errMsg(e)); });
     return () => { live = false; };
   }, [base, draft, planned, askedKey]);
@@ -84,6 +90,7 @@ export function PlanPreview({ base, draft, previews }: { base: string; draft: Dr
               <button key={m} type="button" className={mode === m ? 'on' : ''} aria-pressed={mode === m} onClick={() => setMode(m)}>{label}</button>
             ))}
           </div>
+          {loaded.failed.length > 0 && <div className="warn" role="status">{loaded.failed.length} visão(ões) pedida(s) na conversa não puderam ser desenhadas: {loaded.failed.join('; ')}</div>}
           {d.skipped.length > 0 && <div className="warn" role="status">{d.skipped.length} visão(ões) salva(s) não puderam ser desenhadas: {d.skipped.map((s) => s.key).join(', ')}</div>}
           {current?.error ? <div className="warn" role="status">{current.error}</div> : (
             <div className="preview-frames">

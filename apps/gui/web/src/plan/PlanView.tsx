@@ -11,6 +11,11 @@ const REPLACE = 'Substituir o rascunho atual pelo do arquivo? O atual se perde s
 const TRIMMED = 'a conversa antiga foi cortada para caber no navegador; o rascunho está inteiro';
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
+const addNew = (have: ViewSpec[], more: ViewSpec[]) => {
+  const seen = new Set(have.map((x) => JSON.stringify(x)));
+  return [...have, ...more.filter((x) => { const k = JSON.stringify(x); return !seen.has(k) && !!seen.add(k); })];
+};
+
 const today = () => new Date().toISOString().slice(0, 10);
 
 const readText = (f: File) => new Promise<string>((res, rej) => {
@@ -97,7 +102,7 @@ export function PlanView({ base }: { base: string }) {
       else if (e.type === 'result') {
         finished = true; if (run.current?.id === id) run.current = null;
         const { reply } = e;
-        if (e.previews?.length) setPreviews((p) => [...p, ...e.previews]);
+        if (e.previews?.length) setPreviews((p) => addNew(p, e.previews));
         const msg: Partial<ChatMsg> = { status: undefined, stage: undefined, warning: reply.warning };
         if (reply.kind === 'text') msg.text = reply.text;
         else if (reply.kind === 'question') msg.text = reply.question;
