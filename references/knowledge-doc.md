@@ -263,8 +263,8 @@ rodada no histórico. **Planos gerados antes da migração deixam de valer**: ge
 ## Uso como base de conhecimento
 
 ```bash
-node scripts/archlens.mjs views architecture/
-node scripts/archlens.mjs deliver architecture/ --spec '{"key":"x","notation":"archimate","viewpoint":"impact","anchor":"erp"}' --out erp-impacto.html
+bin/archlens views architecture/
+bin/archlens deliver architecture/ --spec '{"key":"x","notation":"archimate","viewpoint":"impact","anchor":"erp"}' --out erp-impacto.html
 ```
 
 Nenhuma remodelagem: a pergunta nova vira uma view spec sobre o mesmo estado. Para guardar a visão na base, mande-a

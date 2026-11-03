@@ -30,7 +30,7 @@ import { toDelta } from './lib/scan/to-delta.mjs';
 
 const HELP = `archlens — arquitetura como modelo, diagramas como consultas
 
-Uso: node scripts/archlens.mjs <comando> [base] [opções]
+Uso: archlens <comando> [base] [opções]
 
 Base: a pasta architecture/ (fonte da verdade), o ARCHITECTURE.md gerado (aponta para ela) ou nada (procura a
 partir do diretório atual). Bases 1.x (pasta, .md com bloco archlens-json ou modelo .json) são recusadas

@@ -1,7 +1,7 @@
 # Exemplo: base construída a partir de repositórios
 
 Três mini-repositórios (`pedidos`, `pagamentos`, `infra`) lidos pela CLI real, na ordem abaixo, até chegar em
-`architecture/` e no `ARCHITECTURE.md` gerado. Rode a partir desta pasta (`A="node ../../scripts/archlens.mjs"`).
+`architecture/` e no `ARCHITECTURE.md` gerado. Rode a partir desta pasta (`A="../../bin/archlens"`).
 
 As pastas daqui não são repositórios git (estão dentro do repositório do archlens). Lidas direto, a identidade delas
 seria o caminho absoluto na máquina de quem leu. Para a base trazer refs estáveis, cada pasta é copiada para um

@@ -30,7 +30,7 @@ Plugin para Claude Code com três skills (`archlens-plan`, `archlens-apply`, `ar
 
 ```bash
 npm install && npx playwright install chromium
-node scripts/archlens.mjs build examples/loja-online/architecture
+bin/archlens build examples/loja-online/architecture
 ```
 
 | | |
@@ -73,6 +73,18 @@ ln -s <repo>/skills/archlens-* ~/.claude/skills/
 
 Quem tinha `~/.claude/skills/archlens → <repo>` deve **trocar esse link**: o `SKILL.md` da raiz foi removido e o link antigo
 não aponta mais para nenhuma skill (`rm ~/.claude/skills/archlens` e use um dos dois caminhos acima).
+
+### Comando `archlens`
+
+`bin/archlens` (Linux, macOS e Git Bash) e `bin/archlens.cmd` (cmd e PowerShell) rodam a CLI sem digitar `node`: acham o
+Node (`ARCHLENS_NODE`, se definido, senão o do PATH), conferem a versão mínima (18) e repassam argumentos e código de
+saída. As skills usam `"$ARCHLENS/bin/archlens"`. Para ter `archlens` em qualquer pasta:
+
+```bash
+ln -s <repo>/bin/archlens ~/.local/bin/archlens   # Linux/macOS (ou ponha <repo>/bin no PATH)
+```
+
+No Windows, ponha `<repo>\bin` no PATH do usuário. Com npm, `npm link` na raiz do repositório também cria o comando.
 
 ### Atualização
 
@@ -119,8 +131,8 @@ salvas e sugeridas, árvore por camada) e os Detalhes do elemento à direita.
 
 ```bash
 npm run gui:build                                  # uma vez: instala e compila o front (apps/gui/dist)
-node scripts/archlens.mjs serve architecture --open   # [--port N] [--host H]; padrão 127.0.0.1:5180
-node scripts/archlens.mjs serve --config archlens-gui.json   # várias bases
+bin/archlens serve architecture --open   # [--port N] [--host H]; padrão 127.0.0.1:5180
+bin/archlens serve --config archlens-gui.json   # várias bases
 ```
 
 ```json
@@ -160,7 +172,7 @@ mostra como ligar.
 
 ```bash
 export ANTHROPIC_API_KEY=...        # ou ponha a chave num .env (abaixo)
-node scripts/archlens.mjs serve architecture --llm anthropic [--model claude-haiku-5-5] [--env-file .env]
+bin/archlens serve architecture --llm anthropic [--model claude-haiku-5-5] [--env-file .env]
 ```
 
 **A chave** vem do ambiente ou de um arquivo `.env`, nunca do `archlens-gui.json`, e nunca chega ao navegador nem
@@ -193,7 +205,7 @@ O bloco `llm` (e `telemetry`) do `archlens-gui.json`:
 | Azure OpenAI | `{ "provider": "openai", "endpoint": "https://x.openai.azure.com/openai/deployments/d", "model": "d", "auth": { "header": "api-key" }, "query": { "api-version": "2024-10-21" } }` |
 
 Exemplo pronto com OpenRouter: `examples/loja-online/archlens-gui.json`. Copie `examples/loja-online/.env.example` para
-`.env` na mesma pasta, preencha a chave e rode `node scripts/archlens.mjs serve --config examples/loja-online/archlens-gui.json --open`.
+`.env` na mesma pasta, preencha a chave e rode `bin/archlens serve --config examples/loja-online/archlens-gui.json --open`.
 
 - `endpoint` (barras finais são ignoradas): no `openai`, a URL até a base da API, **com** o `/v1` quando o gateway o exige
   (a busca acrescenta `/chat/completions`); no `anthropic`, **sem** `/v1` (o SDK acrescenta `/v1/messages`). `auth` é
@@ -225,12 +237,12 @@ o acerto vem antes da velocidade.
 
 ```bash
 # .git/hooks/pre-commit
-node path/to/archlens/scripts/archlens.mjs check || exit 1
+path/to/archlens/bin/archlens check || exit 1
 ```
 
 ```yaml
 # CI (GitHub Actions)
-- run: node path/to/archlens/scripts/archlens.mjs check
+- run: path/to/archlens/bin/archlens check
 ```
 
 Em times com Windows, fixe as quebras de linha em LF para o documento e a base não mudarem só por causa do checkout

@@ -7,6 +7,8 @@ versões seguem [SemVer](https://semver.org/lang/pt-BR/).
 
 ### Adicionado
 
+- **Comando `archlens`** (`bin/archlens` e `bin/archlens.cmd`): acha o Node (`ARCHLENS_NODE` ou o do PATH), confere a
+  versão mínima e roda a CLI; as skills, as referências e os guias passam a usá-lo.
 - **GUI, fase 1** (`apps/gui/`): interface web local e somente leitura sobre a base. Diagrama no centro; conversa e
   histórico, Explorador (visões salvas e sugeridas, árvore por camada, filtro) e Detalhes ("Nesta visão" e "Na base");
   menu do botão direito, duplo clique, trilha, notação ArchiMate | C4, tema, busca por nome (`Ctrl+K`) e seletor de

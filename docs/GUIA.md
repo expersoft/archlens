@@ -166,7 +166,7 @@ Itens ainda em discussão podem entrar na base com `status: "draft"`: aparecem e
 ## Usando pela linha de comando
 
 ```bash
-A="node scripts/archlens.mjs"
+A="bin/archlens"
 $A validate examples/loja-online/architecture
 $A views    examples/loja-online/architecture               # visões definidas + sugestões
 $A doc      examples/loja-online/architecture               # regenera o ARCHITECTURE.md
@@ -204,7 +204,7 @@ recusadas (`E_STORE_FORMAT`) até o `migrate`. O `migrate` é a exceção: receb
 Por padrão a base é `model.json`. Para ler e navegar nela como um vault, converta-a para o conector `markdown`:
 
 ```bash
-node scripts/archlens.mjs store convert architecture --to markdown   # volta com --to json
+bin/archlens store convert architecture --to markdown   # volta com --to json
 ```
 
 A pasta passa a ter uma subpasta por tipo ArchiMate e um `.md` por elemento (`application-component/loja.pedidos.md`),
