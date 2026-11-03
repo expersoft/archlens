@@ -1,13 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, cpSync, readFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, cpSync, readFileSync, existsSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { startServer } from './app.mjs';
+import { createBaseRegistry } from './bases.mjs';
+import { rebuild } from './plan/routes.mjs';
 import { scripted } from './ask/scripted.mjs';
 import { newDraft, hashOps } from './plan/draft.mjs';
-import { openStore, resolveBase } from '../../../scripts/lib/store/index.mjs';
+import { openStore, resolveBase, storeError } from '../../../scripts/lib/store/index.mjs';
 import { plan as planDelta } from '../../../scripts/lib/api.mjs';
 import { applyAndDocument } from '../../../scripts/lib/apply-flow.mjs';
 
@@ -20,19 +22,25 @@ const delta = elements => ({ 'archlens-delta': '1.0', source: { kind: 'prompt', 
 const NEW = delta([{ id: 'sistema-novo', name: 'Sistema Novo Zeta', type: 'application-component' }]);
 const ALTER = delta([{ id: 'loja.pedidos', name: 'API de Pedidos', type: 'application-component', description: 'Descrição nova para o teste de apply' }]);
 
-async function withPlan(fn, { provider = scripted([]), plan = true } = {}) {
+function lojaCopy() {
   const top = mkdtempSync(join(tmpdir(), 'archlens-papply-'));
   const dir = join(top, 'architecture');
   cpSync(join(root, 'examples/loja-online/architecture'), dir, { recursive: true });
   cpSync(join(root, 'examples/loja-online/ARCHITECTURE.md'), join(top, 'ARCHITECTURE.md'));
+  return { top, dir };
+}
+
+async function withPlan(fn, { provider = scripted([]), plan = true, registry, copy = lojaCopy() } = {}) {
+  const { top, dir } = copy;
   const cfg = { port: 0, bases: [{ id: 'loja', path: dir }], llm: { provider: 'anthropic' },
     ...(plan ? { plan: { maxRounds: 8, timeoutMs: 20000, maxTokens: 100000 } } : {}) };
-  const srv = await startServer({ config: cfg, provider });
+  const srv = await startServer({ config: cfg, provider, registry: registry?.(dir) });
   try { await fn(srv.url, dir, top); } finally { await srv.close(); }
 }
 const post = (url, path, body) => fetch(`${url}/api/bases/loja/${path}`, { method: 'POST', headers: json, body: JSON.stringify(body) });
 const opened = async (url, d) => (await post(url, 'plan/open', { draft: { ...newDraft({ id: 'loja', version: '' }), delta: d } })).json();
 const modelOf = dir => JSON.parse(readFileSync(join(dir, 'model.json'), 'utf8'));
+const PATHS = /\/home|\/tmp|[A-Z]:\\|archlens plan/;
 const flat = els => els.flatMap(e => [e, ...flat(e.children ?? [])]);
 const elementOf = (dir, id) => flat(modelOf(dir).elements).find(e => e.id === id);
 
@@ -65,7 +73,8 @@ test('apply com build indisponível', () => withPlan(async (url, dir) => {
     return r.json();
   });
   assert.equal(out.build.available, false);
-  assert.match(out.build.reason, /Chromium|playwright/);
+  assert.equal(out.build.reason, 'Chromium indisponível no servidor; rode "npx playwright install chromium" na máquina do servidor');
+  assert.ok(!out.build.reason.includes(tmpdir()) && !PATHS.test(out.build.reason));
   assert.equal(out.entry.added[0], 'sistema-novo');
   assert.equal(elementOf(dir, 'sistema-novo').name, 'Sistema Novo Zeta');
 }));
@@ -104,6 +113,7 @@ test('apply recusa quando a base mudou depois da confirmação', () => withPlan(
   assert.equal(r.status, 409);
   const e = await r.json();
   assert.equal(e.code, 'E_GUI_PLAN_CHANGED');
+  assert.match(e.error, /não está final.*base mudou/);
   assert.ok(e.draft.plan, 'o plano novo volta');
   assert.notEqual(e.draft.base.version, draft.base.version);
   assert.equal(elementOf(dir, 'sistema-novo').name, 'Outro Nome');
@@ -130,6 +140,60 @@ test('apply recusa plano aberto', () => withPlan(async (url, dir) => {
   assert.deepEqual(e.questions.map(q => q.key), ['el:loja.pedidos:description']);
   assert.ok(e.questions[0].question.length > 5);
   assert.notEqual(elementOf(dir, 'loja.pedidos').description, 'Descrição nova para o teste de apply');
+}));
+
+test('build que falha depois do apply: available false e erro sem caminhos', async () => {
+  const { dir } = lojaCopy();
+  const store = openStore(resolveBase(dir));
+  const crash = async () => { throw Object.assign(new Error(`visão "x": ${dir}/views.json quebrado`), { code: 'E_BUILD_VIEW' }); };
+  const out = await rebuild(store, crash);
+  assert.equal(out.available, false);
+  assert.equal(out.code, 'E_BUILD_VIEW');
+  assert.match(out.error, /não foram regenerados.*a base foi gravada/);
+  assert.ok(!out.error.includes(dir) && !PATHS.test(out.error));
+});
+
+test('apply com documento alheio → 409 com mensagem da GUI, base intocada', () => withPlan(async (url, dir, top) => {
+  const { draft, opsHash } = await opened(url, NEW);
+  writeFileSync(join(top, 'ARCHITECTURE.md'), '# Escrito à mão\n');
+  const r = await post(url, 'plan/apply', { draft, confirm: opsHash });
+  assert.equal(r.status, 409);
+  const e = await r.json();
+  assert.equal(e.code, 'E_STORE_DOC_FOREIGN');
+  assert.equal(e.error, 'o ARCHITECTURE.md desta base não foi gerado por ela; mova-o ou gere em outro lugar antes de gravar');
+  assert.equal(elementOf(dir, 'sistema-novo'), undefined);
+  const n = await post(url, 'plan/notes', { notes: 'x' });
+  assert.equal(n.status, 409);
+  assert.equal((await n.json()).code, 'E_STORE_DOC_FOREIGN');
+}));
+
+// A write that lands between the replan and the store's write: the connector refuses it.
+const racing = dir => {
+  const real = createBaseRegistry({ port: 0, bases: [{ id: 'loja', path: dir }] }, { pollMs: 100000 });
+  const wrap = ctx => {
+    const store = Object.create(ctx.store);
+    store.apply = () => { throw storeError('E_STORE_CONFLICT', 'a base mudou'); };
+    return { ...ctx, store };
+  };
+  return { list: () => real.list(), close: () => real.close(), reload: id => real.reload(id), get: id => wrap(real.get(id)) };
+};
+
+test('apply com conflito na gravação → 409 com mensagem da GUI, sem comando da CLI', () => withPlan(async (url, dir) => {
+  const { draft, opsHash } = await opened(url, NEW);
+  const r = await post(url, 'plan/apply', { draft, confirm: opsHash });
+  assert.equal(r.status, 409);
+  const e = await r.json();
+  assert.equal(e.code, 'E_STORE_CONFLICT');
+  assert.equal(e.error, 'a base mudou enquanto o plano era aplicado; nada foi gravado. Revise o plano novo');
+  assert.ok(!PATHS.test(e.error));
+  assert.equal(elementOf(dir, 'sistema-novo'), undefined);
+}, { registry: racing }));
+
+test('corpo null → 400 em apply, notes, open e preview', () => withPlan(async url => {
+  for (const p of ['plan', 'plan/apply', 'plan/notes', 'plan/open', 'plan/preview']) {
+    const r = await fetch(`${url}/api/bases/loja/${p}`, { method: 'POST', headers: json, body: 'null' });
+    assert.equal(r.status, 400, p);
+  }
 }));
 
 test('notes grava e regenera o documento', () => withPlan(async (url, dir, top) => {

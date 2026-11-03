@@ -15,9 +15,25 @@ const SPECS_MAX = 20;
 const BODY_MAX = DRAFT_MAX_BYTES + 256 * 1024; // a draft plus the message and the history
 const NOTE_MAX = 200_000;
 const NOTE_FIELDS = ['overview', 'notes'];
-// The write refusals the user solves by planning again (or by moving the document away): 409, not 400.
-const CONFLICTS = new Set(['E_STORE_CONFLICT', 'E_PLAN_STALE', 'E_STORE_DOC_FOREIGN']);
+// The write refusals the user solves by planning again (or by moving the document away): 409, with a GUI message (the
+// core's names paths of the machine and CLI commands).
+const CHANGED_WHILE_APPLYING = 'a base mudou enquanto o plano era aplicado; nada foi gravado. Revise o plano novo';
+const REFUSALS = {
+  E_STORE_CONFLICT: CHANGED_WHILE_APPLYING,
+  E_PLAN_STALE: CHANGED_WHILE_APPLYING,
+  E_STORE_DOC_FOREIGN: 'o ARCHITECTURE.md desta base não foi gerado por ela; mova-o ou gere em outro lugar antes de gravar',
+};
+const NO_CHROMIUM = 'Chromium indisponível no servidor; rode "npx playwright install chromium" na máquina do servidor';
+const BUILD_FAILED = { E_BUILD_INVALID: 'o modelo gravado tem erros', E_BUILD_EMPTY: 'nenhuma visão com conteúdo', E_BUILD_VIEW: 'uma visão salva não abre' };
 const isObject = v => v !== null && typeof v === 'object' && !Array.isArray(v);
+
+/** Runs a write; a refusal in REFUSALS comes back as 409 with its GUI message and code. */
+function guiWrite(fn) {
+  try { return fn(); } catch (e) {
+    if (!Object.hasOwn(REFUSALS, e.code)) throw e;
+    throw Object.assign(new Error(REFUSALS[e.code]), { status: 409, code: e.code });
+  }
+}
 
 function assertLocal(ctx) {
   if (ctx.store?.remote) {
@@ -37,13 +53,20 @@ const docName = (store, doc) => relative(dirname(store.locator.path), doc).split
 const questionsOf = plan => (plan ? openQuestions(plan).map(i => ({ key: i.key, class: i.class, question: describeItem(i).split('  → ')[0] })) : []);
 
 /** The saved diagrams rebuilt with screenshots; the quality report without the machine's paths. Never throws. */
-async function rebuild(store) {
+export async function rebuild(store, build = buildDiagrams) {
   try {
-    const r = await buildDiagrams(store, store.read().raw, { shots: true });
-    return { available: r.available, problems: r.problems, results: r.results.map(({ shot: _shot, ...rest }) => rest), ...(r.available ? {} : { reason: r.reason }) };
+    const r = await build(store, store.read().raw, { shots: true });
+    return { available: r.available, problems: r.problems, results: r.results.map(({ shot: _shot, ...rest }) => rest), ...(r.available ? {} : { reason: NO_CHROMIUM }) };
   } catch (e) {
-    return { available: true, problems: 0, results: [], error: e.message, ...(e.code ? { code: e.code } : {}) };
+    const why = BUILD_FAILED[e.code] ?? 'erro inesperado';
+    return { available: false, problems: 0, results: [], error: `os diagramas não foram regenerados (${why}); a base foi gravada`, ...(e.code ? { code: e.code } : {}) };
   }
+}
+
+async function bodyOf(readJson, req, httpError, limit) {
+  const body = await readJson(req, limit);
+  if (!isObject(body)) throw httpError(400, 'o corpo deve ser um objeto JSON');
+  return body;
 }
 
 function historyOf(history, httpError) {
@@ -61,9 +84,10 @@ function historyOf(history, httpError) {
  */
 export function planRoutes({ registry, provider, config, telemetry, h }) {
   const { readJson, httpError, STREAMED, NDJSON_HEADERS } = h;
+  const read = (req, limit = BODY_MAX) => bodyOf(readJson, req, httpError, limit);
 
   async function plan(req, res, b) {
-    const body = await readJson(req, BODY_MAX);
+    const body = await read(req);
     const ctx = registry.get(b);
     const message = typeof body.message === 'string' ? body.message.trim() : undefined;
     if (body.message !== undefined && message === undefined) throw httpError(400, 'message deve ser texto');
@@ -115,7 +139,7 @@ export function planRoutes({ registry, provider, config, telemetry, h }) {
 
   /** Plans the draft again over the base as it is now; writes only when its ops are the ones the user confirmed. */
   async function apply(req, b) {
-    const { draft, confirm } = await readJson(req, BODY_MAX);
+    const { draft, confirm } = await read(req);
     if (typeof confirm !== 'string') throw httpError(400, 'informe em {confirm} o opsHash do plano confirmado');
     assertLocal(registry.get(b));
     await registry.reload(b); // another write may have landed since the last poll
@@ -125,24 +149,20 @@ export function planRoutes({ registry, provider, config, telemetry, h }) {
     const opsHash = opsHashOf(planned);
     if (opsHash === null || opsHash !== confirm) {
       const message = opsHash === null
-        ? 'o plano não está final; responda as perguntas abertas antes de aplicar'
+        ? `o plano não está final; responda as perguntas abertas antes de aplicar${replanned.warning ? ` (${replanned.warning})` : ''}`
         : 'o plano mudou desde a confirmação (a base mudou); revise o plano novo e confirme de novo';
       throw Object.assign(httpError(409, message, 'E_GUI_PLAN_CHANGED'), {
         extra: { draft: replanned.draft, opsHash, questions: questionsOf(planned), ...(replanned.warning ? { warning: replanned.warning } : {}) },
       });
     }
-    let res;
-    try { res = applyAndDocument(ctx.store, planned); } catch (e) {
-      if (CONFLICTS.has(e.code)) e.status = 409;
-      throw e;
-    }
+    const res = guiWrite(() => applyAndDocument(ctx.store, planned));
     if (!res.entry) return { entry: null, doc: null, build: null, notesDraftNeeded: false };
     await registry.reload(b);
     return { entry: res.entry, doc: docName(ctx.store, res.doc), build: await rebuild(ctx.store), notesDraftNeeded: true };
   }
 
   async function notes(req, b) {
-    const body = await readJson(req);
+    const body = await read(req);
     const given = NOTE_FIELDS.filter(k => body[k] !== undefined);
     if (!given.length) throw httpError(400, 'informe as notas em {overview} e/ou {notes}');
     for (const k of given) {
@@ -151,7 +171,7 @@ export function planRoutes({ registry, provider, config, telemetry, h }) {
     }
     const ctx = registry.get(b);
     assertLocal(ctx);
-    const { doc } = writeNotes(ctx.store, Object.fromEntries(given.map(k => [k, body[k]])));
+    const { doc } = guiWrite(() => writeNotes(ctx.store, Object.fromEntries(given.map(k => [k, body[k]]))));
     await registry.reload(b);
     return { doc: docName(ctx.store, doc) };
   }
@@ -159,12 +179,12 @@ export function planRoutes({ registry, provider, config, telemetry, h }) {
   return [
     ['POST', /^\/api\/bases\/([^/]+)\/plan$/, (req, [b], _url, res) => plan(req, res, b)],
     ['POST', /^\/api\/bases\/([^/]+)\/plan\/open$/, async (req, [b]) => {
-      const { draft } = await readJson(req, BODY_MAX);
+      const { draft } = await read(req);
       const out = draftFrom(registry.get(b), draft);
       return { ...out, opsHash: opsHashOf(out.draft.plan) };
     }],
     ['POST', /^\/api\/bases\/([^/]+)\/plan\/preview$/, async (req, [b]) => {
-      const { draft, specs } = await readJson(req, BODY_MAX);
+      const { draft, specs } = await read(req);
       if (specs !== undefined && !(Array.isArray(specs) && specs.every(isObject))) throw httpError(400, 'specs deve ser uma lista de visões');
       if (specs && specs.length > SPECS_MAX) throw httpError(400, `no máximo ${SPECS_MAX} visões por pedido`);
       const ctx = registry.get(b);

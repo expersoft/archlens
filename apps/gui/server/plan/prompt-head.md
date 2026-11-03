@@ -32,8 +32,8 @@ a migração de base 1.x e o `init` não estão disponíveis na GUI.
   `reason`). A resposta volta na próxima mensagem. Nunca decida sozinho.
 - Cada rodada termina com uma destas ferramentas: `ask_decision`, `ask_user`, `reply` ou `draft_notes`.
 - Depois que o usuário aplica, a GUI pede "rascunhe as notas de interpretação desta rodada": escreva `overview`
-  (propósito, decisões, riscos) e `notes` (o que a rodada mudou e por quê) e entregue com `draft_notes`. Quem grava as
-  notas é o usuário, depois de revisar.
+  (propósito, decisões, riscos) e `notes` (o que a rodada mudou e por quê) e entregue com `draft_notes`. Leia antes as
+  notas atuais com `read_notes` e atualize-as em vez de reescrever. Quem grava as notas é o usuário, depois de revisar.
 
 # Comandos da skill → ferramentas da GUI
 

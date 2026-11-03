@@ -35,6 +35,8 @@ const PLAN_ONLY = [
     input_schema: obj({ text: str }, ['text']) },
   { name: 'draft_notes', description: 'Propõe ao usuário as notas de interpretação da rodada aplicada (overview: propósito, decisões, riscos; notes: notas) e encerra a rodada. Não grava: o usuário revisa e aprova.',
     input_schema: obj({ overview: str, notes: str }) },
+  { name: 'read_notes', description: 'Lê as notas de interpretação atuais da base (overview e notes), para draft_notes atualizá-las em vez de reescrever.',
+    input_schema: obj({}) },
 ];
 
 // Fixed order: the prompt cache depends on it.
@@ -129,13 +131,19 @@ function draftNotes(_ctx, _session, { overview = '', notes = '' }) {
   return { ok: true, content: 'notas enviadas ao usuário', final: { kind: 'notes', overview, notes } };
 }
 
+function readNotes(ctx) {
+  const notes = ctx.store.read()?.notes ?? {};
+  const part = (name, title) => `## ${title}\n\n${typeof notes[name] === 'string' && notes[name].trim() ? notes[name].trim() : '(vazio)'}`;
+  return { ok: true, content: external('base', `${part('overview', 'overview')}\n\n${part('notes', 'notes')}`) };
+}
+
 const RUN = {
   find_elements: (ctx, _s, i) => fromBase(findTool(ctx, i)),
   element_card: (ctx, _s, i) => fromBase(cardTool(ctx, i)),
   relations: (ctx, _s, i) => fromBase(relationsTool(ctx, i)),
   try_view: async (ctx, _s, i) => fromBase(await tryViewTool(ctx, i)),
   read_reference: readReference, set_delta: setDelta, plan_draft: planDraftTool, show_plan: showPlan, set_note: setNote,
-  add_preview: addPreview, ask_decision: askDecision, ask_user: askUser, reply, draft_notes: draftNotes,
+  add_preview: addPreview, ask_decision: askDecision, ask_user: askUser, reply, draft_notes: draftNotes, read_notes: readNotes,
 };
 
 /** Runs one planning tool; `session` ({ draft, previews }) is changed in place. Never throws: errors come back as `ok: false`. */
