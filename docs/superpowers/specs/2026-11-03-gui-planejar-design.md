@@ -1,7 +1,7 @@
 # archlens GUI: planejar e aplicar deltas pela conversa
 
 - **Data:** 2026-11-03
-- **Status:** desenho em revisão pelo usuário; falta o plano
+- **Status:** aprovado pelo usuário em 2026-11-03; plano em `docs/superpowers/plans/2026-11-03-gui-planejar.md`
 - **Base:** GUI das fases 1 e 2 (`docs/superpowers/specs/2026-10-28-archlens-gui-design.md`), skills `archlens-plan` e
   `archlens-apply`
 - **Convenção:** *(decisão do usuário)* marca o que o usuário decidiu; *(chamada do desenho)* marca o que foi decidido
