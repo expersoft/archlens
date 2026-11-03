@@ -108,7 +108,8 @@ export async function startServer({ config, staticDir, registry, provider } = {}
   let askOff = null;
   if (!provider && config?.llm) {
     try { provider = createProvider(config.llm, { env: config.env ?? {} }); } catch (e) {
-      if (!(e.missing && config.llmSource === 'file')) throw e;
+      // `--plan` on the command line makes a missing key fatal even when the llm comes from the file.
+      if (!(e.missing && config.llmSource === 'file') || (config.plan && config.planSource === 'cli')) throw e;
       provider = null;
       askOff = e.message;
     }

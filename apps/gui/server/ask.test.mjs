@@ -177,3 +177,8 @@ test('app: --plan com llm sem chave → startServer rejeita com E_GUI_CONFIG', a
 test('app: provedor sem ferramentas → info.plan desligado com motivo', () => withServer({ config: { ...config(), plan: PLAN }, provider: scripted([], { tools: false }) }, async url => {
   assert.deepEqual(await planInfo(url), { enabled: false, reason: 'o planejamento exige um LLM com ferramentas (llm.tools)' });
 }));
+
+test('app: llm do arquivo sem chave com --plan na linha de comando → startServer rejeita', async () => {
+  await assert.rejects(startServer({ config: { ...config(), llm: { provider: 'anthropic' }, llmSource: 'file', env: {}, plan: PLAN, planSource: 'cli' } }),
+    e => e.code === 'E_GUI_CONFIG' && /ANTHROPIC_API_KEY/.test(e.message));
+});
