@@ -90,3 +90,26 @@ test('bin/archlens é versionado executável e com LF', () => {
   assert.equal(mode, '100755');
   assert.ok(!readFileSync(BIN, 'utf8').includes('\r'));
 });
+
+const CMD = join(ROOT, 'bin', 'archlens.cmd');
+
+test('archlens.cmd: CRLF, @echo off, setlocal e caminho relativo à própria pasta', () => {
+  const text = readFileSync(CMD, 'utf8');
+  assert.ok(text.split('\n').slice(0, -1).every(l => l.endsWith('\r')), 'todas as linhas em CRLF');
+  assert.match(text, /^@echo off\r\n/);
+  assert.match(text, /setlocal/i);
+  assert.ok(text.includes('%~dp0..\\scripts\\archlens.mjs'));
+  assert.match(text, /exit \/b/i);
+  for (const msg of ['Node.js não encontrado', 'ARCHLENS_NODE não aponta para um executável', 'precisa do Node 18 ou mais novo'])
+    assert.ok(text.includes(msg), msg);
+});
+
+test('archlens.cmd roda o help e repassa o código de saída', { skip: process.platform !== 'win32' }, () => {
+  const cmd = args => spawnSync('cmd.exe', ['/d', '/c', CMD, ...args], { encoding: 'utf8' });
+  const r = cmd(['help']);
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /^archlens — /);
+  const args = ['query', 'C:\\nao\\existe', '--view', 'x'];
+  const direct = spawnSync(process.execPath, [CLI, ...args], { encoding: 'utf8' });
+  assert.equal(cmd(args).status, direct.status);
+});
