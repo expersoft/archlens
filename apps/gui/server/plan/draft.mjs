@@ -17,11 +17,14 @@ export function newDraft(ctx) {
 
 /** The URL itself when it carries no credential (`https://user:pass@h`, `https://token@h`). */
 export function cleanRepoUrl(url) {
-  if (typeof url !== 'string' || !url.trim()) throw draftError('o rascunho tem um repositório sem URL');
-  if (/^[a-z][a-z0-9+.-]*:\/\/[^/?#]*@/i.test(url)) {
+  const u = typeof url === 'string' ? url.trim() : '';
+  if (!u) throw draftError('o rascunho tem um repositório sem URL');
+  // A bare user in ssh:// (git@host) is no secret; any http(s) userinfo and ssh user:pass are.
+  const m = /^([a-z][a-z0-9+.-]*):\/\/([^/?#]*)@/i.exec(u);
+  if (m && (m[1].toLowerCase() !== 'ssh' || m[2].includes(':'))) {
     throw draftError('a URL do repositório não pode ter credencial embutida; use o token do ambiente (.env)');
   }
-  return url;
+  return u;
 }
 
 /** Validates a draft read from a file against the open base; the plan is kept only for its answers (replanDraft redoes it). */

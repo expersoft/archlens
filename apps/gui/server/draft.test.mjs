@@ -54,6 +54,11 @@ test('checkDraft recusa repo com credencial na URL; cleanRepoUrl também', () =>
   rejects(() => checkDraft(d, ctx), /credencial/);
   rejects(() => cleanRepoUrl('https://x:y@h/r.git'), /credencial/);
   rejects(() => cleanRepoUrl('https://token@h/r.git'), /credencial/);
+  rejects(() => cleanRepoUrl(' https://x:y@h/r.git'), /credencial/);
+  rejects(() => cleanRepoUrl('http://token@h/r.git'), /credencial/);
+  rejects(() => cleanRepoUrl('ssh://user:pass@h/r.git'), /credencial/);
+  assert.equal(cleanRepoUrl('ssh://git@github.com/o/r.git'), 'ssh://git@github.com/o/r.git');
+  assert.equal(cleanRepoUrl('  https://h/r.git '), 'https://h/r.git');
   assert.equal(cleanRepoUrl('https://h/r.git'), 'https://h/r.git');
   assert.equal(cleanRepoUrl('git@github.com:o/r.git'), 'git@github.com:o/r.git');
   const ok = { ...newDraft(ctx), repo: { url: 'https://h/r.git', ref: 'main', commit: 'abc' } };
