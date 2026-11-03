@@ -87,8 +87,8 @@ export function Shell(p: ShellProps) {
           </select>
           {p.planEnabled && (
             <div className="seg" role="group" aria-label="Modo">
-              <button className={!planning ? 'on' : ''} onClick={() => planning && p.onMode?.('browse')}>Navegar</button>
-              <button className={planning ? 'on' : ''} onClick={() => !planning && p.onMode?.('plan')}>Planejar</button>
+              <button type="button" aria-pressed={!planning} className={!planning ? 'on' : ''} onClick={() => planning && p.onMode?.('browse')}>Navegar</button>
+              <button type="button" aria-pressed={planning} className={planning ? 'on' : ''} onClick={() => !planning && p.onMode?.('plan')}>Planejar</button>
             </div>
           )}
           <input

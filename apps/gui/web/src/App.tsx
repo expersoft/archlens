@@ -36,6 +36,7 @@ export function App() {
   const [status, setStatus] = useState('Carregando…');
   const [presenting, setPresenting] = useState(false);
   const [mode, setMode] = useState<'browse' | 'plan'>('browse');
+  const [planOpened, setPlanOpened] = useState(false); // PlanView stays mounted once opened, so a round in flight finishes
   const [selected, setSelected] = useState<string | null>(null);
   const [menu, setMenu] = useState<Menu | null>(null);
   const frame = useRef<HTMLIFrameElement>(null);
@@ -345,6 +346,7 @@ export function App() {
     menuTicket.current++;
     setMenu(null);
     cancelAsk();
+    if (m === 'plan') setPlanOpened(true);
     setMode(m);
   };
   const closeMenu = useCallback(() => setMenu(null), []);
@@ -418,7 +420,8 @@ export function App() {
         </>
       )}
     >
-      {planning && base ? <PlanView key={base} base={base} /> : view ? (
+      {planEnabled && base && planOpened && <div className="plan-host" hidden={!planning}><PlanView key={base} base={base} /></div>}
+      {planning ? null : view ? (
         <>
           <nav className="trail" aria-label="Trilha">
             {trail.map((s, i) => (

@@ -6,6 +6,8 @@ import { load, save, type ChatMsg } from './draftStore';
 
 const HISTORY_MAX = 40; // the server's limit
 const TOO_BIG = 'o rascunho não cabe no navegador; baixe-o para não perder o trabalho';
+const REPLACE = 'Substituir o rascunho atual pelo do arquivo? O atual se perde se não foi baixado.';
+const TRIMMED = 'a conversa antiga foi cortada para caber no navegador; o rascunho está inteiro';
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -33,7 +35,7 @@ export function PlanView({ base }: { base: string }) {
   const [saved] = useState(() => load(base));
   const [draft, setDraft] = useState<Draft | null>(saved?.draft ?? null);
   const [chat, setChat] = useState<ChatMsg[]>(saved?.chat ?? []);
-  const [tooBig, setTooBig] = useState(false);
+  const [stored, setStored] = useState<'ok' | 'chat-trimmed' | 'too-big'>('ok');
   const draftRef = useRef(draft);
   const chatRef = useRef(chat);
   const seq = useRef(saved?.chat.reduce((n, m) => Math.max(n, m.id), 0) ?? 0);
@@ -45,7 +47,7 @@ export function PlanView({ base }: { base: string }) {
     chatRef.current = nextChat;
     setDraft(nextDraft);
     setChat(nextChat);
-    if (nextDraft) setTooBig(save(base, nextDraft, nextChat.filter((m) => m.status !== 'running')) === 'too-big');
+    if (nextDraft) setStored(save(base, nextDraft, nextChat.filter((m) => m.status !== 'running')));
   }, [base]);
   const setChatOnly = useCallback((fn: (c: ChatMsg[]) => ChatMsg[]) => {
     chatRef.current = fn(chatRef.current);
@@ -121,6 +123,7 @@ export function PlanView({ base }: { base: string }) {
   const upload = async (file: File) => {
     try {
       const r = await planOpen(base, JSON.parse(await readText(file)) as Draft);
+      if (draftRef.current && !window.confirm(REPLACE)) return;
       cancel();
       commit(r.draft, r.warning ? [{ id: ++seq.current, role: 'assistant', text: '', warning: r.warning }] : []);
     } catch (e) {
@@ -138,11 +141,11 @@ export function PlanView({ base }: { base: string }) {
             chat={chat}
             onSend={(t) => turn({ message: t }, t)}
             onAnswer={onAnswer}
-            notice={tooBig && (
+            notice={stored === 'too-big' ? (
               <div className="warn plan-notice" role="alert">
                 <span>{TOO_BIG}</span> <button type="button" aria-label="Baixar rascunho" onClick={() => draft && download(base, draft)}>Baixar</button>
               </div>
-            )}
+            ) : stored === 'chat-trimmed' ? <div className="warn plan-notice" role="status">{TRIMMED}</div> : null}
           />
         )}
         right={(

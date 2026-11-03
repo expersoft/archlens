@@ -114,3 +114,5 @@ body{font:14px/1.4 system-ui,sans-serif;background:var(--bg);color:var(--ink)}
 .plan-preview .toolbar button:disabled{opacity:.5;cursor:default}
 .filebtn{border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:6px;padding:4px 10px;cursor:pointer;font-size:13px}
 .filebtn input{display:none}
+.plan-host{flex:1;display:flex;min-height:0;min-width:0}
+.plan-host[hidden]{display:none}

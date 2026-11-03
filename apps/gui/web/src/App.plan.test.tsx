@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 vi.mock('./api', async (orig) => ({ ...(await orig<typeof import('./api')>()), getBases: vi.fn(), getCatalog: vi.fn(), getView: vi.fn(), getElement: vi.fn(), getInfo: vi.fn() }));
@@ -35,5 +35,27 @@ describe('App, modo Planejar', () => {
     expect(screen.queryByRole('navigation', { name: 'Trilha' })).toBeNull();
     await userEvent.click(screen.getByRole('button', { name: 'Navegar' }));
     expect(await screen.findByRole('navigation', { name: 'Trilha' })).toBeTruthy();
+  });
+});
+
+describe('App, rodada em andamento', () => {
+  it('trocar para Navegar não aborta a rodada; o rascunho devolvido é salvo e aparece ao voltar', async () => {
+    vi.mocked(api.getInfo).mockResolvedValue({ ask, plan: { enabled: true, maxRounds: 8, timeoutMs: 1000 } });
+    let emit!: (e: api.PlanEvent) => void;
+    let signal!: AbortSignal;
+    let finish!: () => void;
+    vi.spyOn(api, 'planTurn').mockImplementation((_b, _body, on, s) => { emit = on; signal = s; return new Promise<void>((r) => { finish = r; }); });
+    const u = userEvent.setup();
+    render(<App />);
+    await screen.findByRole('navigation', { name: 'Trilha' });
+    await u.click(await screen.findByRole('button', { name: 'Planejar' }));
+    await u.type(await screen.findByLabelText('Mensagem'), 'oi{Enter}');
+    await u.click(screen.getByRole('button', { name: 'Navegar' }));
+    expect(signal.aborted).toBe(false);
+    const d = { 'archlens-draft': 1, base: { id: 'b', version: 'v' }, delta: null, plan: null, note: 'x' };
+    await act(async () => { emit({ type: 'result', draft: d, reply: { kind: 'text', text: 'pronto' }, previews: [] }); finish(); });
+    expect(JSON.parse(localStorage.getItem('archlens-gui-draft:b')!)).toEqual(d);
+    await u.click(screen.getByRole('button', { name: 'Planejar' }));
+    expect(await screen.findByText('pronto')).toBeTruthy();
   });
 });

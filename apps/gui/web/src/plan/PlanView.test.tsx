@@ -144,3 +144,37 @@ describe('PlanView', () => {
     expect(screen.getByTestId('plan-preview')).toBeTruthy();
   });
 });
+
+describe('PlanView, correções', () => {
+  it('subir arquivo com rascunho atual pede confirmação; cancelar mantém tudo, confirmar substitui', async () => {
+    const u = userEvent.setup();
+    respond(result({ kind: 'text', text: 'ok' }, draft(10)), done);
+    planOpen.mockResolvedValue({ draft: draft(11) });
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    render(<PlanView base="b" />);
+    await say(u, 'oi');
+    await screen.findByText('ok');
+    const file = () => new File([JSON.stringify(draft(0))], 'd.json', { type: 'application/json' });
+    await u.upload(screen.getByLabelText('Subir rascunho'), file());
+    await waitFor(() => expect(confirm).toHaveBeenCalledWith('Substituir o rascunho atual pelo do arquivo? O atual se perde se não foi baixado.'));
+    expect(JSON.parse(localStorage.getItem('archlens-gui-draft:b')!)).toEqual(draft(10));
+    expect(screen.getByText('ok')).toBeTruthy();
+    confirm.mockReturnValue(true);
+    await u.upload(screen.getByLabelText('Subir rascunho'), file());
+    await waitFor(() => expect(JSON.parse(localStorage.getItem('archlens-gui-draft:b')!)).toEqual(draft(11)));
+    expect(screen.queryByText('ok')).toBeNull();
+  });
+
+  it('conversa cortada para caber mostra o aviso', async () => {
+    const u = userEvent.setup();
+    const real = Storage.prototype.setItem;
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (this: Storage, k: string, v: string) {
+      if (k.startsWith('archlens-gui-chat:')) throw new DOMException('cheio', 'QuotaExceededError');
+      return real.call(this, k, v);
+    });
+    respond(result({ kind: 'text', text: 'ok' }, draft(7)), done);
+    render(<PlanView base="b" />);
+    await say(u, 'oi');
+    expect(await screen.findByText('a conversa antiga foi cortada para caber no navegador; o rascunho está inteiro')).toBeTruthy();
+  });
+});
