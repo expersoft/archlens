@@ -72,8 +72,8 @@ Consultar (nunca grava a base)
   validate  <base>                         valida schema, referências, hierarquia C4 e regras ArchiMate
   check     [base] [--json]               valida e confere se o ARCHITECTURE.md está em dia (CI / pre-commit)
   extract   <base> [--out m.json]          imprime o modelo canônico em JSON
-  serve     <base> [--port N] [--host H] [--open] [--llm anthropic|openai [--model M] [--endpoint URL] [--env-file PATH]]
-            abre a GUI (navegador) sobre a base; padrão 127.0.0.1:5180; --llm liga a busca em texto (chave no ambiente ou .env)
+  serve     <base> [--port N] [--host H] [--open] [--llm anthropic|openai [--model M] [--endpoint URL] [--env-file PATH] [--plan]]
+            abre a GUI (navegador) sobre a base; padrão 127.0.0.1:5180; --llm liga a busca em texto (chave no ambiente ou .env); --plan liga o modo Planejar (exige --llm)
             --config archlens-gui.json [--port N] [--host H] [--open]   a GUI sobre várias bases
 
 Atalhos
@@ -453,8 +453,8 @@ async function main() {
         if (str(args.endpoint)) llm.endpoint = args.endpoint;
       }
       let config;
-      try { config = gui.loadConfig({ file: str(args.config), base: str(file), port, host: str(args.host), llm, envFile: str(args['env-file']) }); } catch (e) { fail(e.message); }
-      if (!config.bases.length) fail('uso: archlens serve <base> [--port N] [--host H] [--open] [--llm anthropic|openai [--model M] [--endpoint URL] [--env-file PATH]]\n      archlens serve --config archlens-gui.json [--port N]');
+      try { config = gui.loadConfig({ file: str(args.config), base: str(file), port, host: str(args.host), llm, envFile: str(args['env-file']), plan: args.plan === true || args.plan === 'true' }); } catch (e) { fail(e.message); }
+      if (!config.bases.length) fail('uso: archlens serve <base> [--port N] [--host H] [--open] [--llm anthropic|openai [--model M] [--endpoint URL] [--env-file PATH] [--plan]]\n      archlens serve --config archlens-gui.json [--port N]');
       const registry = createBaseRegistry(config);
       const bases = registry.list();
       const bad = args.config ? (bases.some(b => b.ok) ? null : bases[0]) : bases.find(b => !b.ok);
@@ -469,6 +469,10 @@ async function main() {
         console.log(`busca em texto: ${srv.provider.name} ${srv.provider.model}${config.llm.auth === 'none' ? '' : ` (chave de ${keyVar}, ${from})`}`);
         const warn = config.envFile && gui.envFileWarning(config.envFile);
         if (warn) console.warn(`aviso: ${warn}`);
+      }
+      if (srv.planOff) console.warn(`aviso: modo Planejar desligado: ${srv.planOff}`);
+      else if (config.plan && !['localhost', '127.0.0.1', '::1'].includes(config.host ?? 'localhost')) {
+        console.warn(`aviso: o modo Planejar grava na base e o servidor escuta em ${config.host}; qualquer um que alcance a porta pode aplicar`);
       }
       if (args.open) openFile(srv.url);
       const stop = () => { registry.close(); srv.close().finally(() => process.exit(0)); };

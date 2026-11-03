@@ -141,3 +141,39 @@ test('POST cross-site: text/plain é 415 e o provedor não é chamado; origem de
     await ok.text();
   });
 });
+
+const planInfo = async url => (await (await fetch(`${url}/api/info`)).json()).plan;
+const PLAN = { maxRounds: 40, timeoutMs: 600000 };
+
+test('app: plan desligado → POST /api/bases/x/plan responde 404', () => withServer({ provider: scripted([]) }, async url => {
+  assert.deepEqual(await planInfo(url), { enabled: false });
+  const res = await fetch(`${url}/api/bases/loja/plan`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
+  assert.equal(res.status, 404);
+}));
+
+test('app: plan ligado com provedor com ferramentas → info.plan enabled', async () => {
+  const srv = await startServer({ config: { ...config(), plan: { ...PLAN, maxTokens: 1 } }, provider: scripted([]) });
+  try {
+    assert.equal(srv.planOff, null);
+    assert.deepEqual(await planInfo(srv.url), { enabled: true, ...PLAN });
+  } finally { await srv.close(); }
+});
+
+test('app: plan do arquivo com llm sem chave → info.plan.enabled false com reason; servidor sobe', async () => {
+  const srv = await startServer({ config: { ...config(), llm: { provider: 'anthropic' }, llmSource: 'file', env: {}, plan: PLAN, planSource: 'file' } });
+  try {
+    assert.match(srv.planOff, /ANTHROPIC_API_KEY/);
+    const p = await planInfo(srv.url);
+    assert.equal(p.enabled, false);
+    assert.match(p.reason, /ANTHROPIC_API_KEY/);
+  } finally { await srv.close(); }
+});
+
+test('app: --plan com llm sem chave → startServer rejeita com E_GUI_CONFIG', async () => {
+  await assert.rejects(startServer({ config: { ...config(), llm: { provider: 'anthropic' }, llmSource: 'cli', env: {}, plan: PLAN, planSource: 'cli' } }),
+    e => e.code === 'E_GUI_CONFIG' && /ANTHROPIC_API_KEY/.test(e.message));
+});
+
+test('app: provedor sem ferramentas → info.plan desligado com motivo', () => withServer({ config: { ...config(), plan: PLAN }, provider: scripted([], { tools: false }) }, async url => {
+  assert.deepEqual(await planInfo(url), { enabled: false, reason: 'o planejamento exige um LLM com ferramentas (llm.tools)' });
+}));

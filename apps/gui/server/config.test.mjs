@@ -63,3 +63,33 @@ test('base única com llm carrega o ambiente só quando há llm', () => {
   assert.equal(typeof c.env, 'object');
   assert.equal(loadConfig({ base: '/a/b' }).env, undefined);
 });
+
+const PLAN_DEFAULTS = { maxRounds: 40, timeoutMs: 600000, maxTokens: 400000, gitUser: 'x-access-token', cloneTimeoutMs: 120000, cloneMaxMb: 200 };
+const LLM = { provider: 'anthropic' };
+
+test('config: "plan": true vira os padrões', () => {
+  const c = loadConfig({ file: write({ llm: LLM, plan: true }) });
+  assert.deepEqual(c.plan, PLAN_DEFAULTS);
+  assert.equal(c.planSource, 'file');
+  assert.equal(loadConfig({ file: write({ llm: LLM }) }).plan, undefined);
+  assert.equal(loadConfig({ file: write({ llm: LLM, plan: false }) }).plan, undefined);
+  assert.deepEqual(loadConfig({ file: write({ llm: LLM, plan: { maxRounds: 5, gitTokenEnv: 'GT' } }) }).plan, { ...PLAN_DEFAULTS, maxRounds: 5, gitTokenEnv: 'GT' });
+});
+
+test('config: plan com valores fora da faixa', () => {
+  for (const plan of [{ maxRounds: 0 }, { maxRounds: 101 }, { timeoutMs: 9999 }, { timeoutMs: 1800001 }, { gitTokenEnv: 5 }, { gitUser: '' }, 'sim']) {
+    assert.throws(() => loadConfig({ file: write({ llm: LLM, plan }) }), e => e.code === 'E_GUI_CONFIG', JSON.stringify(plan));
+  }
+});
+
+test('config: plan sem llm', () => {
+  assert.throws(() => loadConfig({ file: write({ plan: true }) }), e => e.code === 'E_GUI_CONFIG' && /plan exige llm/.test(e.message));
+  assert.throws(() => loadConfig({ base: 'x', plan: true }), e => e.code === 'E_GUI_CONFIG' && /plan exige llm/.test(e.message));
+});
+
+test('config: --plan na linha de comando', () => {
+  const c = loadConfig({ base: 'x', llm: LLM, plan: true });
+  assert.equal(c.planSource, 'cli');
+  assert.deepEqual(c.plan, PLAN_DEFAULTS);
+  assert.equal(loadConfig({ file: write({ llm: LLM }), plan: true }).planSource, 'cli');
+});
