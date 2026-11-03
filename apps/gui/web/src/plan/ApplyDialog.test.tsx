@@ -171,4 +171,40 @@ describe('Aplicar na PlanView', () => {
     expect(planNotes).not.toHaveBeenCalled();
     expect(await screen.findByText('notas descartadas (o apply continua valendo)')).toBeTruthy();
   });
+
+  it('Aplicar desabilitado enquanto uma rodada corre', async () => {
+    open();
+    planTurn.mockImplementation(() => new Promise(() => {}));
+    const u = userEvent.setup();
+    render(<PlanView base="b" canBuild />);
+    await waitFor(() => expect(aplicar().disabled).toBe(false));
+    await u.type(screen.getByLabelText('Mensagem'), 'oi{Enter}');
+    expect(aplicar().disabled).toBe(true);
+    expect(aplicar().title).toBe('aguarde a rodada em andamento terminar antes de aplicar');
+  });
+
+  it('prévia que falhou explica o motivo', async () => {
+    open();
+    planPreview.mockRejectedValue(new Error('x'));
+    render(<PlanView base="b" canBuild />);
+    await waitFor(() => expect(aplicar().title).toBe('a prévia falhou; tente de novo'));
+  });
+
+  it('E_PLAN_STALE mostra a mensagem e Replanejar troca o plano e fecha o diálogo', async () => {
+    open();
+    const u = userEvent.setup();
+    const novo = draft(3);
+    planApply.mockRejectedValue(new api.ApiError('a base mudou enquanto o plano era aplicado; nada foi gravado. Revise o plano novo', 'E_PLAN_STALE', 409));
+    render(<PlanView base="b" canBuild />);
+    await waitFor(() => expect(aplicar().disabled).toBe(false));
+    await u.click(aplicar());
+    await u.click(screen.getByRole('button', { name: 'Confirmar e aplicar' }));
+    expect(await screen.findByText(/a base mudou enquanto o plano era aplicado/)).toBeTruthy();
+    vi.mocked(api.planOpen).mockClear();
+    vi.mocked(api.planOpen).mockResolvedValue({ draft: novo, opsHash: 'h3' });
+    await u.click(screen.getByRole('button', { name: 'Replanejar' }));
+    await waitFor(() => expect(api.planOpen).toHaveBeenCalledWith('b', draft(1)));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(JSON.parse(localStorage.getItem('archlens-gui-draft:b')!)).toEqual(novo);
+  });
 });

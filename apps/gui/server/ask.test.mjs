@@ -146,7 +146,9 @@ const planInfo = async url => (await (await fetch(`${url}/api/info`)).json()).pl
 const PLAN = { maxRounds: 40, timeoutMs: 600000 };
 
 test('app: plan desligado → POST /api/bases/x/plan responde 404', () => withServer({ provider: scripted([]) }, async url => {
-  assert.deepEqual(await planInfo(url), { enabled: false });
+  const off = await planInfo(url);
+  assert.deepEqual(off, { enabled: false });
+  assert.equal('build' in off, false);
   const res = await fetch(`${url}/api/bases/loja/plan`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
   assert.equal(res.status, 404);
 }));

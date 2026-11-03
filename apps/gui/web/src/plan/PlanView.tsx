@@ -11,6 +11,9 @@ const TOO_BIG = 'o rascunho não cabe no navegador; baixe-o para não perder o t
 const REPLACE = 'Substituir o rascunho atual pelo do arquivo? O atual se perde se não foi baixado.';
 const TRIMMED = 'a conversa antiga foi cortada para caber no navegador; o rascunho está inteiro';
 const NOTES_ASK = 'rascunhe as notas de interpretação desta rodada';
+const ROUND_RUNNING = 'aguarde a rodada em andamento terminar antes de aplicar';
+const PREVIEW_FAILED = 'a prévia falhou; tente de novo';
+const REPLANNABLE = new Set(['E_STORE_CONFLICT', 'E_PLAN_STALE']);
 const OPEN_QUESTIONS = 'responda as perguntas abertas antes de aplicar';
 const NO_CHROMIUM = 'Chromium indisponível no servidor; rode "npx playwright install chromium" na máquina do servidor';
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -57,6 +60,8 @@ export function PlanView({ base, canBuild = true, onApplied }: { base: string; /
   const [stored, setStored] = useState<'ok' | 'chat-trimmed' | 'too-big'>('ok');
   const [previews, setPreviews] = useState<ViewSpec[]>([]);
   const [shown, setShown] = useState<PlanPreviewResult | null>(null);
+  const [previewFailed, setPreviewFailed] = useState(false);
+  const [replannable, setReplannable] = useState(false);
   const [applyOpen, setApplyOpen] = useState(false);
   const [applying, setApplying] = useState(false);
   const [applyError, setApplyError] = useState<string | null>(null);
@@ -155,14 +160,28 @@ export function PlanView({ base, canBuild = true, onApplied }: { base: string; /
     );
   };
 
-  const reason = !canBuild ? NO_CHROMIUM : !shown ? 'nada planejado para aplicar' : shown.questions.length ? OPEN_QUESTIONS : shown.opsHash ? undefined : 'o plano ainda não está final';
+  const roundRunning = chat.some((m) => m.status === 'running');
+  const reason = !canBuild ? NO_CHROMIUM : roundRunning ? ROUND_RUNNING : !shown ? (previewFailed ? PREVIEW_FAILED : 'nada planejado para aplicar') : shown.questions.length ? OPEN_QUESTIONS : shown.opsHash ? undefined : 'o plano ainda não está final';
   const savedViews = (shown?.views ?? []).filter((v) => v.kind === 'saved' && !v.error).map((v) => v.title);
+
+  const replan = async () => {
+    const current = draftRef.current;
+    if (!current) return;
+    setApplying(true);
+    try {
+      const r = await planOpen(base, current);
+      setApplyOpen(false);
+      commit(r.draft, chatRef.current);
+      note({ text: '', warning: r.warning ?? 'o plano foi refeito sobre a base atual; revise e aplique de novo' });
+    } catch (e) { setApplyError(errMsg(e)); } finally { setApplying(false); }
+  };
 
   const apply = async () => {
     const current = draftRef.current;
     if (!current || !shown?.opsHash) return;
     setApplying(true);
     setApplyError(null);
+    setReplannable(false);
     try {
       const r = await planApply(base, current, shown.opsHash);
       setApplyOpen(false);
@@ -179,7 +198,7 @@ export function PlanView({ base, canBuild = true, onApplied }: { base: string; /
         setApplyOpen(false);
         commit(e.extra.draft as Draft, chatRef.current);
         note({ text: '', warning: e.message });
-      } else setApplyError(errMsg(e));
+      } else { setApplyError(errMsg(e)); setReplannable(e instanceof ApiError && REPLANNABLE.has(e.code ?? '')); }
     } finally { setApplying(false); }
   };
 
@@ -217,7 +236,7 @@ export function PlanView({ base, canBuild = true, onApplied }: { base: string; /
           <div className="plan-preview" data-testid="plan-preview">
             <div className="toolbar">
               {downloadBtn}
-              <button type="button" disabled={!!reason || applying} title={reason} onClick={() => { setApplyError(null); setApplyOpen(true); }}>Aplicar</button>
+              <button type="button" disabled={!!reason || applying} title={reason} onClick={() => { setApplyError(null); setReplannable(false); setApplyOpen(true); }}>Aplicar</button>
               <label className="filebtn">
                 ⬆ Subir
                 <input type="file" accept="application/json,.json" aria-label="Subir rascunho" onChange={(e) => {
@@ -227,8 +246,8 @@ export function PlanView({ base, canBuild = true, onApplied }: { base: string; /
                 }} />
               </label>
             </div>
-            {applyOpen && shown && <ApplyDialog summary={shown.summary} views={savedViews} busy={applying} error={applyError} onConfirm={() => void apply()} onCancel={() => setApplyOpen(false)} />}
-            <PlanPreview base={base} draft={draft} previews={previews} onLoaded={setShown} />
+            {applyOpen && shown && <ApplyDialog summary={shown.summary} views={savedViews} busy={applying} error={applyError} onConfirm={() => void apply()} onCancel={() => setApplyOpen(false)} onReplan={replannable ? () => void replan() : undefined} />}
+            <PlanPreview base={base} draft={draft} previews={previews} onLoaded={(r, failed) => { setShown(r); setPreviewFailed(!!failed); }} />
           </div>
         )}
       />

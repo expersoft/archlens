@@ -16,7 +16,7 @@ type Loaded = { default: PlanPreviewResult; asked: PreviewView[]; failed: string
 type Base = { id: string; html?: string; error?: string };
 
 /** The right pane of Planejar: the draft drawn with the delta, the delta list and the plan report. */
-export function PlanPreview({ base, draft, previews, onLoaded }: { base: string; draft: Draft | null; previews: ViewSpec[]; onLoaded?: (r: PlanPreviewResult | null) => void }) {
+export function PlanPreview({ base, draft, previews, onLoaded }: { base: string; draft: Draft | null; previews: ViewSpec[]; onLoaded?: (r: PlanPreviewResult | null, failed?: boolean) => void }) {
   const loadedCb = useRef(onLoaded);
   loadedCb.current = onLoaded;
   const [theme, setTheme] = useDiagramTheme();
@@ -44,7 +44,7 @@ export function PlanPreview({ base, draft, previews, onLoaded }: { base: string;
         setError(null);
         loadedCb.current?.(d);
       })
-      .catch((e) => { if (live) setError(errMsg(e)); });
+      .catch((e) => { if (live) { setError(errMsg(e)); loadedCb.current?.(null, true); } });
     return () => { live = false; };
   }, [base, draft, planned, askedKey]);
 

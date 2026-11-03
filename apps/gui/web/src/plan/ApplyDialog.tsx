@@ -7,10 +7,12 @@ export interface ApplyDialogProps {
   error?: string | null;
   onConfirm: () => void;
   onCancel: () => void;
+  /** Offered with a write refusal that planning again solves. */
+  onReplan?: () => void;
 }
 
 /** The last stop before writing: what goes in, and the explicit confirmation. */
-export function ApplyDialog({ summary, views, busy, error, onConfirm, onCancel }: ApplyDialogProps) {
+export function ApplyDialog({ summary, views, busy, error, onConfirm, onCancel, onReplan }: ApplyDialogProps) {
   return (
     <div className="apply-dialog" role="dialog" aria-label="Confirmar a aplicação">
       <p>Aplicar grava este plano na base: <b>{summary}</b></p>
@@ -23,6 +25,7 @@ export function ApplyDialog({ summary, views, busy, error, onConfirm, onCancel }
       {error && <p className="err">{error}</p>}
       <div className="acts">
         <button type="button" className="on" disabled={busy} onClick={onConfirm}>Confirmar e aplicar</button>
+        {onReplan && <button type="button" disabled={busy} onClick={onReplan}>Replanejar</button>}
         <button type="button" disabled={busy} onClick={onCancel}>Cancelar</button>
       </div>
     </div>

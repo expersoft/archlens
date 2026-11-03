@@ -1,5 +1,6 @@
 // HTTP server of the GUI: JSON API over the base registry, plus optional static files.
 import { createServer } from 'node:http';
+import { existsSync } from 'node:fs';
 import { readFile, stat } from 'node:fs/promises';
 import { join, resolve, sep, extname } from 'node:path';
 import { query } from '../../../scripts/lib/api.mjs';
@@ -104,13 +105,11 @@ async function serveStatic(res, staticDir, pathname) {
   }
 }
 
-/** Whether Chromium can start here (what `build` needs to apply a plan). Never throws. */
+/** Whether Chromium is installed here (what `build` needs to apply a plan): a file check, no browser launch. Never throws. */
 async function chromiumUsable() {
   try {
     const { chromium } = await import('playwright-core');
-    const browser = await chromium.launch();
-    await browser.close();
-    return true;
+    return existsSync(chromium.executablePath());
   } catch { return false; }
 }
 
@@ -134,7 +133,7 @@ export async function startServer({ config, staticDir, registry, provider } = {}
     else if (!provider.tools) planOff = 'o planejamento exige um LLM com ferramentas (llm.tools)';
   }
   const planOn = !!config?.plan && !planOff;
-  const canBuild = planOn ? await chromiumUsable() : false; // once: applying a plan rebuilds the saved diagrams with screenshots
+  const canBuild = planOn ? await chromiumUsable() : undefined; // once: applying a plan rebuilds the saved diagrams with screenshots
   const ownRegistry = !registry;
   registry ??= createBaseRegistry(config);
   const cache = createViewCache();
