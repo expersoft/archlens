@@ -69,17 +69,17 @@ function send(res, status, body, headers = {}) {
   res.end(buf);
 }
 
-function readJson(req) {
+function readJson(req, limit = BODY_LIMIT) {
   return new Promise((resolveBody, reject) => {
     const chunks = [];
     let size = 0, over = false;
     req.on('data', c => {
       size += c.length;
-      if (size > BODY_LIMIT) over = true; else chunks.push(c);
+      if (size > limit) over = true; else chunks.push(c);
     });
     req.on('error', reject);
     req.on('end', () => {
-      if (over) return reject(httpError(413, 'corpo da requisição acima de 1 MB'));
+      if (over) return reject(httpError(413, `corpo da requisição acima de ${Math.round(limit / 1048576 * 10) / 10} MB`));
       const text = Buffer.concat(chunks).toString('utf8');
       if (!text.trim()) return resolveBody({});
       try { resolveBody(JSON.parse(text)); } catch { reject(httpError(400, 'JSON inválido no corpo da requisição')); }

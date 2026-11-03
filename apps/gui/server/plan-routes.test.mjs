@@ -127,6 +127,47 @@ test('defaultPreviewSpecs: ids tocados viram o foco da visão do que muda', () =
   assert.equal(specs[0].depth, 1);
 }));
 
+const delta = model => ({ 'archlens-delta': '1.0', source: { kind: 'prompt', ref: 'teste' }, model: { elements: [], relationships: [], ...model } });
+
+test('plan/preview: delta só de relação foca as duas pontas e lista as salvas com elas', () => withPlan(async (url, _srv, dir) => {
+  const draft = await draftWith(url, delta({ relationships: [{ from: 'loja.bff', to: 'loja.cache', type: 'association', description: 'nova' }] }));
+  const { views } = await (await post(url, 'plan/preview', { draft })).json();
+  assert.equal(views[0].kind, 'change');
+  assert.ok(views[0].viewData.nodes['loja.bff'] && views[0].viewData.nodes['loja.cache']);
+  assert.ok(views[0].viewData.edges.some(e => e.change === 'added'));
+  const { ctx, close } = ctxOf(dir);
+  const expected = ctx.model.views.filter(v => { const ids = resolveView(ctx.model, v).nodes.map(n => n.id); return ids.includes('loja.bff') || ids.includes('loja.cache'); }).map(v => v.key);
+  close();
+  assert.ok(expected.length > 0);
+  assert.deepEqual(views.slice(1).map(v => v.key).sort(), expected.sort());
+}));
+
+test('plan/preview: delta só ArchiMate (nó de tecnologia) ainda traz a visão do que muda', () => withPlan(async url => {
+  const draft = await draftWith(url, delta({ elements: [{ id: 'no-novo', name: 'Nó Novo', type: 'node' }] }));
+  const { views } = await (await post(url, 'plan/preview', { draft })).json();
+  assert.equal(views[0].kind, 'change');
+  assert.equal(views[0].error, undefined);
+  assert.equal(views[0].viewData.nodes['no-novo'].change, 'added');
+}));
+
+test('plan/preview: remoção continua visível na visão do que muda', () => withPlan(async url => {
+  const draft = await draftWith(url, { ...delta({}), ops: [{ op: 'remove', id: 'loja.cache' }] });
+  const { views } = await (await post(url, 'plan/preview', { draft })).json();
+  assert.equal(views[0].kind, 'change');
+  assert.equal(views[0].error, undefined);
+  assert.equal(views[0].viewData.nodes['loja.cache'].change, 'removed');
+}));
+
+test('plan/preview: mais de 20 specs é 400; rascunho de ~1,5 MB passa no plan/open', () => withPlan(async url => {
+  const draft = await draftWith(url, NEW);
+  const spec = { notation: 'c4', level: 'landscape' };
+  assert.equal((await post(url, 'plan/preview', { draft, specs: Array(21).fill(spec) })).status, 400);
+  const fat = { ...newDraft({ id: 'loja', version: '' }), note: 'x'.repeat(1_500_000) };
+  const r = await post(url, 'plan/open', { draft: fat });
+  assert.equal(r.status, 200);
+  assert.equal((await r.json()).draft.note.length, 1_500_000);
+}));
+
 test('POST sem Origin da própria GUI é recusado', () => withPlan(async url => {
   const evil = await post(url, 'plan', { message: 'x', history: [] }, { ...json, origin: 'http://evil.example' });
   assert.equal(evil.status, 403);
