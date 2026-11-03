@@ -420,7 +420,7 @@ export function App() {
         </>
       )}
     >
-      {planEnabled && base && planOpened && <div className="plan-host" hidden={!planning}><PlanView key={base} base={base} /></div>}
+      {planEnabled && base && planOpened && <div className="plan-host" hidden={!planning}><PlanView key={base} base={base} canBuild={info?.plan?.enabled ? info.plan.build !== false : true} onApplied={() => { void loadBase(base); }} /></div>}
       {planning ? null : view ? (
         <>
           <nav className="trail" aria-label="Trilha">

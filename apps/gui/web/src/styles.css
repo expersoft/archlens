@@ -125,3 +125,7 @@ body{font:14px/1.4 system-ui,sans-serif;background:var(--bg);color:var(--ink)}
 .preview-report{white-space:pre-wrap}
 .chg b{display:inline-block;width:1.4em}
 .chg.add b{color:#2a8a3e}.chg.mod b{color:#b7791f}.chg.del{text-decoration:line-through}.chg.del b{color:#c0392b}
+.plan-chat .turn p{white-space:pre-wrap}
+.apply-dialog{margin:8px;padding:8px 12px;border:1px solid var(--accent);border-radius:6px;background:var(--panel);font-size:13px}
+.notes-review label{display:block;margin:6px 0;font-size:12px}
+.notes-review textarea{display:block;width:100%;box-sizing:border-box;font:inherit}

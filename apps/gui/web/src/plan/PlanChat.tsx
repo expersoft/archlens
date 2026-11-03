@@ -1,16 +1,19 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ChatMsg } from './draftStore';
+import { NotesReview } from './NotesReview';
 
 export interface PlanChatProps {
   chat: ChatMsg[];
   /** The composer stays enabled during a round: writing again cancels it. */
   onSend: (text: string) => void;
   onAnswer: (msg: ChatMsg, resolution: string) => void;
+  /** The notes draft was approved (with the user's edits) or set aside. */
+  onNotes?: (msg: ChatMsg, notes: { overview: string; notes: string } | null) => void;
   /** Shown above the composer when the draft does not fit in the browser. */
   notice?: React.ReactNode;
 }
 
-export function PlanChat({ chat, onSend, onAnswer, notice }: PlanChatProps) {
+export function PlanChat({ chat, onSend, onAnswer, onNotes, notice }: PlanChatProps) {
   const [text, setText] = useState('');
   const end = useRef<HTMLLIElement>(null);
   useEffect(() => { end.current?.scrollIntoView?.({ block: 'end' }); }, [chat]);
@@ -40,9 +43,13 @@ export function PlanChat({ chat, onSend, onAnswer, notice }: PlanChatProps) {
                 {m.answered !== undefined && <p className="meta">respondida: {m.answered}</p>}
               </div>
             )}
+            {m.notes && (
+              <NotesReview overview={m.notes.overview} notes={m.notes.notes} state={m.notesState} busy={m.status === 'running'} error={m.error}
+                onApprove={(n) => onNotes?.(m, n)} onSkip={() => onNotes?.(m, null)} />
+            )}
             {m.status === 'running' && <p className="meta">{m.stage ? `${m.stage}…` : 'planejando…'}</p>}
             {m.status === 'canceled' && <p className="meta">cancelada</p>}
-            {m.error && <p className="err">{m.error}</p>}
+            {m.error && !m.notes && <p className="err">{m.error}</p>}
             {m.warning && <p className="warn">{m.warning}</p>}
           </li>
         ))}

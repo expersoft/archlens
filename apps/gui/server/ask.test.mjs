@@ -155,7 +155,9 @@ test('app: plan ligado com provedor com ferramentas → info.plan enabled', asyn
   const srv = await startServer({ config: { ...config(), plan: { ...PLAN, maxTokens: 1 } }, provider: scripted([]) });
   try {
     assert.equal(srv.planOff, null);
-    assert.deepEqual(await planInfo(srv.url), { enabled: true, ...PLAN });
+    const { build, ...rest } = await planInfo(srv.url);
+    assert.deepEqual(rest, { enabled: true, ...PLAN });
+    assert.equal(typeof build, 'boolean'); // one Chromium probe at startup; the web turns Aplicar off when false
   } finally { await srv.close(); }
 });
 

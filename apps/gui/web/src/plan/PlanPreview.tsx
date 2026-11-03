@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { getView, planPreview, type Draft, type PlanPreviewResult, type PreviewView, type ViewSpec } from '../api';
 import { Diagram } from '../Diagram';
 import { useDiagramTheme } from '../theme';
@@ -16,7 +16,9 @@ type Loaded = { default: PlanPreviewResult; asked: PreviewView[]; failed: string
 type Base = { id: string; html?: string; error?: string };
 
 /** The right pane of Planejar: the draft drawn with the delta, the delta list and the plan report. */
-export function PlanPreview({ base, draft, previews }: { base: string; draft: Draft | null; previews: ViewSpec[] }) {
+export function PlanPreview({ base, draft, previews, onLoaded }: { base: string; draft: Draft | null; previews: ViewSpec[]; onLoaded?: (r: PlanPreviewResult | null) => void }) {
+  const loadedCb = useRef(onLoaded);
+  loadedCb.current = onLoaded;
   const [theme, setTheme] = useDiagramTheme();
   const [tab, setTab] = useState<Tab>('diagram');
   const [mode, setMode] = useState<Mode>('delta');
@@ -29,6 +31,7 @@ export function PlanPreview({ base, draft, previews }: { base: string; draft: Dr
 
   // The default views come with the draft; the ones asked in the conversation are drawn with the same delta.
   useEffect(() => {
+    loadedCb.current?.(null); // the preview of the previous draft no longer vouches for this one
     if (!draft || !planned) { setLoaded(null); setError(null); return; }
     let live = true;
     const specs = JSON.parse(askedKey) as ViewSpec[];
@@ -39,6 +42,7 @@ export function PlanPreview({ base, draft, previews }: { base: string; draft: Dr
         if (!live) return;
         setLoaded({ default: d, asked: a.flatMap((x) => x.views), failed: a.flatMap((x) => (x.failed ? [x.failed] : [])) });
         setError(null);
+        loadedCb.current?.(d);
       })
       .catch((e) => { if (live) setError(errMsg(e)); });
     return () => { live = false; };

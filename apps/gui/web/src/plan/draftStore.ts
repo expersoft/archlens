@@ -12,6 +12,9 @@ export interface ChatMsg {
   error?: string;
   stage?: string;
   status?: 'running' | 'canceled';
+  /** The agent's draft of the interpretation notes; `notesState` once the user decided. */
+  notes?: { overview: string; notes: string };
+  notesState?: 'saved' | 'skipped';
 }
 
 const draftKey = (b: string) => `archlens-gui-draft:${b}`;

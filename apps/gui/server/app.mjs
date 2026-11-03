@@ -104,6 +104,16 @@ async function serveStatic(res, staticDir, pathname) {
   }
 }
 
+/** Whether Chromium can start here (what `build` needs to apply a plan). Never throws. */
+async function chromiumUsable() {
+  try {
+    const { chromium } = await import('playwright-core');
+    const browser = await chromium.launch();
+    await browser.close();
+    return true;
+  } catch { return false; }
+}
+
 export async function startServer({ config, staticDir, registry, provider } = {}) {
   // Throws E_GUI_CONFIG (no key) before anything listens; a test/e2e provider replaces the configured one.
   // A missing key for an `llm` from the config file only turns the search off (`askOff`): the diagrams stay usable.
@@ -124,6 +134,7 @@ export async function startServer({ config, staticDir, registry, provider } = {}
     else if (!provider.tools) planOff = 'o planejamento exige um LLM com ferramentas (llm.tools)';
   }
   const planOn = !!config?.plan && !planOff;
+  const canBuild = planOn ? await chromiumUsable() : false; // once: applying a plan rebuilds the saved diagrams with screenshots
   const ownRegistry = !registry;
   registry ??= createBaseRegistry(config);
   const cache = createViewCache();
@@ -185,7 +196,7 @@ export async function startServer({ config, staticDir, registry, provider } = {}
   const routes = [
     ['GET', /^\/api\/info$/, async () => ({
       ask: provider ? { enabled: true, provider: provider.name, model: provider.model, mode: provider.tools ? 'tools' : 'json', maxHistory: config?.llm?.maxHistory ?? DEFAULT_MAX_HISTORY } : { enabled: false, ...(askOff ? { reason: askOff } : {}) },
-      plan: planOn ? { enabled: true, maxRounds: config.plan.maxRounds, timeoutMs: config.plan.timeoutMs } : { enabled: false, ...(planOff ? { reason: planOff } : {}) },
+      plan: planOn ? { enabled: true, maxRounds: config.plan.maxRounds, timeoutMs: config.plan.timeoutMs, build: canBuild } : { enabled: false, ...(planOff ? { reason: planOff } : {}) },
     })],
     ['GET', /^\/api\/telemetry$/, async () => summarize(telemetry.recent())],
     ['POST', /^\/api\/bases\/([^/]+)\/ask$/, (req, [b], _url, res) => ask(req, res, b)],
