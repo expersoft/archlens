@@ -26,7 +26,7 @@ function firstJson(text) {
 }
 
 // Node 18 has no AbortSignal.any.
-function combine(signal, ms) {
+export function combine(signal, ms) {
   const ctl = new AbortController();
   const timer = setTimeout(() => { ctl.timedOut = true; ctl.abort(); }, ms);
   const onAbort = () => ctl.abort();
@@ -35,7 +35,7 @@ function combine(signal, ms) {
 }
 
 // Rejects as soon as the signal aborts, even if the provider ignores it.
-function raceAbort(promise, signal) {
+export function raceAbort(promise, signal) {
   if (!signal) return promise;
   return new Promise((resolve, reject) => {
     const onAbort = () => reject(abortError());
