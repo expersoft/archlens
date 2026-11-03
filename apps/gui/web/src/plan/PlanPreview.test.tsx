@@ -109,9 +109,12 @@ describe('PlanPreview', () => {
     const { container } = render(<PlanPreview base="b" draft={withDelta} previews={[]} />);
     await waitFor(() => expect(frames(container)).toHaveLength(1));
     const labels = screen.getByRole('button', { name: 'Rótulos' });
-    const frame = container.querySelector('iframe')!;
-    window.dispatchEvent(new MessageEvent('message', { data: { source: 'archlens', type: 'state', flowing: false, labels: true, legend: false, matrix: false }, source: frame.contentWindow }));
-    await waitFor(() => expect(labels.getAttribute('aria-pressed')).toBe('true'));
+    // The frame reports its state; retried until the host has attached its listener to the loaded frame.
+    await waitFor(() => {
+      const frame = container.querySelector('iframe')!;
+      window.dispatchEvent(new MessageEvent('message', { data: { source: 'archlens', type: 'state', flowing: false, labels: true, legend: false, matrix: false }, source: frame.contentWindow }));
+      expect(labels.getAttribute('aria-pressed')).toBe('true');
+    });
     await u.click(screen.getByRole('button', { name: 'Alternar tema do diagrama' }));
     expect(labels.getAttribute('aria-pressed')).toBe('true');
     expect(frames(container)).toEqual(['<p>com-delta</p>']);
