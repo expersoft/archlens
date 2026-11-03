@@ -6,7 +6,7 @@ import { loadPlanPrompt } from './prompt.mjs';
 import { PLAN_TOOLS, runPlanTool, external } from './tools.mjs';
 import { replanDraft } from './draft.mjs';
 
-const REMINDER = 'Responda chamando reply, ask_user ou ask_decision.';
+const REMINDER = 'Responda chamando reply, ask_user, ask_decision ou draft_notes.';
 const HISTORY_LIMIT = 12;
 const QUERY = new Set(['find_elements', 'element_card', 'relations', 'try_view']);
 const abortError = () => Object.assign(new Error('planejamento cancelado'), { code: 'E_LLM_ABORT' });

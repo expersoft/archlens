@@ -1,6 +1,7 @@
 // The planning draft (archlens-draft): the delta, the plan's answers and the attached repository, saved and restored by the user.
 import { readFileSync } from 'node:fs';
-import { plan as planDelta, answersOf } from '../../../../scripts/lib/api.mjs';
+import { createHash } from 'node:crypto';
+import { plan as planDelta, answersOf, isFinal } from '../../../../scripts/lib/api.mjs';
 
 export const DRAFT_VERSION = '1.0';
 export const DRAFT_MAX_BYTES = 2_000_000;
@@ -70,3 +71,9 @@ export function replanDraft(ctx, draft) {
   const { plan } = planDelta(ctx.store, draft.delta, { answers });
   return { draft: { ...draft, base, plan }, warning };
 }
+
+/** The hash of a plan's store operations: what the user confirms before the apply. */
+export const hashOps = ops => createHash('sha256').update(JSON.stringify(ops)).digest('hex');
+
+/** `hashOps` of the draft's plan when it is final, else null. */
+export const opsHashOf = plan => (isFinal(plan) ? hashOps(plan.ops) : null);

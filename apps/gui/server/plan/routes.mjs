@@ -1,20 +1,49 @@
-// The planning routes: /plan (the agent, as NDJSON), /plan/open (restore a draft) and /plan/preview (draw it).
-import { newDraft, checkDraft, replanDraft, DRAFT_MAX_BYTES } from './draft.mjs';
+// The planning routes: /plan (the agent, as NDJSON), /plan/open (restore a draft), /plan/preview (draw it),
+// /plan/apply (write the confirmed plan, then the document and the diagrams) and /plan/notes (the interpretation notes).
+import { dirname, relative, sep } from 'node:path';
+import { newDraft, checkDraft, replanDraft, opsHashOf, DRAFT_MAX_BYTES } from './draft.mjs';
 import { runPlan } from './agent.mjs';
 import { buildPreview } from './preview.mjs';
+import { applyAndDocument, writeNotes } from '../../../../scripts/lib/apply-flow.mjs';
+import { buildDiagrams } from '../../../../scripts/lib/build.mjs';
+import { openQuestions } from '../../../../scripts/lib/merge.mjs';
+import { describeItem } from '../../../../scripts/lib/merge-report.mjs';
 
 const MESSAGE_MAX = 20000;
 const HISTORY_MAX = 40;
 const SPECS_MAX = 20;
 const BODY_MAX = DRAFT_MAX_BYTES + 256 * 1024; // a draft plus the message and the history
+const NOTE_MAX = 200_000;
+const NOTE_FIELDS = ['overview', 'notes'];
+// The write refusals the user solves by planning again (or by moving the document away): 409, not 400.
+const CONFLICTS = new Set(['E_STORE_CONFLICT', 'E_PLAN_STALE', 'E_STORE_DOC_FOREIGN']);
 const isObject = v => v !== null && typeof v === 'object' && !Array.isArray(v);
 
-/** The draft from the browser: validated, then planned again over the current base (never used as sent). */
-function draftFrom(ctx, raw) {
+function assertLocal(ctx) {
   if (ctx.store?.remote) {
     throw Object.assign(new Error('planejar ainda não funciona numa base gbrain no modo MCP; use a skill archlens-plan'), { status: 409, code: 'E_GUI_PLAN_MCP' });
   }
+}
+
+/** The draft from the browser: validated, then planned again over the current base (never used as sent). */
+function draftFrom(ctx, raw) {
+  assertLocal(ctx);
   return replanDraft(ctx, checkDraft(raw, ctx));
+}
+
+/** The document's path as the user knows it: relative to the folder that holds the base. */
+const docName = (store, doc) => relative(dirname(store.locator.path), doc).split(sep).join('/');
+
+const questionsOf = plan => (plan ? openQuestions(plan).map(i => ({ key: i.key, class: i.class, question: describeItem(i).split('  → ')[0] })) : []);
+
+/** The saved diagrams rebuilt with screenshots; the quality report without the machine's paths. Never throws. */
+async function rebuild(store) {
+  try {
+    const r = await buildDiagrams(store, store.read().raw, { shots: true });
+    return { available: r.available, problems: r.problems, results: r.results.map(({ shot: _shot, ...rest }) => rest), ...(r.available ? {} : { reason: r.reason }) };
+  } catch (e) {
+    return { available: true, problems: 0, results: [], error: e.message, ...(e.code ? { code: e.code } : {}) };
+  }
 }
 
 function historyOf(history, httpError) {
@@ -63,7 +92,7 @@ export function planRoutes({ registry, provider, config, telemetry, h }) {
       let { reply } = out;
       if (replanned.warning && !reply.warning) reply = { ...reply, warning: replanned.warning };
       outcome = reply.kind;
-      write({ type: 'result', draft: out.draft, reply, previews: out.previews });
+      write({ type: 'result', draft: out.draft, reply, previews: out.previews, opsHash: opsHashOf(out.draft.plan) });
     } catch (e) {
       metrics.total = Date.now() - t0;
       if (e.code !== 'E_LLM_ABORT' || !ctl.signal.aborted) {
@@ -84,18 +113,65 @@ export function planRoutes({ registry, provider, config, telemetry, h }) {
     return STREAMED;
   }
 
+  /** Plans the draft again over the base as it is now; writes only when its ops are the ones the user confirmed. */
+  async function apply(req, b) {
+    const { draft, confirm } = await readJson(req, BODY_MAX);
+    if (typeof confirm !== 'string') throw httpError(400, 'informe em {confirm} o opsHash do plano confirmado');
+    assertLocal(registry.get(b));
+    await registry.reload(b); // another write may have landed since the last poll
+    const ctx = registry.get(b);
+    const replanned = draftFrom(ctx, draft);
+    const { plan: planned } = replanned.draft;
+    const opsHash = opsHashOf(planned);
+    if (opsHash === null || opsHash !== confirm) {
+      const message = opsHash === null
+        ? 'o plano não está final; responda as perguntas abertas antes de aplicar'
+        : 'o plano mudou desde a confirmação (a base mudou); revise o plano novo e confirme de novo';
+      throw Object.assign(httpError(409, message, 'E_GUI_PLAN_CHANGED'), {
+        extra: { draft: replanned.draft, opsHash, questions: questionsOf(planned), ...(replanned.warning ? { warning: replanned.warning } : {}) },
+      });
+    }
+    let res;
+    try { res = applyAndDocument(ctx.store, planned); } catch (e) {
+      if (CONFLICTS.has(e.code)) e.status = 409;
+      throw e;
+    }
+    if (!res.entry) return { entry: null, doc: null, build: null, notesDraftNeeded: false };
+    await registry.reload(b);
+    return { entry: res.entry, doc: docName(ctx.store, res.doc), build: await rebuild(ctx.store), notesDraftNeeded: true };
+  }
+
+  async function notes(req, b) {
+    const body = await readJson(req);
+    const given = NOTE_FIELDS.filter(k => body[k] !== undefined);
+    if (!given.length) throw httpError(400, 'informe as notas em {overview} e/ou {notes}');
+    for (const k of given) {
+      if (typeof body[k] !== 'string') throw httpError(400, `${k} deve ser texto`);
+      if (body[k].length > NOTE_MAX) throw httpError(400, `${k} passa de ${NOTE_MAX} caracteres`);
+    }
+    const ctx = registry.get(b);
+    assertLocal(ctx);
+    const { doc } = writeNotes(ctx.store, Object.fromEntries(given.map(k => [k, body[k]])));
+    await registry.reload(b);
+    return { doc: docName(ctx.store, doc) };
+  }
+
   return [
     ['POST', /^\/api\/bases\/([^/]+)\/plan$/, (req, [b], _url, res) => plan(req, res, b)],
     ['POST', /^\/api\/bases\/([^/]+)\/plan\/open$/, async (req, [b]) => {
       const { draft } = await readJson(req, BODY_MAX);
-      return draftFrom(registry.get(b), draft);
+      const out = draftFrom(registry.get(b), draft);
+      return { ...out, opsHash: opsHashOf(out.draft.plan) };
     }],
     ['POST', /^\/api\/bases\/([^/]+)\/plan\/preview$/, async (req, [b]) => {
       const { draft, specs } = await readJson(req, BODY_MAX);
       if (specs !== undefined && !(Array.isArray(specs) && specs.every(isObject))) throw httpError(400, 'specs deve ser uma lista de visões');
       if (specs && specs.length > SPECS_MAX) throw httpError(400, `no máximo ${SPECS_MAX} visões por pedido`);
       const ctx = registry.get(b);
-      return buildPreview(ctx, draftFrom(ctx, draft).draft, specs);
+      const { draft: replanned } = draftFrom(ctx, draft);
+      return { ...(await buildPreview(ctx, replanned, specs)), opsHash: opsHashOf(replanned.plan) };
     }],
+    ['POST', /^\/api\/bases\/([^/]+)\/plan\/apply$/, async (req, [b]) => apply(req, b)],
+    ['POST', /^\/api\/bases\/([^/]+)\/plan\/notes$/, async (req, [b]) => notes(req, b)],
   ];
 }

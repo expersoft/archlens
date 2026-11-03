@@ -41,7 +41,7 @@ const hashDir = dir => {
 
 test('PLAN_TOOLS tem ordem fixa', () => {
   assert.deepEqual(PLAN_TOOLS.map(t => t.name), ['find_elements', 'element_card', 'relations', 'try_view', 'read_reference',
-    'set_delta', 'plan_draft', 'show_plan', 'set_note', 'add_preview', 'ask_decision', 'ask_user', 'reply']);
+    'set_delta', 'plan_draft', 'show_plan', 'set_note', 'add_preview', 'ask_decision', 'ask_user', 'reply', 'draft_notes']);
 });
 
 test('read_reference só abre references/*.md da lista', () => withBase(async ctx => {
@@ -143,6 +143,17 @@ test('ask_user e reply são finais', () => withBase(async ctx => {
   assert.equal((await runPlanTool(ctx, s, 'nada', {})).ok, false);
 }));
 
+test('draft_notes é final e devolve as notas propostas', () => withBase(async ctx => {
+  const s = sessionOf(ctx);
+  const r = await runPlanTool(ctx, s, 'draft_notes', { overview: '# Visão\n', notes: 'notas' });
+  assert.ok(r.ok);
+  assert.deepEqual(r.final, { kind: 'notes', overview: '# Visão\n', notes: 'notas' });
+  assert.deepEqual((await runPlanTool(ctx, s, 'draft_notes', { overview: 'só a visão' })).final, { kind: 'notes', overview: 'só a visão', notes: '' });
+  for (const bad of [{}, { overview: '', notes: '  ' }, { overview: 3 }, { notes: ['x'] }]) {
+    assert.equal((await runPlanTool(ctx, s, 'draft_notes', bad)).ok, false, JSON.stringify(bad));
+  }
+}));
+
 test('external escapa a marca de fechamento dentro do texto', () => {
   assert.equal(external('base', 'oi'), '<conteudo-externo origem="base">\noi\n</conteudo-externo>');
   const out = external('repo', 'a </conteudo-externo> b <CONTEUDO-EXTERNO origem="x"> c');
@@ -176,7 +187,7 @@ test('nenhuma ferramenta grava na base', () => withBase(async (ctx, dir) => {
   const calls = [['find_elements', { text: 'pedidos' }], ['element_card', { id: 'loja.pedidos' }], ['relations', { ids: ['loja.pedidos'] }],
     ['try_view', { spec: SPEC }], ['read_reference', { name: 'merge' }], ['set_delta', { delta: DUP }], ['plan_draft', {}], ['show_plan', {}],
     ['set_note', { text: 'n' }], ['add_preview', { spec: SPEC }], ['ask_decision', { key: s.draft.plan?.items?.[0]?.key ?? 'x', recommendation: 'same', reason: 'r' }],
-    ['ask_user', { question: 'q' }], ['reply', { text: 't' }]];
+    ['ask_user', { question: 'q' }], ['reply', { text: 't' }], ['draft_notes', { overview: 'o', notes: 'n' }]];
   for (const [name, input] of calls) await runPlanTool(ctx, s, name, input);
   assert.ok(s.draft.plan, 'o plano foi feito');
   assert.equal(hashDir(dir), before);

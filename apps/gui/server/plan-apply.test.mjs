@@ -1,0 +1,153 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtempSync, cpSync, readFileSync, existsSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { startServer } from './app.mjs';
+import { scripted } from './ask/scripted.mjs';
+import { newDraft, hashOps } from './plan/draft.mjs';
+import { openStore, resolveBase } from '../../../scripts/lib/store/index.mjs';
+import { plan as planDelta } from '../../../scripts/lib/api.mjs';
+import { applyAndDocument } from '../../../scripts/lib/apply-flow.mjs';
+
+const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
+const USAGE = { input: 1, output: 1, cacheRead: 0 };
+const turn = (calls = []) => ({ text: '', calls: calls.map(([name, input], i) => ({ id: `t${i}`, name, input })), ms: 1, usage: USAGE });
+const json = { 'content-type': 'application/json' };
+const lines = async res => (await res.text()).split('\n').filter(Boolean).map(l => JSON.parse(l));
+const delta = elements => ({ 'archlens-delta': '1.0', source: { kind: 'prompt', ref: 'teste' }, model: { elements, relationships: [] } });
+const NEW = delta([{ id: 'sistema-novo', name: 'Sistema Novo Zeta', type: 'application-component' }]);
+const ALTER = delta([{ id: 'loja.pedidos', name: 'API de Pedidos', type: 'application-component', description: 'Descrição nova para o teste de apply' }]);
+
+async function withPlan(fn, { provider = scripted([]), plan = true } = {}) {
+  const top = mkdtempSync(join(tmpdir(), 'archlens-papply-'));
+  const dir = join(top, 'architecture');
+  cpSync(join(root, 'examples/loja-online/architecture'), dir, { recursive: true });
+  cpSync(join(root, 'examples/loja-online/ARCHITECTURE.md'), join(top, 'ARCHITECTURE.md'));
+  const cfg = { port: 0, bases: [{ id: 'loja', path: dir }], llm: { provider: 'anthropic' },
+    ...(plan ? { plan: { maxRounds: 8, timeoutMs: 20000, maxTokens: 100000 } } : {}) };
+  const srv = await startServer({ config: cfg, provider });
+  try { await fn(srv.url, dir, top); } finally { await srv.close(); }
+}
+const post = (url, path, body) => fetch(`${url}/api/bases/loja/${path}`, { method: 'POST', headers: json, body: JSON.stringify(body) });
+const opened = async (url, d) => (await post(url, 'plan/open', { draft: { ...newDraft({ id: 'loja', version: '' }), delta: d } })).json();
+const modelOf = dir => JSON.parse(readFileSync(join(dir, 'model.json'), 'utf8'));
+const flat = els => els.flatMap(e => [e, ...flat(e.children ?? [])]);
+const elementOf = (dir, id) => flat(modelOf(dir).elements).find(e => e.id === id);
+
+async function withoutChromium(fn) {
+  const saved = process.env.PLAYWRIGHT_BROWSERS_PATH;
+  process.env.PLAYWRIGHT_BROWSERS_PATH = mkdtempSync(join(tmpdir(), 'archlens-nobrowser-'));
+  try { return await fn(); } finally {
+    if (saved === undefined) delete process.env.PLAYWRIGHT_BROWSERS_PATH; else process.env.PLAYWRIGHT_BROWSERS_PATH = saved;
+  }
+}
+
+test('opsHash: o servidor devolve o hash das ops do plano final em /plan, /plan/open e /plan/preview', () => withPlan(async url => {
+  const out = await opened(url, NEW);
+  assert.equal(out.draft.plan.state, 'final');
+  assert.equal(out.opsHash, hashOps(out.draft.plan.ops));
+  assert.match(out.opsHash, /^[0-9a-f]{64}$/);
+  assert.equal((await opened(url, ALTER)).opsHash, null);
+  const preview = await (await post(url, 'plan/preview', { draft: out.draft })).json();
+  assert.equal(preview.opsHash, out.opsHash);
+  const evs = await lines(await post(url, 'plan', { draft: out.draft, message: 'pronto?', history: [] }));
+  assert.equal(evs.find(e => e.type === 'result').opsHash, out.opsHash);
+}, { provider: scripted([turn([['reply', { text: 'sim' }]])]) }));
+
+// Before any test that launches Chromium: playwright-core keeps the browsers path it read first.
+test('apply com build indisponível', () => withPlan(async (url, dir) => {
+  const { draft, opsHash } = await opened(url, NEW);
+  const out = await withoutChromium(async () => {
+    const r = await post(url, 'plan/apply', { draft, confirm: opsHash });
+    assert.equal(r.status, 200);
+    return r.json();
+  });
+  assert.equal(out.build.available, false);
+  assert.match(out.build.reason, /Chromium|playwright/);
+  assert.equal(out.entry.added[0], 'sistema-novo');
+  assert.equal(elementOf(dir, 'sistema-novo').name, 'Sistema Novo Zeta');
+}));
+
+test('apply grava, roda o build e devolve o relatório', () => withPlan(async (url, dir, top) => {
+  const { draft, opsHash } = await opened(url, NEW);
+  const before = draft.base.version;
+  const r = await post(url, 'plan/apply', { draft, confirm: opsHash });
+  assert.equal(r.status, 200);
+  const out = await r.json();
+  assert.equal(out.entry.summary, '+1 ~0 −0');
+  assert.deepEqual(out.entry.added, ['sistema-novo']);
+  assert.equal(out.doc, 'ARCHITECTURE.md');
+  assert.equal(out.notesDraftNeeded, true);
+  assert.equal(typeof out.build.available, 'boolean');
+  assert.equal(typeof out.build.problems, 'number');
+  assert.ok(Array.isArray(out.build.results));
+  if (out.build.available) assert.ok(out.build.results.length > 0);
+  assert.ok(out.build.results.every(x => !('shot' in x)), 'sem caminhos da máquina');
+  assert.equal(elementOf(dir, 'sistema-novo').name, 'Sistema Novo Zeta');
+  assert.match(readFileSync(join(top, 'ARCHITECTURE.md'), 'utf8'), /Sistema Novo Zeta/);
+  assert.match(readFileSync(join(dir, 'diagrams', 'architecture.html'), 'utf8'), /Sistema Novo Zeta/);
+  // The registry sees the new version right away (no wait for the poll).
+  const again = await opened(url, NEW);
+  assert.notEqual(again.draft.base.version, before);
+  const catalog = await (await fetch(`${url}/api/bases/loja/catalog`)).json();
+  assert.ok(JSON.stringify(catalog).includes('sistema-novo'));
+}));
+
+test('apply recusa quando a base mudou depois da confirmação', () => withPlan(async (url, dir) => {
+  const { draft, opsHash } = await opened(url, NEW);
+  // Another write between the confirmation and the apply: the same id, another name.
+  const store = openStore(resolveBase(dir));
+  applyAndDocument(store, planDelta(store, delta([{ id: 'sistema-novo', name: 'Outro Nome', type: 'application-component' }])).plan);
+  const r = await post(url, 'plan/apply', { draft, confirm: opsHash });
+  assert.equal(r.status, 409);
+  const e = await r.json();
+  assert.equal(e.code, 'E_GUI_PLAN_CHANGED');
+  assert.ok(e.draft.plan, 'o plano novo volta');
+  assert.notEqual(e.draft.base.version, draft.base.version);
+  assert.equal(elementOf(dir, 'sistema-novo').name, 'Outro Nome');
+}));
+
+test('apply recusa confirmação de outro plano final', () => withPlan(async (url, dir) => {
+  const { draft, opsHash } = await opened(url, NEW);
+  const r = await post(url, 'plan/apply', { draft, confirm: 'f'.repeat(64) });
+  assert.equal(r.status, 409);
+  const e = await r.json();
+  assert.equal(e.code, 'E_GUI_PLAN_CHANGED');
+  assert.equal(e.opsHash, opsHash);
+  assert.equal(elementOf(dir, 'sistema-novo'), undefined);
+  assert.equal((await post(url, 'plan/apply', { draft })).status, 400);
+}));
+
+test('apply recusa plano aberto', () => withPlan(async (url, dir) => {
+  const { draft } = await opened(url, ALTER);
+  const r = await post(url, 'plan/apply', { draft, confirm: 'x' });
+  assert.equal(r.status, 409);
+  const e = await r.json();
+  assert.equal(e.code, 'E_GUI_PLAN_CHANGED');
+  assert.equal(e.opsHash, null);
+  assert.deepEqual(e.questions.map(q => q.key), ['el:loja.pedidos:description']);
+  assert.ok(e.questions[0].question.length > 5);
+  assert.notEqual(elementOf(dir, 'loja.pedidos').description, 'Descrição nova para o teste de apply');
+}));
+
+test('notes grava e regenera o documento', () => withPlan(async (url, dir, top) => {
+  const before = (await opened(url, NEW)).draft.base.version;
+  const r = await post(url, 'plan/notes', { overview: '# Visão\n\nPropósito escrito pela GUI.\n', notes: 'Nota de interpretação da GUI.\n' });
+  assert.equal(r.status, 200);
+  assert.deepEqual(await r.json(), { doc: 'ARCHITECTURE.md' });
+  assert.match(readFileSync(join(dir, 'notes', 'overview.md'), 'utf8'), /^# Visão\n\nPropósito escrito pela GUI\.\n/);
+  assert.ok(existsSync(join(dir, 'notes', 'notes.md')));
+  const doc = readFileSync(join(top, 'ARCHITECTURE.md'), 'utf8');
+  assert.match(doc, /Propósito escrito pela GUI/);
+  assert.match(doc, /Nota de interpretação da GUI/);
+  assert.notEqual((await opened(url, NEW)).draft.base.version, before);
+  for (const bad of [{}, { overview: 3 }, { notes: ['x'] }, { overview: 'x'.repeat(200_001) }]) {
+    assert.equal((await post(url, 'plan/notes', bad)).status, 400, JSON.stringify(bad).slice(0, 40));
+  }
+}));
+
+test('apply e notes: sem o modo ligado → 404', () => withPlan(async url => {
+  for (const p of ['plan/apply', 'plan/notes']) assert.equal((await post(url, p, {})).status, 404);
+}, { plan: false }));

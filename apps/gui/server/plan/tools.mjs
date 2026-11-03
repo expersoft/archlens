@@ -33,6 +33,8 @@ const PLAN_ONLY = [
     input_schema: obj({ question: str }, ['question']) },
   { name: 'reply', description: 'Responde ao usuário em texto e encerra a rodada.',
     input_schema: obj({ text: str }, ['text']) },
+  { name: 'draft_notes', description: 'Propõe ao usuário as notas de interpretação da rodada aplicada (overview: propósito, decisões, riscos; notes: notas) e encerra a rodada. Não grava: o usuário revisa e aprova.',
+    input_schema: obj({ overview: str, notes: str }) },
 ];
 
 // Fixed order: the prompt cache depends on it.
@@ -121,13 +123,19 @@ function reply(_ctx, _session, { text }) {
   return { ok: true, content: 'resposta enviada ao usuário', final: { kind: 'text', text } };
 }
 
+function draftNotes(_ctx, _session, { overview = '', notes = '' }) {
+  if (typeof overview !== 'string' || typeof notes !== 'string') return fail('"overview" e "notes" são texto');
+  if (!overview.trim() && !notes.trim()) return fail('informe "overview" ou "notes"');
+  return { ok: true, content: 'notas enviadas ao usuário', final: { kind: 'notes', overview, notes } };
+}
+
 const RUN = {
   find_elements: (ctx, _s, i) => fromBase(findTool(ctx, i)),
   element_card: (ctx, _s, i) => fromBase(cardTool(ctx, i)),
   relations: (ctx, _s, i) => fromBase(relationsTool(ctx, i)),
   try_view: async (ctx, _s, i) => fromBase(await tryViewTool(ctx, i)),
   read_reference: readReference, set_delta: setDelta, plan_draft: planDraftTool, show_plan: showPlan, set_note: setNote,
-  add_preview: addPreview, ask_decision: askDecision, ask_user: askUser, reply,
+  add_preview: addPreview, ask_decision: askDecision, ask_user: askUser, reply, draft_notes: draftNotes,
 };
 
 /** Runs one planning tool; `session` ({ draft, previews }) is changed in place. Never throws: errors come back as `ok: false`. */

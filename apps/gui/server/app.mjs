@@ -242,7 +242,7 @@ export async function startServer({ config, staticDir, registry, provider } = {}
       throw httpError(404, 'rota desconhecida');
     } catch (e) {
       if (res.headersSent) return void res.end();
-      if (e.status) return send(res, e.status, { error: e.message, ...(e.code ? { code: e.code } : {}) });
+      if (e.status) return send(res, e.status, { error: e.message, ...(e.code ? { code: e.code } : {}), ...e.extra });
       if (e.code) return send(res, 400, { error: e.message, code: e.code });
       console.error(e);
       send(res, 500, { error: e.message ?? String(e) });

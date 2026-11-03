@@ -54,7 +54,7 @@ test('texto, set_delta, plan_draft e ask_decision terminam em decisão', () => w
   assert.deepEqual(events.filter(e => e.type === 'tool').map(e => e.name), ['set_delta', 'plan_draft', 'ask_decision']);
   assert.ok(events.some(e => e.type === 'stage' && e.stage === 'lendo o pedido'));
   assert.ok(events.some(e => e.type === 'stage' && e.stage === 'planejando'));
-  assert.deepEqual(p.seen[0].tools.map(t => t.name).slice(-3), ['ask_decision', 'ask_user', 'reply']);
+  assert.deepEqual(p.seen[0].tools.map(t => t.name).slice(-4), ['ask_decision', 'ask_user', 'reply', 'draft_notes']);
   assert.match(p.seen[0].input.text, /adicione o cliente/);
 }));
 

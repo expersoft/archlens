@@ -97,6 +97,13 @@ export function createBaseRegistry(config, { pollMs = 5000, remotePollMs = 30000
 
   return {
     refresh: () => refresh(),
+    /** Reads one base again now (after the GUI wrote it), after any read already under way. */
+    async reload(id) {
+      const slot = slots.get(id);
+      if (!slot) throw guiError(`base desconhecida: ${id}`);
+      await slot.busy;
+      await refreshSlot(slot);
+    },
     list: () => [...slots.values()].map(({ entry, ctx, error }) => (ctx
       ? { id: entry.id, name: ctx.name, ok: true }
       : { id: entry.id, name: entry.name ?? entry.id, ok: false, error })),
