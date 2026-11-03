@@ -12,6 +12,7 @@ import { createProvider } from './ask/providers.mjs';
 import { DEFAULT_MAX_HISTORY } from './ask/context.mjs';
 import { runAsk } from './ask/agent.mjs';
 import { createTelemetry, summarize } from './ask/telemetry.mjs';
+import { planRoutes } from './plan/routes.mjs';
 
 const BODY_LIMIT = 1024 * 1024;
 const QUESTION_MAX = 2000;
@@ -24,6 +25,7 @@ const TYPES = {
 
 // Every response: no framing by another origin.
 const SAFE_HEADERS = { 'x-frame-options': 'SAMEORIGIN', 'content-security-policy': "frame-ancestors 'self'" };
+const NDJSON_HEADERS = { 'content-type': 'application/x-ndjson; charset=utf-8', 'cache-control': 'no-store', ...SAFE_HEADERS };
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '[::1]']);
 
 /** Hostname part of a Host header, lowercased (keeps the brackets of an IPv6 literal). */
@@ -138,7 +140,7 @@ export async function startServer({ config, staticDir, registry, provider } = {}
     const ctl = new AbortController();
     // res, not req: req 'close' also fires once the request body is read.
     res.on('close', () => { if (!res.writableEnded) ctl.abort(); });
-    res.writeHead(200, { 'content-type': 'application/x-ndjson; charset=utf-8', 'cache-control': 'no-store', ...SAFE_HEADERS });
+    res.writeHead(200, NDJSON_HEADERS);
     const write = ev => { if (!res.destroyed && !res.writableEnded) res.write(JSON.stringify(ev) + '\n'); };
     const t0 = Date.now();
     const mode = provider.tools ? 'tools' : 'json';
@@ -187,6 +189,7 @@ export async function startServer({ config, staticDir, registry, provider } = {}
     })],
     ['GET', /^\/api\/telemetry$/, async () => summarize(telemetry.recent())],
     ['POST', /^\/api\/bases\/([^/]+)\/ask$/, (req, [b], _url, res) => ask(req, res, b)],
+    ...(planOn ? planRoutes({ registry, provider, config, telemetry, h: { readJson, httpError, STREAMED, NDJSON_HEADERS } }) : []),
     ['GET', /^\/api\/bases$/, async () => registry.list()],
     ['GET', /^\/api\/bases\/([^/]+)\/catalog$/, async (_req, [b]) => catalog(registry.get(b))],
     ['GET', /^\/api\/bases\/([^/]+)\/find$/, async (_req, [b], url) =>
