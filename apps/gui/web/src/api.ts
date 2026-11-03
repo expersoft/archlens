@@ -115,9 +115,9 @@ export type AskEvent =
   | { type: 'error'; error: string; code?: string }
   | { type: 'done'; metrics: { total: number; [k: string]: unknown } };
 
-/** A pergunta como fluxo NDJSON: um evento por linha. Abortar o sinal fecha a conexão (e o servidor para o agente). */
-export async function ask(base: string, body: AskRequest, onEvent: (e: AskEvent) => void, signal: AbortSignal): Promise<void> {
-  const res = await fetch(`${b(base)}/ask`, {
+/** POST que responde em NDJSON: um evento por linha. Abortar o sinal fecha a conexão (e o servidor para o agente). */
+async function stream<E>(path: string, body: unknown, onEvent: (e: E) => void, signal: AbortSignal): Promise<void> {
+  const res = await fetch(path, {
     method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), signal,
   });
   if (!res.ok) {
@@ -129,7 +129,7 @@ export async function ask(base: string, body: AskRequest, onEvent: (e: AskEvent)
   const reader = res.body.getReader();
   const dec = new TextDecoder();
   let buf = '';
-  const flush = (line: string) => { if (line.trim()) onEvent(JSON.parse(line) as AskEvent); };
+  const flush = (line: string) => { if (line.trim()) onEvent(JSON.parse(line) as E); };
   for (;;) {
     const { done, value } = await reader.read();
     if (done) break;
@@ -139,3 +139,34 @@ export async function ask(base: string, body: AskRequest, onEvent: (e: AskEvent)
   }
   flush(buf + dec.decode());
 }
+
+/** A pergunta como fluxo NDJSON. */
+export const ask = (base: string, body: AskRequest, onEvent: (e: AskEvent) => void, signal: AbortSignal) =>
+  stream<AskEvent>(`${b(base)}/ask`, body, onEvent, signal);
+
+/** O rascunho é opaco para a web (só `base.id`, `plan` e `repo` são lidos). */
+export type Draft = Record<string, unknown>;
+export interface PlanItem { n: number; key: string; question: string; options: string[]; recommendation: string; reason?: string }
+export type PlanReply =
+  | { kind: 'text'; text: string; warning?: string }
+  | { kind: 'decision'; item: PlanItem; warning?: string }
+  | { kind: 'question'; question: string; warning?: string }
+  | { kind: 'none'; warning?: string };
+export interface PlanRequest {
+  draft?: Draft;
+  message?: string;
+  answer?: { key: string; resolution: string };
+  /** Só os turnos anteriores; o texto atual vai em `message`. */
+  history: { role: 'user' | 'assistant'; text: string }[];
+}
+export type PlanEvent =
+  | { type: 'stage'; stage: string }
+  | { type: 'tool'; name: string; ok: boolean; ms: number }
+  | { type: 'result'; draft: Draft; reply: PlanReply; previews: unknown[] }
+  | { type: 'error'; error: string; code?: string; draft: Draft; previews: unknown[]; warning?: string }
+  | { type: 'done'; metrics: { total: number; [k: string]: unknown } };
+
+export const planTurn = (base: string, body: PlanRequest, onEvent: (e: PlanEvent) => void, signal: AbortSignal) =>
+  stream<PlanEvent>(`${b(base)}/plan`, body, onEvent, signal);
+/** Valida o rascunho no servidor e o replaneja contra a base atual. */
+export const planOpen = (base: string, draft: Draft) => call<{ draft: Draft; warning?: string }>(`${b(base)}/plan/open`, { draft });

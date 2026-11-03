@@ -13,6 +13,7 @@ import { initialHistory, reducer, type Step } from './history';
 import { useDiagramTheme, useTheme } from './theme';
 import { send, type BridgeEvent } from './bridge';
 import { typeHint } from './labels';
+import { PlanView } from './plan/PlanView';
 import { allLabel, oneLabel, toggleAll, toggleOne } from './nesting';
 
 const totalMs = (v: ViewResult) => v.ms.resolve + v.ms.layout + v.ms.render;
@@ -34,6 +35,7 @@ export function App() {
   const [catalog, setCatalog] = useState<Catalog | null>(null);
   const [status, setStatus] = useState('Carregando…');
   const [presenting, setPresenting] = useState(false);
+  const [mode, setMode] = useState<'browse' | 'plan'>('browse');
   const [selected, setSelected] = useState<string | null>(null);
   const [menu, setMenu] = useState<Menu | null>(null);
   const frame = useRef<HTMLIFrameElement>(null);
@@ -337,6 +339,14 @@ export function App() {
   };
 
   const viewData = (view?.data ?? null) as ViewData | null;
+  const planEnabled = info?.plan?.enabled === true;
+  const planning = planEnabled && mode === 'plan';
+  const onMode = (m: 'browse' | 'plan') => {
+    menuTicket.current++;
+    setMenu(null);
+    cancelAsk();
+    setMode(m);
+  };
   const closeMenu = useCallback(() => setMenu(null), []);
   const trail = useMemo(() => hist.steps.slice(0, hist.cur + 1), [hist.steps, hist.cur]);
   const loading = hist.pending != null;
@@ -349,13 +359,16 @@ export function App() {
       presenting={presenting}
       status={shownStatus}
       notation={notation}
-      onNotation={base && view ? onNotation : undefined}
-      nestLabel={nest ? allLabel(nest) : undefined}
+      onNotation={base && view && !planning ? onNotation : undefined}
+      nestLabel={nest && !planning ? allLabel(nest) : undefined}
       onNestAll={onNestAll}
       bases={bases}
       base={base}
       onBase={onBase}
-      onSearch={base ? onSearch : undefined}
+      mode={planning ? 'plan' : 'browse'}
+      planEnabled={planEnabled}
+      onMode={onMode}
+      onSearch={base && !planning ? onSearch : undefined}
       chatRequest={chatRequest}
       rightRequest={rightRequest}
       leftContent={{
@@ -405,7 +418,7 @@ export function App() {
         </>
       )}
     >
-      {view ? (
+      {planning && base ? <PlanView key={base} base={base} /> : view ? (
         <>
           <nav className="trail" aria-label="Trilha">
             {trail.map((s, i) => (
