@@ -10,7 +10,7 @@ import { looksLikeQuestion, type Turn } from './question';
 import { Explorer } from './Explorer';
 import { Details } from './Details';
 import { initialHistory, reducer, type Step } from './history';
-import { useTheme } from './theme';
+import { useDiagramTheme, useTheme } from './theme';
 import { send, type BridgeEvent } from './bridge';
 import { typeHint } from './labels';
 import { allLabel, oneLabel, toggleAll, toggleOne } from './nesting';
@@ -21,6 +21,7 @@ type Menu = { id: string; at: { x: number; y: number }; title: string; items: Ac
 
 export function App() {
   const [theme, setTheme] = useTheme();
+  const [diagramTheme, setDiagramTheme] = useDiagramTheme();
   const [hist, dispatch] = useReducer(reducer, initialHistory);
   const [bases, setBases] = useState<BaseInfo[]>([]);
   const [base, setBase] = useState<string | null>(null);
@@ -198,7 +199,8 @@ export function App() {
   const askQuestion = (question: string, chosen?: string) => {
     const { base: b, step: cur, selected: sel } = stateRef.current;
     if (!b) return;
-    const history = turnsRef.current.filter((x) => x.status === 'done').slice(-4).map((x) => ({ question: x.question, title: x.view?.title }));
+    const keep = info?.ask.enabled ? info.ask.maxHistory ?? 4 : 4;
+    const history = (keep > 0 ? turnsRef.current.filter((x) => x.status === 'done').slice(-keep) : []).map((x) => ({ question: x.question, title: x.view?.title }));
     const nodes = Object.keys((cur?.view.data as ViewData | null)?.nodes ?? {});
     const context = cur ? { spec: cur.view.spec, ...(nodes.length ? { nodes } : {}), ...(sel ? { selected: sel } : {}) } : undefined;
     const t = reserve(); // cancela a anterior e reserva o ticket
@@ -275,7 +277,7 @@ export function App() {
 
   const onEvent = (e: BridgeEvent) => {
     const { base: b, step: cur } = stateRef.current;
-    if (e.type === 'theme') setTheme(e.theme);
+    if (e.type === 'theme') setDiagramTheme(e.theme); // T dentro do diagrama: só o diagrama muda
     else if (e.type === 'select') {
       menuTicket.current++;
       setMenu(null);
@@ -415,7 +417,7 @@ export function App() {
               </span>
             ))}
           </nav>
-          <Diagram ref={frame} view={view} theme={theme} onEvent={onEvent} busy={loading} />
+          <Diagram ref={frame} view={view} theme={diagramTheme} onThemeChange={setDiagramTheme} onEvent={onEvent} busy={loading} />
         </>
       ) : <div className="empty">{shownStatus}</div>}
       {menu && <ContextMenu at={menu.at} title={menu.title} items={menu.items} onPick={(a) => openAction(a, menu.id, 'Menu')} onClose={closeMenu} nest={nest} nodeId={menu.id} onNest={onNestOne} />}

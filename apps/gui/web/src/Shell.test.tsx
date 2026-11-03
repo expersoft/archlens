@@ -63,7 +63,7 @@ describe('Shell', () => {
     expect(screen.getByText('centro')).toBeTruthy();
   });
 
-  it('botão de tema troca data-theme e grava archlens-theme', async () => {
+  it('botão de tema troca data-theme e grava archlens-gui-theme (não o tema do diagrama)', async () => {
     setWidth(1600);
     const u = userEvent.setup();
     render(<Wrapped />);
@@ -72,6 +72,7 @@ describe('Shell', () => {
     await u.click(screen.getByRole('button', { name: /tema/i }));
     const after = document.documentElement.dataset.theme;
     expect(after).toBe(before === 'light' ? 'dark' : 'light');
-    expect(localStorage.getItem('archlens-theme')).toBe(after);
+    expect(localStorage.getItem('archlens-gui-theme')).toBe(after);
+    expect(localStorage.getItem('archlens-theme')).toBeNull();
   });
 });

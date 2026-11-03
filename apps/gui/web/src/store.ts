@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 
-// Strings ficam cruas (ex.: archlens-theme = "dark", como a página do iframe lê); o resto vai em JSON.
+// Strings ficam cruas (ex.: archlens-theme = "dark", tema do diagrama, como a página do iframe lê); o resto vai em JSON.
 function read<T>(key: string, initial: T): T {
   try {
     const raw = localStorage.getItem(key);

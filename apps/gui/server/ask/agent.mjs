@@ -46,7 +46,7 @@ function raceAbort(promise, signal) {
 }
 
 /** @returns {Promise<{ result: object, metrics: object }>} */
-export async function runAsk(ctx, req, { provider, maxRounds = 4, timeoutMs = 45000, signal, emit = () => {} } = {}) {
+export async function runAsk(ctx, req, { provider, maxRounds = 4, maxHistory, timeoutMs = 45000, signal, emit = () => {} } = {}) {
   const t0 = Date.now();
   const mode = provider.tools ? 'tools' : 'json';
   const metrics = { total: 0, llm: 0, tools: 0, rounds: 0, calls: 0, mode, usage: { input: 0, output: 0, cacheRead: 0 } };
@@ -82,7 +82,7 @@ export async function runAsk(ctx, req, { provider, maxRounds = 4, timeoutMs = 45
 
   try {
     emit({ type: 'stage', stage: 'interpretando' });
-    let input = { text: userMessage(req, ctx) };
+    let input = { text: userMessage(req, ctx, { maxHistory }) };
     let jsonRetried = false;
     while (metrics.rounds < maxRounds) {
       const reply = await send(input);

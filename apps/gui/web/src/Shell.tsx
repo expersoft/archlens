@@ -98,7 +98,7 @@ export function Shell(p: ShellProps) {
           </div>
           {p.nestLabel && <button type="button" className="nest" onClick={() => p.onNestAll?.()}>{p.nestLabel}</button>}
           <span className="status">{p.status}</span>
-          <button className="icon" aria-label="Alternar tema" title="Alternar tema" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
+          <button className="icon" aria-label="Alternar tema" title="Tema da interface (o diagrama tem o seu, na barra do diagrama)" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
             {theme === 'dark' ? '☀' : '☾'}
           </button>
         </header>

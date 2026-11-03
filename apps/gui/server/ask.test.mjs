@@ -73,7 +73,7 @@ test('a malformed llm in the config file is still fatal', async () => {
 });
 
 test('info describes the enabled search', () => withServer({ provider: scripted([]) }, async url => {
-  assert.deepEqual((await (await fetch(`${url}/api/info`)).json()).ask, { enabled: true, provider: 'scripted', model: 'scripted', mode: 'tools' });
+  assert.deepEqual((await (await fetch(`${url}/api/info`)).json()).ask, { enabled: true, provider: 'scripted', model: 'scripted', mode: 'tools', maxHistory: 4 });
 }));
 
 test('empty or huge question is 400', () => withServer({ provider: scripted([]) }, async url => {

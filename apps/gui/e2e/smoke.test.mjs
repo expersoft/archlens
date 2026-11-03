@@ -78,19 +78,28 @@ test('GUI ponta a ponta', async (t) => {
     await page.setViewportSize({ width: 1600, height: 900 });
   });
 
-  await t.test('5. tema: barra do topo muda o iframe; T no iframe muda a aplicação', async () => {
+  await t.test('5. tema: interface e diagrama são independentes', async () => {
     const appTheme = () => page.evaluate(() => document.documentElement.dataset.theme);
     const frameTheme = () => frame().locator('html').getAttribute('data-theme');
-    const before = await appTheme();
-    await page.getByRole('button', { name: 'Alternar tema' }).click();
-    const after = await appTheme();
-    assert.notEqual(after, before);
-    await page.waitForFunction((x) => document.querySelector('iframe[title="Diagrama"]').contentDocument.documentElement.dataset.theme === x, after);
-    assert.equal(await frameTheme(), after);
+    const frameIs = (x) => page.waitForFunction((v) => document.querySelector('iframe[title="Diagrama"]').contentDocument.documentElement.dataset.theme === v, x);
+    const app0 = await appTheme();
+    const diag0 = await frameTheme();
+    // barra do topo: só a interface muda
+    await page.getByRole('button', { name: 'Alternar tema', exact: true }).click();
+    const app1 = await appTheme();
+    assert.notEqual(app1, app0);
+    assert.equal(await frameTheme(), diag0);
+    // botão da barra do diagrama: só o diagrama muda
+    await page.getByRole('button', { name: 'Alternar tema do diagrama' }).click();
+    const diag1 = diag0 === 'dark' ? 'light' : 'dark';
+    await frameIs(diag1);
+    assert.equal(await appTheme(), app1);
+    // T dentro do iframe: o diagrama volta, a interface fica
     await frame().locator('[data-node="tele.api"]').focus();
     await page.keyboard.press('t');
-    await page.waitForFunction((x) => document.documentElement.dataset.theme !== x, after);
-    assert.equal(await appTheme(), before);
+    await frameIs(diag0);
+    assert.equal(await appTheme(), app1);
+    assert.equal(await page.getByRole('button', { name: 'Alternar tema do diagrama' }).textContent(), diag0 === 'dark' ? '☀' : '☾');
   });
 
   await t.test('6. ação que falha mostra o erro e a trilha não muda', async () => {

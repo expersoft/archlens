@@ -1,14 +1,17 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { parseMessage, send, type Act, type BridgeEvent } from './bridge';
 import type { ViewResult } from './api';
-import type { Theme } from './theme';
+import { DIAGRAM_THEME_KEY, type Theme } from './theme';
 import { isGuiShortcut } from './shortcuts';
 
 export interface DiagramProps {
   view: ViewResult;
   /** Uma visão nova está sendo carregada: escurece o diagrama e marca aria-busy. */
   busy?: boolean;
+  /** Tema do diagrama (independente do tema da interface). */
   theme: Theme;
+  /** Se informado, mostra na barra do diagrama o botão que alterna o tema do diagrama. */
+  onThemeChange?: (t: Theme) => void;
   onEvent: (e: BridgeEvent) => void;
 }
 
@@ -27,7 +30,7 @@ const BUTTONS: { act: Act; label: string; flag?: keyof Flags }[] = [
   { act: 'present', label: 'Apresentar' },
 ];
 
-export const Diagram = forwardRef<HTMLIFrameElement, DiagramProps>(function Diagram({ view, theme, onEvent, busy = false }, ref) {
+export const Diagram = forwardRef<HTMLIFrameElement, DiagramProps>(function Diagram({ view, theme, onThemeChange, onEvent, busy = false }, ref) {
   const frame = useRef<HTMLIFrameElement>(null);
   useImperativeHandle(ref, () => frame.current as HTMLIFrameElement);
   const [flags, setFlags] = useState<Flags>(OFF);
@@ -39,7 +42,7 @@ export const Diagram = forwardRef<HTMLIFrameElement, DiagramProps>(function Diag
   onEventRef.current = onEvent;
 
   // O iframe lê o tema do localStorage (mesma origem do srcDoc): o host grava antes de carregar.
-  const writeTheme = (t: Theme) => { try { localStorage.setItem('archlens-theme', t); } catch { /* sem storage */ } };
+  const writeTheme = (t: Theme) => { try { localStorage.setItem(DIAGRAM_THEME_KEY, t); } catch { /* sem storage */ } };
   writeTheme(theme);
 
   useEffect(() => { send(frame.current, { type: 'theme', theme }); }, [theme]);
@@ -102,6 +105,16 @@ export const Diagram = forwardRef<HTMLIFrameElement, DiagramProps>(function Diag
             {b.label}
           </button>
         ))}
+        {onThemeChange && (
+          <button
+            type="button"
+            aria-label="Alternar tema do diagrama"
+            title="Tema do diagrama, independente do tema da interface (T no diagrama)"
+            onClick={() => onThemeChange(theme === 'dark' ? 'light' : 'dark')}
+          >
+            {theme === 'dark' ? '☀' : '☾'}
+          </button>
+        )}
       </div>
       {view.alerts.length > 0 && (
         <div className="alerts" role="status">
