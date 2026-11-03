@@ -7,7 +7,8 @@ import { normalizeModel, c4KindOf } from './lib/model.mjs';
 import { validateModel } from './lib/validate.mjs';
 import { generateDoc } from './lib/doc.mjs';
 import { resolveView } from './lib/query.mjs';
-import { layoutView, legibility } from './lib/layout.mjs';
+import { layoutView } from './lib/layout.mjs';
+import { viewAlerts } from './lib/view-build.mjs';
 import { renderHtml } from './lib/render.mjs';
 import { suggestViews } from './lib/suggest.mjs';
 import { inspectHtml } from './lib/deliver.mjs';
@@ -29,7 +30,7 @@ import { toDelta } from './lib/scan/to-delta.mjs';
 
 const HELP = `archlens — arquitetura como modelo, diagramas como consultas
 
-Uso: node scripts/archlens.mjs <comando> [base] [opções]
+Uso: archlens <comando> [base] [opções]
 
 Base: a pasta architecture/ (fonte da verdade), o ARCHITECTURE.md gerado (aponta para ela) ou nada (procura a
 partir do diretório atual). Bases 1.x (pasta, .md com bloco archlens-json ou modelo .json) são recusadas
@@ -71,6 +72,9 @@ Consultar (nunca grava a base)
   validate  <base>                         valida schema, referências, hierarquia C4 e regras ArchiMate
   check     [base] [--json]               valida e confere se o ARCHITECTURE.md está em dia (CI / pre-commit)
   extract   <base> [--out m.json]          imprime o modelo canônico em JSON
+  serve     <base> [--port N] [--host H] [--open] [--llm anthropic|openai [--model M] [--endpoint URL] [--env-file PATH]]
+            abre a GUI (navegador) sobre a base; padrão 127.0.0.1:5180; --llm liga a busca em texto (chave no ambiente ou .env)
+            --config archlens-gui.json [--port N] [--host H] [--open]   a GUI sobre várias bases
 
 Atalhos
   merge     <base> <delta.json> --plan p.json  o mesmo que "plan"
@@ -208,12 +212,9 @@ async function buildHtml(raw, specs, title, preview) {
     }
     if (preview) annotateView(view, preview);
     if (!view.nodes.length) { console.warn(`  aviso: visão "${spec.key}" ficou vazia — revise scope/anchor/filtros`); continue; }
-    if (view.nodes.length > 40) console.warn(`  aviso: visão "${spec.key}" tem ${view.nodes.length} nós; considere focus/depth, collapse ou layers`);
     const l = await layoutView(view);
     if (l.layoutStyle) console.log(`  layout "${spec.key}": ${l.layoutStyle}${l.layoutAuto ? ` (auto; ${Object.entries(l.layoutScores).map(([k, q]) => `${k} ${q.score}`).join(', ')})` : ' (pedido na visão)'}`);
-    if (l.layoutNote) console.warn(`  aviso: "${spec.key}": ${l.layoutNote}`);
-    const leg = legibility(l, 1920, 1080 - 56);
-    if (!leg.ok) console.warn(`  aviso: "${spec.key}": ${leg.suggestion}`);
+    for (const a of viewAlerts(view, l)) console.warn(`  aviso: ${a}`);
     laid.push(l);
   }
   if (!laid.length) fail('nenhuma visão com conteúdo', 2);
@@ -434,6 +435,47 @@ async function main() {
   const load = () => (preview ? preview.raw : base.raw);
 
   switch (cmd) {
+    case 'serve': {
+      const gui = await import(new URL('../apps/gui/server/index.mjs', import.meta.url));
+      const { createBaseRegistry } = await import(new URL('../apps/gui/server/bases.mjs', import.meta.url));
+      const dist = process.env.ARCHLENS_GUI_DIST ?? gui.DIST_DIR;
+      if (!existsSync(join(dist, 'index.html'))) fail('a GUI não está construída; rode "npm run gui:build" na raiz do archlens');
+      const str = v => (v && v !== true ? v : undefined);
+      let port;
+      if (args.port !== undefined) {
+        port = Number(args.port);
+        if (!Number.isInteger(port) || port < 0 || port > 65535) fail('--port aceita um número de 0 a 65535');
+      }
+      let llm;
+      if (args.llm !== undefined) {
+        llm = { provider: str(args.llm) };
+        if (str(args.model)) llm.model = args.model;
+        if (str(args.endpoint)) llm.endpoint = args.endpoint;
+      }
+      let config;
+      try { config = gui.loadConfig({ file: str(args.config), base: str(file), port, host: str(args.host), llm, envFile: str(args['env-file']) }); } catch (e) { fail(e.message); }
+      if (!config.bases.length) fail('uso: archlens serve <base> [--port N] [--host H] [--open] [--llm anthropic|openai [--model M] [--endpoint URL] [--env-file PATH]]\n      archlens serve --config archlens-gui.json [--port N]');
+      const registry = createBaseRegistry(config);
+      const bases = registry.list();
+      const bad = args.config ? (bases.some(b => b.ok) ? null : bases[0]) : bases.find(b => !b.ok);
+      if (bad || !bases.length) { registry.close(); fail(bad?.error ?? 'nenhuma base válida'); }
+      let srv;
+      try { srv = await gui.startServer({ config, staticDir: dist, registry }); } catch (e) { registry.close(); fail(e.message); }
+      console.log(`archlens GUI: ${srv.url}`);
+      if (srv.askOff) console.warn(`aviso: busca em texto desligada: ${srv.askOff}`);
+      if (srv.provider && config.llm) {
+        const keyVar = config.llm.apiKeyEnv ?? (config.llm.provider === 'anthropic' ? 'ANTHROPIC_API_KEY' : 'OPENAI_API_KEY');
+        const from = process.env[keyVar] ? 'ambiente' : config.envFile;
+        console.log(`busca em texto: ${srv.provider.name} ${srv.provider.model}${config.llm.auth === 'none' ? '' : ` (chave de ${keyVar}, ${from})`}`);
+        const warn = config.envFile && gui.envFileWarning(config.envFile);
+        if (warn) console.warn(`aviso: ${warn}`);
+      }
+      if (args.open) openFile(srv.url);
+      const stop = () => { registry.close(); srv.close().finally(() => process.exit(0)); };
+      process.on('SIGINT', stop);
+      process.on('SIGTERM', stop);
+      break;
+    }
     case 'validate': {
       const { errors, warnings } = validateModel(base.raw);
       if (args.json) { console.log(JSON.stringify({ ok: !errors.length, errors, warnings }, null, 2)); }

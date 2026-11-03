@@ -784,3 +784,27 @@ test('a plan records the store version it was made against; only plans without i
   assert.equal('storeVersion' in old, false);
   assert.throws(() => applyPlan(changed, old, TODAY), e => e.code === 'E_PLAN_STALE');
 });
+
+test('nesting.except: validate flags an unknown id; removing the element trims it from saved views', () => {
+  const base = shop();
+  base.views.push({ key: 'n', notation: 'archimate', layer: 'application', nesting: { mode: 'edges', except: ['loja.db', 'loja.web'] } },
+    { key: 'n1', notation: 'archimate', layer: 'application', nesting: { mode: 'edges', except: ['loja.db'] } });
+  assert.deepEqual(validateModel(base).errors, []);
+  const bad = structuredClone(base);
+  bad.views.find(v => v.key === 'n').nesting.except.push('nada');
+  assert.ok(validateModel(bad).errors.some(e => e.code === 'E_UNKNOWN_REF' && e.message.includes('nada')));
+  const plan = planMerge(base, delta({}, { ops: [{ op: 'remove', id: 'loja.db' }] }), TODAY);
+  assert.deepEqual(plan.items[0].cascade.views, [{ key: 'n', action: 'trim' }, { key: 'n1', action: 'trim' }]);
+  const { raw } = applyPlan(base, answer(plan, { 'op:0': 'yes' }), TODAY);
+  assert.deepEqual(raw.views.find(v => v.key === 'n').nesting, { mode: 'edges', except: ['loja.web'] });
+  assert.deepEqual(raw.views.find(v => v.key === 'n1').nesting, { mode: 'edges' });
+  assert.deepEqual(validateModel(raw).errors, []);
+});
+
+test('nesting.except: a name in a delta view resolves to the element id', () => {
+  const base = shop();
+  find(base, 'loja.api').aliases = ['orders-service'];
+  const d = delta({}, { views: [{ key: 'n', notation: 'archimate', layer: 'application', nesting: { mode: 'edges', except: ['orders-service'] } }] });
+  const { raw } = applyPlan(base, planMerge(base, d, TODAY), TODAY);
+  assert.deepEqual(raw.views.find(v => v.key === 'n').nesting.except, ['loja.api']);
+});

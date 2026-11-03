@@ -60,7 +60,7 @@ export function validateModel(raw) {
           hint: `remova "${gid}" de groups.only ou acrescente "${g.status}" em "status" da visão` });
       }
     }
-    for (const f of ['scope', 'anchor', ...(v.focus || []), ...(v.expand || [])].map(k => (k === 'scope' || k === 'anchor') ? v[k] : k)) {
+    for (const f of ['scope', 'anchor', ...(v.focus || []), ...(v.expand || []), ...(v.nesting?.except ?? [])].map(k => (k === 'scope' || k === 'anchor') ? v[k] : k)) {
       if (f && !model.elements.has(f)) errors.push({ code: 'E_UNKNOWN_REF', message: `visão "${v.key}" referencia "${f}", que não existe`, path: `views[${i}]`, hint: 'use o id de um elemento do modelo' });
     }
   });

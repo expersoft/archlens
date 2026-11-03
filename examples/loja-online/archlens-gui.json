@@ -1,0 +1,9 @@
+{
+  "bases": [{ "id": "loja", "name": "Loja online", "path": "architecture" }],
+  "llm": {
+    "provider": "openai",
+    "endpoint": "https://openrouter.ai/api/v1",
+    "model": "deepseek/deepseek-v4.1-flash",
+    "apiKeyEnv": "OPENROUTER_API_KEY"
+  }
+}

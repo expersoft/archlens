@@ -71,7 +71,7 @@ export function buildSchemas() {
         maxDepth: { type: 'integer', minimum: 1 }, hierarchy: { type: 'boolean' } } },
       granularity: { enum: ['component', 'container', 'system'] }, collapse: { type: 'array', items: str },
       status: { description: 'lifecycle statuses shown (default: all but retired)', type: 'array', items: status },
-      nesting: { anyOf: [{ enum: ['edges', 'nested'] }, { type: 'object', additionalProperties: false, required: ['mode'], properties: { mode: { enum: ['edges', 'nested'] }, depth: { type: 'integer', minimum: 1 } } }] },
+      nesting: { anyOf: [{ enum: ['edges', 'nested'] }, { type: 'object', additionalProperties: false, required: ['mode'], properties: { mode: { enum: ['edges', 'nested'] }, depth: { type: 'integer', minimum: 1 }, except: { type: 'array', items: { type: 'string' } } } }] },
       derive: { type: 'boolean' }, output: { type: 'array', items: { enum: ['diagram', 'matrix'] } },
     },
   };

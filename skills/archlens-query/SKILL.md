@@ -8,7 +8,7 @@ description: Use when the user wants diagrams or answers from an existing archit
 Leia `references/base.md` antes do primeiro comando (caminhos relativos a `$ARCHLENS`).
 
 `SKILL_DIR` = pasta deste arquivo; `ARCHLENS="$(realpath "$SKILL_DIR/../..")"` = o repositório do archlens (o `realpath` segue o link
-simbólico da instalação; sem ele, o `..` sai pelo `~/.claude` e não acha o repositório). CLI: `node "$ARCHLENS/scripts/archlens.mjs" <comando>` (abaixo,
+simbólico da instalação; sem ele, o `..` sai pelo `~/.claude` e não acha o repositório). CLI: `"$ARCHLENS/bin/archlens" <comando>` (abaixo,
 `archlens <comando>`). `$OUT` = uma pasta **fora** da base (ex.: `/tmp/archlens`).
 
 Esta skill **nunca grava a base**: `views`, `query`, `resolve`, `render` e `deliver --view/--spec`, com a saída em
@@ -46,7 +46,9 @@ Esta skill **nunca grava a base**: `views`, `query`, `resolve`, `render` e `deli
 Por padrão a visão ArchiMate liga pai e filho por seta de composição (losango). Pedidos como "dentro de",
 "aninhado", "caixas dentro de caixas" → `"nesting": "nested"`; "com o losango", "com setas de composição" → `"edges"`.
 Em diagramas grandes use `"nesting": { "mode": "nested", "depth": N }` (só os N primeiros níveis ficam dentro; abaixo
-disso o elemento fica ao lado, ligado pelo losango). Detalhes em `references/views.md`.
+disso o elemento fica ao lado, ligado pelo losango). Para agrupar ou desagrupar um elemento só: "desagrupe X" →
+`"nesting": { "mode": "nested", "except": ["X"] }` (tudo aninhado, menos dentro de X); "só X aninhado" →
+`{ "mode": "edges", "except": ["X"] }`. Detalhes em `references/views.md`.
 
 ## Pedido → view spec
 

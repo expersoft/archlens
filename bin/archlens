@@ -1,0 +1,44 @@
+#!/bin/sh
+# archlens: acha o Node (ARCHLENS_NODE ou o do PATH), confere a versão mínima e roda scripts/archlens.mjs.
+# Para Linux, macOS e o Git Bash do Windows; no cmd e no PowerShell vale bin/archlens.cmd.
+
+# A pasta real do repositório, seguindo links simbólicos (sem readlink -f, que o macOS antigo não tem).
+self=$0
+while [ -L "$self" ]; do
+  target=$(readlink "$self")
+  case $target in
+    /*) self=$target ;;
+    *) self=${self%/*}/$target ;;
+  esac
+done
+case $self in
+  */*) dir=${self%/*} ;;
+  *) dir=. ;;
+esac
+root=$(CDPATH= cd -- "$dir/.." && pwd -P) || exit 1
+
+if [ -n "$ARCHLENS_NODE" ]; then
+  node=$ARCHLENS_NODE
+  if [ ! -f "$node" ] || [ ! -x "$node" ]; then
+    echo "archlens: ARCHLENS_NODE não aponta para um executável: $node" >&2
+    exit 127
+  fi
+else
+  node=$(command -v node) || {
+    echo "archlens: Node.js não encontrado. Instale o Node 18 ou mais novo (https://nodejs.org) ou aponte ARCHLENS_NODE para o executável." >&2
+    exit 127
+  }
+fi
+
+version=$("$node" -p 'process.versions.node' 2>/dev/null)
+major=${version%%.*}
+case $major in
+  '' | *[!0-9]*) ok=no ;;
+  *) [ "$major" -ge 18 ] && ok=yes || ok=no ;;
+esac
+if [ "$ok" = no ]; then
+  echo "archlens: o archlens precisa do Node 18 ou mais novo (encontrado: ${version:-desconhecida}, em $node)." >&2
+  exit 1
+fi
+
+exec "$node" "$root/scripts/archlens.mjs" "$@"

@@ -129,7 +129,7 @@ relação derivada entre os dois visíveis:
 - marque como derivada e diga "via <nomes escondidos>". Com dois caminhos igualmente curtos, use qualquer um.
 
 **`nesting`**: `"edges"` (padrão, pai e filho ligados pela composição), `"nested"` (filhos dentro do pai) ou
-`{mode, depth}` (só até esse nível).
+`{mode, depth, except}` (`depth`: só até esse nível; `except`: lista de ids que fazem o contrário do `mode`: em `nested`, não guardam os filhos, que ficam ao lado dele ligados pela composição; em `edges`, são os únicos que guardam os filhos dentro; "desagrupe X" → `{mode:"nested", except:["X"]}`).
 
 ## 5. C4
 

@@ -5,6 +5,52 @@ versões seguem [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Não lançado]
 
+## [0.6.0] — 2026-11-03
+
+### Adicionado
+
+- **Comando `archlens`** (`bin/archlens` e `bin/archlens.cmd`, #30): acha o Node (`ARCHLENS_NODE` ou o do PATH), confere a
+  versão mínima e roda a CLI; as skills, as referências e os guias passam a usá-lo.
+- **GUI, fase 1** (`apps/gui/`, #24): interface web local e somente leitura sobre a base. Diagrama no centro; conversa e
+  histórico, Explorador (visões salvas e sugeridas, árvore por camada, filtro) e Detalhes ("Nesta visão" e "Na base");
+  menu do botão direito, duplo clique, trilha, notação ArchiMate | C4, tema, busca por nome (`Ctrl+K`) e seletor de
+  base. Teste ponta a ponta em Chromium (`npm --prefix apps/gui run test:e2e`).
+- **`archlens serve <base> [--port N] [--host H] [--open]`** (ou `--config archlens-gui.json`, com várias bases) abre a GUI.
+- **Núcleo:** modo `embed` do HTML (ponte `postMessage` com a GUI, sem a moldura da página) e `buildView`, que monta a
+  visão a partir de uma especificação, devolvendo também o `viewData`.
+- **GUI, fase 2** (#26): busca em texto com LLM (opt-in): agente com ferramentas e modo sem ferramentas (JSON) para gateways
+  que não as suportam; Anthropic, OpenAI, OpenRouter e gateways compatíveis (URL, autenticação, cabeçalhos e parâmetros
+  configuráveis); chave só por ambiente ou `.env`; tetos de rodadas e de tempo; respostas em visão, cartão de elemento,
+  tabela ou esclarecimento; conversa com cancelamento da pergunta anterior; telemetria sem o texto da pergunta por
+  padrão.
+- **`archlens serve --llm anthropic|openai [--model M] [--endpoint URL] [--env-file PATH]`** liga a busca em texto. Sem a chave, `--llm` impede a subida; o `llm` do `archlens-gui.json` só
+  desliga a busca, com aviso no terminal e na caixa de pergunta.
+- **Avaliação da busca** (`npm --prefix apps/gui run eval`): roda as perguntas do archlens-ask contra o gabarito, com
+  `--dry` para conferir o encanamento sem chave.
+- **`nesting.except` na view spec** (#26): aninha ou desaninha elementos um a um, no sentido contrário ao do `nesting` da
+  visão. A GUI ganha `Agrupar tudo`/`Desagrupar tudo` no diagrama e `Agrupar aqui dentro`/`Desagrupar` no menu do
+  elemento.
+- **`llm.maxHistory`** no `archlens-gui.json` (#29): quantas perguntas anteriores vão junto com a nova (0 a 50,
+  padrão 4).
+- **Exemplo com OpenRouter** (#28): `examples/loja-online/archlens-gui.json` e `.env.example`, com o modelo DeepSeek flash.
+
+### Mudado
+
+- **GUI, tema** (#29): o tema da interface e o do diagrama são independentes; o diagrama ganha o próprio botão ☀/☾ e o
+  `T` dentro dele troca só o diagrama.
+
+### Corrigido
+
+- **GUI com base remota** (#25): o menu do botão direito abre na hora (o cartão sai do snapshot em memória, sem reler o
+  conector) e a conferência da base remota roda numa worker thread, sem travar o servidor.
+- **GUI, botão de agrupar** (#28) no padrão dos demais botões da barra.
+
+### Segurança
+
+- **GUI, ferramentas de desenvolvimento** (#27): `vite` 5.4.21 → 6.4.5 e `vitest` 2.1.9 → 4.1.12, fechando os alertas do
+  `npm audit` (`tinypool`, `@vitest/mocker`, `esbuild`). Nada muda no que o `archlens serve` executa; rodar os testes
+  da GUI passa a pedir Node 20 ou mais novo.
+
 ## [0.5.0] — 2026-10-28
 
 ### Adicionado
@@ -142,7 +188,8 @@ Primeira versão: arquitetura como modelo (ArchiMate 3.2 com perfil C4), diagram
 - Relações explicadas em português, HTML animado num arquivo único, checagem visual com screenshots.
 - `\n` força quebra de linha em nomes; `expand` no schema da visão (#2). Zoom/pan na tela inteira (#3).
 
-[Não lançado]: https://github.com/expersoft/archlens/compare/v0.5.0...HEAD
+[Não lançado]: https://github.com/expersoft/archlens/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/expersoft/archlens/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/expersoft/archlens/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/expersoft/archlens/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/expersoft/archlens/compare/v0.2.0...v0.3.0

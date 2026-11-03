@@ -274,6 +274,12 @@
             "depth": {
               "type": "integer",
               "minimum": 1
+            },
+            "except": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
             }
           }
         }

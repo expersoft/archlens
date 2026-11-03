@@ -1,6 +1,6 @@
 {
   "name": "archlens",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Skill: arquitetura como modelo (ArchiMate + perfil C4), diagramas como consultas, HTML animado para apresentação",
   "license": "MIT",
   "author": "expersoft",
@@ -17,7 +17,9 @@
     "version": "node scripts/sync-plugin.mjs && git add .claude-plugin",
     "check-plugin": "node scripts/sync-plugin.mjs --check",
     "ask": "node scripts/gen-ask.mjs",
-    "check-ask": "node scripts/gen-ask.mjs --check"
+    "check-ask": "node scripts/gen-ask.mjs --check",
+    "gui:build": "npm --prefix apps/gui ci && npm --prefix apps/gui run build",
+    "gui:test": "npm --prefix apps/gui test"
   },
   "optionalDependencies": { "playwright-core": "1.63.0" },
   "devDependencies": { "elkjs": "0.12.0" }

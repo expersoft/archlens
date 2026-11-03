@@ -152,7 +152,10 @@ export function resolveArchimate(model, spec) {
   const groups = frameGroups(model, gs, nodes);
   const nesting = nestingSpec(spec.nesting);
   let outEdges = shownEdges;
-  if (nesting.mode === 'nested') {
+  for (const x of nesting.except ?? []) {
+    if (!model.elements.has(x)) throw viewError('E_UNKNOWN_REF', `nesting.except "${x}" não existe`, 'use ids de elementos do modelo');
+  }
+  if (nesting.mode === 'nested' || nesting.except) {
     const n = nestElements(new Set(nodes.map(x => x.id)), shownEdges, model, nesting);
     outEdges = shownEdges.filter(e => !n.replaced.has(e.id));
     for (const node of nodes) {
@@ -193,25 +196,21 @@ export function resolveArchimate(model, spec) {
   };
 }
 
-/** The view's nesting ("edges" by default): { mode, depth } with depth null = every level. */
+/** The view's nesting ("edges" by default): { mode, depth, except? } with depth null = every level. */
 export function nestingSpec(v) {
   if (v === undefined || v === 'edges') return { mode: 'edges', depth: null };
   if (v === 'nested') return { mode: 'nested', depth: null };
-  if (v && typeof v === 'object' && ['edges', 'nested'].includes(v.mode) && (v.depth === undefined || (Number.isInteger(v.depth) && v.depth >= 1))) {
-    return { mode: v.mode, depth: v.mode === 'nested' ? v.depth ?? null : null };
+  const exceptOk = x => x === undefined || (Array.isArray(x) && x.every(i => typeof i === 'string'));
+  if (v && typeof v === 'object' && ['edges', 'nested'].includes(v.mode) && (v.depth === undefined || (Number.isInteger(v.depth) && v.depth >= 1)) && exceptOk(v.except)) {
+    return { mode: v.mode, depth: v.mode === 'nested' ? v.depth ?? null : null, ...(v.except?.length ? { except: [...new Set(v.except)] } : {}) };
   }
-  throw viewError('E_VIEW_NESTING', `"nesting" inválido: ${JSON.stringify(v)}`, 'use "edges", "nested" ou { "mode": "nested", "depth": 1 }');
+  throw viewError('E_VIEW_NESTING', `"nesting" inválido: ${JSON.stringify(v)}`, 'use "edges", "nested" ou { "mode": "nested", "depth": 1, "except": ["id"] }');
 }
 
 const NESTING = new Set(['composition', 'aggregation']);
 
-/**
- * Who sits inside whom on the view. The visual parent is the element's parent, else the first composition/aggregation
- * from a shown element (never making a cycle). Up to `depth` an element sits in its visual parent; deeper, in the box
- * of its nearest ancestor that still nests (next to its parent, linked by the diamond). `replaced`: edges the nesting
- * draws instead; `tips`: their descriptions, for the child's tooltip.
- */
-export function nestElements(kept, edges, model, { depth }) {
+/** The visual parent of each shown element: its parent, else the first composition/aggregation from a shown element (never making a cycle). */
+function parentsAndMade(kept, edges, model) {
   const vparent = new Map();
   const made = new Map(); // child → edge that the nesting replaces
   const holds = (a, b) => { for (let c = a; c != null; c = vparent.get(c)) if (c === b) return true; return false; };
@@ -224,6 +223,24 @@ export function nestElements(kept, edges, model, { depth }) {
     if (vparent.get(e.to) === e.from) { if (!made.has(e.to)) made.set(e.to, e); continue; }
     if (!vparent.has(e.to) && !holds(e.from, e.to)) { vparent.set(e.to, e.from); made.set(e.to, e); }
   }
+  return { vparent, made };
+}
+
+/** Map child → visual parent (the hierarchy, else the first composition/aggregation without a cycle). */
+export function visualParents(kept, edges, model) {
+  return parentsAndMade(kept, edges, model).vparent;
+}
+
+/**
+ * Who sits inside whom on the view. Up to `depth` an element sits in its visual parent; deeper, in the box of its
+ * nearest ancestor that still nests (next to its parent, linked by the diamond). `except` lists the parents that do
+ * the opposite of `mode`: in "nested" they do not hold their children; in "edges" they are the only ones that do.
+ * `replaced`: edges the nesting draws instead; `tips`: their descriptions, for the child's tooltip.
+ */
+export function nestElements(kept, edges, model, { depth, mode = 'nested', except = [] }) {
+  const { vparent, made } = parentsAndMade(kept, edges, model);
+  const exc = new Set(except);
+  const holdsKids = p => (mode === 'nested' ? !exc.has(p) : exc.has(p));
   const level = new Map();
   const levelOf = id => {
     if (level.has(id)) return level.get(id);
@@ -236,7 +253,11 @@ export function nestElements(kept, edges, model, { depth }) {
   const nestedIn = new Map();
   const replaced = new Set();
   const tips = new Map();
-  const boxOf = id => (!vparent.has(id) ? null : depth == null || level.get(id) <= depth ? vparent.get(id) : boxOf(vparent.get(id)));
+  const boxOf = id => {
+    if (!vparent.has(id)) return null;
+    const p = vparent.get(id);
+    return holdsKids(p) && (depth == null || level.get(id) <= depth) ? p : boxOf(p);
+  };
   for (const id of kept) {
     const box = boxOf(id);
     if (box) nestedIn.set(id, box);
