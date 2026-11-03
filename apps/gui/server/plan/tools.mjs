@@ -62,11 +62,14 @@ function setDelta(ctx, session, { delta }) {
 }
 
 function planSummary(plan) {
-  if (plan.blocked) return `plano bloqueado, ${plan.errors.length} erro(s):\n${plan.errors.slice(0, 10).map(e => `- ${e.message ?? e}`).join('\n')}`;
+  if (plan.blocked) {
+    const list = plan.errors.slice(0, 10).map(e => `- ${e.message ?? e}`).join('\n');
+    return `plano bloqueado, ${plan.errors.length} erro(s):\n${external('plano', list)}`;
+  }
   if (plan.state === 'open') {
     const open = openQuestions(plan);
     const first = open[0];
-    return `plano aberto: ${open.length} pergunta(s) sem resposta. Primeira: ${first.n} (${first.key}, ${first.class}) ${describeItem(first)}`;
+    return `plano aberto: ${open.length} pergunta(s) sem resposta. Primeira: ${first.n} (${first.key}, ${first.class})\n${external('plano', describeItem(first))}`;
   }
   const counts = Object.entries(plan.summary).map(([k, v]) => `${k}: ${v}`).join(', ');
   return `plano final: ${counts || 'sem itens'}; ${plan.ops.length} operação(ões) na base`;
@@ -94,7 +97,7 @@ async function addPreview(ctx, session, { spec }) {
   const r = await tryViewTool(ctx, { spec });
   if (!r.ok) return r;
   session.previews.push(spec);
-  return { ok: true, content: `prévia ${session.previews.length} adicionada\n${r.content}` };
+  return { ok: true, content: `prévia ${session.previews.length} adicionada\n${external('base', r.content)}` };
 }
 
 function askDecision(_ctx, session, { key, recommendation, reason }) {
