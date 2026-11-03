@@ -89,6 +89,7 @@ test('plan/preview padrão traz a visão do que muda e as salvas afetadas', () =
   const { views, summary } = await r.json();
   assert.equal(typeof summary, 'string');
   assert.equal(views[0].kind, 'change');
+  assert.equal(views[0].spec.key, 'delta');
   assert.equal(views[0].viewData.nodes['loja.pedidos'].change, 'changed');
   assert.ok(views[0].html.includes('data-node'));
   const saved = views.slice(1);
@@ -103,6 +104,19 @@ test('plan/preview padrão traz a visão do que muda e as salvas afetadas', () =
   assert.ok(saved.every(v => v.viewData.nodes['loja.pedidos']));
 }));
 
+test('plan/preview traz a lista do delta (+ ~ −), as perguntas abertas e o relatório do plano', () => withPlan(async url => {
+  const alter = await (await post(url, 'plan/preview', { draft: await draftWith(url, ALTER) })).json();
+  assert.deepEqual(alter.changes, [{ sign: '~', kind: 'element', id: 'loja.pedidos', name: 'API de Pedidos' }]);
+  assert.equal(alter.questions.length, 1);
+  assert.equal(alter.questions[0].key, 'el:loja.pedidos:description');
+  assert.deepEqual(alter.questions[0].options, ['keep', 'take', 'value:<x>']);
+  assert.match(alter.report, /^# Plano/);
+  const added = await (await post(url, 'plan/preview', { draft: await draftWith(url, NEW) })).json();
+  assert.deepEqual(added.changes, [{ sign: '+', kind: 'element', id: 'sistema-novo', name: 'Sistema Novo Zeta' }]);
+  const rel = await (await post(url, 'plan/preview', { draft: await draftWith(url, delta({ relationships: [{ from: 'loja.bff', to: 'loja.cache', type: 'association', description: 'nova' }] })) })).json();
+  assert.ok(rel.changes.some(c => c.sign === '+' && c.kind === 'relationship' && c.name.includes(" → ") && !c.name.includes("loja.")));
+}));
+
 test('plan/preview com specs traz as visões pedidas, desenhadas com o delta', () => withPlan(async url => {
   const draft = await draftWith(url, NEW);
   const spec = { key: 'pedida', notation: 'c4', level: 'landscape', title: 'Panorama' };
@@ -110,6 +124,7 @@ test('plan/preview com specs traz as visões pedidas, desenhadas com o delta', (
   assert.equal(views.length, 1);
   assert.equal(views[0].kind, 'asked');
   assert.equal(views[0].key, 'pedida');
+  assert.deepEqual(views[0].spec, spec);
   assert.equal(views[0].viewData.nodes['sistema-novo'].change, 'added');
   const bad = await post(url, 'plan/preview', { draft, specs: [{ notation: 'c4', level: 'container', scope: 'nao-existe' }] });
   assert.equal(bad.status, 400);

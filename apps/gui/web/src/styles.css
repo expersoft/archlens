@@ -116,3 +116,12 @@ body{font:14px/1.4 system-ui,sans-serif;background:var(--bg);color:var(--ink)}
 .filebtn input{display:none}
 .plan-host{flex:1;display:flex;min-height:0;min-width:0}
 .plan-host[hidden]{display:none}
+.preview-tabs{flex:1;display:flex;flex-direction:column;min-height:0;min-width:0}
+.preview-tabs [role=tab].on{border-color:var(--accent)}
+.preview-diagram{flex:1;display:flex;flex-direction:column;min-height:0}
+.preview-frames{flex:1;display:flex;min-height:0}
+.preview-side{flex:1 1 0;min-width:0;display:flex;flex-direction:column;border-right:1px solid var(--line)}
+.preview-delta,.preview-report{flex:1;overflow:auto;padding:8px 12px;margin:0;font-size:13px}
+.preview-report{white-space:pre-wrap}
+.chg b{display:inline-block;width:1.4em}
+.chg.add b{color:#2a8a3e}.chg.mod b{color:#b7791f}.chg.del{text-decoration:line-through}.chg.del b{color:#c0392b}

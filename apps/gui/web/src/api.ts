@@ -162,11 +162,28 @@ export interface PlanRequest {
 export type PlanEvent =
   | { type: 'stage'; stage: string }
   | { type: 'tool'; name: string; ok: boolean; ms: number }
-  | { type: 'result'; draft: Draft; reply: PlanReply; previews: unknown[] }
-  | { type: 'error'; error: string; code?: string; draft: Draft; previews: unknown[]; warning?: string }
+  | { type: 'result'; draft: Draft; reply: PlanReply; previews: ViewSpec[] }
+  | { type: 'error'; error: string; code?: string; draft: Draft; previews: ViewSpec[]; warning?: string }
   | { type: 'done'; metrics: { total: number; [k: string]: unknown } };
 
 export const planTurn = (base: string, body: PlanRequest, onEvent: (e: PlanEvent) => void, signal: AbortSignal) =>
   stream<PlanEvent>(`${b(base)}/plan`, body, onEvent, signal);
 /** Valida o rascunho no servidor e o replaneja contra a base atual. */
 export const planOpen = (base: string, draft: Draft) => call<{ draft: Draft; warning?: string }>(`${b(base)}/plan/open`, { draft });
+
+export interface PreviewView { key: string; title: string; html?: string; viewData?: unknown; kind: 'change' | 'saved' | 'asked'; error?: string; spec: ViewSpec }
+export interface PreviewChange { sign: '+' | '~' | '−'; kind: 'element' | 'relationship'; id: string; name: string }
+export interface PreviewQuestion { key: string; question: string; options: string[]; assumed: string | null }
+export interface PlanPreviewResult {
+  views: PreviewView[];
+  skipped: { key: string; error: string }[];
+  summary: string;
+  changes: PreviewChange[];
+  questions: PreviewQuestion[];
+  /** Plan report (markdown); null while the draft has no plan. */
+  report: string | null;
+  warning?: string;
+}
+/** Draws the draft: the default views, or exactly `specs` (drawn with the delta applied). */
+export const planPreview = (base: string, draft: Draft, specs?: ViewSpec[]) =>
+  call<PlanPreviewResult>(`${b(base)}/plan/preview`, { draft, ...(specs ? { specs } : {}) });

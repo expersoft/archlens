@@ -1,6 +1,6 @@
 // The preview of a planning draft: the base as the plan would leave it, drawn with what changes marked.
 import { relationshipIds } from '../../../../scripts/lib/merge.mjs';
-import { preview as previewOf } from '../../../../scripts/lib/api.mjs';
+import { preview as previewOf, show } from '../../../../scripts/lib/api.mjs';
 import { previewSummary, annotateView } from '../../../../scripts/lib/preview.mjs';
 import { normalizeModel, c4KindOf } from '../../../../scripts/lib/model.mjs';
 import { resolveView } from '../../../../scripts/lib/query.mjs';
@@ -64,12 +64,33 @@ export function defaultPreviewSpecs(ctx, draft) {
   return specsOf(model, p);
 }
 
+const SIGN = { added: '+', changed: '~', removed: '−', retired: '−' };
+
+/** What the draft adds (+), changes (~) and removes (−), elements then relationships, and the questions still open. */
+function deltaList(model, p) {
+  const changes = [...p.changes].map(([id, c]) => ({ sign: SIGN[c.kind], kind: 'element', id, name: model.elements.get(id)?.name ?? id }));
+  const ends = new Map([...relationshipIds(p.raw)].map(([r, id]) => [id, r]));
+  for (const [id, c] of p.relChanges) {
+    const r = ends.get(id);
+    const name = r ? `${model.elements.get(r.from)?.name ?? r.from} → ${model.elements.get(r.to)?.name ?? r.to}` : id;
+    changes.push({ sign: SIGN[c.kind], kind: 'relationship', id, name });
+  }
+  const seen = new Set();
+  const questions = [];
+  for (const q of [...p.pending.values()].flat()) {
+    if (seen.has(q.key)) continue;
+    seen.add(q.key);
+    questions.push({ key: q.key, question: q.question, options: q.options, assumed: q.assumed });
+  }
+  return { changes, questions };
+}
+
 async function drawView(model, p, spec, kind) {
   const view = resolveView(model, spec, { keep: p.keep });
   if (!view.nodes.length) throw planError(`visão "${spec.key ?? 'view'}" ficou vazia — revise scope/anchor/filtros`, 'E_VIEW_EMPTY');
   const laid = await layoutView(annotateView(view, p));
   const html = renderHtml({ title: model.name, subtitle: 'archlens · prévia', views: [laid], embed: true });
-  return { key: laid.key, title: laid.title, html, viewData: viewData(laid), kind };
+  return { key: laid.key, title: laid.title, html, viewData: viewData(laid), kind, spec };
 }
 
 /**
@@ -83,11 +104,12 @@ export async function buildPreview(ctx, draft, specs) {
   else {
     const [change, ...saved] = specsOf(model, p);
     try { views.push(await drawView(model, p, change, 'change')); } catch (e) {
-      views.push({ kind: 'change', key: 'delta', title: 'O que muda', error: e.message });
+      views.push({ kind: 'change', key: 'delta', title: 'O que muda', error: e.message, spec: change });
     }
     for (const s of saved) {
       try { views.push(await drawView(model, p, s, 'saved')); } catch (e) { skipped.push({ key: s.key, error: e.message }); }
     }
   }
-  return { views, skipped, summary: previewSummary(p), ...(warning ? { warning } : {}) };
+  const report = draft.plan ? show(ctx.store, draft.plan) : null;
+  return { views, skipped, summary: previewSummary(p), ...deltaList(model, p), report, ...(warning ? { warning } : {}) };
 }

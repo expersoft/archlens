@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { planOpen, planTurn, type Draft, type PlanEvent, type PlanRequest } from '../api';
+import { planOpen, planTurn, type Draft, type PlanEvent, type PlanRequest, type ViewSpec } from '../api';
+import { PlanPreview } from './PlanPreview';
 import { PlanChat } from './PlanChat';
 import { Split } from './Split';
 import { load, save, type ChatMsg } from './draftStore';
@@ -30,12 +31,13 @@ function download(base: string, draft: Draft) {
   URL.revokeObjectURL(url);
 }
 
-/** The Planejar screen: conversation on the left, preview (Task 8) on the right. */
+/** The Planejar screen: conversation on the left, preview on the right. */
 export function PlanView({ base }: { base: string }) {
   const [saved] = useState(() => load(base));
   const [draft, setDraft] = useState<Draft | null>(saved?.draft ?? null);
   const [chat, setChat] = useState<ChatMsg[]>(saved?.chat ?? []);
   const [stored, setStored] = useState<'ok' | 'chat-trimmed' | 'too-big'>('ok');
+  const [previews, setPreviews] = useState<ViewSpec[]>([]);
   const draftRef = useRef(draft);
   const chatRef = useRef(chat);
   const seq = useRef(saved?.chat.reduce((n, m) => Math.max(n, m.id), 0) ?? 0);
@@ -95,6 +97,7 @@ export function PlanView({ base }: { base: string }) {
       else if (e.type === 'result') {
         finished = true; if (run.current?.id === id) run.current = null;
         const { reply } = e;
+        if (e.previews?.length) setPreviews((p) => [...p, ...e.previews]);
         const msg: Partial<ChatMsg> = { status: undefined, stage: undefined, warning: reply.warning };
         if (reply.kind === 'text') msg.text = reply.text;
         else if (reply.kind === 'question') msg.text = reply.question;
@@ -125,6 +128,7 @@ export function PlanView({ base }: { base: string }) {
       const r = await planOpen(base, JSON.parse(await readText(file)) as Draft);
       if (draftRef.current && !window.confirm(REPLACE)) return;
       cancel();
+      setPreviews([]);
       commit(r.draft, r.warning ? [{ id: ++seq.current, role: 'assistant', text: '', warning: r.warning }] : []);
     } catch (e) {
       note({ text: '', error: e instanceof SyntaxError ? 'o arquivo não é um rascunho do archlens' : errMsg(e) });
@@ -161,7 +165,7 @@ export function PlanView({ base }: { base: string }) {
                 }} />
               </label>
             </div>
-            <div className="empty">A prévia do diagrama aparece aqui.</div>
+            <PlanPreview base={base} draft={draft} previews={previews} />
           </div>
         )}
       />
