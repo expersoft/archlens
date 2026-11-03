@@ -232,9 +232,9 @@ mesma view spec que o `resolve` (o mesmo view IR) e escreve markdown (padrão) o
 estruturas sem formatação); `--out f` grava num arquivo (fora da base).
 
 ```bash
-node scripts/archlens.mjs query architecture/ --view containers                                   # visão salva
-node scripts/archlens.mjs query architecture/ --spec '{"notation":"archimate","viewpoint":"impact","anchor":"loja.pedidos"}'
-node scripts/archlens.mjs query architecture/ --element loja.pedidos --depth 1                    # cartão do elemento
+bin/archlens query architecture/ --view containers                                   # visão salva
+bin/archlens query architecture/ --spec '{"notation":"archimate","viewpoint":"impact","anchor":"loja.pedidos"}'
+bin/archlens query architecture/ --element loja.pedidos --depth 1                    # cartão do elemento
 ```
 
 **Visão** (`--view k` ou `--spec J`):

@@ -96,15 +96,16 @@ a mesma 'API de Agendamento'?"), remoções e desativações. Depois grava com `
 - a seção **Ciclo de vida** (`planned`, `deprecated`, `retired`) e visões as-is/to-be;
 - a seção **Histórico** com a rodada, e um commit sugerido.
 
-Pela linha de comando, o fluxo é `plan` → `plan --answers` → `apply` → `build`:
+Pela linha de comando (o comando `archlens`; para instalá-lo, veja [Comando `archlens`](../README.md#comando-archlens)), o fluxo
+é `plan` → `plan --answers` → `apply` → `build`:
 
 ```bash
-$A plan architecture/ delta.json --out plano.json             # plano aberto, com as perguntas
+archlens plan architecture/ delta.json --out plano.json             # plano aberto, com as perguntas
 # edite "resolution" nos itens pendentes: keep | take | value:<x> | same | different | yes | no
-$A plan architecture/ --answers plano.json --out plano-2.json # replaneja com as respostas (repita até sair "final")
-$A show architecture/ plano-2.json --out plano-2.md           # relatório: decisões, mudanças, relações e visões
-$A apply architecture/ plano-2.json                           # grava; o plano final leva as operações da base
-$A build architecture/                                        # ARCHITECTURE.md + HTML
+archlens plan architecture/ --answers plano.json --out plano-2.json # replaneja com as respostas (repita até sair "final")
+archlens show architecture/ plano-2.json --out plano-2.md           # relatório: decisões, mudanças, relações e visões
+archlens apply architecture/ plano-2.json                           # grava; o plano final leva as operações da base
+archlens build architecture/                                        # ARCHITECTURE.md + HTML
 ```
 
 O plano final carrega as operações no store e a versão da base: se a base mudou depois do plano, o `apply` recusa e
@@ -114,11 +115,11 @@ você refaz o plano com `--answers`. Exemplo pronto: `examples/telemedicina/plan
 O mesmo fluxo com o comando antigo, que continua valendo (`merge` é o mesmo que `plan` e `apply`):
 
 ```bash
-$A merge architecture/ delta.json --plan plano.json   # relatório + plano com as perguntas
+archlens merge architecture/ delta.json --plan plano.json   # relatório + plano com as perguntas
 # responda primeiro as possíveis duplicatas (same | different); se alguma for "same", replaneje com as respostas:
-$A merge architecture/ delta.json --plan plano2.json --answers plano.json
+archlens merge architecture/ delta.json --plan plano2.json --answers plano.json
 # edite "resolution" nos itens pendentes: keep | take | value:<x> | same | different | yes | no
-$A merge architecture/ --apply plano2.json           # grava, regenera e registra
+archlens merge architecture/ --apply plano2.json           # grava, regenera e registra
 ```
 
 Aplicar de novo um delta que já entrou não muda nada: o apply imprime `= nada mudou; a base não foi regravada`.
@@ -128,9 +129,9 @@ Veja `examples/telemedicina/delta-01.json` e `plano-01.json`, e o formato comple
 ### Consultando
 
 ```bash
-$A query architecture/ --view containers                       # markdown (padrão): elementos por camada, relações
-$A query architecture/ --spec '{"notation":"c4","level":"context","scope":"tele"}' --format json
-$A query architecture/ --element tele.api --depth 1            # cartão do elemento: pai, filhos, relações, fontes
+archlens query architecture/ --view containers                       # markdown (padrão): elementos por camada, relações
+archlens query architecture/ --spec '{"notation":"c4","level":"context","scope":"tele"}' --format json
+archlens query architecture/ --element tele.api --depth 1            # cartão do elemento: pai, filhos, relações, fontes
 ```
 
 `query` nunca grava a base. Para o diagrama animado use `render`/`deliver`.
@@ -141,11 +142,11 @@ Aponte uma pasta ou URL git e o Claude lê o repositório (compose, Kubernetes/H
 `graphify-out/`, se existir). Exemplo com `terminus-assignment-api`:
 
 ```bash
-$A scan terminus-assignment-api --base architecture/        # resumo: fatos, papel sugerido, sistemas prováveis
+archlens scan terminus-assignment-api --base architecture/        # resumo: fatos, papel sugerido, sistemas prováveis
 # o Claude pergunta: serviço ou sistema? Em qual sistema? (mostrando a sugestão e os motivos; o nome nunca decide)
-$A scan terminus-assignment-api --base architecture/ --as service --system terminus --delta d.json
-$A merge architecture/ d.json --plan plano.json             # responda só os itens com "resolution": null
-$A merge architecture/ --apply plano.json
+archlens scan terminus-assignment-api --base architecture/ --as service --system terminus --delta d.json
+archlens merge architecture/ d.json --plan plano.json             # responda só os itens com "resolution": null
+archlens merge architecture/ --apply plano.json
 ```
 
 Cada item ganha a fonte `repo` com commit, arquivo e linha. Ler de novo atualiza a base, e o que sumiu do repositório
@@ -166,17 +167,16 @@ Itens ainda em discussão podem entrar na base com `status: "draft"`: aparecem e
 ## Usando pela linha de comando
 
 ```bash
-A="node scripts/archlens.mjs"
-$A validate examples/loja-online/architecture
-$A views    examples/loja-online/architecture               # visões definidas + sugestões
-$A doc      examples/loja-online/architecture               # regenera o ARCHITECTURE.md
-$A build    examples/loja-online/architecture
-$A check    examples/loja-online/architecture               # modelo válido e ARCHITECTURE.md em dia (CI)
-$A migrate  examples/loja-online/architecture               # base 1.x → 2.0, no mesmo lugar
-$A migrate  ARCHITECTURE.md                                 # modelo dentro do .md → architecture/ (formato 2.0)
-$A deliver  examples/loja-online/architecture --view impacto-api-pedidos --out out/impacto.html --open
-$A deliver  examples/loja-online/architecture --spec '{"key":"erp","notation":"archimate","viewpoint":"impact","anchor":"erp"}' --out out/erp.html
-$A resolve  architecture/ --view containers --json        # IR da visão (nós e arestas), para depuração
+archlens validate examples/loja-online/architecture
+archlens views    examples/loja-online/architecture               # visões definidas + sugestões
+archlens doc      examples/loja-online/architecture               # regenera o ARCHITECTURE.md
+archlens build    examples/loja-online/architecture
+archlens check    examples/loja-online/architecture               # modelo válido e ARCHITECTURE.md em dia (CI)
+archlens migrate  examples/loja-online/architecture               # base 1.x → 2.0, no mesmo lugar
+archlens migrate  ARCHITECTURE.md                                 # modelo dentro do .md → architecture/ (formato 2.0)
+archlens deliver  examples/loja-online/architecture --view impacto-api-pedidos --out out/impacto.html --open
+archlens deliver  examples/loja-online/architecture --spec '{"key":"erp","notation":"archimate","viewpoint":"impact","anchor":"erp"}' --out out/erp.html
+archlens resolve  architecture/ --view containers --json        # IR da visão (nós e arestas), para depuração
 ```
 
 | Comando | O que faz |
@@ -204,7 +204,7 @@ recusadas (`E_STORE_FORMAT`) até o `migrate`. O `migrate` é a exceção: receb
 Por padrão a base é `model.json`. Para ler e navegar nela como um vault, converta-a para o conector `markdown`:
 
 ```bash
-node scripts/archlens.mjs store convert architecture --to markdown   # volta com --to json
+bin/archlens store convert architecture --to markdown   # volta com --to json
 ```
 
 A pasta passa a ter uma subpasta por tipo ArchiMate e um `.md` por elemento (`application-component/loja.pedidos.md`),
@@ -223,11 +223,11 @@ histórico também viram páginas legíveis.
 
 ```bash
 # modo git: o CLI grava um commit por apply num clone do repositório que o gbrain sincroniza
-$A init architecture --store gbrain --mode git --repo ../gbrain-arquitetura [--remote origin] [--branch main] [--prefix archlens]
+archlens init architecture --store gbrain --mode git --repo ../gbrain-arquitetura [--remote origin] [--branch main] [--prefix archlens]
 # modo MCP: o Claude chama as ferramentas do MCP do gbrain configurado no Claude Code; o CLI prepara e confere
-$A init architecture --store gbrain --mode mcp --server gbrain-corp [--source-id arquitetura] [--prefix archlens]
+archlens init architecture --store gbrain --mode mcp --server gbrain-corp [--source-id arquitetura] [--prefix archlens]
 # uma base local que já existe vai para o gbrain (e volta com --to json|markdown)
-$A store convert architecture --to gbrain --mode git --repo ../gbrain-arquitetura
+archlens store convert architecture --to gbrain --mode git --repo ../gbrain-arquitetura
 ```
 
 A pasta `architecture/` fica só com a configuração, o `ARCHITECTURE.md`, as notas e os diagramas: ponha-a no repositório

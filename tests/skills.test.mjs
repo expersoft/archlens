@@ -180,7 +180,7 @@ test('skills reach the repo through realpath, never through a bare $SKILL_DIR/..
   }
   for (const { name, text } of skills()) {
     assert.ok(text.includes(ARCHLENS_DEF), `${name}: define ${ARCHLENS_DEF}`);
-    assert.ok(text.includes('node "$ARCHLENS/scripts/archlens.mjs"'), `${name}: CLI por $ARCHLENS`);
+    assert.ok(text.includes('"$ARCHLENS/bin/archlens"'), `${name}: CLI por "$ARCHLENS/bin/archlens"`);
   }
 });
 
@@ -189,10 +189,19 @@ test('a skill linked into a skills folder finds the CLI with the documented comm
   symlinkSync(join(ROOT, 'skills', 'archlens-plan'), join(dir, 'archlens-plan'));
   const SKILL_DIR = join(dir, 'archlens-plan');
   const sh = cmd => spawnSync('bash', ['-c', cmd], { encoding: 'utf8', env: { ...process.env, SKILL_DIR } });
-  const r = sh(`${ARCHLENS_DEF}; node "$ARCHLENS/scripts/archlens.mjs" help && test -f "$ARCHLENS/references/base.md"`);
+  const r = sh(`${ARCHLENS_DEF}; "$ARCHLENS/bin/archlens" help && test -f "$ARCHLENS/references/base.md"`);
   assert.equal(r.status, 0, r.stderr);
   assert.match(r.stdout, /^archlens — /);
   assert.notEqual(sh('node "$SKILL_DIR/../../scripts/archlens.mjs" help').status, 0, 'o caminho sem realpath falha pelo link');
+});
+
+test('skills and references call the CLI through the launcher, never through node', () => {
+  const files = [...SKILLS.map(skillPath), ...readdirSync(join(ROOT, 'references')).filter(f => f.endsWith('.md')).map(f => join(ROOT, 'references', f))];
+  for (const file of files) {
+    const text = read(file);
+    for (const old of ['node scripts/archlens.mjs', 'node "$ARCHLENS/scripts/archlens.mjs"'])
+      assert.ok(!text.includes(old), `${file}: troque ${old} pelo lançador bin/archlens`);
+  }
 });
 
 test('merge.md previews never run build (it writes inside the base)', () => {

@@ -9,13 +9,13 @@ resposta. `plan`, `show` e as prévias nunca gravam a base (skill archlens-plan)
 archlens-apply).
 
 ```bash
-node scripts/archlens.mjs plan architecture/ delta.json --out p1.json          # relatório + plano (aberto ou final)
+bin/archlens plan architecture/ delta.json --out p1.json          # relatório + plano (aberto ou final)
 # … responda as perguntas em p1.json ("resolution"), possíveis duplicatas primeiro …
-node scripts/archlens.mjs plan architecture/ --answers p1.json --out p2.json   # refaz com as respostas (usa o delta de p1)
+bin/archlens plan architecture/ --answers p1.json --out p2.json   # refaz com as respostas (usa o delta de p1)
 # … repita até o plano sair final; depois revise …
-node scripts/archlens.mjs show architecture/ p2.json --out plano.md             # relatório markdown do plano
-node scripts/archlens.mjs deliver architecture/ --plan p2.json --out prévia.html # prévia em HTML (fora da base)
-node scripts/archlens.mjs apply architecture/ p2.json                           # grava e registra
+bin/archlens show architecture/ p2.json --out plano.md             # relatório markdown do plano
+bin/archlens deliver architecture/ --plan p2.json --out prévia.html # prévia em HTML (fora da base)
+bin/archlens apply architecture/ p2.json                           # grava e registra
 ```
 
 Se a base não existe, o primeiro delta a cria (`name` e `description` do delta viram os da base).
@@ -261,8 +261,8 @@ posições no delta).
 ## Pré-visualizando (antes do apply)
 
 ```bash
-node scripts/archlens.mjs deliver architecture/ --delta delta.json --out /tmp/prévia.html   # pendências no padrão do plano
-node scripts/archlens.mjs deliver architecture/ --plan plano.json --out /tmp/prévia.html    # usa as respostas já dadas
+bin/archlens deliver architecture/ --delta delta.json --out /tmp/prévia.html   # pendências no padrão do plano
+bin/archlens deliver architecture/ --plan plano.json --out /tmp/prévia.html    # usa as respostas já dadas
 ```
 
 O `--out` da prévia vai para fora da pasta da base. O `build` não é prévia: mesmo com `--delta` ele escreve

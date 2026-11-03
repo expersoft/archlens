@@ -40,9 +40,9 @@ O que ele faz, em ordem:
 ## Consultar pelo archlens
 
 ```bash
-node scripts/archlens.mjs query examples/loja-online-gbrain/architecture --element loja.pedidos
-node scripts/archlens.mjs query examples/loja-online-gbrain/architecture --view impacto-api-pedidos
-node scripts/archlens.mjs deliver examples/loja-online-gbrain/architecture --view containers --out /tmp/containers.html
+bin/archlens query examples/loja-online-gbrain/architecture --element loja.pedidos
+bin/archlens query examples/loja-online-gbrain/architecture --view impacto-api-pedidos
+bin/archlens deliver examples/loja-online-gbrain/architecture --view containers --out /tmp/containers.html
 ```
 
 No modo git o archlens lê direto do repositório do time; não há `pull`.
@@ -69,8 +69,8 @@ declara.
 
 ```bash
 B=examples/loja-online-gbrain/architecture
-node scripts/archlens.mjs plan $B delta.json --out /tmp/p1.json    # responda as perguntas e refaça com --answers até sair final
-node scripts/archlens.mjs apply $B /tmp/p2.json                    # um commit + push para o repositório do time
+bin/archlens plan $B delta.json --out /tmp/p1.json    # responda as perguntas e refaça com --answers até sair final
+bin/archlens apply $B /tmp/p2.json                    # um commit + push para o repositório do time
 node examples/loja-online-gbrain/setup.mjs sync                    # o gbrain importa o que chegou
 ```
 
