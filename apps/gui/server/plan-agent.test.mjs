@@ -129,3 +129,33 @@ test('histórico limitado às últimas 12 mensagens', () => withBase(async ctx =
   const t = p.seen[0].input.text;
   assert.ok(!t.includes('msg-2') && t.includes('msg-3') && t.includes('msg-14'));
 }));
+
+test('abort e erro do provedor levam o trabalho já feito no erro', () => withBase(async ctx => {
+  const ctl = new AbortController();
+  const p = scripted([turn([call('set_delta', { delta: NEW })]), () => new Promise(() => {})]);
+  const run = runPlan(ctx, req(ctx), opts(p, { signal: ctl.signal }));
+  setTimeout(() => ctl.abort(), 30);
+  await assert.rejects(run, e => e.code === 'E_LLM_ABORT' && !!e.draft.delta?.model && Array.isArray(e.previews));
+  const p2 = scripted([turn([call('set_delta', { delta: NEW })]), new Error('boom')]);
+  await assert.rejects(runPlan(ctx, req(ctx), opts(p2)), e => e.message === 'boom' && !!e.draft.delta?.model);
+}));
+
+test('teto de tokens é por rascunho', () => withBase(async ctx => {
+  const draft = { ...newDraft(ctx), usage: { tokens: 990 } };
+  const p = scripted([turn([call('set_delta', { delta: NEW })]), turn([call('reply', { text: 'x' })])]);
+  const r = await runPlan(ctx, req(ctx, { draft }), opts(p, { maxTokens: 1000 }));
+  assert.equal(p.seen.length, 1);
+  assert.equal(r.reply.kind, 'none');
+  assert.match(r.reply.warning, /teto de 1000 tokens/);
+  assert.equal(r.draft.usage.tokens, 1005);
+}));
+
+test('o estado do rascunho traz contagens e respostas dadas; avisos se juntam', () => withBase(async ctx => {
+  const draft = { ...newDraft(ctx), base: { id: ctx.id, version: 'antiga' }, delta: DUP, plan: planDelta(ctx.store, DUP).plan };
+  const p = scripted([turn([call('set_delta', { delta: DUP })])]);
+  const r = await runPlan(ctx, { draft, history: [], answer: { key: dupKey(ctx), resolution: 'different' } }, opts(p, { maxRounds: 1 }));
+  const t = p.seen[0].input.text;
+  assert.match(t, new RegExp(`respostas já dadas: ${dupKey(ctx)} = different`));
+  assert.match(t, /itens do plano:/);
+  assert.match(r.reply.warning, /a base mudou.*; teto de 1 rodadas/);
+}));

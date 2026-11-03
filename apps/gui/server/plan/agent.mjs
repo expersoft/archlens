@@ -21,6 +21,10 @@ function draftState(draft) {
     lines.push(draft.plan.blocked ? 'plano: bloqueado'
       : open.length ? `plano: aberto, ${open.length} pergunta(s) sem resposta: ${open.map(i => `${i.key} (${i.class})`).join(', ')}`
         : 'plano: final');
+    const counts = Object.entries(draft.plan.summary ?? {}).map(([k, v]) => `${k}: ${v}`).join(', ');
+    if (counts) lines.push(`itens do plano: ${counts}`);
+    const given = draft.plan.items.filter(i => i.resolution !== undefined && i.resolution !== null).map(i => `${i.key} = ${i.resolution}`);
+    if (given.length) lines.push(`respostas já dadas: ${given.join('; ')}`);
   } else lines.push('plano: nenhum');
   if (draft.note) lines.push(`nota: ${draft.note}`);
   if (draft.repo) lines.push(`repositório: ${draft.repo.url}${draft.repo.ref ? ` @ ${draft.repo.ref}` : ''} (${draft.repo.commit})`);
@@ -48,6 +52,7 @@ function applyAnswer(ctx, draft, { key, resolution }) {
 export async function runPlan(ctx, req, { provider, maxRounds = 12, timeoutMs = 90000, maxTokens = 200000, signal, emit = () => {} } = {}) {
   const t0 = Date.now();
   const metrics = { total: 0, llm: 0, tools: 0, rounds: 0, calls: 0, mode: 'tools', usage: { input: 0, output: 0, cacheRead: 0 } };
+  const base = req.draft.usage?.tokens ?? 0;
   const session = { draft: req.draft, previews: [] };
   let warning;
   emit({ type: 'stage', stage: 'lendo o pedido' });
@@ -61,7 +66,8 @@ export async function runPlan(ctx, req, { provider, maxRounds = 12, timeoutMs = 
   const { ctl, done } = combine(signal, timeoutMs);
   const finish = (reply, extra) => {
     metrics.total = Date.now() - t0;
-    const w = extra ?? warning;
+    const w = [warning, extra].filter(Boolean).join('; ') || undefined;
+    session.draft = { ...session.draft, usage: { tokens: tokens() } };
     return { draft: session.draft, reply: w && !reply.warning ? { ...reply, warning: w } : reply, previews: session.previews, metrics };
   };
   const stopped = reason => finish({ kind: 'none' }, reason);
@@ -78,12 +84,13 @@ export async function runPlan(ctx, req, { provider, maxRounds = 12, timeoutMs = 
     metrics.usage = sum(metrics.usage, out.usage);
     return out;
   };
-  const tokens = () => metrics.usage.input + metrics.usage.output;
+  const tokens = () => base + metrics.usage.input + metrics.usage.output;
 
   try {
     let input = { text: userText(req, session.draft) };
     let reminded = false;
     while (metrics.rounds < maxRounds) {
+      // One turn can go past the cap: it is only checked before each send.
       if (tokens() >= maxTokens) return stopped(`teto de ${maxTokens} tokens por rascunho`);
       const out = await send(input);
       if (!out.calls.length) {
@@ -111,6 +118,9 @@ export async function runPlan(ctx, req, { provider, maxRounds = 12, timeoutMs = 
     return stopped(`teto de ${maxRounds} rodadas`);
   } catch (e) {
     if (e.code === 'E_LLM_ABORT' && ctl.timedOut && !signal?.aborted) return stopped(`teto de ${Math.round(timeoutMs / 1000)} s`);
+    // Keep the tool work so the route can still return it.
+    e.draft = { ...session.draft, usage: { tokens: tokens() } };
+    e.previews = session.previews;
     throw e;
   } finally { done(); }
 }

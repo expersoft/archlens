@@ -5,14 +5,14 @@ import { plan as planDelta, answersOf } from '../../../../scripts/lib/api.mjs';
 export const DRAFT_VERSION = '1.0';
 export const DRAFT_MAX_BYTES = 2_000_000;
 
-const FIELDS = ['archlens-draft', 'base', 'archlens', 'delta', 'plan', 'note', 'repo'];
+const FIELDS = ['archlens-draft', 'base', 'archlens', 'delta', 'plan', 'note', 'repo', 'usage'];
 const archlensVersion = JSON.parse(readFileSync(new URL('../../../../package.json', import.meta.url), 'utf8')).version;
 
 const draftError = message => Object.assign(new Error(message), { code: 'E_GUI_DRAFT' });
 const isObject = v => v !== null && typeof v === 'object' && !Array.isArray(v);
 
 export function newDraft(ctx) {
-  return { 'archlens-draft': DRAFT_VERSION, base: { id: ctx.id, version: ctx.version }, archlens: archlensVersion, delta: null, plan: null, note: '', repo: null };
+  return { 'archlens-draft': DRAFT_VERSION, base: { id: ctx.id, version: ctx.version }, archlens: archlensVersion, delta: null, plan: null, note: '', repo: null, usage: { tokens: 0 } };
 }
 
 /** The URL itself when it carries no credential (`https://user:pass@h`, `https://token@h`). */
@@ -46,6 +46,9 @@ export function checkDraft(obj, ctx) {
     if (obj.delta === null) throw draftError('o rascunho tem plano sem delta');
     if (!isObject(obj.plan)) throw draftError('o plano do rascunho é inválido');
     try { answersOf(obj.plan, obj.delta); } catch (e) { throw draftError(`o plano do rascunho é inválido: ${e.message}`); }
+  }
+  if (obj.usage !== undefined && (!isObject(obj.usage) || !Number.isInteger(obj.usage.tokens) || obj.usage.tokens < 0)) {
+    throw draftError('o consumo do rascunho é inválido');
   }
   let repo = null;
   if (obj.repo !== null) {

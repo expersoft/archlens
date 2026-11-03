@@ -103,3 +103,13 @@ test('checkDraft não confia no plano do arquivo', () => withBase(ctx => {
   assert.equal(JSON.stringify(draft.plan.ops), JSON.stringify(fin.plan.ops));
   assert.ok(!JSON.stringify(draft.plan).includes('forged'));
 }));
+
+test('checkDraft valida o consumo (usage.tokens)', () => withBase(ctx => {
+  assert.deepEqual(newDraft(ctx).usage, { tokens: 0 });
+  const { usage, ...legacy } = newDraft(ctx);
+  assert.ok(checkDraft(legacy, ctx));
+  assert.deepEqual(checkDraft({ ...newDraft(ctx), usage: { tokens: 42 } }, ctx).usage, { tokens: 42 });
+  for (const bad of [{ tokens: -1 }, { tokens: 1.5 }, { tokens: '3' }, {}, 5, null]) {
+    rejects(() => checkDraft({ ...newDraft(ctx), usage: bad }, ctx), /consumo/);
+  }
+}));
