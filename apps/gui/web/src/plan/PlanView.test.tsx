@@ -177,4 +177,50 @@ describe('PlanView, correções', () => {
     await say(u, 'oi');
     expect(await screen.findByText('a conversa antiga foi cortada para caber no navegador; o rascunho está inteiro')).toBeTruthy();
   });
+
+  it('Descartar rascunho pede confirmação; cancelar mantém, confirmar limpa rascunho, conversa e rodada', async () => {
+    const u = userEvent.setup();
+    const signals: AbortSignal[] = [];
+    respond(result({ kind: 'text', text: 'ok' }, draft(12)), done);
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    render(<PlanView base="b" />);
+    const discard = () => screen.getByRole('button', { name: 'Descartar rascunho' }) as HTMLButtonElement;
+    expect(discard().disabled).toBe(true);
+    await say(u, 'oi');
+    await screen.findByText('ok');
+    planTurn.mockImplementation((_b, _body, _on, signal) => { signals.push(signal); return new Promise(() => {}); });
+    await say(u, 'outra');
+    await u.click(discard());
+    expect(confirm).toHaveBeenCalledWith('Descartar o rascunho atual? Ele se perde se não foi baixado.');
+    expect(JSON.parse(localStorage.getItem('archlens-gui-draft:b')!)).toEqual(draft(12));
+    expect(signals[0].aborted).toBe(false);
+    confirm.mockReturnValue(true);
+    await u.click(discard());
+    expect(signals[0].aborted).toBe(true);
+    expect(localStorage.getItem('archlens-gui-draft:b')).toBeNull();
+    expect(localStorage.getItem('archlens-gui-chat:b')).toBeNull();
+    expect(screen.queryByText('ok')).toBeNull();
+    expect(discard().disabled).toBe(true);
+    respond(result({ kind: 'text', text: 'do zero' }, draft(13)), done);
+    await say(u, 'nova');
+    await screen.findByText('do zero');
+    expect(planTurn.mock.calls.at(-1)![1].draft).toBeUndefined();
+    expect(planTurn.mock.calls.at(-1)![1].history).toEqual([]);
+  });
+
+  it('rascunho salvo que o servidor recusa mostra o erro e pode ser descartado', async () => {
+    const u = userEvent.setup();
+    localStorage.setItem('archlens-gui-draft:b', JSON.stringify(draft(14)));
+    localStorage.setItem('archlens-gui-chat:b', JSON.stringify([{ id: 1, role: 'user', text: 'antes' }]));
+    planOpen.mockRejectedValue(new api.ApiError('o delta do rascunho é inválido: x', 'E_GUI_DRAFT', 400));
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    render(<PlanView base="b" />);
+    expect(await screen.findByText(/o delta do rascunho é inválido: x.*Descartar rascunho/)).toBeTruthy();
+    await u.click(screen.getByRole('button', { name: 'Descartar rascunho' }));
+    expect(localStorage.getItem('archlens-gui-draft:b')).toBeNull();
+    respond(result({ kind: 'text', text: 'ok' }, draft(15)), done);
+    await say(u, 'oi');
+    await screen.findByText('ok');
+    expect(planTurn.mock.calls[0][1].draft).toBeUndefined();
+  });
 });

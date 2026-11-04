@@ -158,11 +158,14 @@ export type PlanReply =
   | { kind: 'none'; warning?: string };
 /** Um repositório anexado por URL git (o servidor clona; credencial só pelo ambiente do servidor). */
 export interface RepoAttach { url: string; ref?: string }
+export interface AppliedRound { summary: string; added: string[]; changed: string[]; removed: string[] }
 export interface PlanRequest {
   draft?: Draft;
   message?: string;
   attach?: RepoAttach;
   answer?: { key: string; resolution: string };
+  /** A rodada recém-aplicada (do changelog), para o rascunho das notas. */
+  applied?: AppliedRound;
   /** Só os turnos anteriores; o texto atual vai em `message`. */
   history: { role: 'user' | 'assistant'; text: string }[];
 }
@@ -201,7 +204,8 @@ export interface QualityResult { key: string; viewport: string; fill: number | n
 export interface PlanApplyResult {
   /** Null when the plan changed nothing. */
   entry: Record<string, unknown> | null;
-  doc: string | null;
+  /** The regenerated document; `{ error }` when the base was written but the document was not regenerated. */
+  doc: string | { error: string } | null;
   build: { available: boolean; problems: number; results: QualityResult[]; reason?: string; error?: string; code?: string } | null;
   notesDraftNeeded: boolean;
 }

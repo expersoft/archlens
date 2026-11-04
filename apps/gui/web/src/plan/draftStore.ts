@@ -20,28 +20,52 @@ export interface ChatMsg {
 const draftKey = (b: string) => `archlens-gui-draft:${b}`;
 const chatKey = (b: string) => `archlens-gui-chat:${b}`;
 
-/** The saved draft and conversation of a base, or null (nothing saved, unreadable, or storage blocked). */
-export function load(base: string): { draft: Draft; chat: ChatMsg[] } | null {
+/**
+ * The saved draft and conversation of a base, or null (nothing saved, unreadable, or storage blocked). After an apply
+ * only the conversation is kept: `draft` is null then.
+ */
+export function load(base: string): { draft: Draft | null; chat: ChatMsg[] } | null {
   try {
     const rawDraft = localStorage.getItem(draftKey(base));
-    if (rawDraft == null) return null;
-    const draft = JSON.parse(rawDraft) as Draft;
-    if (draft === null || typeof draft !== 'object') return null;
+    let draft: Draft | null = null;
+    if (rawDraft != null) {
+      draft = JSON.parse(rawDraft) as Draft;
+      if (draft === null || typeof draft !== 'object') return null;
+    }
     let chat: ChatMsg[] = [];
     try {
       const parsed: unknown = JSON.parse(localStorage.getItem(chatKey(base)) ?? '[]');
       if (Array.isArray(parsed)) chat = parsed as ChatMsg[];
     } catch { /* conversa ilegível: fica só o rascunho */ }
-    return { draft, chat };
+    return draft || chat.length ? { draft, chat } : null;
   } catch { return null; }
 }
 
-/** The draft always wins over the conversation: when storage is full the oldest messages go first. */
-export function save(base: string, draft: Draft, chat: ChatMsg[]): 'ok' | 'chat-trimmed' | 'too-big' {
-  try { localStorage.setItem(draftKey(base), JSON.stringify(draft)); } catch { return 'too-big'; }
+/**
+ * The draft always wins over the conversation: when storage is full the oldest messages go first. Without a draft (after
+ * an apply) only the conversation is kept.
+ */
+export function save(base: string, draft: Draft | null, chat: ChatMsg[]): 'ok' | 'chat-trimmed' | 'too-big' {
+  const putDraft = () => { try { localStorage.setItem(draftKey(base), JSON.stringify(draft)); return true; } catch { return false; } };
+  let trimmed = false;
+  if (!draft) {
+    try { localStorage.removeItem(draftKey(base)); } catch { /* sem storage */ }
+  } else if (!putDraft()) {
+    // the old conversation may be what fills the storage; a stale draft must not survive a failed write
+    try { localStorage.removeItem(chatKey(base)); } catch { /* sem storage */ }
+    trimmed = true;
+    if (!putDraft()) {
+      try { localStorage.removeItem(draftKey(base)); } catch { /* sem storage */ }
+      return 'too-big';
+    }
+  }
+  if (!chat.length) {
+    try { localStorage.removeItem(chatKey(base)); } catch { /* sem storage */ }
+    return trimmed ? 'chat-trimmed' : 'ok';
+  }
   try {
     localStorage.setItem(chatKey(base), JSON.stringify(chat));
-    return 'ok';
+    return trimmed ? 'chat-trimmed' : 'ok';
   } catch { /* cheio: corta a conversa */ }
   for (let keep = Math.floor(chat.length / 2); keep > 0; keep = Math.floor(keep / 2)) {
     try { localStorage.setItem(chatKey(base), JSON.stringify(chat.slice(-keep))); return 'chat-trimmed'; } catch { /* tenta menos */ }

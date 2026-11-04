@@ -24,7 +24,7 @@ const preview = (extra: Partial<api.PlanPreviewResult> = {}): api.PlanPreviewRes
   skipped: [], summary: '+2 ~1 −0', changes: [], questions: [], report: 'r', opsHash: 'h1', ...extra,
 });
 const applied = (build: Partial<api.PlanApplyResult['build']> = {}): api.PlanApplyResult => ({
-  entry: { id: 'r1' }, doc: 'ARCHITECTURE.md', notesDraftNeeded: true,
+  entry: { id: 'r1', summary: '+1 ~1 −0', added: ['pag'], changed: ['loja'], removed: [] }, doc: 'ARCHITECTURE.md', notesDraftNeeded: true,
   build: { available: true, problems: 1, results: [{ key: 'ctx', viewport: '1280x720', fill: 0.5, minFontPx: 9, issues: ['largura 50%'] }], ...build },
 });
 const open = () => { localStorage.setItem('archlens-gui-draft:b', JSON.stringify(draft(1))); vi.mocked(api.planOpen).mockResolvedValue({ draft: draft(1), opsHash: 'h1' }); };
@@ -125,6 +125,58 @@ describe('Aplicar na PlanView', () => {
     expect(planTurn.mock.calls[0][1].message).toBe(FIXED);
     expect(planTurn.mock.calls[0][1].draft).toBeUndefined();
     expect(await screen.findByLabelText('Visão geral (notes/overview.md)')).toBeTruthy();
+    expect(localStorage.getItem('archlens-gui-draft:b')).toBeNull();
+  });
+
+  it('o pedido de notas leva o resumo da rodada aplicada', async () => {
+    open();
+    const u = userEvent.setup();
+    planApply.mockResolvedValue(applied());
+    ev(notesReply, { type: 'done', metrics: { total: 1 } });
+    render(<PlanView base="b" canBuild />);
+    await waitFor(() => expect(aplicar().disabled).toBe(false));
+    await u.click(aplicar());
+    await u.click(screen.getByRole('button', { name: 'Confirmar e aplicar' }));
+    await waitFor(() => expect(planTurn).toHaveBeenCalled());
+    expect(planTurn.mock.calls[0][1].applied).toEqual({ summary: '+1 ~1 −0', added: ['pag'], changed: ['loja'], removed: [] });
+  });
+
+  it('depois do apply a conversa (aplicado, relatório e rascunho das notas) continua salva', async () => {
+    open();
+    const u = userEvent.setup();
+    planApply.mockResolvedValue(applied());
+    ev(notesReply, { type: 'done', metrics: { total: 1 } });
+    const { unmount } = render(<PlanView base="b" canBuild />);
+    await waitFor(() => expect(aplicar().disabled).toBe(false));
+    await u.click(aplicar());
+    await u.click(screen.getByRole('button', { name: 'Confirmar e aplicar' }));
+    expect(await screen.findByLabelText('Visão geral (notes/overview.md)')).toBeTruthy();
+    expect(localStorage.getItem('archlens-gui-draft:b')).toBeNull();
+    const saved = localStorage.getItem('archlens-gui-chat:b')!;
+    expect(saved).toContain('Plano aplicado');
+    expect(saved).toContain('problema(s) de qualidade');
+    expect(saved).toContain('"overview":"ov"');
+    unmount();
+    vi.mocked(api.planOpen).mockClear();
+    render(<PlanView base="b" canBuild />);
+    expect(screen.getByText(/Plano aplicado/)).toBeTruthy();
+    expect(await screen.findByLabelText('Visão geral (notes/overview.md)')).toBeTruthy();
+    expect(api.planOpen).not.toHaveBeenCalled();
+  });
+
+  it('documento que falhou depois da gravação: base gravada e o erro na conversa', async () => {
+    open();
+    const u = userEvent.setup();
+    const onApplied = vi.fn();
+    planApply.mockResolvedValue({ ...applied(), doc: { error: 'a base foi gravada, mas o ARCHITECTURE.md não foi regenerado; rode "archlens doc" na base' } });
+    ev();
+    render(<PlanView base="b" canBuild onApplied={onApplied} />);
+    await waitFor(() => expect(aplicar().disabled).toBe(false));
+    await u.click(aplicar());
+    await u.click(screen.getByRole('button', { name: 'Confirmar e aplicar' }));
+    expect(await screen.findByText('Plano aplicado: base gravada.')).toBeTruthy();
+    expect(screen.getByText(/o ARCHITECTURE.md não foi regenerado/)).toBeTruthy();
+    expect(onApplied).toHaveBeenCalledTimes(1);
     expect(localStorage.getItem('archlens-gui-draft:b')).toBeNull();
   });
 

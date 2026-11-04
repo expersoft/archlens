@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ApiError, planApply, planNotes, planOpen, planTurn, type Draft, type PlanApplyResult, type PlanEvent, type PlanPreviewResult, type PlanRequest, type RepoAttach, type ViewSpec } from '../api';
+import { ApiError, planApply, planNotes, planOpen, planTurn, type AppliedRound, type Draft, type PlanApplyResult, type PlanEvent, type PlanPreviewResult, type PlanRequest, type RepoAttach, type ViewSpec } from '../api';
 import { ApplyDialog } from './ApplyDialog';
 import { PlanPreview } from './PlanPreview';
 import { PlanChat } from './PlanChat';
@@ -9,6 +9,8 @@ import { clear, load, save, type ChatMsg } from './draftStore';
 const HISTORY_MAX = 40; // the server's limit
 const TOO_BIG = 'o rascunho não cabe no navegador; baixe-o para não perder o trabalho';
 const REPLACE = 'Substituir o rascunho atual pelo do arquivo? O atual se perde se não foi baixado.';
+const DISCARD = 'Descartar o rascunho atual? Ele se perde se não foi baixado.';
+const BROKEN = 'o rascunho salvo não abre; descarte-o ("Descartar rascunho") ou suba outro';
 const TRIMMED = 'a conversa antiga foi cortada para caber no navegador; o rascunho está inteiro';
 const NOTES_ASK = 'rascunhe as notas de interpretação desta rodada';
 const ROUND_RUNNING = 'aguarde a rodada em andamento terminar antes de aplicar';
@@ -31,6 +33,12 @@ function buildText(base: string, b: PlanApplyResult['build']): string {
   const lines = b.results.filter((r) => r.issues.length).flatMap((r) => [`${r.key} (${r.viewport}):`, ...r.issues.map((i) => `  ${i}`)]);
   return b.problems ? `Relatório de qualidade: ${b.problems} problema(s) de qualidade nos diagramas.\n${lines.join('\n')}` : 'Relatório de qualidade: os diagramas salvos foram regenerados sem problemas.';
 }
+
+const list = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []);
+/** The changelog entry of the applied round, as the notes request carries it. */
+const roundOf = (entry: Record<string, unknown>): AppliedRound => ({
+  summary: typeof entry.summary === 'string' ? entry.summary : '', added: list(entry.added), changed: list(entry.changed), removed: list(entry.removed),
+});
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -76,7 +84,7 @@ export function PlanView({ base, canBuild = true, onApplied }: { base: string; /
     chatRef.current = nextChat;
     setDraft(nextDraft);
     setChat(nextChat);
-    if (nextDraft) setStored(save(base, nextDraft, nextChat.filter((m) => m.status !== 'running')));
+    setStored(save(base, nextDraft, nextChat.filter((m) => m.status !== 'running')));
   }, [base]);
   const setChatOnly = useCallback((fn: (c: ChatMsg[]) => ChatMsg[]) => {
     chatRef.current = fn(chatRef.current);
@@ -96,18 +104,18 @@ export function PlanView({ base, canBuild = true, onApplied }: { base: string; /
   // Restore: the saved draft is validated and planned again by the server (it never trusts the browser).
   useEffect(() => {
     alive.current = true;
-    if (saved) {
+    if (saved?.draft) {
       planOpen(base, saved.draft).then((r) => {
         if (!alive.current || run.current) return;
         commit(r.draft, chatRef.current);
         if (r.warning) { note({ text: '', warning: r.warning }); }
-      }).catch((e) => { if (alive.current) note({ text: '', error: errMsg(e) }); });
+      }).catch((e) => { if (alive.current) note({ text: '', error: `${errMsg(e)}; ${BROKEN}` }); });
     }
     return () => { alive.current = false; run.current?.ctl.abort(); run.current = null; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const turn = (req: { message?: string; answer?: { key: string; resolution: string }; attach?: RepoAttach }, userText: string, opts: { keepDraft?: boolean } = {}) => {
+  const turn = (req: { message?: string; answer?: { key: string; resolution: string }; attach?: RepoAttach; applied?: AppliedRound }, userText: string, opts: { keepDraft?: boolean } = {}) => {
     cancel();
     const history: PlanRequest['history'] = chatRef.current
       .filter((m) => m.status !== 'running' && m.status !== 'canceled' && m.text)
@@ -155,7 +163,11 @@ export function PlanView({ base, canBuild = true, onApplied }: { base: string; /
     if (!notes) { patch(msg.id, { notesState: 'skipped', error: undefined }); return; }
     patch(msg.id, { status: 'running', stage: 'gravando as notas', error: undefined });
     planNotes(base, notes).then(
-      (r) => { patch(msg.id, { status: undefined, stage: undefined, notes, notesState: 'saved' }); note({ text: `Notas gravadas e ${r.doc} regenerado.` }); },
+      (r) => {
+        patch(msg.id, { status: undefined, stage: undefined, notes, notesState: 'saved' });
+        note({ text: `Notas gravadas e ${r.doc} regenerado.` });
+        commit(draftRef.current, chatRef.current);
+      },
       (e) => patch(msg.id, { status: undefined, stage: undefined, error: errMsg(e) }),
     );
   };
@@ -186,13 +198,13 @@ export function PlanView({ base, canBuild = true, onApplied }: { base: string; /
       const r = await planApply(base, current, shown.opsHash);
       setApplyOpen(false);
       if (!r.entry) { note({ text: 'O plano não muda nada na base; nada foi gravado.' }); return; }
-      note({ text: `Plano aplicado: base gravada e ${r.doc ?? 'ARCHITECTURE.md'} regenerado.` });
+      if (r.doc && typeof r.doc === 'object') note({ text: 'Plano aplicado: base gravada.', error: r.doc.error });
+      else note({ text: `Plano aplicado: base gravada e ${r.doc ?? 'ARCHITECTURE.md'} regenerado.` });
       note({ text: buildText(base, r.build) });
-      clear(base);
-      commit(null, chatRef.current);
+      commit(null, chatRef.current); // the draft goes; the conversation stays saved
       setPreviews([]);
       onApplied?.();
-      if (r.notesDraftNeeded) turn({ message: NOTES_ASK }, NOTES_ASK, { keepDraft: false });
+      if (r.notesDraftNeeded) turn({ message: NOTES_ASK, applied: roundOf(r.entry) }, NOTES_ASK, { keepDraft: false });
     } catch (e) {
       if (e instanceof ApiError && e.code === 'E_GUI_PLAN_CHANGED' && e.extra.draft) {
         setApplyOpen(false);
@@ -212,6 +224,15 @@ export function PlanView({ base, canBuild = true, onApplied }: { base: string; /
     } catch (e) {
       note({ text: '', error: e instanceof SyntaxError ? 'o arquivo não é um rascunho do archlens' : errMsg(e) });
     }
+  };
+
+  const discard = () => {
+    if (!window.confirm(DISCARD)) return;
+    cancel();
+    clear(base);
+    commit(null, []);
+    setPreviews([]);
+    setApplyOpen(false);
   };
 
   const downloadBtn = <button type="button" aria-label="Baixar rascunho" disabled={!draft} onClick={() => draft && download(base, draft)}>⬇ Baixar</button>;
@@ -237,6 +258,7 @@ export function PlanView({ base, canBuild = true, onApplied }: { base: string; /
           <div className="plan-preview" data-testid="plan-preview">
             <div className="toolbar">
               {downloadBtn}
+              <button type="button" aria-label="Descartar rascunho" disabled={!draft} onClick={discard}>Descartar</button>
               <button type="button" disabled={!!reason || applying} title={reason} onClick={() => { setApplyError(null); setReplannable(false); setApplyOpen(true); }}>Aplicar</button>
               <label className="filebtn">
                 ⬆ Subir

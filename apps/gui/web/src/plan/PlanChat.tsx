@@ -4,6 +4,13 @@ import { NotesReview } from './NotesReview';
 import type { RepoAttach } from '../api';
 
 /** The chip of a repository: url@ref, else url@commit (short). */
+// The server's rule (cleanRepoUrl): any http(s) userinfo and ssh user:pass are credentials; a bare ssh user is not.
+const CREDENTIAL = 'a URL do repositório não pode ter credencial embutida; use o token do ambiente (.env)';
+const hasCredential = (url: string) => {
+  const m = /^([a-z][a-z0-9+.-]*):\/\/([^/?#]*)@/i.exec(url);
+  return !!m && (m[1].toLowerCase() !== 'ssh' || m[2].includes(':'));
+};
+
 const repoLabel = (r: { url: string; ref?: string; commit?: string }) => (r.ref ? `${r.url}@${r.ref}` : r.commit ? `${r.url}@${r.commit.slice(0, 7)}` : r.url);
 
 export interface PlanChatProps {
@@ -21,7 +28,7 @@ export interface PlanChatProps {
 
 export function PlanChat({ chat, onSend, onAnswer, onNotes, notice, repo }: PlanChatProps) {
   const [text, setText] = useState('');
-  const [form, setForm] = useState<{ url: string; ref: string } | null>(null);
+  const [form, setForm] = useState<{ url: string; ref: string; error?: string } | null>(null);
   const [attach, setAttach] = useState<RepoAttach | null>(null);
   const end = useRef<HTMLLIElement>(null);
   useEffect(() => { end.current?.scrollIntoView?.({ block: 'end' }); }, [chat]);
@@ -37,6 +44,8 @@ export function PlanChat({ chat, onSend, onAnswer, onNotes, notice, repo }: Plan
   const confirmAttach = () => {
     const url = form?.url.trim();
     if (!url) return;
+    // refused here, so the credential never reaches the conversation (nor the model through the history)
+    if (hasCredential(url)) { setForm({ ...form!, error: CREDENTIAL }); return; }
     const ref = form!.ref.trim();
     setAttach({ url, ...(ref ? { ref } : {}) });
     setForm(null);
@@ -85,10 +94,11 @@ export function PlanChat({ chat, onSend, onAnswer, onNotes, notice, repo }: Plan
         {form && !repo && (
           <div className="attach-form">
             <input aria-label="URL do repositório" placeholder="https://… ou git@host:caminho" value={form.url} autoFocus
-              onChange={(e) => setForm({ ...form, url: e.target.value })} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); confirmAttach(); } }} />
+              onChange={(e) => setForm({ ...form, url: e.target.value, error: undefined })} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); confirmAttach(); } }} />
             <input aria-label="Ref (opcional)" placeholder="branch, tag ou commit" value={form.ref}
               onChange={(e) => setForm({ ...form, ref: e.target.value })} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); confirmAttach(); } }} />
             <button type="button" disabled={!form.url.trim()} onClick={confirmAttach}>Anexar</button>
+            {form.error && <p className="err" role="alert">{form.error}</p>}
           </div>
         )}
         <textarea

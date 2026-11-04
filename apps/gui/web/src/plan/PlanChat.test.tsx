@@ -41,4 +41,30 @@ describe('PlanChat: anexar repositório', () => {
     render(<PlanChat chat={[]} onSend={noop} onAnswer={noop} repo={{ url: 'https://github.com/a/b.git', commit: 'abcdef1234' }} />);
     expect(screen.getByText('https://github.com/a/b.git@abcdef1')).toBeTruthy();
   });
+
+  it('URL com credencial embutida é recusada no navegador e não vira anexo', async () => {
+    const u = userEvent.setup();
+    const onSend = vi.fn();
+    render(<PlanChat chat={[]} onSend={onSend} onAnswer={noop} />);
+    await u.click(screen.getByRole('button', { name: 'Anexar repositório' }));
+    await u.type(screen.getByLabelText('URL do repositório'), 'https://x-access-token:ghp_segredo@github.com/a/b.git');
+    await u.click(screen.getByRole('button', { name: 'Anexar' }));
+    expect(screen.getByText('a URL do repositório não pode ter credencial embutida; use o token do ambiente (.env)')).toBeTruthy();
+    expect(screen.queryByText(/ghp_segredo@github.com\/a\/b.git@?/, { selector: '.chip' })).toBeNull();
+    await u.type(screen.getByLabelText('Mensagem'), 'leia{Enter}');
+    expect(onSend).toHaveBeenCalledWith('leia');
+    expect(JSON.stringify(onSend.mock.calls)).not.toContain('ghp_segredo');
+  });
+
+  it('ssh com só o usuário é aceito; ssh com senha é recusado', async () => {
+    const u = userEvent.setup();
+    render(<PlanChat chat={[]} onSend={noop} onAnswer={noop} />);
+    await u.click(screen.getByRole('button', { name: 'Anexar repositório' }));
+    await u.type(screen.getByLabelText('URL do repositório'), 'ssh://git:senha@host/a.git{Enter}');
+    expect(screen.getByText(/não pode ter credencial embutida/)).toBeTruthy();
+    await u.clear(screen.getByLabelText('URL do repositório'));
+    await u.type(screen.getByLabelText('URL do repositório'), 'ssh://git@host/a.git{Enter}');
+    expect(screen.getByText('ssh://git@host/a.git')).toBeTruthy();
+    expect(screen.queryByText(/não pode ter credencial embutida/)).toBeNull();
+  });
 });
