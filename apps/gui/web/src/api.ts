@@ -182,7 +182,14 @@ export const planTurn = (base: string, body: PlanRequest, onEvent: (e: PlanEvent
 export const planOpen = (base: string, draft: Draft) => call<{ draft: Draft; warning?: string; opsHash?: string | null }>(`${b(base)}/plan/open`, { draft });
 
 export interface PreviewView { key: string; title: string; html?: string; viewData?: unknown; kind: 'change' | 'saved' | 'asked'; error?: string; spec: ViewSpec }
-export interface PreviewChange { sign: '+' | '~' | '−'; kind: 'element' | 'relationship'; id: string; name: string }
+export interface PreviewField { field: string; before: string; after: string }
+export interface PreviewChange {
+  sign: '+' | '~' | '−'; kind: 'element' | 'relationship'; id: string; name: string;
+  /** Element type label, or the relationship type. */
+  type?: string; description?: string; fields?: PreviewField[];
+  /** A relationship's ends (ids). */
+  ends?: string[];
+}
 export interface PreviewQuestion { key: string; question: string; options: string[]; assumed: string | null }
 export interface PlanPreviewResult {
   views: PreviewView[];
@@ -197,8 +204,13 @@ export interface PlanPreviewResult {
   warning?: string;
 }
 /** Draws the draft: the default views, or exactly `specs` (drawn with the delta applied). */
-export const planPreview = (base: string, draft: Draft, specs?: ViewSpec[]) =>
-  call<PlanPreviewResult>(`${b(base)}/plan/preview`, { draft, ...(specs ? { specs } : {}) });
+export type Notation = 'archimate' | 'c4';
+/** `notation` picks the notation of the change view (the server picks one if absent). */
+export const planPreview = (base: string, draft: Draft, specs?: ViewSpec[], notation?: Notation) =>
+  call<PlanPreviewResult>(`${b(base)}/plan/preview`, { draft, ...(specs ? { specs } : {}), ...(notation ? { notation } : {}) });
+/** Context-menu actions and notation flip over the preview (the base as the draft leaves it). */
+export const planActions = (base: string, draft: Draft, id: string) => call<{ actions: Action[] }>(`${b(base)}/plan/actions`, { draft, id });
+export const planFlip = (base: string, draft: Draft, spec: ViewSpec) => call<{ spec: ViewSpec }>(`${b(base)}/plan/flip`, { draft, spec });
 
 export interface QualityResult { key: string; viewport: string; fill: number | null; minFontPx: number | null; issues: string[] }
 export interface PlanApplyResult {

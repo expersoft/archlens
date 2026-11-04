@@ -79,15 +79,32 @@ test('planejar ponta a ponta', async (t) => {
     await page.waitForFunction(() => !([...document.querySelectorAll('button')].find((b) => b.textContent === 'Aplicar')?.disabled ?? true));
   });
 
-  await t.test('3. a prévia alterna entre as abas', async () => {
+  await t.test('3. a prévia alterna entre as abas e o delta fica na lateral', async () => {
     const tab = (name) => page.getByRole('tab', { name });
-    await tab('Delta').click();
-    assert.equal(await tab('Delta').getAttribute('aria-selected'), 'true');
-    await page.getByRole('list', { name: 'Mudanças' }).waitFor();
     await tab('Plano').click();
     assert.equal(await tab('Plano').getAttribute('aria-selected'), 'true');
     await tab('Diagrama').click();
     assert.equal(await tab('Diagrama').getAttribute('aria-selected'), 'true');
+    const panel = page.getByTestId('delta-panel');
+    await panel.getByRole('button', { name: 'Sistema Novo Zeta' }).waitFor();
+    await panel.getByText('API de Pedidos').waitFor();
+  });
+
+  await t.test('3b. ArchiMate | C4 redesenha a visão do que muda; o menu de contexto navega pela prévia', async () => {
+    const frame = () => page.frameLocator('[data-testid="plan-preview"] iframe[title="Diagrama"]');
+    const notation = page.getByRole('group', { name: 'Notação' });
+    await frame().locator('[data-node="sistema-novo"]').waitFor();
+    const before = await notation.getByRole('button', { name: 'C4' }).getAttribute('class');
+    const other = before === 'on' ? 'ArchiMate' : 'C4';
+    await notation.getByRole('button', { name: other }).click();
+    await page.waitForFunction((o) => [...document.querySelectorAll('[aria-label="Notação"] button')].find((b) => b.textContent === o)?.className === 'on', other);
+    await frame().locator('[data-node="sistema-novo"]').waitFor();
+    await frame().locator('[data-node="sistema-novo"]').click({ button: 'right', position: { x: 12, y: 12 }, force: true });
+    const menu = page.getByRole('menu');
+    await menu.getByRole('menuitem').first().waitFor();
+    await menu.getByRole('menuitem', { name: /Focar/ }).click();
+    await page.locator('[aria-label="Visões da prévia"]').getByRole('button', { pressed: true }).filter({ hasNotText: 'O que muda' }).waitFor();
+    await frame().locator('[data-node="sistema-novo"]').waitFor();
   });
 
   await t.test('4. recarregar a página traz o rascunho de volta, sem gravar nada', async () => {

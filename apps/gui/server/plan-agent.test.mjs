@@ -78,7 +78,7 @@ test('teto de rodadas preserva o rascunho', () => withBase(async ctx => {
   assert.ok(r.draft.plan);
 }));
 
-test('teto de tokens por rascunho', () => withBase(async ctx => {
+test('teto de tokens por mensagem', () => withBase(async ctx => {
   const big = { input: 600, output: 500, cacheRead: 0 };
   const p = scripted([turn([call('set_delta', { delta: NEW })], big), turn([call('plan_draft')], big), turn([call('reply', { text: 'x' })])]);
   const r = await runPlan(ctx, req(ctx), opts(p, { maxTokens: 1000 }));
@@ -140,14 +140,13 @@ test('abort e erro do provedor levam o trabalho já feito no erro', () => withBa
   await assert.rejects(runPlan(ctx, req(ctx), opts(p2)), e => e.message === 'boom' && !!e.draft.delta?.model);
 }));
 
-test('teto de tokens é por rascunho', () => withBase(async ctx => {
+test('teto de tokens é por mensagem; o rascunho só acumula o total', () => withBase(async ctx => {
   const draft = { ...newDraft(ctx), usage: { tokens: 990 } };
   const p = scripted([turn([call('set_delta', { delta: NEW })]), turn([call('reply', { text: 'x' })])]);
   const r = await runPlan(ctx, req(ctx, { draft }), opts(p, { maxTokens: 1000 }));
-  assert.equal(p.seen.length, 1);
-  assert.equal(r.reply.kind, 'none');
-  assert.match(r.reply.warning, /teto de 1000 tokens/);
-  assert.equal(r.draft.usage.tokens, 1005);
+  assert.equal(p.seen.length, 2);
+  assert.equal(r.reply.kind, 'text');
+  assert.equal(r.draft.usage.tokens, 990 + 2 * 15);
 }));
 
 test('o estado do rascunho traz contagens e respostas dadas; avisos se juntam', () => withBase(async ctx => {

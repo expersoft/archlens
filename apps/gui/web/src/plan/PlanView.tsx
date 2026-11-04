@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ApiError, planApply, planNotes, planOpen, planTurn, type AppliedRound, type Draft, type PlanApplyResult, type PlanEvent, type PlanPreviewResult, type PlanRequest, type RepoAttach, type ViewSpec } from '../api';
 import { ApplyDialog } from './ApplyDialog';
-import { PlanPreview } from './PlanPreview';
+import { PlanPreview, type PreviewNav } from './PlanPreview';
+import { DeltaPanel } from './DeltaPanel';
+import { useStoredState } from '../store';
 import { PlanChat } from './PlanChat';
 import { Split } from './Split';
 import { clear, load, save, type ChatMsg } from './draftStore';
@@ -62,7 +64,19 @@ function download(base: string, draft: Draft) {
 }
 
 /** The Planejar screen: conversation on the left, preview on the right. */
-export function PlanView({ base, canBuild = true, onApplied }: { base: string; /** The server can run Chromium (info.plan.build). */ canBuild?: boolean; /** The base was written: reload it in the GUI. */ onApplied?: () => void }) {
+export interface PlanViewProps {
+  base: string;
+  /** The server can run Chromium (info.plan.build). */
+  canBuild?: boolean;
+  /** The base was written: reload it in the GUI. */
+  onApplied?: () => void;
+  /** Planejar is on screen: its shortcuts listen only then. */
+  active?: boolean;
+  /** The preview's notation and flip, for the top bar's ArchiMate | C4. */
+  onNav?: (nav: PreviewNav) => void;
+}
+
+export function PlanView({ base, canBuild = true, onApplied, active = true, onNav }: PlanViewProps) {
   const [saved] = useState(() => load(base));
   const [draft, setDraft] = useState<Draft | null>(saved?.draft ?? null);
   const [chat, setChat] = useState<ChatMsg[]>(saved?.chat ?? []);
@@ -74,6 +88,12 @@ export function PlanView({ base, canBuild = true, onApplied }: { base: string; /
   const [applyOpen, setApplyOpen] = useState(false);
   const [applying, setApplying] = useState(false);
   const [applyError, setApplyError] = useState<string | null>(null);
+  const [panel, setPanel] = useStoredState<boolean>('archlens-plan-delta', true);
+  // The panel keeps the last preview while the next one is drawn (`shown` goes null then, which only gates Aplicar).
+  const [listed, setListed] = useState<PlanPreviewResult | null>(null);
+  const [selected, setSelected] = useState<string | null>(null);
+  const [focus, setFocus] = useState<{ id: string; n: number } | null>(null);
+  const navigated = useCallback((spec: ViewSpec) => setPreviews((p) => addNew(p, [spec])), []);
   const draftRef = useRef(draft);
   const chatRef = useRef(chat);
   const seq = useRef(saved?.chat.reduce((n, m) => Math.max(n, m.id), 0) ?? 0);
@@ -244,7 +264,19 @@ export function PlanView({ base, canBuild = true, onApplied }: { base: string; /
     commit(draftRef.current, []);
   };
 
-  const downloadBtn = <button type="button" aria-label="Baixar rascunho" disabled={!draft} onClick={() => draft && download(base, draft)}>⬇ Baixar</button>;
+  // Ctrl+Alt+B (as in Navegar) or Ctrl+Shift+B shows or hides the delta panel.
+  useEffect(() => {
+    if (!active) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.code !== 'KeyB' || !(e.altKey || e.shiftKey)) return;
+      e.preventDefault();
+      setPanel((v) => !v);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [active, setPanel]);
+
+  const saveBtn = <button type="button" aria-label="Salvar rascunho" title="Salvar o rascunho num arquivo .json" disabled={!draft} onClick={() => draft && download(base, draft)}>Salvar</button>;
 
   return (
     <div className="plan" data-testid="plan-view">
@@ -259,7 +291,7 @@ export function PlanView({ base, canBuild = true, onApplied }: { base: string; /
             onClear={clearChat}
             notice={stored === 'too-big' ? (
               <div className="warn plan-notice" role="alert">
-                <span>{TOO_BIG}</span> <button type="button" aria-label="Baixar rascunho" onClick={() => draft && download(base, draft)}>Baixar</button>
+                <span>{TOO_BIG}</span> <button type="button" aria-label="Salvar rascunho" onClick={() => draft && download(base, draft)}>Salvar</button>
               </div>
             ) : stored === 'chat-trimmed' ? <div className="warn plan-notice" role="status">{TRIMMED}</div> : null}
           />
@@ -267,23 +299,33 @@ export function PlanView({ base, canBuild = true, onApplied }: { base: string; /
         right={(
           <div className="plan-preview" data-testid="plan-preview">
             <div className="toolbar">
-              {downloadBtn}
-              <button type="button" aria-label="Descartar rascunho" disabled={!draft} onClick={discard}>Descartar</button>
-              <button type="button" disabled={!!reason || applying} title={reason} onClick={() => { setApplyError(null); setReplannable(false); setApplyOpen(true); }}>Aplicar</button>
-              <label className="filebtn">
-                ⬆ Subir
-                <input type="file" accept="application/json,.json" aria-label="Subir rascunho" onChange={(e) => {
+              <label className="filebtn" title="Abrir um rascunho salvo (.json)">
+                Abrir
+                <input type="file" accept="application/json,.json" aria-label="Abrir rascunho" onChange={(e) => {
                   const f = e.target.files?.[0];
                   e.target.value = '';
                   if (f) void upload(f);
                 }} />
               </label>
+              {saveBtn}
+              <button type="button" aria-label="Descartar rascunho" disabled={!draft} onClick={discard}>Descartar</button>
+              <button type="button" disabled={!!reason || applying} title={reason} onClick={() => { setApplyError(null); setReplannable(false); setApplyOpen(true); }}>Aplicar</button>
             </div>
             {applyOpen && shown && <ApplyDialog summary={shown.summary} views={savedViews} busy={applying} error={applyError} onConfirm={() => void apply()} onCancel={() => setApplyOpen(false)} onReplan={replannable ? () => void replan() : undefined} />}
-            <PlanPreview base={base} draft={draft} previews={previews} onLoaded={(r, failed) => { setShown(r); setPreviewFailed(!!failed); }} />
+            <PlanPreview base={base} draft={draft} previews={previews} onLoaded={(r, failed) => { setShown(r); if (r) setListed(r); setPreviewFailed(!!failed); }}
+              onNavigate={navigated} onNav={onNav} onSelect={setSelected} focus={focus} />
           </div>
         )}
       />
+      {panel && (
+        <aside className="side r" data-testid="delta-panel" aria-label="Delta">
+          <div className="ph">Delta</div>
+          <DeltaPanel result={draft?.delta ? listed : null} selected={selected} onPick={(id) => { setSelected(id); setFocus((f) => ({ id, n: (f?.n ?? 0) + 1 })); }} />
+        </aside>
+      )}
+      <nav className="rail r" aria-label="Painel direito">
+        <button type="button" aria-label="Delta" title="Delta (Ctrl+Alt+B ou Ctrl+Shift+B)" className={panel ? 'on' : ''} onClick={() => setPanel((v) => !v)}>Δ</button>
+      </nav>
     </div>
   );
 }

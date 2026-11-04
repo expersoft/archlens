@@ -116,14 +116,16 @@ export async function runPlan(ctx, req, { provider, maxRounds = 12, timeoutMs = 
     metrics.usage = sum(metrics.usage, out.usage);
     return out;
   };
-  const tokens = () => base + metrics.usage.input + metrics.usage.output;
+  // The cap is per message (long deltas take many rounds); the draft keeps the running total, for information.
+  const spent = () => metrics.usage.input + metrics.usage.output;
+  const tokens = () => base + spent();
 
   try {
     let input = { text: userText(req, session.draft) };
     let reminded = false;
     while (metrics.rounds < maxRounds) {
       // One turn can go past the cap: it is only checked before each send.
-      if (tokens() >= maxTokens) return stopped(`teto de ${maxTokens} tokens por rascunho`);
+      if (spent() >= maxTokens) return stopped(`teto de ${maxTokens} tokens por mensagem`);
       const out = await send(input);
       if (!out.calls.length) {
         if (reminded) return finish({ kind: 'text', text: out.text ?? '' });

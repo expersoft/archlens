@@ -101,7 +101,7 @@ describe('Aplicar na PlanView', () => {
     expect(await screen.findByText(/o plano mudou desde a confirmação/)).toBeTruthy();
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(JSON.parse(localStorage.getItem('archlens-gui-draft:b')!)).toEqual(novo);
-    await waitFor(() => expect(planPreview).toHaveBeenLastCalledWith('b', novo));
+    await waitFor(() => expect(planPreview).toHaveBeenLastCalledWith('b', novo, undefined, undefined));
     await waitFor(() => expect(aplicar().disabled).toBe(false));
     await u.click(aplicar());
     expect(within(screen.getByRole('dialog')).getByText(/\+9 ~0 −0/)).toBeTruthy(); // asks for a new review of the new plan

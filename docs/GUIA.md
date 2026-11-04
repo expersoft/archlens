@@ -160,12 +160,16 @@ repositório dele substitui (remove o placeholder e leva as relações para o co
 Com a GUI ligada em modo Planejar (`archlens serve architecture --llm anthropic --plan`; veja o README) o seletor do
 topo ganha **Navegar | Planejar**. O fluxo é o da `archlens-plan` e da `archlens-apply`, sem sair do navegador:
 
-1. **Descreva a mudança** no chat ("a API de Pedidos passa a falar com o Sistema X") ou **anexe um repositório** por URL
+1. **Descreva a mudança** no chat ("a API de Pedidos passa a falar com o Sistema X"; `Ctrl+Enter` ou o botão envia,
+   `Enter` quebra a linha, **Limpar** ou `/limpar` começa uma conversa nova sem perder o rascunho) ou **anexe um repositório** por URL
    git (botão "Anexar repositório"; um por rascunho). O agente consulta a base, monta o delta e o planeja.
 2. **Responda as decisões por botões.** Cada pergunta aberta do plano (conflito, possível duplicata, remoção) vem com a
    recomendação do agente e o motivo; clicar numa opção responde. Dá para responder também em texto.
-3. **Confira a prévia** à direita: **Diagrama** (a base com o que muda desenhado por cima, ou lado a lado), **Delta** e
-   **Plano** (o que entra, o que muda, o que sai e o que falta decidir).
+3. **Confira a prévia**: **Diagrama** (a base com o que muda desenhado por cima, ou lado a lado) e **Plano**. O painel
+   **Delta**, na lateral direita (`Ctrl+Alt+B` ou `Ctrl+Shift+B`), lista em texto o que entra, o que muda (campo por
+   campo, antes → depois), o que sai e o que falta decidir; clicar num elemento o mostra no diagrama. **ArchiMate | C4**
+   redesenha a visão do que muda na outra notação, e o botão direito e o clique duplo navegam como no Navegar, só que
+   sobre a base com o delta: dá para abrir o contexto ou as dependências de um elemento que o delta ainda vai criar.
 4. **Aplique.** O botão **Aplicar** só fica ativo com o plano final. Ele abre a confirmação (resumo `+N ~N −N` e visões
    afetadas); o servidor refaz o plano contra a base de agora e só grava se for o plano que você confirmou, senão mostra
    o plano novo. Depois regenera o `ARCHITECTURE.md` e os diagramas (precisa do Chromium no servidor) e o agente
@@ -174,8 +178,8 @@ topo ganha **Navegar | Planejar**. O fluxo é o da `archlens-plan` e da `archlen
 O chat só planeja mudanças desta base: não escreve código, não responde perguntas gerais e **nunca aplica por conta
 própria**; pedir "aplique" no chat só leva a uma explicação de que aplicar é o botão.
 
-**O rascunho é seu.** Fica no navegador e volta depois de recarregar. `Baixar` e `Subir` movem o rascunho entre
-máquinas ou o guardam como registro; o servidor valida o que sobe e replaneja. Nada que o rascunho traga grava sem passar pelo
+**O rascunho é seu.** Fica no navegador e volta depois de recarregar. `Salvar` e `Abrir` movem o rascunho entre
+máquinas ou o guardam como registro; o servidor valida o que abre e replaneja. Nada que o rascunho traga grava sem passar pelo
 botão.
 
 **Passando para a skill.** O rascunho exportado é um JSON com o `delta` e o `plan` (com as respostas já dadas). Para

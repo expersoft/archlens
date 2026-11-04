@@ -10,10 +10,14 @@ versões seguem [SemVer](https://semver.org/lang/pt-BR/).
 - **GUI, modo Planejar** (`archlens serve … --plan` ou `plan` no `archlens-gui.json`; desligado por padrão, exige LLM com
   ferramentas): chat que monta o delta e o plano, decisões por botões, prévia (diagrama, delta e plano), **Aplicar** com
   confirmação que regrava a base, o `ARCHITECTURE.md` e os diagramas, e rascunho das notas de interpretação. Rascunho no
-  navegador, com `Baixar` e `Subir`; anexar um repositório por URL git (um por rascunho), com token do git preso aos
+  navegador, com `Abrir` e `Salvar`; anexar um repositório por URL git (um por rascunho), com token do git preso aos
   hosts de `plan.gitTokenHosts` (obrigatório com `plan.gitTokenEnv`) e `file://` só com `plan.allowFileUrls`. Aplicar usa
   o Chromium do servidor para os diagramas; sem ele a base é gravada e a GUI avisa. Com o modo ligado e fora de
   `localhost`, o terminal avisa que qualquer um que alcance a porta pode aplicar.
+  Na tela: painel **Delta** na lateral direita (`Ctrl+Alt+B` ou `Ctrl+Shift+B`) com o que muda campo a campo;
+  **ArchiMate | C4** e menu de contexto/clique duplo navegando sobre a base com o delta; largura dos painéis por ícones;
+  `Ctrl+Enter` ou botão para enviar e **Limpar** (`/limpar`) para começar uma conversa nova. O teto `plan.maxTokens`
+  vale por mensagem.
 - **Limites do chat de planejamento:** o agente não tem ferramenta de gravar, de executar nem de rede; só planeja
   arquitetura, com frase fixa de recusa. Avaliação dos limites com `npm --prefix apps/gui run eval -- --plan-limits`
   (`--dry` sem chave), mais testes de servidor e ponta a ponta (`apps/gui/e2e/plan.test.mjs`).

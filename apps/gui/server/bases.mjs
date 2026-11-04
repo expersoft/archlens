@@ -10,12 +10,8 @@ const guiError = (message) => Object.assign(new Error(message), { code: 'E_GUI_B
 /** A connector that goes to a remote on every read (gbrain git: one `git fetch` each), run synchronously. */
 const isRemote = store => store.kind === 'gbrain';
 
-/** The context of one snapshot of the base: `raw`, its `version` and the model the views use. */
-function contextOf(entry, store, raw, version) {
-  if (!raw) throw guiError('a base está vazia ou não existe');
-  const model = normalizeModel(raw);
-  const fmt = (model.issues ?? []).find(i => i.code === 'E_STORE_FORMAT');
-  if (fmt) throw Object.assign(new Error(fmt.message), { code: 'E_STORE_FORMAT' });
+/** The C4 kind of an element and the system it belongs to (itself, if it is one), over one model. */
+export function navHelpers(model) {
   const kind = el => c4KindOf(model, el);
   const systemOf = id => {
     const seen = new Set();
@@ -27,6 +23,16 @@ function contextOf(entry, store, raw, version) {
     }
     return null;
   };
+  return { kind, systemOf };
+}
+
+/** The context of one snapshot of the base: `raw`, its `version` and the model the views use. */
+function contextOf(entry, store, raw, version) {
+  if (!raw) throw guiError('a base está vazia ou não existe');
+  const model = normalizeModel(raw);
+  const fmt = (model.issues ?? []).find(i => i.code === 'E_STORE_FORMAT');
+  if (fmt) throw Object.assign(new Error(fmt.message), { code: 'E_STORE_FORMAT' });
+  const { kind, systemOf } = navHelpers(model);
   // The reads of `query --element` over this snapshot: the card matches the views and never goes back to the connector.
   const snapshot = { read: () => ({ raw }), readSubgraph: q => subgraphOf(raw, q), history: () => raw.changelog ?? [] };
   return { id: entry.id, name: entry.name ?? model.name ?? entry.id, store, raw, model, version, kind, systemOf, snapshot };

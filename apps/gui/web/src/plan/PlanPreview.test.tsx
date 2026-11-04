@@ -1,13 +1,23 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
-vi.mock('../api', async (orig) => ({ ...(await orig<typeof import('../api')>()), planPreview: vi.fn(), getView: vi.fn() }));
+vi.mock('../api', async (orig) => ({ ...(await orig<typeof import('../api')>()), planPreview: vi.fn(), getView: vi.fn(), planActions: vi.fn(), planFlip: vi.fn() }));
 
 import * as api from '../api';
 import { PlanPreview } from './PlanPreview';
 
 const planPreview = vi.mocked(api.planPreview);
+const planActions = vi.mocked(api.planActions);
+const planFlip = vi.mocked(api.planFlip);
+/** Sends a bridge event from the diagram's iframe, retried until the host listens to the loaded frame. */
+const fromFrame = async (c: HTMLElement, data: Record<string, unknown>, until: () => void) => {
+  await waitFor(() => {
+    const frame = c.querySelector('iframe')!;
+    window.dispatchEvent(new MessageEvent('message', { data: { source: 'archlens', ...data }, source: frame.contentWindow }));
+    until();
+  });
+};
 const getView = vi.mocked(api.getView);
 const withDelta = { 'archlens-draft': 1, delta: { x: 1 }, plan: {} };
 const spec = { key: 'delta', notation: 'c4', level: 'landscape' };
@@ -41,17 +51,11 @@ describe('PlanPreview', () => {
     expect(planPreview).not.toHaveBeenCalled();
   });
 
-  it('abas Diagrama | Delta | Plano; Delta lista + ~ − e as perguntas; Plano mostra o relatório', async () => {
+  it('abas Diagrama | Plano (o delta vai para a lateral); Plano mostra o relatório', async () => {
     const u = userEvent.setup();
     const { container } = render(<PlanPreview base="b" draft={withDelta} previews={[]} />);
-    expect((await screen.findAllByRole('tab')).map((t) => t.textContent)).toEqual(['Diagrama', 'Delta', 'Plano']);
+    expect((await screen.findAllByRole('tab')).map((t) => t.textContent)).toEqual(['Diagrama', 'Plano']);
     await waitFor(() => expect(frames(container)).toEqual(['<p>com-delta</p>']));
-    await u.click(screen.getByRole('tab', { name: 'Delta' }));
-    const list = screen.getByRole('list', { name: 'Mudanças' });
-    expect(list.textContent).toContain('+Novo');
-    expect(list.textContent).toContain('~Mudou');
-    expect(list.textContent).toContain('−X → Y');
-    expect(screen.getByText('conflito b.description')).toBeTruthy();
     await u.click(screen.getByRole('tab', { name: 'Plano' }));
     expect(screen.getByText(/relatório do plano/)).toBeTruthy();
   });
@@ -86,22 +90,18 @@ describe('PlanPreview', () => {
     const { container } = render(<PlanPreview base="b" draft={withDelta} previews={[asked]} />);
     const tab = await screen.findByRole('button', { name: 'Impacto no checkout' });
     expect(planPreview).toHaveBeenCalledWith('b', withDelta, [asked]);
+    expect(planPreview).toHaveBeenCalledWith('b', withDelta, undefined, undefined);
     expect(screen.getByRole('button', { name: 'O que muda' })).toBeTruthy();
     await u.click(tab);
     expect(frames(container)).toEqual(['<p>pedida</p>']);
-    await u.click(screen.getByRole('tab', { name: 'Delta' }));
-    expect(screen.getByRole('list', { name: 'Mudanças' }).querySelectorAll('li')).toHaveLength(3);
   });
 
   it('uma visão pedida inválida avisa e não esconde o resto da prévia', async () => {
-    const u = userEvent.setup();
     const bad = { key: 'ruim', notation: 'c4', level: 'container', scope: 'nao-existe' };
     planPreview.mockImplementation(async (_b, _d, specs) => { if (specs) throw new Error('escopo inexistente'); return result(); });
     const { container } = render(<PlanPreview base="b" draft={withDelta} previews={[bad]} />);
     expect(await screen.findByText(/não puderam ser desenhadas: escopo inexistente/)).toBeTruthy();
     expect(frames(container)).toEqual(['<p>com-delta</p>']);
-    await u.click(screen.getByRole('tab', { name: 'Delta' }));
-    expect(screen.getByRole('list', { name: 'Mudanças' }).querySelectorAll('li')).toHaveLength(3);
   });
 
   it('re-renderizar com o mesmo html (tema) mantém um botão ligado', async () => {
@@ -118,5 +118,53 @@ describe('PlanPreview', () => {
     await u.click(screen.getByRole('button', { name: 'Alternar tema do diagrama' }));
     expect(labels.getAttribute('aria-pressed')).toBe('true');
     expect(frames(container)).toEqual(['<p>com-delta</p>']);
+  });
+
+  it('notação: a visão do que muda é pedida de novo na outra; as demais abrem a versão na outra notação', async () => {
+    let nav: { notation: string | null; flip: (n: 'archimate' | 'c4') => void } | null = null;
+    const onNavigate = vi.fn();
+    const am = { key: 'delta', notation: 'archimate', viewpoint: 'layered' };
+    planPreview.mockImplementation(async (_b, _d, specs, notation) => (specs
+      ? result({ views: [{ key: 'nav-1', title: 'Contexto', html: '<p>nav</p>', kind: 'asked', spec: specs[0] }] })
+      : notation === 'archimate' ? result({ views: [{ key: 'delta', title: 'O que muda', html: '<p>am</p>', kind: 'change', spec: am }] }) : result()));
+    const { container, rerender } = render(<PlanPreview base="b" draft={withDelta} previews={[]} onNav={(n) => { nav = n; }} onNavigate={onNavigate} />);
+    await waitFor(() => expect(nav?.notation).toBe('c4'));
+    act(() => nav!.flip('archimate'));
+    await waitFor(() => expect(frames(container)).toEqual(['<p>am</p>']));
+    expect(planPreview).toHaveBeenLastCalledWith('b', withDelta, undefined, 'archimate');
+    expect(nav!.notation).toBe('archimate');
+    expect(onNavigate).not.toHaveBeenCalled();
+    // a view that is not the change view: the server flips it over the preview
+    const ctxSpec = { key: 'nav-1', notation: 'c4', level: 'context', scope: 'x', title: 'Contexto' };
+    rerender(<PlanPreview base="b" draft={withDelta} previews={[ctxSpec]} onNav={(n) => { nav = n; }} onNavigate={onNavigate} />);
+    await userEvent.setup().click(await screen.findByRole('button', { name: 'Contexto' }));
+    const flipped = { key: 'nav-2', notation: 'archimate', anchor: 'x', title: 'Em volta de X' };
+    planFlip.mockResolvedValue({ spec: flipped });
+    act(() => nav!.flip('archimate'));
+    await waitFor(() => expect(onNavigate).toHaveBeenCalledWith(flipped));
+    expect(planFlip).toHaveBeenCalledWith('b', withDelta, ctxSpec);
+  });
+
+  it('botão direito abre o menu com as ações da prévia; a escolhida vira uma visão navegada', async () => {
+    const u = userEvent.setup();
+    const onNavigate = vi.fn();
+    const go = { key: 'nav-9', notation: 'c4', level: 'container', scope: 'a', title: 'Containers de Novo' };
+    planActions.mockResolvedValue({ actions: [{ label: 'Abrir containers', spec: go, primary: true }] });
+    const { container } = render(<PlanPreview base="b" draft={withDelta} previews={[]} onNavigate={onNavigate} />);
+    await waitFor(() => expect(frames(container)).toHaveLength(1));
+    await fromFrame(container, { type: 'context', id: 'a', x: 10, y: 10 }, () => expect(screen.getByRole('menu')).toBeTruthy());
+    expect(planActions).toHaveBeenCalledWith('b', withDelta, 'a');
+    await u.click(await screen.findByRole('menuitem', { name: 'Abrir containers' }));
+    expect(onNavigate).toHaveBeenCalledWith(go);
+    // double click opens the primary action
+    onNavigate.mockClear();
+    await fromFrame(container, { type: 'expand', id: 'a' }, () => expect(onNavigate).toHaveBeenCalledWith(go));
+  });
+
+  it('seleção no diagrama vai para o host', async () => {
+    const onSelect = vi.fn();
+    const { container } = render(<PlanPreview base="b" draft={withDelta} previews={[]} onSelect={onSelect} />);
+    await waitFor(() => expect(frames(container)).toHaveLength(1));
+    await fromFrame(container, { type: 'select', id: 'b' }, () => expect(onSelect).toHaveBeenCalledWith('b'));
   });
 });

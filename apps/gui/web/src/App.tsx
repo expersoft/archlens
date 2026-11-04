@@ -14,6 +14,7 @@ import { useDiagramTheme, useTheme } from './theme';
 import { send, type BridgeEvent } from './bridge';
 import { typeHint } from './labels';
 import { PlanView } from './plan/PlanView';
+import type { PreviewNav } from './plan/PlanPreview';
 import { allLabel, oneLabel, toggleAll, toggleOne } from './nesting';
 
 const totalMs = (v: ViewResult) => v.ms.resolve + v.ms.layout + v.ms.render;
@@ -37,6 +38,7 @@ export function App() {
   const [presenting, setPresenting] = useState(false);
   const [mode, setMode] = useState<'browse' | 'plan'>('browse');
   const [planOpened, setPlanOpened] = useState(false); // PlanView stays mounted once opened, so a round in flight finishes
+  const [planNav, setPlanNav] = useState<PreviewNav | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [menu, setMenu] = useState<Menu | null>(null);
   const frame = useRef<HTMLIFrameElement>(null);
@@ -360,8 +362,8 @@ export function App() {
       onThemeChange={setTheme}
       presenting={presenting}
       status={shownStatus}
-      notation={notation}
-      onNotation={base && view && !planning ? onNotation : undefined}
+      notation={planning ? planNav?.notation ?? undefined : notation}
+      onNotation={planning ? (planNav?.notation ? planNav.flip : undefined) : base && view ? onNotation : undefined}
       nestLabel={nest && !planning ? allLabel(nest) : undefined}
       onNestAll={onNestAll}
       bases={bases}
@@ -420,7 +422,7 @@ export function App() {
         </>
       )}
     >
-      {planEnabled && base && planOpened && <div className="plan-host" hidden={!planning}><PlanView key={base} base={base} canBuild={info?.plan?.enabled ? info.plan.build !== false : true} onApplied={() => { void loadBase(base); }} /></div>}
+      {planEnabled && base && planOpened && <div className="plan-host" hidden={!planning}><PlanView key={base} base={base} active={planning} onNav={setPlanNav} canBuild={info?.plan?.enabled ? info.plan.build !== false : true} onApplied={() => { void loadBase(base); }} /></div>}
       {planning ? null : view ? (
         <>
           <nav className="trail" aria-label="Trilha">

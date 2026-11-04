@@ -65,14 +65,14 @@ export function Shell(p: ShellProps) {
     const onKey = (e: KeyboardEvent) => {
       if (!isGuiShortcut(e)) return;
       if (e.code === 'KeyK') { e.preventDefault(); search.current?.focus(); search.current?.select(); return; }
-      if (e.code !== 'KeyB') return;
+      if (e.code !== 'KeyB' || planning) return; // Planejar has its own panel and shortcut
       e.preventDefault();
-      if (e.altKey) setRight((r) => !r);
+      if (e.altKey || e.shiftKey) setRight((r) => !r);
       else setLeft((l) => (l ? null : lastLeft));
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [lastLeft, setLeft, setRight]);
+  }, [lastLeft, setLeft, setRight, planning]);
 
   const toggleLeft = (tab: 'chat' | 'tree') => setLeft((l) => (l === tab ? null : tab));
 
@@ -130,7 +130,7 @@ export function Shell(p: ShellProps) {
         )}
         {!presenting && !planning && (
           <nav className="rail r" aria-label="Painel direito">
-            <button aria-label="Detalhes" title="Detalhes (Ctrl+Alt+B)" className={right ? 'on' : ''} onClick={() => setRight((r) => !r)}>ⓘ</button>
+            <button aria-label="Detalhes" title="Detalhes (Ctrl+Alt+B ou Ctrl+Shift+B)" className={right ? 'on' : ''} onClick={() => setRight((r) => !r)}>ⓘ</button>
           </nav>
         )}
       </div>

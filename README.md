@@ -150,7 +150,7 @@ O que faz:
 - **Navega** pelas visões: botão direito no elemento abre o menu de visões (contexto, containers, componentes,
   suporte, impacto…), duplo clique expande, a trilha e o histórico voltam a qualquer passo. A notação alterna entre
   ArchiMate e C4; o tema da interface (botão da barra do topo) e o do diagrama (o mesmo botão ☀/☾ na barra do diagrama, ou `T`
-  no diagrama) são escolhidos em separado; o painel esquerdo (`Ctrl+B`) e o direito (`Ctrl+Alt+B`) seguem o seu gosto.
+  no diagrama) são escolhidos em separado; o painel esquerdo (`Ctrl+B`) e o direito (`Ctrl+Alt+B` ou `Ctrl+Shift+B`) seguem o seu gosto.
 - **Detalhes** do elemento: "Nesta visão" (tipo C4 e ArchiMate, papel, distância, relações como frases) e "Na base"
   (apelidos, pai, filhos, fontes e rodadas).
 - **Busca por nome** (`Ctrl+K`), seletor de base, e a troca de base reinicia o histórico.
@@ -264,8 +264,8 @@ bin/archlens serve architecture --llm anthropic --plan
 planejamento fica desligado com aviso no terminal e na GUI (a mesma regra da busca). Numa base gbrain no modo MCP o
 planejamento é recusado com mensagem clara; use a skill `archlens-plan`.
 
-- **Tetos de uso:** `maxRounds` (rodadas de modelo, 1 a 100), `timeoutMs` (10 s a 30 min) por mensagem e `maxTokens`
-  por rascunho. Ao bater um teto o agente para e a GUI mostra o rascunho como está, com aviso.
+- **Tetos de uso:** `maxRounds` (rodadas de modelo, 1 a 100), `timeoutMs` (10 s a 30 min) e `maxTokens`, todos por
+  mensagem. Ao bater um teto o agente para e a GUI mostra o rascunho como está, com aviso.
 - **Anexar repositório:** o botão "Anexar repositório" do chat recebe uma URL git (`https://…` ou ssh) e, opcional, um
   ref. O servidor faz um clone raso e o agente lê **só dentro dele** (`scan_repo`, `read_file`, `grep`), recusando
   `.env*`, chaves, `.git/` e links que saem do clone. **Um repositório por rascunho:** aplique ou descarte o atual
@@ -281,8 +281,8 @@ planejamento é recusado com mensagem clara; use a skill `archlens-plan`.
 - **`file://` e caminhos locais** são recusados, a não ser com `plan.allowFileUrls: true` (útil em testes e em
   máquina de confiança); sem isso só `https` e `ssh`.
 - **Rascunho:** o delta, as respostas e o repositório ficam no navegador (localStorage, por base) e voltam depois de
-  recarregar a página. `Baixar` salva o rascunho num arquivo e `Subir` o restaura em outro navegador ou máquina; ao
-  subir, o servidor o valida e **replaneja** contra a base de agora. `Descartar` apaga o rascunho atual e a conversa
+  recarregar a página. `Salvar` grava o rascunho num arquivo e `Abrir` o restaura em outro navegador ou máquina; ao
+  abrir, o servidor o valida e **replaneja** contra a base de agora. `Descartar` apaga o rascunho atual e a conversa
   (depois de confirmar), inclusive um rascunho salvo que o servidor não aceita mais.
 - **Aplicar exige Chromium no servidor.** O servidor replaneja, confere que o plano é o que você confirmou e grava; em
   seguida regenera `ARCHITECTURE.md` e os diagramas, o que usa o Chromium (`npx playwright install chromium`, na máquina

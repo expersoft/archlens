@@ -23,6 +23,25 @@ beforeEach(() => { vi.resetAllMocks(); });
 afterEach(() => vi.restoreAllMocks());
 
 describe('PlanView', () => {
+  it('o painel Delta abre e fecha pelo botão e por Ctrl+Shift+B / Ctrl+Alt+B', async () => {
+    const u = userEvent.setup();
+    render(<PlanView base="b" />);
+    expect(screen.getByTestId('delta-panel')).toBeTruthy();
+    await u.click(screen.getByRole('button', { name: 'Delta' }));
+    expect(screen.queryByTestId('delta-panel')).toBeNull();
+    await u.keyboard('{Control>}{Shift>}b{/Shift}{/Control}');
+    expect(screen.getByTestId('delta-panel')).toBeTruthy();
+    await u.keyboard('{Control>}{Alt>}b{/Alt}{/Control}');
+    expect(screen.queryByTestId('delta-panel')).toBeNull();
+  });
+
+  it('fora da tela (Navegar) o atalho do painel não age', async () => {
+    const u = userEvent.setup();
+    render(<PlanView base="b" active={false} />);
+    await u.keyboard('{Control>}{Shift>}b{/Shift}{/Control}');
+    expect(screen.getByTestId('delta-panel')).toBeTruthy();
+  });
+
   it('Limpar apaga a conversa e o histórico do agente, mas o rascunho continua', async () => {
     const u = userEvent.setup();
     respond(result({ kind: 'text', text: 'montei o delta' }), done);
@@ -105,10 +124,10 @@ describe('PlanView', () => {
     respond(result({ kind: 'text', text: 'de novo' }, draft(8)), done);
     await say(u, 'mais');
     expect(await screen.findByText('o rascunho não cabe no navegador; baixe-o para não perder o trabalho')).toBeTruthy();
-    expect(screen.getAllByRole('button', { name: 'Baixar rascunho' }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('button', { name: 'Salvar rascunho' }).length).toBeGreaterThan(0);
   });
 
-  it('baixar gera archlens-draft-<base>-<data>.json só com o rascunho', async () => {
+  it('salvar gera archlens-draft-<base>-<data>.json só com o rascunho', async () => {
     const u = userEvent.setup();
     respond(result({ kind: 'text', text: 'ok' }, draft(9)), done);
     let blob: Blob | undefined;
@@ -119,13 +138,13 @@ describe('PlanView', () => {
     render(<PlanView base="b" />);
     await say(u, 'oi');
     await screen.findByText('ok');
-    await u.click(screen.getByRole('button', { name: 'Baixar rascunho' }));
+    await u.click(screen.getByRole('button', { name: 'Salvar rascunho' }));
     expect(names[0]).toMatch(/^archlens-draft-b-\d{4}-\d{2}-\d{2}\.json$/);
     const text = await new Promise<string>((res) => { const r = new FileReader(); r.onload = () => res(String(r.result)); r.readAsText(blob!); });
     expect(JSON.parse(text)).toEqual(draft(9));
   });
 
-  it('subir arquivo de outra base mostra o erro do servidor e não troca o rascunho', async () => {
+  it('abrir arquivo de outra base mostra o erro do servidor e não troca o rascunho', async () => {
     const u = userEvent.setup();
     respond(result({ kind: 'text', text: 'ok' }, draft(10)), done);
     planOpen.mockRejectedValue(new api.ApiError('este rascunho é da base "outra"', 'E_DRAFT', 400));
@@ -133,7 +152,7 @@ describe('PlanView', () => {
     await say(u, 'oi');
     await screen.findByText('ok');
     const file = new File([JSON.stringify({ ...draft(0), base: { id: 'outra', version: 'v' } })], 'd.json', { type: 'application/json' });
-    await u.upload(screen.getByLabelText('Subir rascunho'), file);
+    await u.upload(screen.getByLabelText('Abrir rascunho'), file);
     expect(await screen.findByText('este rascunho é da base "outra"')).toBeTruthy();
     expect(JSON.parse(localStorage.getItem('archlens-gui-draft:b')!)).toEqual(draft(10));
   });
@@ -160,7 +179,7 @@ describe('PlanView', () => {
 });
 
 describe('PlanView, correções', () => {
-  it('subir arquivo com rascunho atual pede confirmação; cancelar mantém tudo, confirmar substitui', async () => {
+  it('abrir arquivo com rascunho atual pede confirmação; cancelar mantém tudo, confirmar substitui', async () => {
     const u = userEvent.setup();
     respond(result({ kind: 'text', text: 'ok' }, draft(10)), done);
     planOpen.mockResolvedValue({ draft: draft(11) });
@@ -169,12 +188,12 @@ describe('PlanView, correções', () => {
     await say(u, 'oi');
     await screen.findByText('ok');
     const file = () => new File([JSON.stringify(draft(0))], 'd.json', { type: 'application/json' });
-    await u.upload(screen.getByLabelText('Subir rascunho'), file());
+    await u.upload(screen.getByLabelText('Abrir rascunho'), file());
     await waitFor(() => expect(confirm).toHaveBeenCalledWith('Substituir o rascunho atual pelo do arquivo? O atual se perde se não foi baixado.'));
     expect(JSON.parse(localStorage.getItem('archlens-gui-draft:b')!)).toEqual(draft(10));
     expect(screen.getByText('ok')).toBeTruthy();
     confirm.mockReturnValue(true);
-    await u.upload(screen.getByLabelText('Subir rascunho'), file());
+    await u.upload(screen.getByLabelText('Abrir rascunho'), file());
     await waitFor(() => expect(JSON.parse(localStorage.getItem('archlens-gui-draft:b')!)).toEqual(draft(11)));
     expect(screen.queryByText('ok')).toBeNull();
   });

@@ -6,7 +6,7 @@ import { runPlan } from './agent.mjs';
 import { checkRepo, scrubCredentials } from './repo.mjs';
 import { ONE_REPO } from './tools.mjs';
 import { normalizeRepoUrl } from '../../../../scripts/lib/scan/git.mjs';
-import { buildPreview } from './preview.mjs';
+import { buildPreview, previewActions, previewFlip } from './preview.mjs';
 import { applyAndDocument, writeNotes } from '../../../../scripts/lib/apply-flow.mjs';
 import { buildDiagrams } from '../../../../scripts/lib/build.mjs';
 import { openQuestions } from '../../../../scripts/lib/merge.mjs';
@@ -96,6 +96,8 @@ function appliedOf(applied, httpError) {
   const { summary, added, changed, removed } = applied;
   return { summary, added, changed, removed };
 }
+
+const NOTATIONS = new Set(['archimate', 'c4']);
 
 /**
  * Route table entries, to be mounted only when planning is on.
@@ -213,12 +215,26 @@ export function planRoutes({ registry, provider, config, telemetry, h }) {
       return { ...out, opsHash: opsHashOf(out.draft.plan) };
     }],
     ['POST', /^\/api\/bases\/([^/]+)\/plan\/preview$/, async (req, [b]) => {
-      const { draft, specs } = await read(req);
+      const { draft, specs, notation } = await read(req);
       if (specs !== undefined && !(Array.isArray(specs) && specs.every(isObject))) throw httpError(400, 'specs deve ser uma lista de visões');
       if (specs && specs.length > SPECS_MAX) throw httpError(400, `no máximo ${SPECS_MAX} visões por pedido`);
+      if (notation !== undefined && !NOTATIONS.has(notation)) throw httpError(400, 'notation deve ser archimate ou c4');
       const ctx = registry.get(b);
       const { draft: replanned } = draftFrom(ctx, draft);
-      return { ...(await buildPreview(ctx, replanned, specs)), opsHash: opsHashOf(replanned.plan) };
+      return { ...(await buildPreview(ctx, replanned, specs, { notation })), opsHash: opsHashOf(replanned.plan) };
+    }],
+    // Navigation over the preview: the context menu and the notation flip see what the draft adds.
+    ['POST', /^\/api\/bases\/([^/]+)\/plan\/actions$/, async (req, [b]) => {
+      const { draft, id } = await read(req);
+      if (typeof id !== 'string' || !id) throw httpError(400, 'informe o id do elemento');
+      const ctx = registry.get(b);
+      return { actions: previewActions(ctx, draftFrom(ctx, draft).draft, id) };
+    }],
+    ['POST', /^\/api\/bases\/([^/]+)\/plan\/flip$/, async (req, [b]) => {
+      const { draft, spec } = await read(req);
+      if (!isObject(spec)) throw httpError(400, 'informe a visão em {spec}');
+      const ctx = registry.get(b);
+      return { spec: previewFlip(ctx, draftFrom(ctx, draft).draft, spec) };
     }],
     ['POST', /^\/api\/bases\/([^/]+)\/plan\/apply$/, async (req, [b]) => apply(req, b)],
     ['POST', /^\/api\/bases\/([^/]+)\/plan\/notes$/, async (req, [b]) => notes(req, b)],

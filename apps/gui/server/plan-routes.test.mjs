@@ -109,15 +109,60 @@ test('plan/preview padrão traz a visão do que muda e as salvas afetadas', () =
 
 test('plan/preview traz a lista do delta (+ ~ −), as perguntas abertas e o relatório do plano', () => withPlan(async url => {
   const alter = await (await post(url, 'plan/preview', { draft: await draftWith(url, ALTER) })).json();
-  assert.deepEqual(alter.changes, [{ sign: '~', kind: 'element', id: 'loja.pedidos', name: 'API de Pedidos' }]);
+  assert.deepEqual(alter.changes.map(({ sign, kind, id, name }) => ({ sign, kind, id, name })), [{ sign: '~', kind: 'element', id: 'loja.pedidos', name: 'API de Pedidos' }]);
+  assert.ok(alter.changes[0].type);
+  assert.deepEqual(alter.changes[0].fields.map(f => f.field), ['description']);
+  assert.equal(alter.changes[0].fields[0].after, 'Descrição nova para o teste de prévia');
   assert.equal(alter.questions.length, 1);
   assert.equal(alter.questions[0].key, 'el:loja.pedidos:description');
   assert.deepEqual(alter.questions[0].options, ['keep', 'take', 'value:<x>']);
   assert.match(alter.report, /^# Plano/);
   const added = await (await post(url, 'plan/preview', { draft: await draftWith(url, NEW) })).json();
-  assert.deepEqual(added.changes, [{ sign: '+', kind: 'element', id: 'sistema-novo', name: 'Sistema Novo Zeta' }]);
+  assert.deepEqual(added.changes, [{ sign: '+', kind: 'element', id: 'sistema-novo', name: 'Sistema Novo Zeta', type: 'Application Component', fields: [] }]);
   const rel = await (await post(url, 'plan/preview', { draft: await draftWith(url, delta({ relationships: [{ from: 'loja.bff', to: 'loja.cache', type: 'association', description: 'nova' }] })) })).json();
-  assert.ok(rel.changes.some(c => c.sign === '+' && c.kind === 'relationship' && c.name.includes(" → ") && !c.name.includes("loja.")));
+  assert.ok(rel.changes.some(c => c.sign === '+' && c.kind === 'relationship' && c.name.includes(" → ") && !c.name.includes("loja.")
+    && c.type === 'association' && c.description === 'nova' && c.ends.join() === 'loja.bff,loja.cache'));
+}));
+
+test('plan/preview: notation escolhe a notação da visão do que muda', () => withPlan(async url => {
+  const draft = await draftWith(url, ALTER);
+  const c4 = await (await post(url, 'plan/preview', { draft, notation: 'c4' })).json();
+  assert.equal(c4.views[0].spec.notation, 'c4');
+  const am = await (await post(url, 'plan/preview', { draft, notation: 'archimate' })).json();
+  assert.equal(am.views[0].kind, 'change');
+  assert.equal(am.views[0].spec.notation, 'archimate');
+  assert.ok(am.views[0].viewData.nodes['loja.pedidos']);
+  assert.equal((await post(url, 'plan/preview', { draft, notation: 'uml' })).status, 400);
+}));
+
+test('plan/actions: o menu de contexto vale para o que o rascunho adiciona, com chave e título', () => withPlan(async url => {
+  const draft = await draftWith(url, NEW);
+  const r = await post(url, 'plan/actions', { draft, id: 'sistema-novo' });
+  assert.equal(r.status, 200);
+  const { actions } = await r.json();
+  assert.ok(actions.length > 0);
+  const withSpec = actions.filter(a => a.spec);
+  assert.ok(withSpec.every(a => /^nav-[0-9a-f]{10}$/.test(a.spec.key) && a.spec.title));
+  // the base alone does not know the element
+  const base = await (await fetch(`${url}/api/bases/loja/elements/sistema-novo/actions`)).json();
+  assert.ok(!base.actions?.length);
+  // the action draws over the preview
+  const { views } = await (await post(url, 'plan/preview', { draft, specs: [withSpec[0].spec] })).json();
+  assert.ok(views[0].viewData.nodes['sistema-novo']);
+  assert.equal((await post(url, 'plan/actions', { draft })).status, 400);
+}));
+
+test('plan/flip: a visão do que muda vira a outra notação dela; as demais vão para a outra notação', () => withPlan(async url => {
+  const draft = await draftWith(url, ALTER);
+  const [change] = (await (await post(url, 'plan/preview', { draft, notation: 'c4' })).json()).views;
+  const flipped = (await (await post(url, 'plan/flip', { draft, spec: change.spec })).json()).spec;
+  assert.equal(flipped.key, 'delta');
+  assert.equal(flipped.notation, 'archimate');
+  const other = (await (await post(url, 'plan/flip', { draft, spec: { notation: 'c4', level: 'context', scope: 'loja' } })).json()).spec;
+  assert.equal(other.notation, 'archimate');
+  assert.match(other.key, /^nav-/);
+  assert.ok(other.title);
+  assert.equal((await post(url, 'plan/flip', { draft })).status, 400);
 }));
 
 test('plan/preview com specs traz as visões pedidas, desenhadas com o delta', () => withPlan(async url => {
@@ -201,8 +246,8 @@ test('base MCP → 409 E_GUI_PLAN_MCP', () => {
   const real = createBaseRegistry({ port: 0, bases: [{ id: 'loja', path: dir }] }, { pollMs: 100000 });
   const registry = { list: () => real.list(), close: () => real.close(), get: id => ({ ...real.get(id), store: { ...real.get(id).store, remote: {} } }) };
   return withPlan(async url => {
-    for (const p of ['plan', 'plan/open', 'plan/preview', 'plan/apply', 'plan/notes']) {
-      const r = await post(url, p, { draft: newDraft({ id: 'loja', version: '' }), message: 'x', history: [], confirm: 'x', notes: 'x' });
+    for (const p of ['plan', 'plan/open', 'plan/preview', 'plan/actions', 'plan/flip', 'plan/apply', 'plan/notes']) {
+      const r = await post(url, p, { draft: newDraft({ id: 'loja', version: '' }), message: 'x', history: [], confirm: 'x', notes: 'x', id: 'loja', spec: {} });
       assert.equal(r.status, 409);
       const e = await r.json();
       assert.equal(e.code, 'E_GUI_PLAN_MCP');

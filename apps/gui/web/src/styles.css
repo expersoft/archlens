@@ -146,3 +146,23 @@ body{font:14px/1.4 system-ui,sans-serif;background:var(--bg);color:var(--ink)}
 .apply-dialog{margin:8px;padding:8px 12px;border:1px solid var(--accent);border-radius:6px;background:var(--panel);font-size:13px}
 .notes-review label{display:block;margin:6px 0;font-size:12px}
 .notes-review textarea{display:block;width:100%;box-sizing:border-box;font:inherit}
+.plan>.side.r{overflow:auto}
+.delta-panel{padding:0 12px 12px;display:flex;flex-direction:column;gap:10px;font-size:13px;overflow:auto}
+.delta-panel h3{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin:4px 0 6px}
+.delta-panel ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.delta-panel .chg{border:1px solid var(--line);border-radius:6px;padding:6px 8px;background:var(--bg)}
+.delta-panel .chg.sel{border-color:var(--sel);box-shadow:0 0 0 1px var(--sel)}
+.delta-panel .chg.del{text-decoration:none}
+.delta-panel .chg.del .chg-name{text-decoration:line-through}
+.delta-panel .chg-head{display:flex;align-items:baseline;gap:4px;min-width:0}
+.delta-panel .chg-name{font:inherit;font-weight:600;color:var(--ink);background:none;border:0;padding:0;text-align:left;overflow-wrap:anywhere}
+.delta-panel button.chg-name{cursor:pointer}
+.delta-panel button.chg-name:hover{color:var(--accent);text-decoration:underline}
+.delta-panel .t{font-size:11px;color:var(--muted);margin-left:1.4em}
+.delta-panel .chg-desc{margin:4px 0 0 1.4em;color:var(--ink);overflow-wrap:anywhere}
+.delta-panel .chg-fields{margin:4px 0 0 1.4em;display:flex;flex-direction:column;gap:3px}
+.delta-panel .chg-fields dt{font-size:11px;color:var(--muted)}
+.delta-panel .chg-fields dd{margin:0;overflow-wrap:anywhere}
+.delta-panel .chg-fields .before{color:var(--muted);text-decoration:line-through}
+.delta-panel .delta-questions li{border-left:3px solid var(--sel);padding-left:8px}
+.delta-empty{padding:0 12px}
