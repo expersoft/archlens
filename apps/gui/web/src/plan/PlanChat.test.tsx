@@ -68,3 +68,24 @@ describe('PlanChat: anexar repositório', () => {
     expect(screen.queryByText(/não pode ter credencial embutida/)).toBeNull();
   });
 });
+
+describe('PlanChat: caixa de mensagem', () => {
+  it('cresce com o texto e volta ao tamanho inicial depois de enviar', async () => {
+    const u = userEvent.setup();
+    const proto = HTMLTextAreaElement.prototype;
+    const sh = Object.getOwnPropertyDescriptor(Element.prototype, 'scrollHeight');
+    Object.defineProperty(proto, 'scrollHeight', { configurable: true, get(this: HTMLTextAreaElement) { return 60 + this.value.split('\n').length * 20; } });
+    try {
+      render(<PlanChat chat={[]} onSend={noop} onAnswer={noop} />);
+      const box = screen.getByLabelText('Mensagem') as HTMLTextAreaElement;
+      const start = parseFloat(box.style.height);
+      await u.type(box, 'a{Shift>}{Enter}{/Shift}b{Shift>}{Enter}{/Shift}c{Shift>}{Enter}{/Shift}d');
+      expect(parseFloat(box.style.height)).toBeGreaterThan(start);
+      await u.type(box, '{Enter}');
+      expect(parseFloat(box.style.height)).toBe(start);
+    } finally {
+      delete (proto as unknown as Record<string, unknown>).scrollHeight;
+      if (sh) Object.defineProperty(Element.prototype, 'scrollHeight', sh);
+    }
+  });
+});

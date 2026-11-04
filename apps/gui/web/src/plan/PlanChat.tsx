@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { ChatMsg } from './draftStore';
 import { NotesReview } from './NotesReview';
 import type { RepoAttach } from '../api';
@@ -32,6 +32,14 @@ export function PlanChat({ chat, onSend, onAnswer, onNotes, notice, repo }: Plan
   const [attach, setAttach] = useState<RepoAttach | null>(null);
   const end = useRef<HTMLLIElement>(null);
   useEffect(() => { end.current?.scrollIntoView?.({ block: 'end' }); }, [chat]);
+  // The composer grows with its text (the CSS caps it at half the screen, then it scrolls).
+  const box = useRef<HTMLTextAreaElement>(null);
+  useLayoutEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight + el.offsetHeight - el.clientHeight}px`;
+  }, [text]);
 
   const submit = () => {
     const t = text.trim();
@@ -102,6 +110,7 @@ export function PlanChat({ chat, onSend, onAnswer, onNotes, notice, repo }: Plan
           </div>
         )}
         <textarea
+          ref={box}
           aria-label="Mensagem"
           rows={3}
           value={text}

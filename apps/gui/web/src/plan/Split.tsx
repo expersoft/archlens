@@ -4,6 +4,24 @@ import { useStoredState } from '../store';
 const MIN = 15;
 const MAX = 85;
 const clamp = (n: number) => Math.min(MAX, Math.max(MIN, Math.round(n)));
+const PRESETS = [
+  { at: 75, label: 'Conversa larga' },
+  { at: 50, label: 'Meio a meio' },
+  { at: 25, label: 'Diagrama largo' },
+];
+
+/** A 16px layout glyph in the VS Code style: the frame, the divider at `at`% and the wide side filled. */
+function PresetIcon({ at }: { at: number }) {
+  const x = 1.6 + (12.8 * at) / 100;
+  return (
+    <svg className="glyph" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+      <rect x="1.6" y="2.6" width="12.8" height="10.8" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.2" />
+      <line x1={x} y1="3" x2={x} y2="13" stroke="currentColor" strokeWidth="1.2" />
+      {at >= 50 && <rect x="2.6" y="3.6" width={x - 3.6} height="8.8" rx=".6" fill="currentColor" opacity={at === 50 ? 0.45 : 1} />}
+      {at <= 50 && <rect x={x + 1} y="3.6" width={13.4 - x - 1} height="8.8" rx=".6" fill="currentColor" opacity={at === 50 ? 0.45 : 1} />}
+    </svg>
+  );
+}
 
 /** Two panes with a draggable divider; `left` takes the stored percentage of the width. */
 export function Split({ left, right }: { left: ReactNode; right: ReactNode }) {
@@ -29,9 +47,13 @@ export function Split({ left, right }: { left: ReactNode; right: ReactNode }) {
   return (
     <div className="split" ref={box}>
       <div className="split-bar toolbar" role="group" aria-label="Largura dos painéis">
-        <button type="button" onClick={() => setPos(75)}>Conversa larga</button>
-        <button type="button" onClick={() => setPos(50)}>Meio a meio</button>
-        <button type="button" onClick={() => setPos(25)}>Diagrama largo</button>
+        <div className="seg">
+          {PRESETS.map((p) => (
+            <button key={p.at} type="button" title={p.label} aria-label={p.label} aria-pressed={at === p.at} className={at === p.at ? 'on' : ''} onClick={() => setPos(p.at)}>
+              <PresetIcon at={p.at} />
+            </button>
+          ))}
+        </div>
       </div>
       <div className="split-panes">
         <section className="split-pane" style={{ flexBasis: `${at}%` }}>{left}</section>

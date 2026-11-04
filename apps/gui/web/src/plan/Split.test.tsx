@@ -25,6 +25,20 @@ describe('Split', () => {
     expect(pos()).toBe(wide);
   });
 
+  it('os atalhos são ícones e o da largura atual fica marcado', async () => {
+    const u = userEvent.setup();
+    mount();
+    const pressed = () => screen.getAllByRole('button').filter((b) => b.getAttribute('aria-pressed') === 'true').map((b) => b.getAttribute('aria-label'));
+    expect(pressed()).toEqual(['Meio a meio']);
+    const wide = screen.getByRole('button', { name: 'Conversa larga' });
+    expect(wide.textContent).toBe('');
+    expect(wide.querySelector('svg')).toBeTruthy();
+    await u.click(wide);
+    expect(pressed()).toEqual(['Conversa larga']);
+    fireEvent.keyDown(screen.getByRole('separator'), { key: 'ArrowRight' });
+    expect(pressed()).toEqual([]);
+  });
+
   it('setas movem a divisória dentro dos limites', () => {
     mount();
     const sep = screen.getByRole('separator');

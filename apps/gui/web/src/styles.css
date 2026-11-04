@@ -106,11 +106,17 @@ body{font:14px/1.4 system-ui,sans-serif;background:var(--bg);color:var(--ink)}
 .plan{flex:1;display:flex;min-height:0;min-width:0}
 .split{flex:1;display:flex;flex-direction:column;min-width:0;min-height:0}
 .split-bar{justify-content:flex-end}
+.split-bar .seg button{border:0;border-radius:0;padding:4px 8px;display:grid;place-items:center;color:var(--muted)}
+.split-bar .seg button+button{border-left:1px solid var(--line)}
+.split-bar .seg button:hover{color:var(--ink);background:var(--bg)}
+.split-bar .seg button.on{color:#fff;background:var(--accent)}
+.glyph{display:block}
 .split-panes{flex:1;display:flex;min-height:0;min-width:0}
 .split-pane{flex:1 1 0;min-width:0;min-height:0;display:flex;flex-direction:column;overflow:hidden;background:var(--panel)}
 .split-handle{flex:0 0 6px;cursor:col-resize;background:var(--line)}
 .split-handle:hover,.split-handle:focus-visible{background:var(--accent);outline:0}
 .plan-chat{border-top:0;margin-top:0}
+.plan-chat .askbox textarea{max-height:50vh;overflow-y:auto}
 .plan-chat .turn.user .q{color:var(--accent)}
 .plan-chat .turn .acts{flex-wrap:wrap}
 .plan-chat .turn .acts button.on{border-color:var(--accent)}
