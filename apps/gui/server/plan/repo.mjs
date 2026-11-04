@@ -33,18 +33,20 @@ export function isSecretPath(rel) {
 
 /**
  * scheme and host of a git url, as git sees them: `https://h/…`, `ssh://u@h/…`, `file://…` through `new URL()` (an
- * authority with `?` or `#`, or `@` in https, is refused: it would name another host than git's), and the scp-like
+ * authority with `?`, `#` or `\`, or `@` in https, is refused: it would name another host than git's), and the scp-like
  * `u@h:path` explicitly; null otherwise.
  */
 function partsOf(url) {
   const m = /^([a-z][a-z0-9+.-]*):\/\/([^/]*)/i.exec(url);
   if (m) {
     const scheme = m[1].toLowerCase();
-    if (/[?#]/.test(m[2]) || (scheme === 'https' && m[2].includes('@'))) return null;
+    // node reads `\` as a separator, git and curl as a literal: the two would name different hosts
+    if (/[?#\\]/.test(m[2]) || (scheme === 'https' && m[2].includes('@'))) return null;
     let u;
     try { u = new URL(url); } catch { return null; }
     return { scheme, host: u.hostname.toLowerCase() };
   }
+  if (url.includes('\\')) return null;
   const scp = /^[^@/:?#]+@([^:/?#@]+):/.exec(url);
   return scp ? { scheme: 'ssh', host: scp[1].toLowerCase() } : null;
 }
