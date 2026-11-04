@@ -273,15 +273,22 @@ planejamento é recusado com mensagem clara; use a skill `archlens-plan`.
 - **Token do git (repositório privado):** `gitTokenEnv` é o **nome** da variável (ambiente ou `.env`, nunca o valor no
   JSON) e **`gitTokenHosts` é obrigatório junto com ele**: o token só é entregue aos hosts listados (`gitUser`
   é o usuário, padrão `x-access-token`), não importa que URL alguém anexe, e redirecionamentos do git são desligados.
+  URL com credencial embutida (`https://usuário:token@…`) é recusada.
+- **Credenciais da máquina do servidor:** URLs `https` de hosts fora de `gitTokenHosts` e URLs `ssh` são clonadas com
+  as credenciais e a configuração git da máquina do servidor (credential helper, chaves e agente ssh, `~/.gitconfig`).
+  Com a GUI ouvindo além de `localhost`, qualquer usuário que alcance a porta consegue ler os repositórios (e os hosts
+  internos) que o servidor alcança.
 - **`file://` e caminhos locais** são recusados, a não ser com `plan.allowFileUrls: true` (útil em testes e em
   máquina de confiança); sem isso só `https` e `ssh`.
 - **Rascunho:** o delta, as respostas e o repositório ficam no navegador (localStorage, por base) e voltam depois de
   recarregar a página. `Baixar` salva o rascunho num arquivo e `Subir` o restaura em outro navegador ou máquina; ao
-  subir, o servidor o valida e **replaneja** contra a base de agora.
+  subir, o servidor o valida e **replaneja** contra a base de agora. `Descartar` apaga o rascunho atual e a conversa
+  (depois de confirmar), inclusive um rascunho salvo que o servidor não aceita mais.
 - **Aplicar exige Chromium no servidor.** O servidor replaneja, confere que o plano é o que você confirmou e grava; em
   seguida regenera `ARCHITECTURE.md` e os diagramas, o que usa o Chromium (`npx playwright install chromium`, na máquina
   do servidor). Sem ele, a **base é gravada do mesmo jeito**, o documento é regenerado e a GUI avisa que os diagramas
-  salvos não foram refeitos.
+  salvos não foram refeitos. Se o documento não puder ser regenerado depois da gravação, a GUI avisa que a base foi
+  gravada e pede `archlens doc`.
 - **Aviso de host:** com o modo ligado e `--host` diferente de `localhost`/`127.0.0.1`, o terminal avisa que qualquer um
   que alcance a porta pode aplicar. Não há autenticação: em equipe, ponha um proxy com login na frente.
 
