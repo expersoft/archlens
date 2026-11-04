@@ -155,6 +155,41 @@ impacto segue esse fluxo. Um host que ainda não está na base vira um placehold
 repositório dele substitui (remove o placeholder e leva as relações para o container real). Veja `examples/repos` (três mini-repositórios lidos na ordem do `README.md` dele) e
 `references/repo-reading.md`.
 
+### Planejar pela GUI
+
+Com a GUI ligada em modo Planejar (`archlens serve architecture --llm anthropic --plan`; veja o README) o seletor do
+topo ganha **Navegar | Planejar**. O fluxo é o da `archlens-plan` e da `archlens-apply`, sem sair do navegador:
+
+1. **Descreva a mudança** no chat ("a API de Pedidos passa a falar com o Sistema X") ou **anexe um repositório** por URL
+   git (botão "Anexar repositório"; um por rascunho). O agente consulta a base, monta o delta e o planeja.
+2. **Responda as decisões por botões.** Cada pergunta aberta do plano (conflito, possível duplicata, remoção) vem com a
+   recomendação do agente e o motivo; clicar numa opção responde. Dá para responder também em texto.
+3. **Confira a prévia** à direita: **Diagrama** (a base com o que muda desenhado por cima, ou lado a lado), **Delta** e
+   **Plano** (o que entra, o que muda, o que sai e o que falta decidir).
+4. **Aplique.** O botão **Aplicar** só fica ativo com o plano final. Ele abre a confirmação (resumo `+N ~N −N` e visões
+   afetadas); o servidor refaz o plano contra a base de agora e só grava se for o plano que você confirmou, senão mostra
+   o plano novo. Depois regenera o `ARCHITECTURE.md` e os diagramas (precisa do Chromium no servidor) e o agente
+   rascunha as **notas de interpretação** da rodada, que você revisa antes de salvar.
+
+O chat só planeja mudanças desta base: não escreve código, não responde perguntas gerais e **nunca aplica por conta
+própria**; pedir "aplique" no chat só leva a uma explicação de que aplicar é o botão.
+
+**O rascunho é seu.** Fica no navegador e volta depois de recarregar. `Baixar` e `Subir` movem o rascunho entre
+máquinas ou o guardam como registro; o servidor valida o que sobe e replaneja. Nada que o rascunho traga grava sem passar pelo
+botão.
+
+**Passando para a skill.** O rascunho exportado é um JSON com o `delta` e o `plan` (com as respostas já dadas). Para
+continuar no Claude Code, extraia os dois e siga o fluxo de linha de comando:
+
+```bash
+jq .delta rascunho.json > delta.json
+jq .plan rascunho.json > plano-do-rascunho.json
+archlens plan architecture/ delta.json --answers plano-do-rascunho.json --out plano.json   # reaproveita as respostas
+archlens apply architecture/ plano.json                                                   # com o plano final
+```
+
+As regras de planejamento são as mesmas nos dois lados, porque a GUI usa o mesmo núcleo.
+
 ### Vendo antes de aplicar
 
 Peça "mostre como fica" e o Claude gera a **prévia** do delta: a base oficial desenhada normalmente e, por

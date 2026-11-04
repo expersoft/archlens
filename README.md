@@ -162,8 +162,9 @@ O que faz:
 - **Busca em texto** (opcional, com LLM): a caixa de pergunta da conversa transforma uma pergunta em linguagem natural
   numa visão, no cartão de um elemento ou numa pergunta de esclarecimento. Veja a seção seguinte.
 
-O que não faz: **só lê**, nunca grava a base (mudanças continuam em `archlens-plan` e `archlens-apply`). O teste ponta
-a ponta, em Chromium real, é `npm --prefix apps/gui run test:e2e`.
+O que não faz: **sem o modo Planejar ligado, só lê** e nunca grava a base (mudanças continuam em `archlens-plan` e
+`archlens-apply`); veja "Planejar pela GUI" abaixo. O teste ponta a ponta, em Chromium real, é
+`npm --prefix apps/gui run test:e2e`.
 
 ### Busca em texto (LLM)
 
@@ -232,6 +233,67 @@ P50/P90 e fração em uma rodada. `--config` reusa o bloco `llm` e o `.env` da G
 será usado; sem `--config` a chave vem só do ambiente do processo, e `--provider`/`--model`/`--mode` sempre prevalecem.
 `--dry` confere o encanamento sem chave. Metas: P50 ≤ 15 s e P90 ≤ 60 s (alvo ~5 s);
 o acerto vem antes da velocidade.
+
+### Planejar pela GUI
+
+O modo **Planejar** leva o fluxo da `archlens-plan` e da `archlens-apply` para a GUI: você descreve a mudança num chat, o
+agente monta o delta e o plano, pergunta as decisões por botões, mostra a prévia (diagrama, delta e plano) e, só quando
+você clica em **Aplicar**, a base é gravada e o `ARCHITECTURE.md` e os diagramas são regenerados.
+
+É **desligado por padrão** e exige um LLM **com ferramentas** (veja "Busca em texto"; `tools: false` não serve).
+Liga-se com `--plan` na linha de comando ou com `plan` no `archlens-gui.json`; desligado, as rotas de planejamento
+respondem 404 e a GUI continua só de leitura.
+
+```bash
+bin/archlens serve architecture --llm anthropic --plan
+```
+
+```json
+{
+  "bases": [{ "id": "loja", "path": "examples/loja-online/architecture" }],
+  "llm": { "provider": "anthropic" },
+  "plan": {
+    "maxRounds": 40, "timeoutMs": 600000, "maxTokens": 400000,
+    "gitTokenEnv": "GITHUB_TOKEN", "gitTokenHosts": ["github.com"], "gitUser": "x-access-token",
+    "cloneTimeoutMs": 120000, "cloneMaxMb": 200, "allowFileUrls": false
+  }
+}
+```
+
+`"plan": true` liga com os padrões acima. Sem chave do LLM, `--plan` impede a subida; com `plan` vindo do arquivo, o
+planejamento fica desligado com aviso no terminal e na GUI (a mesma regra da busca). Numa base gbrain no modo MCP o
+planejamento é recusado com mensagem clara; use a skill `archlens-plan`.
+
+- **Tetos de uso:** `maxRounds` (rodadas de modelo, 1 a 100), `timeoutMs` (10 s a 30 min) por mensagem e `maxTokens`
+  por rascunho. Ao bater um teto o agente para e a GUI mostra o rascunho como está, com aviso.
+- **Anexar repositório:** o botão "Anexar repositório" do chat recebe uma URL git (`https://…` ou ssh) e, opcional, um
+  ref. O servidor faz um clone raso e o agente lê **só dentro dele** (`scan_repo`, `read_file`, `grep`), recusando
+  `.env*`, chaves, `.git/` e links que saem do clone. **Um repositório por rascunho:** aplique ou descarte o atual
+  antes de anexar outro. `cloneTimeoutMs` e `cloneMaxMb` limitam o clone.
+- **Token do git (repositório privado):** `gitTokenEnv` é o **nome** da variável (ambiente ou `.env`, nunca o valor no
+  JSON) e **`gitTokenHosts` é obrigatório junto com ele**: o token só é entregue aos hosts listados (`gitUser`
+  é o usuário, padrão `x-access-token`), não importa que URL alguém anexe, e redirecionamentos do git são desligados.
+- **`file://` e caminhos locais** são recusados, a não ser com `plan.allowFileUrls: true` (útil em testes e em
+  máquina de confiança); sem isso só `https` e `ssh`.
+- **Rascunho:** o delta, as respostas e o repositório ficam no navegador (localStorage, por base) e voltam depois de
+  recarregar a página. `Baixar` salva o rascunho num arquivo e `Subir` o restaura em outro navegador ou máquina; ao
+  subir, o servidor o valida e **replaneja** contra a base de agora.
+- **Aplicar exige Chromium no servidor.** O servidor replaneja, confere que o plano é o que você confirmou e grava; em
+  seguida regenera `ARCHITECTURE.md` e os diagramas, o que usa o Chromium (`npx playwright install chromium`, na máquina
+  do servidor). Sem ele, a **base é gravada do mesmo jeito**, o documento é regenerado e a GUI avisa que os diagramas
+  salvos não foram refeitos.
+- **Aviso de host:** com o modo ligado e `--host` diferente de `localhost`/`127.0.0.1`, o terminal avisa que qualquer um
+  que alcance a porta pode aplicar. Não há autenticação: em equipe, ponha um proxy com login na frente.
+
+**O chat só planeja arquitetura.** A barreira não é o prompt, é o que o servidor deixa o agente fazer: ele não tem
+ferramenta de gravar, de rodar comando nem de acessar a rede; lê só a base, `references/` e o clone anexado; tudo o
+que ele produz passa pelas validações do núcleo; conteúdo lido (README, textos da base) vai ao modelo marcado como dado, não
+como ordem; chave e token nunca entram no prompt. Pedidos fora do escopo recebem uma frase fixa de recusa. A
+avaliação desses limites roda sem chave no `gui:test` e, com um LLM real:
+
+```bash
+npm --prefix apps/gui run eval -- --plan-limits [--config archlens-gui.json] [--provider P] [--model M] [--dry]
+```
 
 ## Manter o ARCHITECTURE.md em dia
 

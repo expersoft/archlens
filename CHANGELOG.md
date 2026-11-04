@@ -5,6 +5,24 @@ versões seguem [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Não lançado]
 
+### Adicionado
+
+- **GUI, modo Planejar** (`archlens serve … --plan` ou `plan` no `archlens-gui.json`; desligado por padrão, exige LLM com
+  ferramentas): chat que monta o delta e o plano, decisões por botões, prévia (diagrama, delta e plano), **Aplicar** com
+  confirmação que regrava a base, o `ARCHITECTURE.md` e os diagramas, e rascunho das notas de interpretação. Rascunho no
+  navegador, com `Baixar` e `Subir`; anexar um repositório por URL git (um por rascunho), com token do git preso aos
+  hosts de `plan.gitTokenHosts` (obrigatório com `plan.gitTokenEnv`) e `file://` só com `plan.allowFileUrls`. Aplicar usa
+  o Chromium do servidor para os diagramas; sem ele a base é gravada e a GUI avisa. Com o modo ligado e fora de
+  `localhost`, o terminal avisa que qualquer um que alcance a porta pode aplicar.
+- **Limites do chat de planejamento:** o agente não tem ferramenta de gravar, de executar nem de rede; só planeja
+  arquitetura, com frase fixa de recusa. Avaliação dos limites com `npm --prefix apps/gui run eval -- --plan-limits`
+  (`--dry` sem chave), mais testes de servidor e ponta a ponta (`apps/gui/e2e/plan.test.mjs`).
+
+### Mudado
+
+- **Núcleo:** aplicar, documentar e construir os diagramas viraram funções do núcleo (`scripts/lib/apply-flow.mjs` e
+  `scripts/lib/build.mjs`), usadas pela CLI e pela GUI; o comportamento da CLI não muda.
+
 ## [0.6.0] — 2026-11-03
 
 ### Adicionado
