@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ApiError, planApply, planNotes, planOpen, planTurn, type Draft, type PlanApplyResult, type PlanEvent, type PlanPreviewResult, type PlanRequest, type ViewSpec } from '../api';
+import { ApiError, planApply, planNotes, planOpen, planTurn, type Draft, type PlanApplyResult, type PlanEvent, type PlanPreviewResult, type PlanRequest, type RepoAttach, type ViewSpec } from '../api';
 import { ApplyDialog } from './ApplyDialog';
 import { PlanPreview } from './PlanPreview';
 import { PlanChat } from './PlanChat';
@@ -107,7 +107,7 @@ export function PlanView({ base, canBuild = true, onApplied }: { base: string; /
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const turn = (req: { message?: string; answer?: { key: string; resolution: string } }, userText: string, opts: { keepDraft?: boolean } = {}) => {
+  const turn = (req: { message?: string; answer?: { key: string; resolution: string }; attach?: RepoAttach }, userText: string, opts: { keepDraft?: boolean } = {}) => {
     cancel();
     const history: PlanRequest['history'] = chatRef.current
       .filter((m) => m.status !== 'running' && m.status !== 'canceled' && m.text)
@@ -222,7 +222,8 @@ export function PlanView({ base, canBuild = true, onApplied }: { base: string; /
         left={(
           <PlanChat
             chat={chat}
-            onSend={(t) => turn({ message: t }, t)}
+            onSend={(t, attach) => turn({ message: t, ...(attach ? { attach } : {}) }, attach ? `${t}\n(anexo: ${attach.url}${attach.ref ? `@${attach.ref}` : ''})` : t)}
+            repo={(draft?.repo as { url: string; ref?: string; commit?: string } | null | undefined) ?? null}
             onAnswer={onAnswer}
             onNotes={onNotes}
             notice={stored === 'too-big' ? (

@@ -9,6 +9,8 @@ import { replanDraft } from './draft.mjs';
 const REMINDER = 'Responda chamando reply, ask_user, ask_decision ou draft_notes.';
 const HISTORY_LIMIT = 12;
 const QUERY = new Set(['find_elements', 'element_card', 'relations', 'try_view']);
+const REPO = new Set(['scan_repo', 'read_file', 'grep']);
+const stageOf = name => (QUERY.has(name) ? 'consultando a base' : REPO.has(name) ? 'lendo o repositório' : 'planejando');
 const abortError = () => Object.assign(new Error('planejamento cancelado'), { code: 'E_LLM_ABORT' });
 const sum = (a, b) => ({ input: a.input + (b?.input ?? 0), output: a.output + (b?.output ?? 0), cacheRead: a.cacheRead + (b?.cacheRead ?? 0) });
 
@@ -36,6 +38,7 @@ function userText(req, draft) {
   const parts = [];
   if (history.length) parts.push(`Conversa até aqui:\n${history.join('\n')}`);
   parts.push(`Estado do rascunho:\n${external('rascunho', draftState(draft))}`);
+  if (req.attach) parts.push(`O usuário anexou o repositório ${req.attach.url}${req.attach.ref ? ` (ref ${req.attach.ref})` : ''}: leia-o com scan_repo.`);
   if (req.answer) parts.push(`O usuário respondeu à decisão ${req.answer.key}: ${req.answer.resolution}`);
   if (req.message) parts.push(`Mensagem do usuário:\n${req.message}`);
   return parts.join('\n\n');
@@ -48,12 +51,15 @@ function applyAnswer(ctx, draft, { key, resolution }) {
   return replanDraft(ctx, { ...draft, plan });
 }
 
-/** @returns {Promise<{ draft: object, reply: object, previews: object[], metrics: object }>} */
-export async function runPlan(ctx, req, { provider, maxRounds = 12, timeoutMs = 90000, maxTokens = 200000, signal, emit = () => {} } = {}) {
+/**
+ * `req.attach` ({ url, ref? }): the repository the user attached, already checked; `git` ({ env, plan }) for its clone.
+ * @returns {Promise<{ draft: object, reply: object, previews: object[], metrics: object }>}
+ */
+export async function runPlan(ctx, req, { provider, maxRounds = 12, timeoutMs = 90000, maxTokens = 200000, signal, emit = () => {}, git } = {}) {
   const t0 = Date.now();
   const metrics = { total: 0, llm: 0, tools: 0, rounds: 0, calls: 0, mode: 'tools', usage: { input: 0, output: 0, cacheRead: 0 } };
   const base = req.draft.usage?.tokens ?? 0;
-  const session = { draft: req.draft, previews: [] };
+  const session = { draft: req.draft, previews: [], ...(req.attach ? { attach: req.attach } : {}), ...(git ? { git } : {}) };
   let warning;
   emit({ type: 'stage', stage: 'lendo o pedido' });
   if (req.answer) {
@@ -103,7 +109,7 @@ export async function runPlan(ctx, req, { provider, maxRounds = 12, timeoutMs = 
       let final = null;
       for (const c of out.calls) {
         metrics.calls++;
-        emit({ type: 'stage', stage: QUERY.has(c.name) ? 'consultando a base' : 'planejando' });
+        emit({ type: 'stage', stage: stageOf(c.name) });
         const s = Date.now();
         const r = await runPlanTool(ctx, session, c.name, c.input);
         const ms = Date.now() - s;

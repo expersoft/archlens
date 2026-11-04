@@ -156,9 +156,12 @@ export type PlanReply =
   | { kind: 'question'; question: string; warning?: string }
   | { kind: 'notes'; overview: string; notes: string; warning?: string }
   | { kind: 'none'; warning?: string };
+/** Um repositório anexado por URL git (o servidor clona; credencial só pelo ambiente do servidor). */
+export interface RepoAttach { url: string; ref?: string }
 export interface PlanRequest {
   draft?: Draft;
   message?: string;
+  attach?: RepoAttach;
   answer?: { key: string; resolution: string };
   /** Só os turnos anteriores; o texto atual vai em `message`. */
   history: { role: 'user' | 'assistant'; text: string }[];

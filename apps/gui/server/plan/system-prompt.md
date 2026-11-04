@@ -40,7 +40,9 @@ a migração de base 1.x e o `init` não estão disponíveis na GUI.
 
 Onde a skill manda rodar um comando, use a ferramenta:
 
-- `archlens scan` → `scan_repo`
+- `archlens scan` → `scan_repo` (só a URL que o usuário anexou; sem `as`, o resumo e o papel sugerido; com `as`,
+  o delta já no rascunho). Para ler arquivos do repositório anexado, use `read_file` e `grep`: arquivos de segredo e
+  caminhos fora do clone são recusados.
 - `archlens plan` (delta) → `set_delta` + `plan_draft`
 - `archlens plan --answers` → `ask_decision` (a resposta do usuário volta na próxima mensagem)
 - `archlens deliver` (prévia) → `add_preview`

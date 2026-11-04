@@ -6,10 +6,10 @@ import { join, basename, resolve } from 'node:path';
 
 const scanError = (code, message) => Object.assign(new Error(`${code}: ${message}`), { code });
 const run = (cwd, args) => spawnSync('git', ['-c', 'safe.directory=*', ...args], { cwd, encoding: 'utf8' });
-// Network commands never prompt for credentials (a scan must not hang) and give up after 120 s.
-const runRemote = (cwd, args) => spawnSync('git', ['-c', 'safe.directory=*', ...args],
-  { cwd, encoding: 'utf8', timeout: 120000, env: { ...process.env, GIT_TERMINAL_PROMPT: '0' } });
-const why = r => (r.error?.code === 'ETIMEDOUT' ? 'tempo esgotado (120 s)' : r.error ? r.error.message : (r.stderr || '').trim().split('\n').at(-1));
+// Network commands never prompt for credentials (a scan must not hang) and give up after 120 s (or `timeoutMs`).
+const runRemote = (cwd, args, { env = process.env, timeoutMs = 120000 } = {}) => spawnSync('git', ['-c', 'safe.directory=*', ...args],
+  { cwd, encoding: 'utf8', timeout: timeoutMs, env: { ...env, GIT_TERMINAL_PROMPT: '0' } });
+const why = (r, timeoutMs = 120000) => (r.error?.code === 'ETIMEDOUT' ? `tempo esgotado (${Math.round(timeoutMs / 1000)} s)` : r.error ? r.error.message : (r.stderr || '').trim().split('\n').at(-1));
 
 export const isGitUrl = s => /^(https?|ssh|git|file):\/\//.test(s) || /^[\w.-]+@[\w.-]+:/.test(s);
 
@@ -39,18 +39,20 @@ export function remoteUrl(dir) {
 
 /**
  * git clone --depth 1 into a temp folder; the caller removes it (rmSync) when done. A branch or tag goes to
- * --branch; a full commit sha is fetched on its own (depth 1) and checked out.
+ * --branch; a full commit sha is fetched on its own (depth 1) and checked out. `env` (the git process's environment),
+ * `timeoutMs` and `tmp` (the folder that holds the clone) default to the CLI's.
  */
-export function cloneShallow(url, { ref } = {}) {
-  const dir = mkdtempSync(join(tmpdir(), 'archlens-clone-'));
+export function cloneShallow(url, { ref, env, timeoutMs, tmp = tmpdir() } = {}) {
+  const dir = mkdtempSync(join(tmp, 'archlens-clone-'));
+  const opts = { env, timeoutMs };
   const sha = ref && /^[0-9a-f]{40}$/i.test(ref);
   const fail = message => { rmSync(dir, { recursive: true, force: true }); throw scanError('E_SCAN_SOURCE', message); };
-  const r = runRemote(tmpdir(), ['clone', '-q', '--depth', '1', ...(ref && !sha ? ['--branch', ref] : []), url, dir]);
-  if (r.status !== 0) fail(`não foi possível clonar ${normalizeRepoUrl(url)}: ${why(r)}`);
+  const r = runRemote(tmp, ['clone', '-q', '--depth', '1', ...(ref && !sha ? ['--branch', ref] : []), '--', url, dir], opts);
+  if (r.status !== 0) fail(`não foi possível clonar ${normalizeRepoUrl(url)}: ${why(r, timeoutMs)}`);
   if (sha) {
-    const f = runRemote(dir, ['fetch', '-q', '--depth', '1', 'origin', ref]);
+    const f = runRemote(dir, ['fetch', '-q', '--depth', '1', 'origin', ref], opts);
     const c = f.status === 0 ? run(dir, ['checkout', '-q', 'FETCH_HEAD']) : f;
-    if (c.status !== 0) fail(`não foi possível obter o commit ${ref.slice(0, 7)} de ${normalizeRepoUrl(url)} (o servidor precisa permitir buscar um commit pelo sha): ${why(c)}`);
+    if (c.status !== 0) fail(`não foi possível obter o commit ${ref.slice(0, 7)} de ${normalizeRepoUrl(url)} (o servidor precisa permitir buscar um commit pelo sha): ${why(c, timeoutMs)}`);
   }
   return dir;
 }

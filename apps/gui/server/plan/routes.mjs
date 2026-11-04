@@ -3,6 +3,9 @@
 import { dirname, relative, sep } from 'node:path';
 import { newDraft, checkDraft, replanDraft, opsHashOf, DRAFT_MAX_BYTES } from './draft.mjs';
 import { runPlan } from './agent.mjs';
+import { checkRepo } from './repo.mjs';
+import { ONE_REPO } from './tools.mjs';
+import { normalizeRepoUrl } from '../../../../scripts/lib/scan/git.mjs';
 import { buildPreview } from './preview.mjs';
 import { applyAndDocument, writeNotes } from '../../../../scripts/lib/apply-flow.mjs';
 import { buildDiagrams } from '../../../../scripts/lib/build.mjs';
@@ -96,10 +99,17 @@ export function planRoutes({ registry, provider, config, telemetry, h }) {
     if (answer !== undefined && !(isObject(answer) && typeof answer.key === 'string' && typeof answer.resolution === 'string')) {
       throw httpError(400, 'answer deve ser { key, resolution }');
     }
-    if (!message && !answer) throw httpError(400, 'informe a mensagem em {message} ou a resposta em {answer}');
+    let attach;
+    if (body.attach !== undefined) {
+      if (!isObject(body.attach)) throw httpError(400, 'attach deve ser { url, ref? }');
+      try { attach = checkRepo(body.attach); } catch (e) { throw httpError(400, e.message, e.code); }
+    }
+    if (!message && !answer && !attach) throw httpError(400, 'informe a mensagem em {message} ou a resposta em {answer}');
     // `history` holds the prior turns only; the current text goes only in `message` (the agent adds it itself).
     const history = historyOf(body.history, httpError);
     const replanned = draftFrom(ctx, body.draft === undefined ? newDraft(ctx) : body.draft);
+    const had = replanned.draft.repo;
+    if (attach && had && normalizeRepoUrl(had.url) !== normalizeRepoUrl(attach.url)) throw httpError(409, ONE_REPO, 'E_GUI_REPO');
 
     const ctl = new AbortController();
     res.on('close', () => { if (!res.writableEnded) ctl.abort(); });
@@ -109,8 +119,8 @@ export function planRoutes({ registry, provider, config, telemetry, h }) {
     let metrics = { total: 0, llm: 0, tools: 0, rounds: 0, calls: 0, mode: 'tools', usage: { input: 0, output: 0, cacheRead: 0 } };
     let outcome = 'error';
     try {
-      const out = await runPlan(ctx, { draft: replanned.draft, message, answer, history }, {
-        provider, signal: ctl.signal, emit: write, maxRounds: config.plan.maxRounds, timeoutMs: config.plan.timeoutMs, maxTokens: config.plan.maxTokens,
+      const out = await runPlan(ctx, { draft: replanned.draft, message, answer, history, attach }, {
+        provider, signal: ctl.signal, emit: write, git: { env: config.env ?? {}, plan: config.plan }, maxRounds: config.plan.maxRounds, timeoutMs: config.plan.timeoutMs, maxTokens: config.plan.maxTokens,
       });
       metrics = out.metrics;
       let { reply } = out;

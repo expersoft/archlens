@@ -1,28 +1,45 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ChatMsg } from './draftStore';
 import { NotesReview } from './NotesReview';
+import type { RepoAttach } from '../api';
+
+/** The chip of a repository: url@ref, else url@commit (short). */
+const repoLabel = (r: { url: string; ref?: string; commit?: string }) => (r.ref ? `${r.url}@${r.ref}` : r.commit ? `${r.url}@${r.commit.slice(0, 7)}` : r.url);
 
 export interface PlanChatProps {
   chat: ChatMsg[];
   /** The composer stays enabled during a round: writing again cancels it. */
-  onSend: (text: string) => void;
+  onSend: (text: string, attach?: RepoAttach) => void;
   onAnswer: (msg: ChatMsg, resolution: string) => void;
   /** The notes draft was approved (with the user's edits) or set aside. */
   onNotes?: (msg: ChatMsg, notes: { overview: string; notes: string } | null) => void;
   /** Shown above the composer when the draft does not fit in the browser. */
   notice?: React.ReactNode;
+  /** The draft's repository: attaching another one is off (one repository per draft). */
+  repo?: { url: string; ref?: string; commit?: string } | null;
 }
 
-export function PlanChat({ chat, onSend, onAnswer, onNotes, notice }: PlanChatProps) {
+export function PlanChat({ chat, onSend, onAnswer, onNotes, notice, repo }: PlanChatProps) {
   const [text, setText] = useState('');
+  const [form, setForm] = useState<{ url: string; ref: string } | null>(null);
+  const [attach, setAttach] = useState<RepoAttach | null>(null);
   const end = useRef<HTMLLIElement>(null);
   useEffect(() => { end.current?.scrollIntoView?.({ block: 'end' }); }, [chat]);
 
   const submit = () => {
     const t = text.trim();
-    if (!t) return;
+    if (!t && !attach) return;
     setText('');
-    onSend(t);
+    if (!attach) { onSend(t); return; }
+    setAttach(null);
+    onSend(t || `Leia o repositório ${attach.url}`, attach);
+  };
+  const confirmAttach = () => {
+    const url = form?.url.trim();
+    if (!url) return;
+    const ref = form!.ref.trim();
+    setAttach({ url, ...(ref ? { ref } : {}) });
+    setForm(null);
   };
 
   return (
@@ -57,6 +74,23 @@ export function PlanChat({ chat, onSend, onAnswer, onNotes, notice }: PlanChatPr
       </ul>
       {notice}
       <div className="askbox">
+        <div className="attach">
+          <button type="button" aria-label="Anexar repositório" title={repo ? 'um repositório por rascunho: aplique ou descarte o atual' : 'Anexar um repositório por URL git'}
+            disabled={!!repo || !!attach} onClick={() => setForm(form ? null : { url: '', ref: '' })}>＋ Repositório</button>
+          {repo && <span className="chip" title="repositório do rascunho">{repoLabel(repo)}</span>}
+          {!repo && attach && (
+            <span className="chip">{repoLabel(attach)} <button type="button" className="link" aria-label="Remover anexo" onClick={() => setAttach(null)}>×</button></span>
+          )}
+        </div>
+        {form && !repo && (
+          <div className="attach-form">
+            <input aria-label="URL do repositório" placeholder="https://… ou git@host:caminho" value={form.url} autoFocus
+              onChange={(e) => setForm({ ...form, url: e.target.value })} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); confirmAttach(); } }} />
+            <input aria-label="Ref (opcional)" placeholder="branch, tag ou commit" value={form.ref}
+              onChange={(e) => setForm({ ...form, ref: e.target.value })} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); confirmAttach(); } }} />
+            <button type="button" disabled={!form.url.trim()} onClick={confirmAttach}>Anexar</button>
+          </div>
+        )}
         <textarea
           aria-label="Mensagem"
           rows={3}

@@ -4,7 +4,12 @@ import { plan as planDelta, show } from '../../../../scripts/lib/api.mjs';
 import { openQuestions, validResolution } from '../../../../scripts/lib/merge.mjs';
 import { describeItem } from '../../../../scripts/lib/merge-report.mjs';
 import { QUERY_TOOLS, findTool, cardTool, relationsTool, tryViewTool } from '../ask/tools.mjs';
+import { summarize, formatSummary } from '../../../../scripts/lib/scan/summary.mjs';
+import { toDelta } from '../../../../scripts/lib/scan/to-delta.mjs';
+import { normalizeRepoUrl } from '../../../../scripts/lib/scan/git.mjs';
+import { c4KindOf } from '../../../../scripts/lib/model.mjs';
 import { replanDraft } from './draft.mjs';
+import { openRepo, readRepoFile, grepRepo, READ_MAX, GREP_MAX } from './repo.mjs';
 
 const str = { type: 'string' };
 const obj = (properties, required = []) => ({ type: 'object', properties, required, additionalProperties: false });
@@ -39,8 +44,17 @@ const PLAN_ONLY = [
     input_schema: obj({}) },
 ];
 
+const REPO_TOOLS = [
+  { name: 'scan_repo', description: 'Lê o repositório que o usuário anexou (clone raso da URL git): resumo do inventário e papel sugerido. Com "as" (system ou service; service pede "system"), monta o delta do repositório e o guarda no rascunho. Um repositório por rascunho.',
+    input_schema: obj({ url: str, ref: str, as: { type: 'string', enum: ['system', 'service'] }, system: str, id: str }, ['url']) },
+  { name: 'read_file', description: `Lê um arquivo do repositório do rascunho (caminho relativo à raiz, até ${READ_MAX / 1024} KB). Arquivos de segredo são recusados.`,
+    input_schema: obj({ path: str }, ['path']) },
+  { name: 'grep', description: `Procura uma expressão regular nos arquivos do repositório do rascunho (até ${GREP_MAX} linhas). "glob" filtra os arquivos (ex.: *.yaml, src/**/*.ts).`,
+    input_schema: obj({ pattern: str, glob: str }, ['pattern']) },
+];
+
 // Fixed order: the prompt cache depends on it.
-export const PLAN_TOOLS = [...QUERY_TOOLS, ...PLAN_ONLY];
+export const PLAN_TOOLS = [...QUERY_TOOLS, ...PLAN_ONLY, ...REPO_TOOLS];
 
 const fail = content => ({ ok: false, content });
 const isObject = v => v !== null && typeof v === 'object' && !Array.isArray(v);
@@ -48,7 +62,7 @@ const isObject = v => v !== null && typeof v === 'object' && !Array.isArray(v);
 /** Text from outside the user's turn (base, repository, delta) between the content marks; marks inside it are neutralized. */
 export function external(origin, text) {
   const safe = String(text).replace(/<(\/?conteudo-externo)/gi, '&lt;$1');
-  return `<conteudo-externo origem="${String(origin).replace(/[^\w.-]/g, '')}">\n${safe}\n</conteudo-externo>`;
+  return `<conteudo-externo origem="${String(origin).replace(/[^\p{L}\p{N}_.-]/gu, '')}">\n${safe}\n</conteudo-externo>`;
 }
 
 const fromBase = r => (r.ok ? { ok: true, content: external('base', r.content) } : r);
@@ -137,6 +151,63 @@ function readNotes(ctx) {
   return { ok: true, content: external('base', `${part('overview', 'overview')}\n\n${part('notes', 'notes')}`) };
 }
 
+export const ONE_REPO = 'um repositório por rascunho: aplique ou descarte o atual';
+const sameRepo = (a, b) => normalizeRepoUrl(a) === normalizeRepoUrl(b);
+
+/** The role checks of `archlens scan --as` against the base. */
+function roleProblem(model, { as, system, id }) {
+  if (as === undefined) return null;
+  if (!['system', 'service'].includes(as)) return 'informe "as" como system ou service';
+  if (as === 'service' && !system) return 'com as=service, informe "system" (o id do software system)';
+  const kindOf = x => (model.elements.has(x) ? c4KindOf(model, model.elements.get(x)) : null);
+  if (system && model.elements.has(system) && kindOf(system) !== 'softwareSystem') return `"${system}" não é um software system`;
+  const want = as === 'system' ? 'softwareSystem' : 'container';
+  if (id && model.elements.has(id) && kindOf(id) !== want) return `"${id}" na base não é um ${as === 'system' ? 'software system' : 'container'}`;
+  return null;
+}
+
+async function scanRepo(ctx, session, { url, ref, as, system, id }) {
+  if (typeof url !== 'string') return fail('informe "url"');
+  const cur = session.draft.repo;
+  if (cur && !sameRepo(cur.url, url)) return fail(ONE_REPO);
+  const attached = session.attach && sameRepo(session.attach.url, url) ? session.attach : null;
+  if (!attached && !cur) return fail('só leio o repositório que o usuário anexou: peça que ele o anexe pelo botão "Anexar repositório"');
+  const problem = roleProblem(ctx.model, { as, system, id });
+  if (problem) return fail(problem);
+  const at = ref ?? attached?.ref ?? cur?.ref;
+  const r = await openRepo({ url, ref: at }, session.git ?? {});
+  const repo = { url: url.trim(), ...(at === undefined ? {} : { ref: at }), commit: r.commit };
+  const summary = formatSummary(summarize(r.inv, ctx.model)).split('\n').filter(l => !l.startsWith('  próximo passo')).join('\n');
+  if (as === undefined) {
+    session.draft = { ...session.draft, repo };
+    return { ok: true, content: `${external('repositório', summary)}\npróximo passo: confirme o papel (system ou service) com o usuário e chame scan_repo com "as"` };
+  }
+  const delta = toDelta(r.inv, { role: as, system, id, base: ctx.model });
+  planDelta(ctx.store, delta);
+  session.draft = { ...session.draft, repo, delta, plan: null };
+  return { ok: true, content: `${external('repositório', summary)}\ndelta do repositório guardado (${delta.model.elements.length} elemento(s), ${delta.model.relationships.length} relação(ões)); rode plan_draft para planejar` };
+}
+
+/** The clone of the draft's repository, the same commit it was read at. */
+async function draftRepoDir(session) {
+  const cur = session.draft.repo;
+  if (!cur) throw new Error('o rascunho não tem repositório; leia-o antes com scan_repo');
+  const r = await openRepo({ url: cur.url, ref: cur.ref }, session.git ?? {});
+  if (r.commit !== cur.commit) throw new Error(`o repositório mudou desde a leitura (agora em ${r.commit.slice(0, 7)}); leia-o de novo com scan_repo`);
+  return r.dir;
+}
+
+async function readFileTool(_ctx, session, { path }) {
+  const text = readRepoFile(await draftRepoDir(session), path);
+  return { ok: true, content: external('repositório', `arquivo ${path}:\n${text}`) };
+}
+
+async function grepTool(_ctx, session, input) {
+  const { lines, more } = await grepRepo(await draftRepoDir(session), input);
+  const body = lines.length ? `${lines.join('\n')}${more ? `\n(mais de ${GREP_MAX} linhas; refine o pattern ou o glob)` : ''}` : 'nenhuma linha encontrada';
+  return { ok: true, content: external('repositório', body) };
+}
+
 const RUN = {
   find_elements: (ctx, _s, i) => fromBase(findTool(ctx, i)),
   element_card: (ctx, _s, i) => fromBase(cardTool(ctx, i)),
@@ -144,9 +215,13 @@ const RUN = {
   try_view: async (ctx, _s, i) => fromBase(await tryViewTool(ctx, i)),
   read_reference: readReference, set_delta: setDelta, plan_draft: planDraftTool, show_plan: showPlan, set_note: setNote,
   add_preview: addPreview, ask_decision: askDecision, ask_user: askUser, reply, draft_notes: draftNotes, read_notes: readNotes,
+  scan_repo: scanRepo, read_file: readFileTool, grep: grepTool,
 };
 
-/** Runs one planning tool; `session` ({ draft, previews }) is changed in place. Never throws: errors come back as `ok: false`. */
+/**
+ * Runs one planning tool; `session` ({ draft, previews, attach?, git? }) is changed in place. `attach` is the
+ * repository the user attached in this message; `git` ({ env, plan }) the server's git settings. Never throws: errors come back as `ok: false`.
+ */
 export async function runPlanTool(ctx, session, name, input) {
   const fn = Object.hasOwn(RUN, name) ? RUN[name] : null;
   if (!fn) return fail(`ferramenta desconhecida: ${name}`);

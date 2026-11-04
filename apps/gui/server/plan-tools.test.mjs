@@ -41,7 +41,7 @@ const hashDir = dir => {
 
 test('PLAN_TOOLS tem ordem fixa', () => {
   assert.deepEqual(PLAN_TOOLS.map(t => t.name), ['find_elements', 'element_card', 'relations', 'try_view', 'read_reference',
-    'set_delta', 'plan_draft', 'show_plan', 'set_note', 'add_preview', 'ask_decision', 'ask_user', 'reply', 'draft_notes', 'read_notes']);
+    'set_delta', 'plan_draft', 'show_plan', 'set_note', 'add_preview', 'ask_decision', 'ask_user', 'reply', 'draft_notes', 'read_notes', 'scan_repo', 'read_file', 'grep']);
 });
 
 test('read_reference só abre references/*.md da lista', () => withBase(async ctx => {
