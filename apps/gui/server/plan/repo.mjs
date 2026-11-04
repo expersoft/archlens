@@ -77,6 +77,15 @@ export const scrub = (text, token) => {
   return token ? s.split(token).join('***') : s;
 };
 
+/** Text without the credentials of its urls (cleanRepoUrl's rule: a bare ssh user, as in ssh://git@h, is no secret). */
+export const scrubCredentials = text => String(text).replace(/([a-z][a-z0-9+.-]*:\/\/)([^@/\s]+)@/gi,
+  (all, scheme, user) => (scheme.toLowerCase() === 'ssh://' && !user.includes(':') ? all : scheme));
+
+/** Text without the server's temp folders: a path inside a clone becomes relative to it, the clone itself "o clone". */
+export const hidePaths = text => String(text)
+  .replace(/[^\s'"`(]*archlens-plan-[A-Za-z0-9_-]+[\\/]clone[\\/]/g, '')
+  .replace(/[^\s'"`(]*archlens-plan-[A-Za-z0-9_-]+(?:[\\/]clone)?/g, 'o clone');
+
 /** The token for `url`: only https and a host on plan.gitTokenHosts (exact, any case). */
 function tokenFor(url, { env = {}, plan = {} }) {
   const token = plan.gitTokenEnv && typeof env[plan.gitTokenEnv] === 'string' ? env[plan.gitTokenEnv] : '';
@@ -183,8 +192,8 @@ function inWorker(data, ms, late) {
     let settled = false;
     const end = (fn, v) => { if (!settled) { settled = true; clearTimeout(timer); fn(v); } };
     const timer = setTimeout(() => { end(fail, repoError(late)); void w.terminate(); }, ms);
-    w.once('message', m => (m.error ? end(fail, repoError(m.error.message)) : end(done, m.result)));
-    w.once('error', e => end(fail, repoError(e.message)));
+    w.once('message', m => (m.error ? end(fail, repoError(hidePaths(m.error.message))) : end(done, m.result)));
+    w.once('error', e => end(fail, repoError(hidePaths(e.message))));
     w.once('exit', code => end(fail, repoError(`a leitura do repositório parou (código ${code})`)));
   });
 }
@@ -242,7 +251,7 @@ async function cloneAndScan(url, ref, opts) {
     return { tmp, repo: { ...repo, dir } };
   } catch (e) {
     rmSync(tmp, { recursive: true, force: true });
-    throw repoError(scrub(e.message, token));
+    throw repoError(scrub(hidePaths(e.message), token));
   } finally { release(); }
 }
 

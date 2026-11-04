@@ -215,3 +215,34 @@ test('notes grava e regenera o documento', () => withPlan(async (url, dir, top) 
 test('apply e notes: sem o modo ligado → 404', () => withPlan(async url => {
   for (const p of ['plan/apply', 'plan/notes']) assert.equal((await post(url, p, {})).status, 404);
 }, { plan: false }));
+
+test('documento que falha depois da gravação: sucesso com doc.error sem caminhos e registro recarregado', () => withPlan(async (url, dir) => {
+  const { draft, opsHash } = await opened(url, NEW);
+  const before = draft.base.version;
+  const r = await post(url, 'plan/apply', { draft, confirm: opsHash });
+  assert.equal(r.status, 200);
+  const out = await r.json();
+  assert.equal(out.entry.added[0], 'sistema-novo');
+  assert.equal(out.doc.error, 'a base foi gravada, mas o ARCHITECTURE.md não foi regenerado; rode "archlens doc" na base');
+  assert.ok(!PATHS.test(JSON.stringify(out.doc)));
+  assert.equal(elementOf(dir, 'sistema-novo').name, 'Sistema Novo Zeta');
+  const again = await opened(url, NEW);
+  assert.notEqual(again.draft.base.version, before);
+}, { registry: dir => {
+  const reg = createBaseRegistry({ port: 0, bases: [{ id: 'loja', path: dir }] }, { pollMs: 100000 });
+  const get = reg.get.bind(reg);
+  // the write lands, then the document cannot be regenerated
+  reg.get = id => {
+    const ctx = get(id);
+    const { store } = ctx;
+    if (!store.__broken) {
+      const apply = store.apply.bind(store);
+      const read = store.read;
+      // only the read that regenerates the document fails
+      store.apply = (...a) => { const res = apply(...a); store.read = () => { store.read = read; throw new Error(`EACCES: ${dir}/x`); }; return res; };
+      store.__broken = true;
+    }
+    return ctx;
+  };
+  return reg;
+} }));

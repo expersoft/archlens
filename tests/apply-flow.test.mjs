@@ -55,6 +55,19 @@ test('applyAndDocument grava a base e o ARCHITECTURE.md e devolve a rodada', () 
   assert.match(readFileSync(res.doc, 'utf8'), /Serviço de notificações push/);
 });
 
+test('applyAndDocument: base gravada e documento que falha devolve docError em vez de lançar', () => {
+  const dir = lojaCopy();
+  const store = storeAt(dir);
+  const apply = store.apply.bind(store);
+  const read = store.read;
+  store.apply = (...a) => { const r = apply(...a); store.read = () => { store.read = read; throw new Error('disco cheio'); }; return r; };
+  const res = applyAndDocument(store, finalPlan(store));
+  assert.deepEqual(res.entry.added, ['loja.notificacoes']);
+  assert.equal(res.doc, null);
+  assert.match(res.docError.message, /disco cheio/);
+  assert.ok(store.read().raw.model.elements.some(e => e.id === 'loja.notificacoes'));
+});
+
 test('applyAndDocument sem mudanças devolve entry null', () => {
   const dir = lojaCopy();
   const store = storeAt(dir);

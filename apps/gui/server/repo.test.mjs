@@ -9,9 +9,9 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { startServer } from './app.mjs';
 import { createBaseRegistry } from './bases.mjs';
 import { scripted } from './ask/scripted.mjs';
-import { newDraft } from './plan/draft.mjs';
+import { newDraft, DRAFT_MAX_BYTES } from './plan/draft.mjs';
 import { PLAN_TOOLS, runPlanTool } from './plan/tools.mjs';
-import { openRepo, closeRepos, gitEnv, isSecretPath, scrub, checkRepo } from './plan/repo.mjs';
+import { openRepo, closeRepos, gitEnv, isSecretPath, scrub, scrubCredentials, checkRepo, hidePaths, grepRepo } from './plan/repo.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const USAGE = { input: 1, output: 1, cacheRead: 0 };
@@ -211,6 +211,10 @@ test('scrub tira o token e a credencial das URLs', () => {
   assert.equal(scrub('ssh://git:senha@h/x e https://u@h/y'), 'ssh://h/x e https://h/y');
 });
 
+test('scrubCredentials tira a credencial e mantém o usuário simples do ssh', () => {
+  assert.equal(scrubCredentials('a https://u:p@h/x http://t@h/y ssh://git:s@h/z ssh://git@h/w'), 'a https://h/x http://h/y ssh://h/z ssh://git@h/w');
+});
+
 test('file:// e caminho local só com plan.allowFileUrls; só https, ssh e file', async () => {
   const repo = sampleRepo();
   assert.throws(() => checkRepo({ url: repo.url }), /file:\/\//);
@@ -303,3 +307,25 @@ test('clone acima do teto de tempo', async () => {
     }, { provider, plan: { cloneTimeoutMs: 2000, allowFileUrls: true } });
   } finally { await silent.close(); }
 });
+
+test('erros do worker e do clone não levam caminhos temporários', async () => {
+  assert.equal(hidePaths(`ENOENT: no such file or directory, open '${join(tmpdir(), 'archlens-plan-AbC123', 'clone', 'src', 'a.yml')}'`),
+    "ENOENT: no such file or directory, open 'src/a.yml'");
+  assert.equal(hidePaths(`fatal: could not create work tree dir '${join(tmpdir(), 'archlens-plan-AbC123', 'clone')}': x`), "fatal: could not create work tree dir 'o clone': x");
+  const gone = join(tmpdir(), 'archlens-plan-zzzzzz', 'clone');
+  await assert.rejects(grepRepo(gone, { pattern: 'x' }), e => {
+    assert.doesNotMatch(e.message, /archlens-plan-|\/tmp/, e.message);
+    return true;
+  });
+});
+
+test('scan_repo recusa delta que estoura o teto do rascunho', () => withBase(async ctx => {
+  const repo = sampleRepo();
+  const draft = newDraft(ctx);
+  const note = 'x'.repeat(DRAFT_MAX_BYTES - Buffer.byteLength(JSON.stringify(draft)) - 10);
+  const session = { draft: { ...draft, note }, previews: [], attach: { url: repo.url }, git: FILE_OK };
+  const r = await runPlanTool(ctx, session, 'scan_repo', { url: repo.url, as: 'system' });
+  assert.equal(r.ok, false);
+  assert.match(r.content, /grande demais/);
+  assert.equal(session.draft.delta, null);
+}));

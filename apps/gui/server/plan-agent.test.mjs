@@ -159,3 +159,40 @@ test('o estado do rascunho traz contagens e respostas dadas; avisos se juntam', 
   assert.match(t, /itens do plano:/);
   assert.match(r.reply.warning, /a base mudou.*; teto de 1 rodadas/);
 }));
+
+test('o catálogo da base vai ao system como conteúdo externo', () => withBase(async ctx => {
+  const p = scripted([turn([call('reply', { text: 'ok' })])]);
+  await runPlan(ctx, req(ctx), opts(p));
+  const [head, catalog] = p.seen[0].system;
+  assert.doesNotMatch(head, /^<conteudo-externo/);
+  assert.ok(catalog.startsWith('<conteudo-externo origem="base">\n'), catalog.slice(0, 80));
+  assert.ok(catalog.endsWith('\n</conteudo-externo>'));
+}));
+
+test('delta grande vai ao modelo resumido: contagens e ids', () => withBase(async ctx => {
+  const elements = Array.from({ length: 300 }, (_, i) => ({ id: `big-${i}`, name: `Grande ${i}`, type: 'application-component', description: `DESCRICAO-LONGA ${'d'.repeat(100)}` }));
+  const relationships = [{ id: 'r-big', source: 'big-0', target: 'big-1', type: 'flow' }];
+  const delta = { 'archlens-delta': '1.0', source: { kind: 'prompt', ref: 'teste' }, model: { elements, relationships } };
+  const p = scripted([turn([call('reply', { text: 'ok' })])]);
+  await runPlan(ctx, req(ctx, { draft: { ...newDraft(ctx), delta } }), opts(p));
+  const t = p.seen[0].input.text;
+  assert.doesNotMatch(t, /DESCRICAO-LONGA/);
+  assert.match(t, /300 elemento\(s\), 1 relação\(ões\)/);
+  assert.match(t, /big-0 \(Grande 0\)/);
+  assert.match(t, /r-big \(big-0 → big-1\)/);
+  assert.ok(t.length < 20000, String(t.length));
+}));
+
+test('delta pequeno vai inteiro', () => withBase(async ctx => {
+  const p = scripted([turn([call('reply', { text: 'ok' })])]);
+  await runPlan(ctx, req(ctx, { draft: { ...newDraft(ctx), delta: NEW } }), opts(p));
+  assert.ok(p.seen[0].input.text.includes(JSON.stringify(NEW)));
+}));
+
+test('o pedido de notas leva a rodada aplicada como conteúdo externo', () => withBase(async ctx => {
+  const p = scripted([turn([call('reply', { text: 'ok' })])]);
+  const applied = { summary: '+1 ~1 −0', added: ['sistema-novo'], changed: ['loja.pedidos'], removed: [] };
+  await runPlan(ctx, req(ctx, { message: 'rascunhe as notas', applied }), opts(p));
+  const t = p.seen[0].input.text;
+  assert.match(t, /<conteudo-externo origem="rodada">\nresumo: \+1 ~1 −0\nadicionados: sistema-novo\nalterados: loja\.pedidos\nremovidos: nenhum\n<\/conteudo-externo>/);
+}));

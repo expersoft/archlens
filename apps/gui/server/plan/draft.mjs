@@ -9,6 +9,10 @@ export const DRAFT_MAX_BYTES = 2_000_000;
 const FIELDS = ['archlens-draft', 'base', 'archlens', 'delta', 'plan', 'note', 'repo', 'usage'];
 const archlensVersion = JSON.parse(readFileSync(new URL('../../../../package.json', import.meta.url), 'utf8')).version;
 
+/** The draft's size as the cap measures it: without the plan, which the server always plans again. */
+export const draftBytes = draft => Buffer.byteLength(JSON.stringify({ ...draft, plan: null }));
+export const TOO_BIG = 'o rascunho é grande demais';
+
 const draftError = message => Object.assign(new Error(message), { code: 'E_GUI_DRAFT' });
 const isObject = v => v !== null && typeof v === 'object' && !Array.isArray(v);
 
@@ -31,7 +35,7 @@ export function cleanRepoUrl(url) {
 /** Validates a draft read from a file against the open base; the plan is kept only for its answers (replanDraft redoes it). */
 export function checkDraft(obj, ctx) {
   if (!isObject(obj)) throw draftError('o arquivo não é um rascunho do archlens');
-  if (Buffer.byteLength(JSON.stringify(obj)) > DRAFT_MAX_BYTES) throw draftError('o rascunho é grande demais');
+  if (draftBytes(obj) > DRAFT_MAX_BYTES) throw draftError(TOO_BIG);
   if (obj['archlens-draft'] !== DRAFT_VERSION) throw draftError(`versão de rascunho desconhecida: ${obj['archlens-draft']}`);
   const extra = Object.keys(obj).filter(k => !FIELDS.includes(k));
   if (extra.length) throw draftError(`campos desconhecidos no rascunho: ${extra.join(', ')}`);

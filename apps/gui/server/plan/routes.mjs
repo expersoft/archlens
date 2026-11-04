@@ -3,7 +3,7 @@
 import { dirname, relative, sep } from 'node:path';
 import { newDraft, checkDraft, replanDraft, opsHashOf, DRAFT_MAX_BYTES } from './draft.mjs';
 import { runPlan } from './agent.mjs';
-import { checkRepo } from './repo.mjs';
+import { checkRepo, scrubCredentials } from './repo.mjs';
 import { ONE_REPO } from './tools.mjs';
 import { normalizeRepoUrl } from '../../../../scripts/lib/scan/git.mjs';
 import { buildPreview } from './preview.mjs';
@@ -15,7 +15,10 @@ import { describeItem } from '../../../../scripts/lib/merge-report.mjs';
 const MESSAGE_MAX = 20000;
 const HISTORY_MAX = 40;
 const SPECS_MAX = 20;
-const BODY_MAX = DRAFT_MAX_BYTES + 256 * 1024; // a draft plus the message and the history
+// A draft (its cap leaves out the plan, about 2.5× the delta) plus the message and the history.
+const BODY_MAX = 4 * DRAFT_MAX_BYTES + 256 * 1024;
+const APPLIED_LIST_MAX = 5000;
+const DOC_FAILED = 'a base foi gravada, mas o ARCHITECTURE.md não foi regenerado; rode "archlens doc" na base';
 const NOTE_MAX = 200_000;
 const NOTE_FIELDS = ['overview', 'notes'];
 // The write refusals the user solves by planning again (or by moving the document away): 409, with a GUI message (the
@@ -78,7 +81,20 @@ function historyOf(history, httpError) {
     || !history.every(m => isObject(m) && (m.role === 'user' || m.role === 'assistant') && typeof m.text === 'string' && m.text.length <= MESSAGE_MAX)) {
     throw httpError(400, 'history inválido: use uma lista de { role, text }');
   }
-  return history.map(({ role, text }) => ({ role, text }));
+  // a credential typed in a url never reaches the model
+  return history.map(({ role, text }) => ({ role, text: scrubCredentials(text) }));
+}
+
+/** The round just applied (its changelog entry), sent with the notes request. */
+function appliedOf(applied, httpError) {
+  if (applied === undefined) return undefined;
+  const ids = v => Array.isArray(v) && v.length <= APPLIED_LIST_MAX && v.every(x => typeof x === 'string' && x.length <= 500);
+  if (!isObject(applied) || typeof applied.summary !== 'string' || applied.summary.length > MESSAGE_MAX
+    || !['added', 'changed', 'removed'].every(k => ids(applied[k]))) {
+    throw httpError(400, 'applied inválido: use { summary, added, changed, removed }');
+  }
+  const { summary, added, changed, removed } = applied;
+  return { summary, added, changed, removed };
 }
 
 /**
@@ -92,7 +108,7 @@ export function planRoutes({ registry, provider, config, telemetry, h }) {
   async function plan(req, res, b) {
     const body = await read(req);
     const ctx = registry.get(b);
-    const message = typeof body.message === 'string' ? body.message.trim() : undefined;
+    const message = typeof body.message === 'string' ? scrubCredentials(body.message.trim()) : undefined;
     if (body.message !== undefined && message === undefined) throw httpError(400, 'message deve ser texto');
     if (message && message.length > MESSAGE_MAX) throw httpError(400, `a mensagem passa de ${MESSAGE_MAX} caracteres`);
     const { answer } = body;
@@ -107,6 +123,7 @@ export function planRoutes({ registry, provider, config, telemetry, h }) {
     if (!message && !answer && !attach) throw httpError(400, 'informe a mensagem em {message} ou a resposta em {answer}');
     // `history` holds the prior turns only; the current text goes only in `message` (the agent adds it itself).
     const history = historyOf(body.history, httpError);
+    const applied = appliedOf(body.applied, httpError);
     const replanned = draftFrom(ctx, body.draft === undefined ? newDraft(ctx) : body.draft);
     const had = replanned.draft.repo;
     if (attach && had && normalizeRepoUrl(had.url) !== normalizeRepoUrl(attach.url)) throw httpError(409, ONE_REPO, 'E_GUI_REPO');
@@ -119,7 +136,7 @@ export function planRoutes({ registry, provider, config, telemetry, h }) {
     let metrics = { total: 0, llm: 0, tools: 0, rounds: 0, calls: 0, mode: 'tools', usage: { input: 0, output: 0, cacheRead: 0 } };
     let outcome = 'error';
     try {
-      const out = await runPlan(ctx, { draft: replanned.draft, message, answer, history, attach }, {
+      const out = await runPlan(ctx, { draft: replanned.draft, message, answer, history, attach, applied }, {
         provider, signal: ctl.signal, emit: write, git: { env: config.env ?? {}, plan: config.plan }, maxRounds: config.plan.maxRounds, timeoutMs: config.plan.timeoutMs, maxTokens: config.plan.maxTokens,
       });
       metrics = out.metrics;
@@ -168,7 +185,9 @@ export function planRoutes({ registry, provider, config, telemetry, h }) {
     const res = guiWrite(() => applyAndDocument(ctx.store, planned));
     if (!res.entry) return { entry: null, doc: null, build: null, notesDraftNeeded: false };
     await registry.reload(b);
-    return { entry: res.entry, doc: docName(ctx.store, res.doc), build: await rebuild(ctx.store), notesDraftNeeded: true };
+    // the base is written: a document that failed is reported, not thrown (the core's error names the machine's paths)
+    const doc = res.docError ? { error: DOC_FAILED } : docName(ctx.store, res.doc);
+    return { entry: res.entry, doc, build: await rebuild(ctx.store), notesDraftNeeded: true };
   }
 
   async function notes(req, b) {

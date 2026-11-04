@@ -8,7 +8,7 @@ import { summarize, formatSummary } from '../../../../scripts/lib/scan/summary.m
 import { toDelta } from '../../../../scripts/lib/scan/to-delta.mjs';
 import { normalizeRepoUrl } from '../../../../scripts/lib/scan/git.mjs';
 import { c4KindOf } from '../../../../scripts/lib/model.mjs';
-import { replanDraft } from './draft.mjs';
+import { replanDraft, draftBytes, DRAFT_MAX_BYTES } from './draft.mjs';
 import { openRepo, readRepoFile, grepRepo, checkRepo, READ_MAX, GREP_MAX } from './repo.mjs';
 
 const str = { type: 'string' };
@@ -57,6 +57,9 @@ const REPO_TOOLS = [
 export const PLAN_TOOLS = [...QUERY_TOOLS, ...PLAN_ONLY, ...REPO_TOOLS];
 
 const fail = content => ({ ok: false, content });
+// A draft the server would refuse on the next request never leaves the tool.
+const TOO_BIG = `o delta deixa o rascunho grande demais (máximo ${DRAFT_MAX_BYTES / 1_000_000} MB); reduza-o (menos elementos, descrições mais curtas)`;
+const fits = draft => draftBytes(draft) <= DRAFT_MAX_BYTES;
 const isObject = v => v !== null && typeof v === 'object' && !Array.isArray(v);
 
 /** Text from outside the user's turn (base, repository, delta) between the content marks; marks inside it are neutralized. */
@@ -75,7 +78,9 @@ function readReference(_ctx, _session, { name }) {
 function setDelta(ctx, session, { delta }) {
   if (!isObject(delta)) return fail('informe "delta" como objeto');
   try { planDelta(ctx.store, delta); } catch (e) { return fail(e.message); }
-  session.draft = { ...session.draft, delta, plan: null };
+  const next = { ...session.draft, delta, plan: null };
+  if (!fits(next)) return fail(TOO_BIG);
+  session.draft = next;
   return { ok: true, content: 'delta guardado; rode plan_draft para planejar' };
 }
 
@@ -186,7 +191,9 @@ async function scanRepo(ctx, session, { url, ref, as, system, id }) {
   }
   const delta = toDelta(r.inv, { role: as, system, id, base: ctx.model });
   planDelta(ctx.store, delta);
-  session.draft = { ...session.draft, repo, delta, plan: null };
+  const next = { ...session.draft, repo, delta, plan: null };
+  if (!fits(next)) return fail(TOO_BIG);
+  session.draft = next;
   return { ok: true, content: `${external('repositório', summary)}\ndelta do repositório guardado (${delta.model.elements.length} elemento(s), ${delta.model.relationships.length} relação(ões)); rode plan_draft para planejar` };
 }
 

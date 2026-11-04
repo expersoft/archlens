@@ -8,16 +8,36 @@ import { replanDraft } from './draft.mjs';
 
 const REMINDER = 'Responda chamando reply, ask_user, ask_decision ou draft_notes.';
 const HISTORY_LIMIT = 12;
+const DELTA_INLINE_MAX = 20000; // a larger delta goes to the model as a summary
+const LIST_MAX = 150;
 const QUERY = new Set(['find_elements', 'element_card', 'relations', 'try_view']);
 const REPO = new Set(['scan_repo', 'read_file', 'grep']);
 const stageOf = name => (QUERY.has(name) ? 'consultando a base' : REPO.has(name) ? 'lendo o repositório' : 'planejando');
 const abortError = () => Object.assign(new Error('planejamento cancelado'), { code: 'E_LLM_ABORT' });
 const sum = (a, b) => ({ input: a.input + (b?.input ?? 0), output: a.output + (b?.output ?? 0), cacheRead: a.cacheRead + (b?.cacheRead ?? 0) });
 
+const listed = (items, show) => `${items.slice(0, LIST_MAX).map(show).join(', ')}${items.length > LIST_MAX ? ` (+${items.length - LIST_MAX})` : ''}`;
+
+/** A large delta as counts and ids: the full JSON would fill the model's context every turn. */
+function deltaSummary(delta) {
+  const arr = v => (Array.isArray(v) ? v : []);
+  const els = arr(delta.model?.elements);
+  const rels = arr(delta.model?.relationships);
+  const lines = [`delta (resumo; grande demais para ir inteiro): ${els.length} elemento(s), ${rels.length} relação(ões), ${arr(delta.views).length} visão(ões), ${arr(delta.ops).length} operação(ões)`];
+  if (delta.summary) lines.push(`resumo do delta: ${delta.summary}`);
+  if (els.length) lines.push(`elementos: ${listed(els, e => `${e?.id} (${e?.name})`)}`);
+  if (rels.length) lines.push(`relações: ${listed(rels, r => `${r?.id ?? r?.type} (${r?.source} → ${r?.target})`)}`);
+  if (arr(delta.views).length) lines.push(`visões: ${listed(arr(delta.views), v => v?.key)}`);
+  if (arr(delta.ops).length) lines.push(`operações: ${listed(arr(delta.ops), o => `${o?.op} ${o?.id}`)}`);
+  lines.push('use show_plan para o detalhe do plano');
+  return lines.join('\n');
+}
+
 // What the model gets to know about the draft; all of it is external content.
 function draftState(draft) {
   const lines = [];
-  lines.push(draft.delta ? `delta:\n${JSON.stringify(draft.delta)}` : 'delta: nenhum');
+  const json = draft.delta ? JSON.stringify(draft.delta) : '';
+  lines.push(!draft.delta ? 'delta: nenhum' : json.length > DELTA_INLINE_MAX ? deltaSummary(draft.delta) : `delta:\n${json}`);
   if (draft.plan) {
     const open = openQuestions(draft.plan);
     lines.push(draft.plan.blocked ? 'plano: bloqueado'
@@ -39,6 +59,11 @@ function userText(req, draft) {
   if (history.length) parts.push(`Conversa até aqui:\n${history.join('\n')}`);
   parts.push(`Estado do rascunho:\n${external('rascunho', draftState(draft))}`);
   if (req.attach) parts.push(`O usuário anexou o repositório ${req.attach.url}${req.attach.ref ? ` (ref ${req.attach.ref})` : ''}: leia-o com scan_repo.`);
+  if (req.applied) {
+    const { summary, added, changed, removed } = req.applied;
+    const ids = list => (list.length ? listed(list, x => x) : 'nenhum');
+    parts.push(`Rodada aplicada na base:\n${external('rodada', `resumo: ${summary}\nadicionados: ${ids(added)}\nalterados: ${ids(changed)}\nremovidos: ${ids(removed)}`)}`);
+  }
   if (req.answer) parts.push(`O usuário respondeu à decisão ${req.answer.key}: ${req.answer.resolution}`);
   if (req.message) parts.push(`Mensagem do usuário:\n${req.message}`);
   return parts.join('\n\n');
@@ -52,7 +77,8 @@ function applyAnswer(ctx, draft, { key, resolution }) {
 }
 
 /**
- * `req.attach` ({ url, ref? }): the repository the user attached, already checked; `git` ({ env, plan }) for its clone.
+ * `req.attach` ({ url, ref? }): the repository the user attached, already checked; `req.applied` ({ summary, added,
+ * changed, removed }): the round just applied, for the notes draft; `git` ({ env, plan }) for its clone.
  * @returns {Promise<{ draft: object, reply: object, previews: object[], metrics: object }>}
  */
 export async function runPlan(ctx, req, { provider, maxRounds = 12, timeoutMs = 90000, maxTokens = 200000, signal, emit = () => {}, git } = {}) {
@@ -67,7 +93,7 @@ export async function runPlan(ctx, req, { provider, maxRounds = 12, timeoutMs = 
     session.draft = r.draft;
     warning = r.warning;
   }
-  const system = [loadPlanPrompt(), compactCatalog(ctx).text];
+  const system = [loadPlanPrompt(), external('base', compactCatalog(ctx).text)];
   const conv = provider.open({ system, tools: PLAN_TOOLS });
   const { ctl, done } = combine(signal, timeoutMs);
   const finish = (reply, extra) => {

@@ -49,6 +49,13 @@ test('checkDraft recusa versão desconhecida, campos a mais e tamanho acima do l
   rejects(() => checkDraft({ ...d, note: 'x'.repeat(DRAFT_MAX_BYTES) }, ctx), /grande/);
 }));
 
+test('checkDraft mede o teto sem o plano (ele é refeito)', () => withBase(ctx => {
+  const { draft } = replanDraft(ctx, { ...newDraft(ctx), delta: dupDelta });
+  const big = { ...draft, plan: { ...draft.plan, items: [...draft.plan.items, { key: 'x', class: 'info', text: 'x'.repeat(DRAFT_MAX_BYTES) }] } };
+  assert.doesNotThrow(() => checkDraft(JSON.parse(JSON.stringify(big)), ctx));
+  rejects(() => checkDraft({ ...draft, note: 'x'.repeat(DRAFT_MAX_BYTES) }, ctx), /grande/);
+}));
+
 test('checkDraft recusa repo com credencial na URL; cleanRepoUrl também', () => withBase(ctx => {
   const d = { ...newDraft(ctx), repo: { url: 'https://x:y@h/r.git', commit: 'abc' } };
   rejects(() => checkDraft(d, ctx), /credencial/);

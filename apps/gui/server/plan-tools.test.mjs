@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createBaseRegistry } from './bases.mjs';
-import { newDraft } from './plan/draft.mjs';
+import { newDraft, DRAFT_MAX_BYTES } from './plan/draft.mjs';
 import { PLAN_TOOLS, runPlanTool, external } from './plan/tools.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
@@ -240,4 +240,14 @@ test('plan_draft e add_preview só levam texto da base dentro da marca externa',
   const v = await runPlanTool(ctx, s, 'add_preview', { spec });
   assert.ok(v.ok, v.content);
   only(v.content);
+}));
+
+test('set_delta recusa delta que estoura o teto do rascunho', () => withBase(async ctx => {
+  const s = sessionOf(ctx);
+  // the draft fits with a few bytes to spare: any delta goes past the cap
+  s.draft = { ...s.draft, note: 'x'.repeat(DRAFT_MAX_BYTES - Buffer.byteLength(JSON.stringify(s.draft)) - 10) };
+  const r = await runPlanTool(ctx, s, 'set_delta', { delta: NEW });
+  assert.equal(r.ok, false);
+  assert.match(r.content, /grande demais/);
+  assert.equal(s.draft.delta, null);
 }));

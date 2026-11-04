@@ -48,7 +48,8 @@ const documentStored = store => {
 
 /**
  * Writes a final plan through the connector and regenerates the document (the diagrams are not rebuilt). The document is
- * checked before anything is written. `{ entry: null }` when the plan changes nothing. Not for a gbrain MCP base.
+ * checked before anything is written. `{ entry: null }` when the plan changes nothing. When the base was written but
+ * the document could not be regenerated, `doc` is null and `docError` holds the error. Not for a gbrain MCP base.
  */
 export function applyAndDocument(store, plan) {
   if (store.remote) throw storeError('E_STORE_UNSUPPORTED', `${store.describe()} é uma base gbrain no modo mcp; grave com "archlens apply"`);
@@ -56,7 +57,9 @@ export function applyAndDocument(store, plan) {
   if (isFinal(plan) && plan.ops?.length) assertDocOwned(store);
   const res = applyPlan(store, plan);
   if (!res.entry) return { entry: null };
-  return { entry: res.entry, preserved: res.preserved, doc: documentStored(store) };
+  try { return { entry: res.entry, preserved: res.preserved, doc: documentStored(store) }; } catch (e) {
+    return { entry: res.entry, preserved: res.preserved, doc: null, docError: e };
+  }
 }
 
 /** Writes the interpretation notes ({ overview?, notes? }) through the connector (op putNote) and regenerates the document. */

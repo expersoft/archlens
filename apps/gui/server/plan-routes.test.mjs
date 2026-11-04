@@ -26,6 +26,9 @@ const NEW = {
   model: { elements: [{ id: 'sistema-novo', name: 'Sistema Novo Zeta', type: 'application-component' }], relationships: [] },
 };
 
+const provider = scripted([turn([['reply', { text: 'ok' }]])]);
+const notesProvider = scripted([turn([['reply', { text: 'ok' }]])]);
+
 async function withPlan(fn, { provider = scripted([]), registry, config = {} } = {}) {
   const dir = join(mkdtempSync(join(tmpdir(), 'archlens-proutes-')), 'arch');
   cpSync(join(root, 'examples/loja-online/architecture'), dir, { recursive: true });
@@ -214,3 +217,25 @@ test('plan desligado: as rotas /plan* respondem 404', async () => {
     for (const p of ['plan', 'plan/open', 'plan/preview']) assert.equal((await post(srv.url, p, {})).status, 404);
   } finally { await srv.close(); }
 });
+
+test('plan: credencial em URL do histórico ou da mensagem não chega ao modelo', () => withPlan(async (url, srv) => {
+  const history = [{ role: 'user', text: 'leia\n(anexo: https://x-access-token:ghp_segredo@github.com/a/b.git)' }, { role: 'assistant', text: 'ok' }];
+  const evs = await lines(await post(url, 'plan', { message: 'e ssh://git:senha2@h/x.git? e ssh://git@h/y.git', history }));
+  assert.ok(evs.some(e => e.type === 'result'));
+  const seen = JSON.stringify(provider.seen);
+  assert.doesNotMatch(seen, /ghp_segredo|senha2/);
+  assert.match(seen, /https:\/\/github\.com\/a\/b\.git/);
+  assert.match(seen, /ssh:\/\/h\/x\.git/);
+  assert.match(seen, /ssh:\/\/git@h\/y\.git/); // a bare ssh user is no secret
+}, { provider }));
+
+test('plan: applied vai ao agente; applied inválido → 400', () => withPlan(async url => {
+  const applied = { summary: '+1 ~0 −0', added: ['sistema-novo'], changed: [], removed: [] };
+  const evs = await lines(await post(url, 'plan', { message: 'rascunhe as notas', applied, history: [] }));
+  assert.ok(evs.some(e => e.type === 'result'));
+  assert.match(notesProvider.seen[0].input.text, /<conteudo-externo origem="rodada">[\s\S]*adicionados: sistema-novo/);
+  for (const bad of ['x', { summary: 1, added: [], changed: [], removed: [] }, { summary: 's', added: [1], changed: [], removed: [] }, { summary: 's', added: [] }]) {
+    const res = await post(url, 'plan', { message: 'x', applied: bad, history: [] });
+    assert.equal(res.status, 400, JSON.stringify(bad));
+  }
+}, { provider: notesProvider }));

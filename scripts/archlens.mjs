@@ -317,7 +317,7 @@ function applyCommand(store, plan, names) {
   assertWritable(store);
   if (isFinal(plan) && plan.ops?.length) assertDocOwned(store); // before anything is written
   let res;
-  try { res = applyAndDocument(store, plan); } catch (e) { if (e.code === 'E_STORE_DOC_FOREIGN') fail(e.message); failApi(e, names); }
+  try { res = applyAndDocument(store, plan); if (res.docError) throw res.docError; } catch (e) { if (e.code === 'E_STORE_DOC_FOREIGN') fail(e.message); failApi(e, names); }
   if (!res.entry) { console.log('= nada mudou; a base não foi regravada'); return; }
   afterApply(store, res);
 }
