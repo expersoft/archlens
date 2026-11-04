@@ -47,6 +47,43 @@ function checkLlm(llm) {
   return llm;
 }
 
+const HOSTNAME = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$/;
+const inRange = (v, lo, hi) => Number.isInteger(v) && v >= lo && v <= hi;
+
+/** The `plan` block (`true` or an object): defaults filled, ranges checked; it needs an `llm`. Returns null when off. */
+function checkPlan(plan, hasLlm) {
+  if (plan === undefined || plan === false) return null;
+  if (plan !== true && !isObj(plan)) throw configError('plan deve ser verdadeiro ou um objeto');
+  const p = plan === true ? {} : plan;
+  const bad = what => { throw configError(`plan: ${what}`); };
+  if (!hasLlm) bad('plan exige llm (configure "llm" ou use --llm)');
+  if (p.maxRounds !== undefined && !inRange(p.maxRounds, 1, 100)) bad('maxRounds deve ser um inteiro de 1 a 100');
+  if (p.timeoutMs !== undefined && !inRange(p.timeoutMs, 10000, 1800000)) bad('timeoutMs deve ser um inteiro de 10000 a 1800000');
+  if (p.maxTokens !== undefined && !(Number.isInteger(p.maxTokens) && p.maxTokens >= 1)) bad('maxTokens deve ser um inteiro positivo');
+  if (p.gitTokenEnv !== undefined && (typeof p.gitTokenEnv !== 'string' || !p.gitTokenEnv)) bad('gitTokenEnv deve ser texto (nome da variável de ambiente)');
+  if (p.gitUser !== undefined && (typeof p.gitUser !== 'string' || !p.gitUser.trim())) bad('gitUser deve ser texto não vazio');
+  if (p.cloneTimeoutMs !== undefined && !inRange(p.cloneTimeoutMs, 1000, 1800000)) bad('cloneTimeoutMs deve ser um inteiro de 1000 a 1800000');
+  if (p.cloneMaxMb !== undefined && !inRange(p.cloneMaxMb, 1, 10000)) bad('cloneMaxMb deve ser um inteiro de 1 a 10000');
+  // The token goes only to these hosts (never to whatever host a GUI user names).
+  if (p.gitTokenHosts !== undefined && !(Array.isArray(p.gitTokenHosts) && p.gitTokenHosts.length && p.gitTokenHosts.every(h => typeof h === 'string' && HOSTNAME.test(h)))) {
+    bad('gitTokenHosts deve ser uma lista de nomes de host (minúsculos, sem esquema), como ["github.com"]');
+  }
+  if (p.gitTokenEnv !== undefined && p.gitTokenHosts === undefined) throw configError('plan.gitTokenHosts é obrigatório com plan.gitTokenEnv');
+  if (p.allowFileUrls !== undefined && typeof p.allowFileUrls !== 'boolean') bad('allowFileUrls deve ser verdadeiro ou falso');
+  return {
+    maxRounds: p.maxRounds ?? 40, timeoutMs: p.timeoutMs ?? 600000, maxTokens: p.maxTokens ?? 400000,
+    ...(p.gitTokenEnv !== undefined ? { gitTokenEnv: p.gitTokenEnv, gitTokenHosts: p.gitTokenHosts } : {}),
+    gitUser: p.gitUser ?? 'x-access-token', cloneTimeoutMs: p.cloneTimeoutMs ?? 120000, cloneMaxMb: p.cloneMaxMb ?? 200,
+    allowFileUrls: p.allowFileUrls ?? false,
+  };
+}
+
+/** The plan part: `plan` + where it came from, only when planning is on. */
+function planPart(plan, llmCfg, source) {
+  const checked = checkPlan(plan, !!llmCfg.llm);
+  return checked ? { plan: checked, planSource: source } : {};
+}
+
 function checkTelemetry(t, dir) {
   if (!isObj(t)) throw configError('telemetry deve ser um objeto');
   if (t.file !== undefined && (typeof t.file !== 'string' || !t.file)) throw configError('telemetry.file deve ser texto');
@@ -64,8 +101,8 @@ function llmPart(llm, envFile, dir, source) {
   return { llm: checkLlm(llm), llmSource: source, env, envFile: file };
 }
 
-/** @returns {{ port: number, bases: { id: string, name?: string, path: string }[], llm?: object, llmSource?: 'cli'|'file', env?: object, envFile?: string|null, telemetry?: object }} */
-export function loadConfig({ file, base, port, host, llm, envFile } = {}) {
+/** @returns {{ port: number, bases: { id: string, name?: string, path: string }[], llm?: object, llmSource?: 'cli'|'file', plan?: object, planSource?: 'cli'|'file', env?: object, envFile?: string|null, telemetry?: object }} */
+export function loadConfig({ file, base, port, host, llm, envFile, plan } = {}) {
   if (file) {
     const abs = resolve(file);
     const dir = dirname(abs);
@@ -79,17 +116,20 @@ export function loadConfig({ file, base, port, host, llm, envFile } = {}) {
     const h = host ?? cfg.host;
     if (cfg.envFile !== undefined && typeof cfg.envFile !== 'string') throw configError('envFile deve ser texto');
     const ef = envFile ? resolve(envFile) : cfg.envFile ? resolve(dir, cfg.envFile) : undefined;
+    const llmCfg = llmPart(llm ?? cfg.llm, ef, dir, llm ? 'cli' : 'file');
     return {
       port: port ?? cfg.port ?? DEFAULT_PORT, ...(h ? { host: h } : {}), bases,
-      ...llmPart(llm ?? cfg.llm, ef, dir, llm ? 'cli' : 'file'),
+      ...llmCfg,
+      ...(plan ? planPart(isObj(cfg.plan) ? cfg.plan : true, llmCfg, 'cli') : planPart(cfg.plan, llmCfg, 'file')),
       ...(cfg.telemetry !== undefined ? { telemetry: checkTelemetry(cfg.telemetry, dir) } : {}),
     };
   }
   const common = { port: port ?? DEFAULT_PORT, ...(host ? { host } : {}) };
   const llmCfg = llmPart(llm, envFile ? resolve(envFile) : undefined, process.cwd(), 'cli');
+  const planCfg = planPart(plan ? true : undefined, llmCfg, 'cli');
   if (base) {
     const abs = resolve(base);
-    return { ...common, bases: [{ id: basename(abs), path: abs }], ...llmCfg };
+    return { ...common, bases: [{ id: basename(abs), path: abs }], ...llmCfg, ...planCfg };
   }
-  return { ...common, bases: [], ...llmCfg };
+  return { ...common, bases: [], ...llmCfg, ...planCfg };
 }

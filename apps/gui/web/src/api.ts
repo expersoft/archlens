@@ -1,11 +1,14 @@
 export class ApiError extends Error {
   code?: string;
   status: number;
-  constructor(message: string, code: string | undefined, status: number) {
+  /** The rest of the error body (e.g. the new draft of a 409 E_GUI_PLAN_CHANGED). */
+  extra: Record<string, unknown>;
+  constructor(message: string, code: string | undefined, status: number, extra: Record<string, unknown> = {}) {
     super(message);
     this.name = 'ApiError';
     this.code = code;
     this.status = status;
+    this.extra = extra;
   }
 }
 
@@ -66,8 +69,8 @@ async function call<T>(path: string, body?: unknown): Promise<T> {
   let data: unknown = null;
   try { data = await res.json(); } catch { /* corpo não JSON */ }
   if (!res.ok) {
-    const e = (data ?? {}) as { error?: string; code?: string };
-    throw new ApiError(e.error ?? `HTTP ${res.status}`, e.code, res.status);
+    const { error, code, ...extra } = (data ?? {}) as { error?: string; code?: string };
+    throw new ApiError(error ?? `HTTP ${res.status}`, code, res.status, extra);
   }
   return data as T;
 }
@@ -83,7 +86,8 @@ export const getElement = (base: string, id: string) => call<ElementDetail>(`${b
 export const getActions = (base: string, id: string) => call<{ actions: Action[] }>(`${b(base)}/elements/${encodeURIComponent(id)}/actions`);
 export const flip = (base: string, spec: ViewSpec) => call<{ spec: ViewSpec }>(`${b(base)}/flip`, { spec });
 
-export interface Info { ask: { enabled: false; reason?: string } | { enabled: true; provider: string; model: string; mode: 'tools' | 'json'; /** Perguntas anteriores enviadas junto (llm.maxHistory). */ maxHistory?: number } }
+export interface Info { ask: { enabled: false; reason?: string } | { enabled: true; provider: string; model: string; mode: 'tools' | 'json'; /** Perguntas anteriores enviadas junto (llm.maxHistory). */ maxHistory?: number }
+  plan?: { enabled: false; reason?: string } | { enabled: true; maxRounds: number; timeoutMs: number; /** Chromium available on the server (needed to apply). */ build?: boolean } }
 export const getInfo = () => call<Info>('/api/info');
 
 export interface AskOption { id: string; name: string; typeLabel?: string; c4Label?: string | null; type?: string }
@@ -114,9 +118,9 @@ export type AskEvent =
   | { type: 'error'; error: string; code?: string }
   | { type: 'done'; metrics: { total: number; [k: string]: unknown } };
 
-/** A pergunta como fluxo NDJSON: um evento por linha. Abortar o sinal fecha a conexão (e o servidor para o agente). */
-export async function ask(base: string, body: AskRequest, onEvent: (e: AskEvent) => void, signal: AbortSignal): Promise<void> {
-  const res = await fetch(`${b(base)}/ask`, {
+/** POST que responde em NDJSON: um evento por linha. Abortar o sinal fecha a conexão (e o servidor para o agente). */
+async function stream<E>(path: string, body: unknown, onEvent: (e: E) => void, signal: AbortSignal): Promise<void> {
+  const res = await fetch(path, {
     method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), signal,
   });
   if (!res.ok) {
@@ -128,7 +132,7 @@ export async function ask(base: string, body: AskRequest, onEvent: (e: AskEvent)
   const reader = res.body.getReader();
   const dec = new TextDecoder();
   let buf = '';
-  const flush = (line: string) => { if (line.trim()) onEvent(JSON.parse(line) as AskEvent); };
+  const flush = (line: string) => { if (line.trim()) onEvent(JSON.parse(line) as E); };
   for (;;) {
     const { done, value } = await reader.read();
     if (done) break;
@@ -138,3 +142,86 @@ export async function ask(base: string, body: AskRequest, onEvent: (e: AskEvent)
   }
   flush(buf + dec.decode());
 }
+
+/** A pergunta como fluxo NDJSON. */
+export const ask = (base: string, body: AskRequest, onEvent: (e: AskEvent) => void, signal: AbortSignal) =>
+  stream<AskEvent>(`${b(base)}/ask`, body, onEvent, signal);
+
+/** O rascunho é opaco para a web (só `base.id`, `plan` e `repo` são lidos). */
+export type Draft = Record<string, unknown>;
+export interface PlanItem { n: number; key: string; question: string; options: string[]; recommendation: string; reason?: string }
+export type PlanReply =
+  | { kind: 'text'; text: string; warning?: string }
+  | { kind: 'decision'; item: PlanItem; warning?: string }
+  | { kind: 'question'; question: string; warning?: string }
+  | { kind: 'notes'; overview: string; notes: string; warning?: string }
+  | { kind: 'none'; warning?: string };
+/** Um repositório anexado por URL git (o servidor clona; credencial só pelo ambiente do servidor). */
+export interface RepoAttach { url: string; ref?: string }
+export interface AppliedRound { summary: string; added: string[]; changed: string[]; removed: string[] }
+export interface PlanRequest {
+  draft?: Draft;
+  message?: string;
+  attach?: RepoAttach;
+  answer?: { key: string; resolution: string };
+  /** A rodada recém-aplicada (do changelog), para o rascunho das notas. */
+  applied?: AppliedRound;
+  /** Só os turnos anteriores; o texto atual vai em `message`. */
+  history: { role: 'user' | 'assistant'; text: string }[];
+}
+export type PlanEvent =
+  | { type: 'stage'; stage: string }
+  | { type: 'tool'; name: string; ok: boolean; ms: number }
+  | { type: 'result'; draft: Draft; reply: PlanReply; previews: ViewSpec[]; opsHash?: string | null }
+  | { type: 'error'; error: string; code?: string; draft: Draft; previews: ViewSpec[]; warning?: string }
+  | { type: 'done'; metrics: { total: number; [k: string]: unknown } };
+
+export const planTurn = (base: string, body: PlanRequest, onEvent: (e: PlanEvent) => void, signal: AbortSignal) =>
+  stream<PlanEvent>(`${b(base)}/plan`, body, onEvent, signal);
+/** Valida o rascunho no servidor e o replaneja contra a base atual. */
+export const planOpen = (base: string, draft: Draft) => call<{ draft: Draft; warning?: string; opsHash?: string | null }>(`${b(base)}/plan/open`, { draft });
+
+export interface PreviewView { key: string; title: string; html?: string; viewData?: unknown; kind: 'change' | 'saved' | 'asked'; error?: string; spec: ViewSpec }
+export interface PreviewField { field: string; before: string; after: string }
+export interface PreviewChange {
+  sign: '+' | '~' | '−'; kind: 'element' | 'relationship'; id: string; name: string;
+  /** Element type label, or the relationship type. */
+  type?: string; description?: string; fields?: PreviewField[];
+  /** A relationship's ends (ids). */
+  ends?: string[];
+}
+export interface PreviewQuestion { key: string; question: string; options: string[]; assumed: string | null }
+export interface PlanPreviewResult {
+  views: PreviewView[];
+  skipped: { key: string; error: string }[];
+  summary: string;
+  changes: PreviewChange[];
+  questions: PreviewQuestion[];
+  /** Plan report (markdown); null while the draft has no plan. */
+  report: string | null;
+  /** Hash of the final plan's ops (what apply must be confirmed with); null while the plan is not final. */
+  opsHash?: string | null;
+  warning?: string;
+}
+/** Draws the draft: the default views, or exactly `specs` (drawn with the delta applied). */
+export type Notation = 'archimate' | 'c4';
+/** `notation` picks the notation of the change view (the server picks one if absent). */
+export const planPreview = (base: string, draft: Draft, specs?: ViewSpec[], notation?: Notation) =>
+  call<PlanPreviewResult>(`${b(base)}/plan/preview`, { draft, ...(specs ? { specs } : {}), ...(notation ? { notation } : {}) });
+/** Context-menu actions and notation flip over the preview (the base as the draft leaves it). */
+export const planActions = (base: string, draft: Draft, id: string) => call<{ actions: Action[] }>(`${b(base)}/plan/actions`, { draft, id });
+export const planFlip = (base: string, draft: Draft, spec: ViewSpec) => call<{ spec: ViewSpec }>(`${b(base)}/plan/flip`, { draft, spec });
+
+export interface QualityResult { key: string; viewport: string; fill: number | null; minFontPx: number | null; issues: string[] }
+export interface PlanApplyResult {
+  /** Null when the plan changed nothing. */
+  entry: Record<string, unknown> | null;
+  /** The regenerated document; `{ error }` when the base was written but the document was not regenerated. */
+  doc: string | { error: string } | null;
+  build: { available: boolean; problems: number; results: QualityResult[]; reason?: string; error?: string; code?: string } | null;
+  notesDraftNeeded: boolean;
+}
+/** Writes the confirmed plan; `confirm` is the opsHash the user was shown. */
+export const planApply = (base: string, draft: Draft, confirm: string) => call<PlanApplyResult>(`${b(base)}/plan/apply`, { draft, confirm });
+/** Writes the approved interpretation notes. */
+export const planNotes = (base: string, notes: { overview?: string; notes?: string }) => call<{ doc: string }>(`${b(base)}/plan/notes`, notes);

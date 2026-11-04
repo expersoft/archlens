@@ -1,22 +1,20 @@
 #!/usr/bin/env node
 // archlens CLI — model → knowledge base (ARCHITECTURE.md) → C4 / ArchiMate views → animated HTML.
 import { readFileSync, writeFileSync, existsSync, renameSync, mkdirSync, rmSync, readdirSync, cpSync } from 'node:fs';
-import { dirname, basename, extname, join, resolve, relative, sep } from 'node:path';
+import { dirname, basename, extname, join, resolve, relative } from 'node:path';
 import { spawn } from 'node:child_process';
 import { normalizeModel, c4KindOf } from './lib/model.mjs';
 import { validateModel } from './lib/validate.mjs';
 import { generateDoc } from './lib/doc.mjs';
 import { resolveView } from './lib/query.mjs';
-import { layoutView } from './lib/layout.mjs';
-import { viewAlerts } from './lib/view-build.mjs';
-import { renderHtml } from './lib/render.mjs';
 import { suggestViews } from './lib/suggest.mjs';
-import { inspectHtml } from './lib/deliver.mjs';
+import { renderViews, deliverHtml, buildDiagrams } from './lib/build.mjs';
+import { applyAndDocument, assertDocOwned as docOwned, writeDocument, docSource } from './lib/apply-flow.mjs';
 import { mergeError, canonicalJson, relationshipIds } from './lib/merge.mjs';
 import { plan as planOf, finalize, apply as applyPlanTo, answersOf, isFinal, preview as previewOf, show as showPlan, query as queryBase } from './lib/api.mjs';
 import { formatPlanReport } from './lib/merge-report.mjs';
 import { previewSummary, annotateView } from './lib/preview.mjs';
-import { resolveBase, openStore, frontmatterSource, MANIFEST, assertWritable as storeWritable } from './lib/store/index.mjs';
+import { resolveBase, openStore, MANIFEST, assertWritable as storeWritable } from './lib/store/index.mjs';
 import { diffRaw, contentVersion } from './lib/store/ops.mjs';
 import { migrateRaw, reportLines } from './lib/migrate.mjs';
 import { FORMAT, isCanonicalFormat } from './lib/canonical.mjs';
@@ -72,8 +70,8 @@ Consultar (nunca grava a base)
   validate  <base>                         valida schema, referências, hierarquia C4 e regras ArchiMate
   check     [base] [--json]               valida e confere se o ARCHITECTURE.md está em dia (CI / pre-commit)
   extract   <base> [--out m.json]          imprime o modelo canônico em JSON
-  serve     <base> [--port N] [--host H] [--open] [--llm anthropic|openai [--model M] [--endpoint URL] [--env-file PATH]]
-            abre a GUI (navegador) sobre a base; padrão 127.0.0.1:5180; --llm liga a busca em texto (chave no ambiente ou .env)
+  serve     <base> [--port N] [--host H] [--open] [--llm anthropic|openai [--model M] [--endpoint URL] [--env-file PATH] [--plan]]
+            abre a GUI (navegador) sobre a base; padrão 127.0.0.1:5180; --llm liga a busca em texto (chave no ambiente ou .env); --plan liga o modo Planejar (exige --llm)
             --config archlens-gui.json [--port N] [--host H] [--open]   a GUI sobre várias bases
 
 Atalhos
@@ -132,29 +130,15 @@ function assertWritable(store) {
   try { storeWritable(store); } catch (e) { fail(e.message); }
 }
 
-/**
- * Refuses to replace a document this base does not own: `out` may be missing, generated from this base (its
- * `source:` points to the folder), or the file being converted (`replacing`, e.g. the old .md migrate read).
- */
-function assertDocOwned(store, out = store.locator.docPath, { replacing } = {}) {
-  const p = resolve(out);
-  if (!existsSync(p) || (replacing && resolve(replacing) === p)) return;
-  const src = frontmatterSource(readFileSync(p, 'utf8'));
-  if (src && resolve(dirname(p), src) === resolve(store.locator.path)) return;
-  fail(`E_STORE_DOC_FOREIGN: ${relPath(p)} existe e não foi gerado por esta base (sem "source:" apontando para ${relPath(store.locator.path)}/); `
-    + 'mova-o, gere em outro lugar com --out, ou transforme o conteúdo dele em um delta (texto livre) antes.');
+/** Exits with E_STORE_DOC_FOREIGN when `out` is a document this base does not own (see apply-flow). */
+function assertDocOwned(store, out, opts) {
+  try { docOwned(store, out, opts); } catch (e) { fail(e.message); }
 }
 
-/** Regenerates ARCHITECTURE.md (or `out`) from a folder base; `source:` is the folder relative to the document. */
-function writeDoc(store, raw, notes, out = store.locator.docPath, { replacing } = {}) {
-  assertDocOwned(store, out, { replacing });
-  atomicWrite(out, generateDoc(raw, { notes, source: docSource(store, out) }));
-  return out;
+/** Regenerates ARCHITECTURE.md (or `out`) from a folder base; exits when the document is not this base's. */
+function writeDoc(store, raw, notes, out, { replacing } = {}) {
+  try { return writeDocument(store, raw, notes, { out, replacing }); } catch (e) { fail(e.message); }
 }
-
-/** The `source:` value of the document at `out`: the folder base relative to it, with a trailing slash. */
-const docSource = (store, out = store.locator.docPath) =>
-  `${relative(dirname(resolve(out)), store.locator.path).split(sep).join('/') || '.'}/`;
 
 function fail(msg, code = 1) { console.error(`archlens: ${msg}`); process.exit(code); }
 
@@ -199,27 +183,25 @@ function selectSpecs(model, args, defined = model.views) {
   return specs;
 }
 
-async function buildHtml(raw, specs, title, preview) {
-  const { errors } = validateModel(raw);
-  if (errors.length) { printIssues(errors, 'ERRO'); fail(`${errors.length} erro(s) no modelo; corrija antes de renderizar`, 2); }
-  const model = normalizeModel(raw);
-  const laid = [];
-  for (const spec of specs) {
-    let view;
-    try { view = resolveView(model, spec, preview ? { keep: preview.keep } : {}); } catch (e) {
-      if (preview) { console.warn(`  aviso: visão "${spec.key}" não abre na prévia: ${e.message}`); continue; }
-      fail(`visão "${spec.key}": ${e.message}`, 2);
-    }
-    if (preview) annotateView(view, preview);
-    if (!view.nodes.length) { console.warn(`  aviso: visão "${spec.key}" ficou vazia — revise scope/anchor/filtros`); continue; }
-    const l = await layoutView(view);
-    if (l.layoutStyle) console.log(`  layout "${spec.key}": ${l.layoutStyle}${l.layoutAuto ? ` (auto; ${Object.entries(l.layoutScores).map(([k, q]) => `${k} ${q.score}`).join(', ')})` : ' (pedido na visão)'}`);
-    for (const a of viewAlerts(view, l)) console.warn(`  aviso: ${a}`);
-    laid.push(l);
+/** The rendering lines: the layout of each view on stdout, the warnings on stderr. */
+function printWarnings(lines) {
+  for (const l of lines) (l.startsWith('  aviso:') ? console.warn : console.log)(l);
+}
+
+/** Awaits a rendering of build.mjs; on its refusals, prints what came before and exits with code 2. */
+async function rendered(promise) {
+  try { return await promise; } catch (e) {
+    if (!e.code?.startsWith('E_BUILD_')) throw e;
+    printWarnings(e.warnings ?? []);
+    if (e.errors) printIssues(e.errors, 'ERRO');
+    fail(e.message, 2);
   }
-  if (!laid.length) fail('nenhuma visão com conteúdo', 2);
-  const subtitle = `${laid.length} visão(ões) · archlens${preview ? ' · prévia' : ''}`;
-  return { html: renderHtml({ title: title ?? model.name, subtitle, views: laid, ...(preview ? { preview: { label: preview.label } } : {}) }), laid };
+}
+
+async function buildHtml(raw, specs, title, preview) {
+  const res = await rendered(renderViews(raw, specs, { title, preview }));
+  printWarnings(res.warnings);
+  return res;
 }
 
 function openFile(path) {
@@ -228,34 +210,28 @@ function openFile(path) {
   try { spawn(cmd, a, { detached: true, stdio: 'ignore' }).on('error', () => {}).unref(); } catch { /* ignore */ }
 }
 
-async function deliver(raw, specs, out, args, preview) {
-  const { html } = await buildHtml(raw, specs, args.title, preview);
-  const tmp = out.replace(/\.html?$/i, '') + `.candidate-${process.pid}.html`;
-  mkdirSync(dirname(resolve(out)), { recursive: true });
-  writeFileSync(tmp, html);
-  const shots = args.shots && args.shots !== true ? args.shots : out.replace(/\.html?$/i, '') + '.shots';
-  const report = await inspectHtml(tmp, { shotsDir: shots });
-  let problems = 0;
-  if (!report.available) {
-    console.warn(`  aviso: checagem visual pulada: ${report.reason}`);
+/** The options of deliverHtml / buildDiagrams from the command line (--title, --shots, --strict). */
+const deliverOpts = (args, preview) => ({ title: args.title, preview, shots: args.shots && args.shots !== true ? args.shots : true, strict: !!args.strict });
+
+/** Prints a delivery (rendering lines, quality table, result) and returns its problem count; exits 3 when --strict refused it. */
+async function deliver(delivery, args) {
+  const res = await rendered(delivery);
+  printWarnings(res.warnings);
+  if (!res.available) {
+    console.warn(`  aviso: checagem visual pulada: ${res.reason}`);
   } else {
     console.log('  visão                          viewport    largura  fonte');
-    for (const r of report.results) {
+    for (const r of res.results) {
       const status = r.issues.length ? '✗' : '✓';
-      if (r.issues.length) problems++;
       console.log(`  ${status} ${r.key.padEnd(30)} ${r.viewport.padEnd(10)} ${r.fill === null ? '   —' : `${(r.fill * 100).toFixed(0).padStart(3)}%`}   ${r.minFontPx ?? '—'}px`);
       for (const i of r.issues) console.log(`      ${i}`);
     }
-    console.log(`  screenshots em ${shots}/`);
+    console.log(`  screenshots em ${res.shots}/`);
   }
-  if (problems && args.strict) {
-    renameSync(tmp, out.replace(/\.html?$/i, '') + '.rejected.html');
-    fail(`${problems} checagem(ns) falharam; saída anterior mantida (--strict)`, 3);
-  }
-  renameSync(tmp, out);
-  console.log(`✓ ${out}${problems ? ` (com ${problems} alerta(s) de qualidade)` : ''}`);
-  if (args.open) openFile(out);
-  return problems;
+  if (res.rejected) fail(`${res.problems} checagem(ns) falharam; saída anterior mantida (--strict)`, 3);
+  console.log(`✓ ${res.out}${res.problems ? ` (com ${res.problems} alerta(s) de qualidade)` : ''}`);
+  if (args.open) openFile(res.out);
+  return res.problems;
 }
 
 /** Preview mode (--delta / --plan): the model with the delta applied, never written; exits on bad input. */
@@ -326,7 +302,7 @@ function planCommand(store, deltaPath, args, out, names) {
 /** Revision, preserved texts, regenerated document and suggested commit after a write by apply / merge --apply. */
 function afterApply(store, res) {
   const saved = loadBase(store); // the document follows what is on disk (a split model regroups items by file)
-  const doc = writeDoc(store, saved.raw, saved.notes);
+  const doc = res.doc ?? writeDoc(store, saved.raw, saved.notes);
   const e = res.entry;
   const st = Object.keys(e.status).length;
   console.log(`✓ ${store.describe()} e ${relPath(doc)} (revisão ${saved.raw.changelog.length}, rodada ${e.id}): +${e.added.length} ~${e.changed.length} −${e.removed.length}${st ? `, ${st} mudança(s) de status` : ''}`);
@@ -341,7 +317,7 @@ function applyCommand(store, plan, names) {
   assertWritable(store);
   if (isFinal(plan) && plan.ops?.length) assertDocOwned(store); // before anything is written
   let res;
-  try { res = applyPlanTo(store, plan); } catch (e) { failApi(e, names); }
+  try { res = applyAndDocument(store, plan); if (res.docError) throw res.docError; } catch (e) { if (e.code === 'E_STORE_DOC_FOREIGN') fail(e.message); failApi(e, names); }
   if (!res.entry) { console.log('= nada mudou; a base não foi regravada'); return; }
   afterApply(store, res);
 }
@@ -453,8 +429,8 @@ async function main() {
         if (str(args.endpoint)) llm.endpoint = args.endpoint;
       }
       let config;
-      try { config = gui.loadConfig({ file: str(args.config), base: str(file), port, host: str(args.host), llm, envFile: str(args['env-file']) }); } catch (e) { fail(e.message); }
-      if (!config.bases.length) fail('uso: archlens serve <base> [--port N] [--host H] [--open] [--llm anthropic|openai [--model M] [--endpoint URL] [--env-file PATH]]\n      archlens serve --config archlens-gui.json [--port N]');
+      try { config = gui.loadConfig({ file: str(args.config), base: str(file), port, host: str(args.host), llm, envFile: str(args['env-file']), plan: args.plan === true || args.plan === 'true' }); } catch (e) { fail(e.message); }
+      if (!config.bases.length) fail('uso: archlens serve <base> [--port N] [--host H] [--open] [--llm anthropic|openai [--model M] [--endpoint URL] [--env-file PATH] [--plan]]\n      archlens serve --config archlens-gui.json [--port N]');
       const registry = createBaseRegistry(config);
       const bases = registry.list();
       const bad = args.config ? (bases.some(b => b.ok) ? null : bases[0]) : bases.find(b => !b.ok);
@@ -469,6 +445,10 @@ async function main() {
         console.log(`busca em texto: ${srv.provider.name} ${srv.provider.model}${config.llm.auth === 'none' ? '' : ` (chave de ${keyVar}, ${from})`}`);
         const warn = config.envFile && gui.envFileWarning(config.envFile);
         if (warn) console.warn(`aviso: ${warn}`);
+      }
+      if (srv.planOff) console.warn(`aviso: modo Planejar desligado: ${srv.planOff}`);
+      else if (config.plan && !['localhost', '127.0.0.1', '::1'].includes(config.host ?? 'localhost')) {
+        console.warn(`aviso: o modo Planejar grava na base e o servidor escuta em ${config.host}; qualquer um que alcance a porta pode aplicar`);
       }
       if (args.open) openFile(srv.url);
       const stop = () => { registry.close(); srv.close().finally(() => process.exit(0)); };
@@ -548,28 +528,21 @@ async function main() {
       const raw = load();
       const model = normalizeModel(raw);
       if (!args.out || args.out === true) fail('informe --out arquivo.html');
-      const problems = await deliver(raw, specsOf(model), args.out, args, preview);
+      const problems = await deliver(deliverHtml(raw, specsOf(model), args.out, deliverOpts(args, preview)), args);
       process.exitCode = problems ? 3 : 0;
       break;
     }
     case 'build': {
       const raw = load();
       const model = normalizeModel(raw);
-      const loc = store.locator;
-      const dir = args['out-dir'] && args['out-dir'] !== true ? args['out-dir']
-        : loc.kind === 'folder' && loc.exists ? join(loc.path, 'diagrams') : dirname(loc.path);
       if (!preview) {
         assertWritable(store);
         const { errors } = validateModel(raw);
         if (errors.length) { printIssues(errors, 'ERRO'); fail('corrija os erros do modelo', 2); }
         console.log(`✓ ${relPath(writeDoc(store, raw, base.notes))}`);
       }
-      mkdirSync(dir, { recursive: true });
-      const name = args.name && args.name !== true ? args.name
-        : preview ? preview.name
-          : loc.kind === 'folder' ? 'architecture'
-            : basename(loc.path).replace(/\.(json|md)$/i, '').replace(/^ARCHITECTURE$/i, 'architecture').replace(/\.model$/, '');
-      const problems = await deliver(raw, specsOf(model), join(dir, `${name}.html`), args, preview);
+      const problems = await deliver(buildDiagrams(store, raw, { dir: args['out-dir'] && args['out-dir'] !== true ? args['out-dir'] : undefined,
+        name: args.name && args.name !== true ? args.name : undefined, specs: specsOf(model), ...deliverOpts(args, preview) }), args);
       process.exitCode = problems ? 3 : 0;
       break;
     }

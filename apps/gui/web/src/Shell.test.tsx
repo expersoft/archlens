@@ -76,3 +76,29 @@ describe('Shell', () => {
     expect(localStorage.getItem('archlens-theme')).toBeNull();
   });
 });
+
+describe('Shell, modo Planejar', () => {
+  const W = (p: { planEnabled?: boolean; mode?: 'browse' | 'plan' }) => (
+    <Shell leftContent={{ chat: <p>conversa</p>, tree: <p>explorador</p> }} rightContent={<p>detalhes</p>} planEnabled={p.planEnabled} mode={p.mode} onMode={() => {}}>
+      <p>centro</p>
+    </Shell>
+  );
+
+  it('Navegar | Planejar aparece só com o planejamento ligado', () => {
+    setWidth(1600);
+    const r = render(<W />);
+    expect(screen.queryByRole('button', { name: 'Planejar' })).toBeNull();
+    r.unmount();
+    render(<W planEnabled />);
+    expect(screen.getByRole('button', { name: 'Navegar' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Planejar' })).toBeTruthy();
+  });
+
+  it('no modo Planejar some o painel lateral e fica só o centro', () => {
+    setWidth(1600);
+    render(<W planEnabled mode="plan" />);
+    expect(screen.queryByTestId('side-left')).toBeNull();
+    expect(screen.queryByTestId('side-right')).toBeNull();
+    expect(screen.getByText('centro')).toBeTruthy();
+  });
+});

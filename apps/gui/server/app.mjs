@@ -1,5 +1,6 @@
 // HTTP server of the GUI: JSON API over the base registry, plus optional static files.
 import { createServer } from 'node:http';
+import { existsSync } from 'node:fs';
 import { readFile, stat } from 'node:fs/promises';
 import { join, resolve, sep, extname } from 'node:path';
 import { query } from '../../../scripts/lib/api.mjs';
@@ -12,6 +13,7 @@ import { createProvider } from './ask/providers.mjs';
 import { DEFAULT_MAX_HISTORY } from './ask/context.mjs';
 import { runAsk } from './ask/agent.mjs';
 import { createTelemetry, summarize } from './ask/telemetry.mjs';
+import { planRoutes } from './plan/routes.mjs';
 
 const BODY_LIMIT = 1024 * 1024;
 const QUESTION_MAX = 2000;
@@ -24,6 +26,7 @@ const TYPES = {
 
 // Every response: no framing by another origin.
 const SAFE_HEADERS = { 'x-frame-options': 'SAMEORIGIN', 'content-security-policy': "frame-ancestors 'self'" };
+const NDJSON_HEADERS = { 'content-type': 'application/x-ndjson; charset=utf-8', 'cache-control': 'no-store', ...SAFE_HEADERS };
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '[::1]']);
 
 /** Hostname part of a Host header, lowercased (keeps the brackets of an IPv6 literal). */
@@ -67,17 +70,17 @@ function send(res, status, body, headers = {}) {
   res.end(buf);
 }
 
-function readJson(req) {
+function readJson(req, limit = BODY_LIMIT) {
   return new Promise((resolveBody, reject) => {
     const chunks = [];
     let size = 0, over = false;
     req.on('data', c => {
       size += c.length;
-      if (size > BODY_LIMIT) over = true; else chunks.push(c);
+      if (size > limit) over = true; else chunks.push(c);
     });
     req.on('error', reject);
     req.on('end', () => {
-      if (over) return reject(httpError(413, 'corpo da requisição acima de 1 MB'));
+      if (over) return reject(httpError(413, `corpo da requisição acima de ${Math.round(limit / 1048576 * 10) / 10} MB`));
       const text = Buffer.concat(chunks).toString('utf8');
       if (!text.trim()) return resolveBody({});
       try { resolveBody(JSON.parse(text)); } catch { reject(httpError(400, 'JSON inválido no corpo da requisição')); }
@@ -102,18 +105,35 @@ async function serveStatic(res, staticDir, pathname) {
   }
 }
 
+/** Whether Chromium is installed here (what `build` needs to apply a plan): a file check, no browser launch. Never throws. */
+async function chromiumUsable() {
+  try {
+    const { chromium } = await import('playwright-core');
+    return existsSync(chromium.executablePath());
+  } catch { return false; }
+}
+
 export async function startServer({ config, staticDir, registry, provider } = {}) {
   // Throws E_GUI_CONFIG (no key) before anything listens; a test/e2e provider replaces the configured one.
   // A missing key for an `llm` from the config file only turns the search off (`askOff`): the diagrams stay usable.
   let askOff = null;
   if (!provider && config?.llm) {
     try { provider = createProvider(config.llm, { env: config.env ?? {} }); } catch (e) {
-      if (!(e.missing && config.llmSource === 'file')) throw e;
+      // `--plan` on the command line makes a missing key fatal even when the llm comes from the file.
+      if (!(e.missing && config.llmSource === 'file') || (config.plan && config.planSource === 'cli')) throw e;
       provider = null;
       askOff = e.message;
     }
   }
   provider ??= null;
+  // Planning needs an LLM with tools; when it cannot run, `planOff` says why (and /plan* stay 404).
+  let planOff = null;
+  if (config?.plan) {
+    if (!provider) planOff = askOff ?? 'o planejamento exige um LLM (llm)';
+    else if (!provider.tools) planOff = 'o planejamento exige um LLM com ferramentas (llm.tools)';
+  }
+  const planOn = !!config?.plan && !planOff;
+  const canBuild = planOn ? await chromiumUsable() : undefined; // once: applying a plan rebuilds the saved diagrams with screenshots
   const ownRegistry = !registry;
   registry ??= createBaseRegistry(config);
   const cache = createViewCache();
@@ -130,7 +150,7 @@ export async function startServer({ config, staticDir, registry, provider } = {}
     const ctl = new AbortController();
     // res, not req: req 'close' also fires once the request body is read.
     res.on('close', () => { if (!res.writableEnded) ctl.abort(); });
-    res.writeHead(200, { 'content-type': 'application/x-ndjson; charset=utf-8', 'cache-control': 'no-store', ...SAFE_HEADERS });
+    res.writeHead(200, NDJSON_HEADERS);
     const write = ev => { if (!res.destroyed && !res.writableEnded) res.write(JSON.stringify(ev) + '\n'); };
     const t0 = Date.now();
     const mode = provider.tools ? 'tools' : 'json';
@@ -175,9 +195,11 @@ export async function startServer({ config, staticDir, registry, provider } = {}
   const routes = [
     ['GET', /^\/api\/info$/, async () => ({
       ask: provider ? { enabled: true, provider: provider.name, model: provider.model, mode: provider.tools ? 'tools' : 'json', maxHistory: config?.llm?.maxHistory ?? DEFAULT_MAX_HISTORY } : { enabled: false, ...(askOff ? { reason: askOff } : {}) },
+      plan: planOn ? { enabled: true, maxRounds: config.plan.maxRounds, timeoutMs: config.plan.timeoutMs, build: canBuild } : { enabled: false, ...(planOff ? { reason: planOff } : {}) },
     })],
     ['GET', /^\/api\/telemetry$/, async () => summarize(telemetry.recent())],
     ['POST', /^\/api\/bases\/([^/]+)\/ask$/, (req, [b], _url, res) => ask(req, res, b)],
+    ...(planOn ? planRoutes({ registry, provider, config, telemetry, h: { readJson, httpError, STREAMED, NDJSON_HEADERS } }) : []),
     ['GET', /^\/api\/bases$/, async () => registry.list()],
     ['GET', /^\/api\/bases\/([^/]+)\/catalog$/, async (_req, [b]) => catalog(registry.get(b))],
     ['GET', /^\/api\/bases\/([^/]+)\/find$/, async (_req, [b], url) =>
@@ -230,7 +252,7 @@ export async function startServer({ config, staticDir, registry, provider } = {}
       throw httpError(404, 'rota desconhecida');
     } catch (e) {
       if (res.headersSent) return void res.end();
-      if (e.status) return send(res, e.status, { error: e.message, ...(e.code ? { code: e.code } : {}) });
+      if (e.status) return send(res, e.status, { error: e.message, ...(e.code ? { code: e.code } : {}), ...e.extra });
       if (e.code) return send(res, 400, { error: e.message, code: e.code });
       console.error(e);
       send(res, 500, { error: e.message ?? String(e) });
@@ -247,6 +269,7 @@ export async function startServer({ config, staticDir, registry, provider } = {}
     telemetry,
     provider,
     askOff,
+    planOff,
     close() {
       return new Promise(done => {
         server.close(() => done());

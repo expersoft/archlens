@@ -30,6 +30,10 @@ export interface ShellProps {
   chatRequest?: number;
   /** Cada incremento abre a lateral direita (ex.: cartão do elemento achado por uma pergunta). */
   rightRequest?: number;
+  /** Navegar | Planejar: o seletor só aparece com planEnabled; no modo plan só o centro é mostrado. */
+  mode?: 'browse' | 'plan';
+  planEnabled?: boolean;
+  onMode?: (m: 'browse' | 'plan') => void;
 }
 
 const narrow = () => typeof window !== 'undefined' && window.innerWidth < 1100;
@@ -42,6 +46,7 @@ export function Shell(p: ShellProps) {
   const theme = p.theme ?? ownTheme;
   const setTheme = p.onThemeChange ?? setOwnTheme;
   const presenting = !!p.presenting;
+  const planning = p.mode === 'plan';
   const search = useRef<HTMLInputElement>(null);
 
   useEffect(() => { document.documentElement.dataset.theme = theme; }, [theme]);
@@ -60,14 +65,14 @@ export function Shell(p: ShellProps) {
     const onKey = (e: KeyboardEvent) => {
       if (!isGuiShortcut(e)) return;
       if (e.code === 'KeyK') { e.preventDefault(); search.current?.focus(); search.current?.select(); return; }
-      if (e.code !== 'KeyB') return;
+      if (e.code !== 'KeyB' || planning) return; // Planejar has its own panel and shortcut
       e.preventDefault();
-      if (e.altKey) setRight((r) => !r);
+      if (e.altKey || e.shiftKey) setRight((r) => !r);
       else setLeft((l) => (l ? null : lastLeft));
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [lastLeft, setLeft, setRight]);
+  }, [lastLeft, setLeft, setRight, planning]);
 
   const toggleLeft = (tab: 'chat' | 'tree') => setLeft((l) => (l === tab ? null : tab));
 
@@ -80,6 +85,12 @@ export function Shell(p: ShellProps) {
             {!p.bases?.length && <option value="">Base</option>}
             {p.bases?.map((b) => <option key={b.id} value={b.id} disabled={!b.ok} title={b.ok ? undefined : b.error}>{b.name}</option>)}
           </select>
+          {p.planEnabled && (
+            <div className="seg" role="group" aria-label="Modo">
+              <button type="button" aria-pressed={!planning} className={!planning ? 'on' : ''} onClick={() => planning && p.onMode?.('browse')}>Navegar</button>
+              <button type="button" aria-pressed={planning} className={planning ? 'on' : ''} onClick={() => !planning && p.onMode?.('plan')}>Planejar</button>
+            </div>
+          )}
           <input
             ref={search}
             type="search"
@@ -104,22 +115,22 @@ export function Shell(p: ShellProps) {
         </header>
       )}
       <div className="main">
-        {!presenting && (
+        {!presenting && !planning && (
           <nav className="rail" aria-label="Painel esquerdo">
             <button aria-label="Conversa e histórico" title="Conversa e histórico (Ctrl+B)" className={left === 'chat' ? 'on' : ''} onClick={() => toggleLeft('chat')}>💬</button>
             <button aria-label="Explorador" title="Explorador (Ctrl+B)" className={left === 'tree' ? 'on' : ''} onClick={() => toggleLeft('tree')}>🗂</button>
           </nav>
         )}
-        {!presenting && left && (
+        {!presenting && !planning && left && (
           <aside className="side" data-testid="side-left">{left === 'chat' ? p.leftContent.chat : p.leftContent.tree}</aside>
         )}
         <main className="center">{p.children}</main>
-        {!presenting && right && (
+        {!presenting && !planning && right && (
           <aside className="side r" data-testid="side-right">{p.rightContent}</aside>
         )}
-        {!presenting && (
+        {!presenting && !planning && (
           <nav className="rail r" aria-label="Painel direito">
-            <button aria-label="Detalhes" title="Detalhes (Ctrl+Alt+B)" className={right ? 'on' : ''} onClick={() => setRight((r) => !r)}>ⓘ</button>
+            <button aria-label="Detalhes" title="Detalhes (Ctrl+Alt+B ou Ctrl+Shift+B)" className={right ? 'on' : ''} onClick={() => setRight((r) => !r)}>ⓘ</button>
           </nav>
         )}
       </div>
