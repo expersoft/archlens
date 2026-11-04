@@ -102,7 +102,7 @@ export function planRoutes({ registry, provider, config, telemetry, h }) {
     let attach;
     if (body.attach !== undefined) {
       if (!isObject(body.attach)) throw httpError(400, 'attach deve ser { url, ref? }');
-      try { attach = checkRepo(body.attach); } catch (e) { throw httpError(400, e.message, e.code); }
+      try { attach = checkRepo(body.attach, { allowFileUrls: !!config.plan.allowFileUrls }); } catch (e) { throw httpError(400, e.message, e.code); }
     }
     if (!message && !answer && !attach) throw httpError(400, 'informe a mensagem em {message} ou a resposta em {answer}');
     // `history` holds the prior turns only; the current text goes only in `message` (the agent adds it itself).

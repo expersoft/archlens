@@ -9,7 +9,7 @@ import { toDelta } from '../../../../scripts/lib/scan/to-delta.mjs';
 import { normalizeRepoUrl } from '../../../../scripts/lib/scan/git.mjs';
 import { c4KindOf } from '../../../../scripts/lib/model.mjs';
 import { replanDraft } from './draft.mjs';
-import { openRepo, readRepoFile, grepRepo, READ_MAX, GREP_MAX } from './repo.mjs';
+import { openRepo, readRepoFile, grepRepo, checkRepo, READ_MAX, GREP_MAX } from './repo.mjs';
 
 const str = { type: 'string' };
 const obj = (properties, required = []) => ({ type: 'object', properties, required, additionalProperties: false });
@@ -152,7 +152,7 @@ function readNotes(ctx) {
 }
 
 export const ONE_REPO = 'um repositório por rascunho: aplique ou descarte o atual';
-const sameRepo = (a, b) => normalizeRepoUrl(a) === normalizeRepoUrl(b);
+const sameRepo = (a, b) => normalizeRepoUrl(a.trim()) === normalizeRepoUrl(b.trim());
 
 /** The role checks of `archlens scan --as` against the base. */
 function roleProblem(model, { as, system, id }) {
@@ -174,9 +174,11 @@ async function scanRepo(ctx, session, { url, ref, as, system, id }) {
   if (!attached && !cur) return fail('só leio o repositório que o usuário anexou: peça que ele o anexe pelo botão "Anexar repositório"');
   const problem = roleProblem(ctx.model, { as, system, id });
   if (problem) return fail(problem);
-  const at = ref ?? attached?.ref ?? cur?.ref;
-  const r = await openRepo({ url, ref: at }, session.git ?? {});
-  const repo = { url: url.trim(), ...(at === undefined ? {} : { ref: at }), commit: r.commit };
+  // the user's ref wins over the model's
+  const at = attached?.ref ?? ref ?? cur?.ref;
+  const checked = checkRepo({ url, ref: at }, { allowFileUrls: !!session.git?.plan?.allowFileUrls });
+  const r = await openRepo(checked, session.git ?? {});
+  const repo = { url: checked.url, ...(at === undefined ? {} : { ref: at }), commit: r.commit };
   const summary = formatSummary(summarize(r.inv, ctx.model)).split('\n').filter(l => !l.startsWith('  próximo passo')).join('\n');
   if (as === undefined) {
     session.draft = { ...session.draft, repo };

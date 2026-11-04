@@ -64,7 +64,7 @@ test('base única com llm carrega o ambiente só quando há llm', () => {
   assert.equal(loadConfig({ base: '/a/b' }).env, undefined);
 });
 
-const PLAN_DEFAULTS = { maxRounds: 40, timeoutMs: 600000, maxTokens: 400000, gitUser: 'x-access-token', cloneTimeoutMs: 120000, cloneMaxMb: 200 };
+const PLAN_DEFAULTS = { maxRounds: 40, timeoutMs: 600000, maxTokens: 400000, gitUser: 'x-access-token', cloneTimeoutMs: 120000, cloneMaxMb: 200, allowFileUrls: false };
 const LLM = { provider: 'anthropic' };
 
 test('config: "plan": true vira os padrões', () => {
@@ -73,13 +73,28 @@ test('config: "plan": true vira os padrões', () => {
   assert.equal(c.planSource, 'file');
   assert.equal(loadConfig({ file: write({ llm: LLM }) }).plan, undefined);
   assert.equal(loadConfig({ file: write({ llm: LLM, plan: false }) }).plan, undefined);
-  assert.deepEqual(loadConfig({ file: write({ llm: LLM, plan: { maxRounds: 5, gitTokenEnv: 'GT' } }) }).plan, { ...PLAN_DEFAULTS, maxRounds: 5, gitTokenEnv: 'GT' });
+  assert.deepEqual(loadConfig({ file: write({ llm: LLM, plan: { maxRounds: 5, gitTokenEnv: 'GT', gitTokenHosts: ['github.com'] } }) }).plan, { ...PLAN_DEFAULTS, maxRounds: 5, gitTokenEnv: 'GT', gitTokenHosts: ['github.com'] });
 });
 
 test('config: plan com valores fora da faixa', () => {
   for (const plan of [{ maxRounds: 0 }, { maxRounds: 101 }, { timeoutMs: 9999 }, { timeoutMs: 1800001 }, { gitTokenEnv: 5 }, { gitUser: '' }, 'sim']) {
     assert.throws(() => loadConfig({ file: write({ llm: LLM, plan }) }), e => e.code === 'E_GUI_CONFIG', JSON.stringify(plan));
   }
+});
+
+test('config: plan.gitTokenHosts é obrigatório com plan.gitTokenEnv e lista hosts', () => {
+  assert.throws(() => loadConfig({ file: write({ llm: LLM, plan: { gitTokenEnv: 'GT' } }) }),
+    e => e.code === 'E_GUI_CONFIG' && e.message.includes('plan.gitTokenHosts é obrigatório com plan.gitTokenEnv'));
+  for (const gitTokenHosts of [[], 'github.com', ['https://github.com'], ['GitHub.com'], ['a/b'], [''], [5]]) {
+    assert.throws(() => loadConfig({ file: write({ llm: LLM, plan: { gitTokenEnv: 'GT', gitTokenHosts } }) }), e => e.code === 'E_GUI_CONFIG', JSON.stringify(gitTokenHosts));
+  }
+  assert.deepEqual(loadConfig({ file: write({ llm: LLM, plan: { gitTokenEnv: 'GT', gitTokenHosts: ['github.com', 'gitlab.empresa.com.br'] } }) }).plan.gitTokenHosts,
+    ['github.com', 'gitlab.empresa.com.br']);
+});
+
+test('config: plan.allowFileUrls é booleano, falso por padrão', () => {
+  assert.equal(loadConfig({ file: write({ llm: LLM, plan: { allowFileUrls: true } }) }).plan.allowFileUrls, true);
+  assert.throws(() => loadConfig({ file: write({ llm: LLM, plan: { allowFileUrls: 'sim' } }) }), e => e.code === 'E_GUI_CONFIG');
 });
 
 test('config: plan sem llm', () => {

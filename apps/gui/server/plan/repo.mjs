@@ -1,10 +1,13 @@
-// The repository attached to a draft: shallow clone and scan in a worker thread, kept 30 min for read_file/grep,
-// reads confined to the clone. The git token goes to git only through GIT_ASKPASS, from the child's environment.
+// The repository attached to a draft: shallow clone by an async git (size and time ceilings, two at a time), scan in
+// a worker thread, kept 30 min for read_file/grep, reads confined to the clone. The git token goes to git only through
+// GIT_ASKPASS, from the child's environment, and only to the hosts listed in plan.gitTokenHosts.
 import { Worker } from 'node:worker_threads';
+import { spawn } from 'node:child_process';
 import { mkdtempSync, writeFileSync, rmSync, realpathSync, statSync, readFileSync } from 'node:fs';
+import { readdir, lstat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, relative, sep, isAbsolute } from 'node:path';
-import { isGitUrl, normalizeRepoUrl } from '../../../../scripts/lib/scan/git.mjs';
+import { normalizeRepoUrl } from '../../../../scripts/lib/scan/git.mjs';
 import { cleanRepoUrl } from './draft.mjs';
 
 export const SECRET_FILES = ['.env', '.env.*', '*.pem', '*.key', '*.p12', '*.pfx', 'id_rsa*', 'id_ed25519*', '.npmrc', '.pypirc', '.netrc', '.git/'];
@@ -12,6 +15,9 @@ export const READ_MAX = 200 * 1024;
 export const GREP_MAX = 200;
 const TTL = 30 * 60 * 1000;
 const GREP_TIMEOUT = 10000;
+const SCAN_TIMEOUT = 120000;
+const SIZE_POLL = 500;
+const MAX_CLONES = 2;
 const SECRET_NAMES = SECRET_FILES.filter(p => !p.endsWith('/')).map(p => new RegExp(`^${p.replace(/\./g, '\\.').replace(/\*/g, '.*')}$`, 'i'));
 const SECRET_DIRS = SECRET_FILES.filter(p => p.endsWith('/')).map(p => p.slice(0, -1));
 
@@ -25,13 +31,27 @@ export function isSecretPath(rel) {
   return SECRET_NAMES.some(re => re.test(name));
 }
 
-/** `{ url, ref }` safe to hand to git: a git url without credentials or a leading dash, a plain ref. */
-export function checkRepo({ url, ref } = {}) {
+/** scheme and host of a git url: `https://h/…`, `ssh://u@h/…`, `file://…`, `u@h:path`; null otherwise. */
+function partsOf(url) {
+  const m = /^([a-z][a-z0-9+.-]*):\/\/(?:[^@/]*@)?(\[[^\]]*\]|[^:/]*)/i.exec(url);
+  if (m) return { scheme: m[1].toLowerCase(), host: m[2].toLowerCase() };
+  const scp = /^[^@/:]+@([^:/]+):/.exec(url);
+  return scp ? { scheme: 'ssh', host: scp[1].toLowerCase() } : null;
+}
+
+/**
+ * `{ url, ref }` safe to hand to git: https or ssh (file:// only with `allowFileUrls`), no credentials, no host or url
+ * starting with a dash, a plain ref.
+ */
+export function checkRepo({ url, ref } = {}, { allowFileUrls = false } = {}) {
   if (typeof url !== 'string' || !url.trim()) throw repoError('informe a URL do repositório');
   let clean;
   try { clean = cleanRepoUrl(url); } catch (e) { throw repoError(e.message); }
-  if (clean.startsWith('-') || /[\s\0]/.test(clean) || !isGitUrl(clean)) {
-    throw repoError('informe uma URL git (https://, ssh://, git@host:caminho ou file://)');
+  const p = partsOf(clean);
+  if (p?.scheme === 'file' && !allowFileUrls) throw repoError('URLs file:// estão desligadas neste servidor; use uma URL https:// ou ssh');
+  if (!p || !['https', 'ssh', 'file'].includes(p.scheme) || clean.startsWith('-') || /[\s\0]/.test(clean)
+    || (p.scheme !== 'file' && (!p.host || p.host.startsWith('-')))) {
+    throw repoError('informe uma URL git https:// ou ssh (ssh://… ou git@host:caminho)');
   }
   if (ref !== undefined && !(typeof ref === 'string' && ref.length <= 200 && /^\w[\w./-]*$/.test(ref) && !ref.includes('..'))) {
     throw repoError('ref inválida: use um branch, uma tag ou um commit');
@@ -40,43 +60,119 @@ export function checkRepo({ url, ref } = {}) {
 }
 
 /** Text without userinfo in urls nor the token itself. */
-const scrub = (text, token) => {
+export const scrub = (text, token) => {
   const s = String(text).replace(/([a-z][a-z0-9+.-]*:\/\/)[^@/\s]+@/gi, '$1');
   return token ? s.split(token).join('***') : s;
 };
 
-const tokenOf = ({ env = {}, plan = {} }) => (plan.gitTokenEnv && typeof env[plan.gitTokenEnv] === 'string' && env[plan.gitTokenEnv]) || undefined;
+/** The token for `url`: only https and a host on plan.gitTokenHosts (exact, any case). */
+function tokenFor(url, { env = {}, plan = {} }) {
+  const token = plan.gitTokenEnv && typeof env[plan.gitTokenEnv] === 'string' ? env[plan.gitTokenEnv] : '';
+  const p = partsOf(url);
+  if (!token || p?.scheme !== 'https' || !(plan.gitTokenHosts ?? []).includes(p.host)) return null;
+  return { token, host: p.host };
+}
 
-// Reads the answers from the child's environment: the token is never written to disk.
-const ASKPASS = '#!/bin/sh\ncase "$1" in\n  [Uu]sername*) printf \'%s\\n\' "$ARCHLENS_GIT_USER" ;;\n  *) printf \'%s\\n\' "$ARCHLENS_GIT_TOKEN" ;;\nesac\n';
+// The variables git, ssh and the proxies need; nothing else (the LLM key never reaches git, ssh or the askpass).
+const KEEP = new Set(['PATH', 'HOME', 'USER', 'LOGNAME', 'TMPDIR', 'TEMP', 'TMP', 'TZ', 'LANG', 'LANGUAGE', 'SystemRoot', 'windir',
+  'ComSpec', 'PATHEXT', 'APPDATA', 'LOCALAPPDATA', 'USERPROFILE', 'HOMEDRIVE', 'HOMEPATH', 'ProgramData', 'XDG_CONFIG_HOME',
+  'SSH_AUTH_SOCK', 'SSH_AGENT_PID', 'GIT_SSH', 'GIT_SSH_COMMAND', 'GIT_SSH_VARIANT', 'GIT_SSL_CAINFO', 'GIT_SSL_CAPATH',
+  'GIT_CONFIG_GLOBAL', 'GIT_CONFIG_NOSYSTEM', 'GIT_EXEC_PATH', 'SSL_CERT_FILE', 'SSL_CERT_DIR', 'CURL_CA_BUNDLE',
+  'http_proxy', 'https_proxy', 'HTTP_PROXY', 'HTTPS_PROXY', 'no_proxy', 'NO_PROXY', 'all_proxy', 'ALL_PROXY']);
+const machineEnv = () => Object.fromEntries(Object.entries(process.env).filter(([k]) => KEEP.has(k) || k.startsWith('LC_')));
+
+// Answers only prompts for the token's host, from the child's environment: the token is never written to disk.
+const ASKPASS = `#!/bin/sh
+case "$1" in
+  *"//$ARCHLENS_GIT_HOST'"*|*"@$ARCHLENS_GIT_HOST'"*) ;;
+  *) exit 0 ;;
+esac
+case "$1" in
+  [Uu]sername*) printf '%s\\n' "$ARCHLENS_GIT_USER" ;;
+  [Pp]assword*) printf '%s\\n' "$ARCHLENS_GIT_TOKEN" ;;
+esac
+`;
 
 /**
- * The environment of the git process: never prompts; with a token and an https url, GIT_ASKPASS points to a script in
- * `tmp` (0700) that answers the user (`plan.gitUser`) and the token from the child's own variables, and the machine's
+ * The environment of a GUI clone: the machine's git/ssh/proxy variables only, never a prompt, no redirects, only the
+ * https and ssh protocols (+ file with `allowFileUrls`). With a token for the url's host, GIT_ASKPASS points to a
+ * script in `tmp` (0700) that answers the user (`plan.gitUser`) and the token for that host only, and the machine's
  * credential helpers are set aside. ssh and file urls use the machine's git.
  */
 export function gitEnv(url, { env = {}, plan = {} } = {}, tmp) {
-  const out = { ...process.env, GIT_TERMINAL_PROMPT: '0' };
-  delete out.GIT_ASKPASS;
-  delete out.SSH_ASKPASS;
-  const token = tokenOf({ env, plan });
-  if (!token || !/^https:\/\//i.test(url)) return out;
-  const script = join(tmp, 'askpass.sh');
-  writeFileSync(script, ASKPASS, { mode: 0o700 });
-  return { ...out, GIT_ASKPASS: script, ARCHLENS_GIT_USER: plan.gitUser ?? 'x-access-token', ARCHLENS_GIT_TOKEN: token,
-    GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: 'credential.helper', GIT_CONFIG_VALUE_0: '' };
+  const config = [['http.followRedirects', 'false']];
+  const out = { ...machineEnv(), GIT_TERMINAL_PROMPT: '0', GIT_ALLOW_PROTOCOL: plan.allowFileUrls ? 'https:ssh:file' : 'https:ssh' };
+  const auth = tokenFor(url, { env, plan });
+  if (auth) {
+    const script = join(tmp, 'askpass.sh');
+    writeFileSync(script, ASKPASS, { mode: 0o700 });
+    config.push(['credential.helper', '']);
+    Object.assign(out, { GIT_ASKPASS: script, ARCHLENS_GIT_HOST: auth.host, ARCHLENS_GIT_USER: plan.gitUser ?? 'x-access-token', ARCHLENS_GIT_TOKEN: auth.token });
+  }
+  out.GIT_CONFIG_COUNT = String(config.length);
+  config.forEach(([k, v], i) => { out[`GIT_CONFIG_KEY_${i}`] = k; out[`GIT_CONFIG_VALUE_${i}`] = v; });
+  return out;
 }
 
-/** One job of repo-worker.mjs; past `ms` the worker is stopped, `late` is the error and `onLate` runs once it is gone. */
-function inWorker(data, ms, late, onLate = () => {}) {
+async function sizeOf(dir) {
+  let total = 0;
+  let list;
+  try { list = await readdir(dir, { withFileTypes: true }); } catch { return 0; }
+  for (const e of list) {
+    const p = join(dir, e.name);
+    if (e.isDirectory()) total += await sizeOf(p);
+    else { try { total += (await lstat(p)).size; } catch { /* gone meanwhile */ } }
+  }
+  return total;
+}
+
+// At most MAX_CLONES clones at a time, server-wide; the others wait their turn.
+let running = 0;
+const waiting = [];
+const acquire = () => new Promise(go => { if (running < MAX_CLONES) { running++; go(); } else waiting.push(go); });
+const release = () => { const next = waiting.shift(); if (next) next(); else running--; };
+
+/**
+ * One git command, async. Past the deadline or with `watch` above `maxBytes`, the whole process group is killed and the
+ * promise rejects only once git has exited. Resolves { code, stderr } otherwise.
+ */
+function git(args, { cwd, env, deadline, watch, maxBytes, late, big }) {
   return new Promise((done, fail) => {
-    const w = new Worker(new URL('./repo-worker.mjs', import.meta.url), { workerData: data });
-    let settled = false, timedOut = false;
+    const group = process.platform !== 'win32';
+    const child = spawn('git', ['-c', 'safe.directory=*', ...args], { cwd, env, stdio: ['ignore', 'ignore', 'pipe'], detached: group });
+    let stderr = '';
+    let why = null;
+    child.stderr.on('data', d => { stderr = (stderr + d).slice(-4000); });
+    const kill = reason => {
+      if (why) return;
+      why = reason;
+      try { if (group) process.kill(-child.pid, 'SIGKILL'); else child.kill('SIGKILL'); } catch { /* already gone */ }
+    };
+    const timer = setTimeout(() => kill(late), Math.max(0, deadline - Date.now()));
+    let polling = false;
+    const poll = setInterval(() => {
+      if (polling) return;
+      polling = true;
+      sizeOf(watch).then(n => { if (n > maxBytes) kill(big); }).finally(() => { polling = false; });
+    }, SIZE_POLL);
+    const stop = () => { clearTimeout(timer); clearInterval(poll); };
+    child.once('error', e => { stop(); fail(repoError(`git indisponível: ${e.message}`)); });
+    child.once('close', code => { stop(); if (why) fail(repoError(why)); else done({ code, stderr }); });
+  });
+}
+
+const lastLine = s => s.trim().split('\n').at(-1) ?? '';
+
+/** One job of repo-worker.mjs; past `ms` the worker is stopped and `late` is the error. */
+function inWorker(data, ms, late) {
+  return new Promise((done, fail) => {
+    const w = new Worker(new URL('./repo-worker.mjs', import.meta.url), { workerData: data, env: machineEnv() });
+    let settled = false;
     const end = (fn, v) => { if (!settled) { settled = true; clearTimeout(timer); fn(v); } };
-    const timer = setTimeout(() => { timedOut = true; end(fail, repoError(late)); void w.terminate(); }, ms);
+    const timer = setTimeout(() => { end(fail, repoError(late)); void w.terminate(); }, ms);
     w.once('message', m => (m.error ? end(fail, repoError(m.error.message)) : end(done, m.result)));
     w.once('error', e => end(fail, repoError(e.message)));
-    w.once('exit', code => { end(fail, repoError(`a leitura do repositório parou (código ${code})`)); if (timedOut) onLate(); });
+    w.once('exit', code => end(fail, repoError(`a leitura do repositório parou (código ${code})`)));
   });
 }
 
@@ -99,26 +195,50 @@ export function closeRepos() {
   for (const key of [...entries.keys()]) forget(key);
 }
 
-async function cloneAndScan(url, ref, { env = {}, plan = {} }) {
+/** git clone --depth 1 of `url` into `tmp`/clone (a full sha: fetched on its own and checked out); returns the folder. */
+async function cloneInto(url, ref, tmp, opts) {
+  const { plan = {} } = opts;
   const timeoutMs = plan.cloneTimeoutMs ?? 120000;
-  const token = tokenOf({ env, plan });
+  const maxMb = plan.cloneMaxMb ?? 200;
+  const dir = join(tmp, 'clone');
+  const deadline = Date.now() + timeoutMs;
+  const run = (args, cwd) => git(args, {
+    cwd, env: gitEnv(url, opts, tmp), deadline, watch: dir, maxBytes: maxMb * 1024 * 1024,
+    late: `o clone passou de ${Math.round(timeoutMs / 1000)} s`, big: `o repositório passou de ${maxMb} MB`,
+  });
+  const sha = ref && /^[0-9a-f]{40}$/i.test(ref);
+  const r = await run(['clone', '-q', '--depth', '1', ...(ref && !sha ? ['--branch', ref] : []), '--', url, dir], tmp);
+  if (r.code !== 0) throw repoError(`não foi possível clonar ${normalizeRepoUrl(url)}: ${lastLine(r.stderr)}`);
+  if (sha) {
+    const f = await run(['fetch', '-q', '--depth', '1', 'origin', ref], dir);
+    const c = f.code === 0 ? await run(['checkout', '-q', 'FETCH_HEAD'], dir) : f;
+    if (c.code !== 0) throw repoError(`não foi possível obter o commit ${ref.slice(0, 7)} de ${normalizeRepoUrl(url)}: ${lastLine(c.stderr)}`);
+  }
+  if (await sizeOf(dir) > maxMb * 1024 * 1024) throw repoError(`o repositório passou de ${maxMb} MB`);
+  return dir;
+}
+
+async function cloneAndScan(url, ref, opts) {
+  const token = tokenFor(url, opts)?.token;
   const tmp = mkdtempSync(join(tmpdir(), 'archlens-plan-'));
-  const drop = () => rmSync(tmp, { recursive: true, force: true });
+  await acquire();
   try {
-    // git itself is killed a little after the worker is given up, so the message is the one about the ceiling
-    const job = { job: 'clone', url, ref, env: gitEnv(url, { env, plan }, tmp), timeoutMs: timeoutMs + 1000, tmp, maxMb: plan.cloneMaxMb ?? 200 };
-    const r = await inWorker(job, timeoutMs, `o clone passou de ${Math.round(timeoutMs / 1000)} s`, drop);
+    const dir = await cloneInto(url, ref, tmp, opts);
     rmSync(join(tmp, 'askpass.sh'), { force: true });
-    return { tmp, repo: r };
-  } catch (e) { drop(); throw repoError(scrub(e.message, token)); }
+    const repo = await inWorker({ job: 'scan', dir, url }, SCAN_TIMEOUT, `a leitura do repositório passou de ${SCAN_TIMEOUT / 1000} s`);
+    return { tmp, repo: { ...repo, dir } };
+  } catch (e) {
+    rmSync(tmp, { recursive: true, force: true });
+    throw repoError(scrub(e.message, token));
+  } finally { release(); }
 }
 
 /**
  * The clone of `{ url, ref }`: `{ dir, commit, inv }` (inv: the scan inventory, without the clone's path). Kept for
- * 30 min under url@commit; a second call within that time reuses it.
+ * 30 min under url@commit; a second call within that time reuses it. `opts`: `{ env, plan }` of the server.
  */
 export async function openRepo(target, opts = {}) {
-  const { url, ref } = checkRepo(target);
+  const { url, ref } = checkRepo(target, { allowFileUrls: !!opts.plan?.allowFileUrls });
   const id = `${normalizeRepoUrl(url)}#${ref ?? ''}`;
   const hit = entries.get(latest.get(id));
   if (hit) return hit.repo;
