@@ -68,7 +68,7 @@ test('planejar ponta a ponta', async (t) => {
 
   await t.test('1. um texto vira delta e o agente pergunta a decisão por botões', async () => {
     await box.fill('troque a descrição da API de Pedidos e inclua o Sistema Novo Zeta');
-    await box.press('Enter');
+    await box.press('Control+Enter');
     await chat.getByText('a descrição nova é a mais completa').waitFor();
     await chat.getByRole('button', { name: 'keep' }).waitFor();
   });

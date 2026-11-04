@@ -10,6 +10,7 @@ const HISTORY_MAX = 40; // the server's limit
 const TOO_BIG = 'o rascunho não cabe no navegador; baixe-o para não perder o trabalho';
 const REPLACE = 'Substituir o rascunho atual pelo do arquivo? O atual se perde se não foi baixado.';
 const DISCARD = 'Descartar o rascunho atual? Ele se perde se não foi baixado.';
+const CLEAR_PENDING = 'Há decisão ou notas esperando resposta nesta conversa. Limpar mesmo assim? O rascunho do delta continua.';
 const BROKEN = 'o rascunho salvo não abre; descarte-o ("Descartar rascunho") ou suba outro';
 const TRIMMED = 'a conversa antiga foi cortada para caber no navegador; o rascunho está inteiro';
 const NOTES_ASK = 'rascunhe as notas de interpretação desta rodada';
@@ -235,6 +236,14 @@ export function PlanView({ base, canBuild = true, onApplied }: { base: string; /
     setApplyOpen(false);
   };
 
+  // Like /clear: a fresh conversation, so the agent starts without history; the draft and its open questions stay.
+  const clearChat = () => {
+    const pending = chatRef.current.some((m) => (m.item && m.answered === undefined) || (m.notes && !m.notesState));
+    if (pending && !window.confirm(CLEAR_PENDING)) return;
+    cancel();
+    commit(draftRef.current, []);
+  };
+
   const downloadBtn = <button type="button" aria-label="Baixar rascunho" disabled={!draft} onClick={() => draft && download(base, draft)}>⬇ Baixar</button>;
 
   return (
@@ -247,6 +256,7 @@ export function PlanView({ base, canBuild = true, onApplied }: { base: string; /
             repo={(draft?.repo as { url: string; ref?: string; commit?: string } | null | undefined) ?? null}
             onAnswer={onAnswer}
             onNotes={onNotes}
+            onClear={clearChat}
             notice={stored === 'too-big' ? (
               <div className="warn plan-notice" role="alert">
                 <span>{TOO_BIG}</span> <button type="button" aria-label="Baixar rascunho" onClick={() => draft && download(base, draft)}>Baixar</button>

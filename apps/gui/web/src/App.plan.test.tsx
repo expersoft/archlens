@@ -49,7 +49,7 @@ describe('App, rodada em andamento', () => {
     render(<App />);
     await screen.findByRole('navigation', { name: 'Trilha' });
     await u.click(await screen.findByRole('button', { name: 'Planejar' }));
-    await u.type(await screen.findByLabelText('Mensagem'), 'oi{Enter}');
+    await u.type(await screen.findByLabelText('Mensagem'), 'oi{Control>}{Enter}{/Control}');
     await u.click(screen.getByRole('button', { name: 'Navegar' }));
     expect(signal.aborted).toBe(false);
     const d = { 'archlens-draft': 1, base: { id: 'b', version: 'v' }, delta: null, plan: null, note: 'x' };

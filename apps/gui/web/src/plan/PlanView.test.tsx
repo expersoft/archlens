@@ -17,12 +17,26 @@ const respond = (...events: Ev[]) => planTurn.mockImplementation(async (_b, _bod
 const result = (reply: api.PlanReply, d = draft(1)): Ev => ({ type: 'result', draft: d, reply, previews: [] });
 const done: Ev = { type: 'done', metrics };
 const box = () => screen.getByLabelText('Mensagem') as HTMLTextAreaElement;
-const say = async (u: ReturnType<typeof userEvent.setup>, t: string) => { await u.type(box(), `${t}{Enter}`); };
+const say = async (u: ReturnType<typeof userEvent.setup>, t: string) => { await u.type(box(), `${t}{Control>}{Enter}{/Control}`); };
 
 beforeEach(() => { vi.resetAllMocks(); });
 afterEach(() => vi.restoreAllMocks());
 
 describe('PlanView', () => {
+  it('Limpar apaga a conversa e o histórico do agente, mas o rascunho continua', async () => {
+    const u = userEvent.setup();
+    respond(result({ kind: 'text', text: 'montei o delta' }), done);
+    render(<PlanView base="b" />);
+    await say(u, 'adicione Pagamentos');
+    expect(await screen.findByText('montei o delta')).toBeTruthy();
+    await u.click(screen.getByRole('button', { name: 'Limpar conversa' }));
+    expect(screen.queryByText('montei o delta')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Descartar rascunho' })).toHaveProperty('disabled', false);
+    respond(result({ kind: 'text', text: 'ok' }, draft(2)), done);
+    await say(u, 'continue');
+    expect(planTurn.mock.calls[1][1]).toMatchObject({ message: 'continue', history: [], draft: draft(1) });
+  });
+
   it('decisão vira botões com as opções e clicar envia answer { key, resolution }', async () => {
     const u = userEvent.setup();
     respond(result({ kind: 'decision', item: { n: 1, key: 'k1', question: 'Mesmo elemento?', options: ['merge', 'new'], recommendation: 'merge', reason: 'nomes iguais' } }), done);

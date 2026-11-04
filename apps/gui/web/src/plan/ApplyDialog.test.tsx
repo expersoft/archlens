@@ -230,7 +230,7 @@ describe('Aplicar na PlanView', () => {
     const u = userEvent.setup();
     render(<PlanView base="b" canBuild />);
     await waitFor(() => expect(aplicar().disabled).toBe(false));
-    await u.type(screen.getByLabelText('Mensagem'), 'oi{Enter}');
+    await u.type(screen.getByLabelText('Mensagem'), 'oi{Control>}{Enter}{/Control}');
     expect(aplicar().disabled).toBe(true);
     expect(aplicar().title).toBe('aguarde a rodada em andamento terminar antes de aplicar');
   });

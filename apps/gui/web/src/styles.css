@@ -116,7 +116,13 @@ body{font:14px/1.4 system-ui,sans-serif;background:var(--bg);color:var(--ink)}
 .split-handle{flex:0 0 6px;cursor:col-resize;background:var(--line)}
 .split-handle:hover,.split-handle:focus-visible{background:var(--accent);outline:0}
 .plan-chat{border-top:0;margin-top:0}
-.plan-chat .askbox textarea{max-height:50vh;overflow-y:auto}
+.plan-chat .askbox textarea{max-height:50vh;overflow-y:auto;flex:1;min-width:0}
+.plan-chat .compose{display:flex;gap:6px;align-items:flex-end}
+.plan-chat .send{flex:none;width:34px;height:34px;display:grid;place-items:center;border:1px solid var(--accent);border-radius:6px;background:var(--accent);color:#fff;cursor:pointer}
+.plan-chat .send:disabled{background:var(--bg);border-color:var(--line);color:var(--muted);cursor:default}
+.plan-chat .attach .clear{margin-left:auto;display:inline-flex;align-items:center;gap:4px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--muted);padding:2px 8px;cursor:pointer;font:inherit;font-size:12px}
+.plan-chat .attach .clear:hover:not(:disabled){color:var(--ink);border-color:var(--accent)}
+.plan-chat .attach .clear:disabled{opacity:.5;cursor:default}
 .plan-chat .turn.user .q{color:var(--accent)}
 .plan-chat .turn .acts{flex-wrap:wrap}
 .plan-chat .turn .acts button.on{border-color:var(--accent)}

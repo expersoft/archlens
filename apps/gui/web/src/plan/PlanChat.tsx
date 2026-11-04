@@ -24,9 +24,14 @@ export interface PlanChatProps {
   notice?: React.ReactNode;
   /** The draft's repository: attaching another one is off (one repository per draft). */
   repo?: { url: string; ref?: string; commit?: string } | null;
+  /** Clears the conversation (and so the history the agent gets); the draft stays. */
+  onClear?: () => void;
 }
 
-export function PlanChat({ chat, onSend, onAnswer, onNotes, notice, repo }: PlanChatProps) {
+/** Typed in the composer, clears the conversation like the button. */
+const CLEAR_CMD = /^\/(clear|limpar)$/i;
+
+export function PlanChat({ chat, onSend, onAnswer, onNotes, notice, repo, onClear }: PlanChatProps) {
   const [text, setText] = useState('');
   const [form, setForm] = useState<{ url: string; ref: string; error?: string } | null>(null);
   const [attach, setAttach] = useState<RepoAttach | null>(null);
@@ -44,6 +49,7 @@ export function PlanChat({ chat, onSend, onAnswer, onNotes, notice, repo }: Plan
   const submit = () => {
     const t = text.trim();
     if (!t && !attach) return;
+    if (!attach && onClear && CLEAR_CMD.test(t)) { setText(''); onClear(); return; }
     setText('');
     if (!attach) { onSend(t); return; }
     setAttach(null);
@@ -95,6 +101,12 @@ export function PlanChat({ chat, onSend, onAnswer, onNotes, notice, repo }: Plan
           <button type="button" aria-label="Anexar repositório" title={repo ? 'um repositório por rascunho: aplique ou descarte o atual' : 'Anexar um repositório por URL git'}
             disabled={!!repo || !!attach} onClick={() => setForm(form ? null : { url: '', ref: '' })}>＋ Repositório</button>
           {repo && <span className="chip" title="repositório do rascunho">{repoLabel(repo)}</span>}
+          {onClear && (
+            <button type="button" className="clear" aria-label="Limpar conversa" title="Limpar a conversa (o rascunho do delta continua)" disabled={!chat.length} onClick={onClear}>
+              <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M2.5 4.5h11M6 4.5V3h4v1.5M4 4.5l.7 9h6.6l.7-9M6.7 7v4.5M9.3 7v4.5" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+              Limpar
+            </button>
+          )}
           {!repo && attach && (
             <span className="chip">{repoLabel(attach)} <button type="button" className="link" aria-label="Remover anexo" onClick={() => setAttach(null)}>×</button></span>
           )}
@@ -109,16 +121,21 @@ export function PlanChat({ chat, onSend, onAnswer, onNotes, notice, repo }: Plan
             {form.error && <p className="err" role="alert">{form.error}</p>}
           </div>
         )}
-        <textarea
-          ref={box}
-          aria-label="Mensagem"
-          rows={3}
-          value={text}
-          placeholder="Descreva a mudança na arquitetura…"
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); } }}
-        />
-        <span className="hint">Enter envia · Shift+Enter quebra a linha · escrever durante uma rodada a cancela</span>
+        <div className="compose">
+          <textarea
+            ref={box}
+            aria-label="Mensagem"
+            rows={3}
+            value={text}
+            placeholder="Descreva a mudança na arquitetura…"
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); submit(); } }}
+          />
+          <button type="button" className="send" aria-label="Enviar" title="Enviar (Ctrl+Enter)" disabled={!text.trim() && !attach} onClick={submit}>
+            <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M2 2.5 14 8 2 13.5l1.6-5.5L2 2.5Z M3.6 8H9" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" strokeLinecap="round" /></svg>
+          </button>
+        </div>
+        <span className="hint">Ctrl+Enter envia · /limpar limpa a conversa · escrever durante uma rodada a cancela</span>
       </div>
     </div>
   );
