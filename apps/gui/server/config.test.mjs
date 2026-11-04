@@ -108,3 +108,10 @@ test('config: --plan na linha de comando', () => {
   assert.deepEqual(c.plan, PLAN_DEFAULTS);
   assert.equal(loadConfig({ file: write({ llm: LLM }), plan: true }).planSource, 'cli');
 });
+
+test('config: --plan com arquivo usa o objeto plan do arquivo', () => {
+  const c = loadConfig({ file: write({ llm: LLM, plan: { maxRounds: 5, gitTokenEnv: 'GT', gitTokenHosts: ['github.com'] } }), plan: true });
+  assert.equal(c.planSource, 'cli');
+  assert.deepEqual(c.plan, { ...PLAN_DEFAULTS, maxRounds: 5, gitTokenEnv: 'GT', gitTokenHosts: ['github.com'] });
+  assert.deepEqual(loadConfig({ file: write({ llm: LLM, plan: false }), plan: true }).plan, PLAN_DEFAULTS);
+});

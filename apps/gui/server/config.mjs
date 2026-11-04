@@ -120,7 +120,7 @@ export function loadConfig({ file, base, port, host, llm, envFile, plan } = {}) 
     return {
       port: port ?? cfg.port ?? DEFAULT_PORT, ...(h ? { host: h } : {}), bases,
       ...llmCfg,
-      ...(plan ? planPart(true, llmCfg, 'cli') : planPart(cfg.plan, llmCfg, 'file')),
+      ...(plan ? planPart(isObj(cfg.plan) ? cfg.plan : true, llmCfg, 'cli') : planPart(cfg.plan, llmCfg, 'file')),
       ...(cfg.telemetry !== undefined ? { telemetry: checkTelemetry(cfg.telemetry, dir) } : {}),
     };
   }
