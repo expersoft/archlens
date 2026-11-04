@@ -186,6 +186,22 @@ test('o token vai ao git só pelo askpass, só para os hosts da lista', () => {
   assert.equal(gitEnv('file:///tmp/x', { plan: { allowFileUrls: true } }, tmp).GIT_ALLOW_PROTOCOL, 'https:ssh:file');
 });
 
+test('URL com ? ou # antes do @ não engana o host do token', () => {
+  const tmp = mkdtempSync(join(tmpdir(), 'archlens-askpass-'));
+  const opts = { env: { GIT_TOKEN: 'ghp_segredo' }, plan: { gitTokenEnv: 'GIT_TOKEN', gitTokenHosts: ['github.com'] } };
+  for (const url of ['https://attacker.example?@github.com/x.git', 'https://attacker.example#@github.com/x.git', 'https://attacker.example/?@github.com/x.git']) {
+    const e = gitEnv(url, opts, tmp);
+    assert.equal(e.ARCHLENS_GIT_TOKEN, undefined, url);
+    assert.equal(e.GIT_ASKPASS, undefined, url);
+  }
+  for (const url of ['https://attacker.example?@github.com/x.git', 'https://attacker.example#@github.com/x.git', 'ssh://h?@github.com/x']) {
+    assert.throws(() => checkRepo({ url }), e => e.code === 'E_GUI_REPO', url);
+  }
+  const ok = gitEnv('https://GitHub.com/a/b.git', opts, tmp);
+  assert.equal(ok.ARCHLENS_GIT_TOKEN, 'ghp_segredo');
+  assert.equal(ok.ARCHLENS_GIT_HOST, 'github.com');
+});
+
 test('scrub tira o token e a credencial das URLs', () => {
   assert.equal(scrub("fatal: unable to access 'https://x-access-token:ghp_segredo@github.com/a.git/': 403", 'ghp_segredo'),
     "fatal: unable to access 'https://github.com/a.git/': 403");

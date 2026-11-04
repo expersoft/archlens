@@ -31,11 +31,21 @@ export function isSecretPath(rel) {
   return SECRET_NAMES.some(re => re.test(name));
 }
 
-/** scheme and host of a git url: `https://h/…`, `ssh://u@h/…`, `file://…`, `u@h:path`; null otherwise. */
+/**
+ * scheme and host of a git url, as git sees them: `https://h/…`, `ssh://u@h/…`, `file://…` through `new URL()` (an
+ * authority with `?` or `#`, or `@` in https, is refused: it would name another host than git's), and the scp-like
+ * `u@h:path` explicitly; null otherwise.
+ */
 function partsOf(url) {
-  const m = /^([a-z][a-z0-9+.-]*):\/\/(?:[^@/]*@)?(\[[^\]]*\]|[^:/]*)/i.exec(url);
-  if (m) return { scheme: m[1].toLowerCase(), host: m[2].toLowerCase() };
-  const scp = /^[^@/:]+@([^:/]+):/.exec(url);
+  const m = /^([a-z][a-z0-9+.-]*):\/\/([^/]*)/i.exec(url);
+  if (m) {
+    const scheme = m[1].toLowerCase();
+    if (/[?#]/.test(m[2]) || (scheme === 'https' && m[2].includes('@'))) return null;
+    let u;
+    try { u = new URL(url); } catch { return null; }
+    return { scheme, host: u.hostname.toLowerCase() };
+  }
+  const scp = /^[^@/:?#]+@([^:/?#@]+):/.exec(url);
   return scp ? { scheme: 'ssh', host: scp[1].toLowerCase() } : null;
 }
 
@@ -142,9 +152,10 @@ function git(args, { cwd, env, deadline, watch, maxBytes, late, big }) {
     const child = spawn('git', ['-c', 'safe.directory=*', ...args], { cwd, env, stdio: ['ignore', 'ignore', 'pipe'], detached: group });
     let stderr = '';
     let why = null;
+    let closed = false;
     child.stderr.on('data', d => { stderr = (stderr + d).slice(-4000); });
     const kill = reason => {
-      if (why) return;
+      if (why || closed) return; // after close the pid may belong to another process
       why = reason;
       try { if (group) process.kill(-child.pid, 'SIGKILL'); else child.kill('SIGKILL'); } catch { /* already gone */ }
     };
@@ -157,7 +168,7 @@ function git(args, { cwd, env, deadline, watch, maxBytes, late, big }) {
     }, SIZE_POLL);
     const stop = () => { clearTimeout(timer); clearInterval(poll); };
     child.once('error', e => { stop(); fail(repoError(`git indisponível: ${e.message}`)); });
-    child.once('close', code => { stop(); if (why) fail(repoError(why)); else done({ code, stderr }); });
+    child.once('close', code => { closed = true; stop(); if (why) fail(repoError(why)); else done({ code, stderr }); });
   });
 }
 
