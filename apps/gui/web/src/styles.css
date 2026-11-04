@@ -171,3 +171,22 @@ body{font:14px/1.4 system-ui,sans-serif;background:var(--bg);color:var(--ink)}
 .view-pick select{flex:1;min-width:0;font:inherit;color:var(--ink);padding:4px 6px;border:1px solid var(--line);border-radius:6px;background:var(--bg)}
 .preview-pick .seg button{border:0;border-radius:0;padding:4px 10px}
 .preview-pick .seg button+button{border-left:1px solid var(--line)}
+.preview-pick .step{flex:none;padding:4px 9px;font-size:15px;line-height:1}
+.preview-pick .step:disabled{opacity:.4;cursor:default}
+.preview-plan{flex:1;display:flex;flex-direction:column;min-height:0}
+.preview-plan .seg button{border:0;border-radius:0;padding:4px 10px}
+.preview-plan .seg button+button{border-left:1px solid var(--line)}
+.preview-report.md{white-space:normal;line-height:1.5}
+.preview-report.md h1{font-size:18px;margin:4px 0 10px}
+.preview-report.md h2{font-size:15px;margin:16px 0 6px;padding-bottom:3px;border-bottom:1px solid var(--line)}
+.preview-report.md h3{font-size:14px;margin:12px 0 4px}
+.preview-report.md p,.preview-report.md ul,.preview-report.md ol{margin:6px 0}
+.preview-report.md ul,.preview-report.md ol{padding-left:22px}
+.preview-report.md code{font-family:ui-monospace,monospace;font-size:12px;background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:0 4px}
+.preview-report.md pre{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:8px;overflow:auto}
+.preview-report.md pre code{border:0;padding:0;background:none}
+.preview-report.md table{border-collapse:collapse;margin:8px 0;display:block;overflow-x:auto}
+.preview-report.md th,.preview-report.md td{border:1px solid var(--line);padding:4px 8px;text-align:left;vertical-align:top}
+.preview-report.md th{background:var(--panel)}
+.preview-report.md blockquote{margin:6px 0;padding-left:10px;border-left:3px solid var(--line);color:var(--muted)}
+.preview-report.md a{color:var(--accent)}

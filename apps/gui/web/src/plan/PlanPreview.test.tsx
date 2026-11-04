@@ -170,4 +170,38 @@ describe('PlanPreview', () => {
     await waitFor(() => expect(frames(container)).toHaveLength(1));
     await fromFrame(container, { type: 'select', id: 'b' }, () => expect(onSelect).toHaveBeenCalledWith('b'));
   });
+
+  it('« e » andam pela lista de visões, na ordem da lista, e param nas pontas', async () => {
+    const u = userEvent.setup();
+    const views = ['O que muda', 'Salva A', 'Salva B'].map((title, i) => ({ key: `k${i}`, title, html: `<p>${i}</p>`, kind: (i ? 'saved' : 'change') as 'saved' | 'change', spec: { key: `k${i}` } }));
+    planPreview.mockResolvedValue(result({ views }));
+    const { container } = render(<PlanPreview base="b" draft={withDelta} previews={[]} />);
+    const prev = await screen.findByRole('button', { name: 'Visão anterior' }) as HTMLButtonElement;
+    const next = screen.getByRole('button', { name: 'Próxima visão' }) as HTMLButtonElement;
+    const pick = screen.getByRole('combobox', { name: 'Visão da prévia' }) as HTMLSelectElement;
+    expect(prev.disabled).toBe(true);
+    await u.click(next);
+    expect(pick.selectedOptions[0].textContent).toBe('Salva A');
+    await u.click(next);
+    expect(frames(container)).toEqual(['<p>2</p>']);
+    expect(next.disabled).toBe(true);
+    await u.click(prev);
+    expect(pick.selectedOptions[0].textContent).toBe('Salva A');
+  });
+
+  it('Plano: Preview renderiza o markdown (sem HTML cru) e Raw mostra o texto', async () => {
+    const u = userEvent.setup();
+    planPreview.mockResolvedValue(result({ report: '# Plano: teste\n\n- item **forte**\n\n<script>alert(1)</script>\n\n[x](javascript:alert(1))' }));
+    const { container } = render(<PlanPreview base="b" draft={withDelta} previews={[]} />);
+    await u.click(await screen.findByRole('tab', { name: 'Plano' }));
+    expect(screen.getByRole('heading', { name: 'Plano: teste' })).toBeTruthy();
+    expect(container.querySelector('.md strong')?.textContent).toBe('forte');
+    expect(container.querySelector('.md script')).toBeNull();
+    expect(container.querySelector('.md a[href^="javascript"]')).toBeNull();
+    await u.click(screen.getByRole('button', { name: 'Raw' }));
+    expect(container.querySelector('pre.preview-report')?.textContent).toContain('# Plano: teste');
+    expect(screen.queryByRole('heading', { name: 'Plano: teste' })).toBeNull();
+    await u.click(screen.getByRole('button', { name: 'Preview' }));
+    expect(screen.getByRole('heading', { name: 'Plano: teste' })).toBeTruthy();
+  });
 });

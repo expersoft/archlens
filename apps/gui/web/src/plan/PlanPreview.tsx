@@ -4,6 +4,8 @@ import { Diagram } from '../Diagram';
 import { ContextMenu } from '../ContextMenu';
 import { send, type BridgeEvent } from '../bridge';
 import { useDiagramTheme } from '../theme';
+import { useStoredState } from '../store';
+import { Markdown } from './Markdown';
 
 type Tab = 'diagram' | 'plan';
 type Mode = 'base' | 'delta' | 'both';
@@ -42,6 +44,7 @@ export function PlanPreview({ base, draft, previews, onLoaded, onNavigate, onNav
   loadedCb.current = onLoaded;
   const [theme, setTheme] = useDiagramTheme();
   const [tab, setTab] = useState<Tab>('diagram');
+  const [raw, setRaw] = useStoredState<boolean>('archlens-plan-report-raw', false);
   const [mode, setMode] = useState<Mode>('delta');
   const [pick, setPick] = useState<string | null>(null);
   const [loaded, setLoaded] = useState<Loaded | null>(null);
@@ -79,6 +82,7 @@ export function PlanPreview({ base, draft, previews, onLoaded, onNavigate, onNav
   const views = useMemo(() => [...(loaded?.default.views ?? []), ...(loaded?.asked ?? [])].map((v) => ({ ...v, id: `${v.kind}:${v.key}` })), [loaded]);
   const current = views.find((v) => v.id === pick) ?? views[0];
   const wantsBase = mode !== 'delta' && !!current && !current.error;
+  const at = current ? views.indexOf(current) : -1;
   const notation: Notation | null = current?.spec ? (current.spec.notation === 'c4' ? 'c4' : 'archimate') : null;
 
   const navigate = useCallback((spec: ViewSpec, matrix?: boolean) => {
@@ -169,6 +173,7 @@ export function PlanPreview({ base, draft, previews, onLoaded, onNavigate, onNav
       {tab === 'diagram' && (
         <div className="preview-diagram">
           <div className="toolbar preview-pick">
+            <button type="button" className="step" aria-label="Visão anterior" title="Visão anterior" disabled={at <= 0} onClick={() => setPick(views[at - 1].id)}>«</button>
             <label className="view-pick">
               <span>Visão</span>
               <select aria-label="Visão da prévia" value={current?.id ?? ''} onChange={(e) => setPick(e.target.value)}>
@@ -182,6 +187,7 @@ export function PlanPreview({ base, draft, previews, onLoaded, onNavigate, onNav
                 })}
               </select>
             </label>
+            <button type="button" className="step" aria-label="Próxima visão" title="Próxima visão" disabled={at < 0 || at >= views.length - 1} onClick={() => setPick(views[at + 1].id)}>»</button>
             <div className="seg" role="group" aria-label="Comparar">
               {MODES.map(([m, label]) => (
                 <button key={m} type="button" className={mode === m ? 'on' : ''} aria-pressed={mode === m} onClick={() => setMode(m)}>{label}</button>
@@ -199,7 +205,17 @@ export function PlanPreview({ base, draft, previews, onLoaded, onNavigate, onNav
           )}
         </div>
       )}
-      {tab === 'plan' && (d.report ? <pre className="preview-report">{d.report}</pre> : <div className="empty">O rascunho ainda não tem plano.</div>)}
+      {tab === 'plan' && (d.report ? (
+        <div className="preview-plan">
+          <div className="toolbar">
+            <div className="seg" role="group" aria-label="Mostrar o plano como">
+              <button type="button" className={!raw ? 'on' : ''} aria-pressed={!raw} onClick={() => setRaw(false)}>Preview</button>
+              <button type="button" className={raw ? 'on' : ''} aria-pressed={raw} onClick={() => setRaw(true)}>Raw</button>
+            </div>
+          </div>
+          {raw ? <pre className="preview-report">{d.report}</pre> : <Markdown className="preview-report md" text={d.report} />}
+        </div>
+      ) : <div className="empty">O rascunho ainda não tem plano.</div>)}
       {menu && <ContextMenu at={menu.at} title={menu.title} items={menu.items} onPick={(a) => { setMenu(null); if (a.spec) navigate(a.spec, a.matrix); }} onClose={() => setMenu(null)} />}
     </div>
   );
