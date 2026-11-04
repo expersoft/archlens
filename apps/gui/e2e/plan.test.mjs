@@ -103,7 +103,10 @@ test('planejar ponta a ponta', async (t) => {
     const menu = page.getByRole('menu');
     await menu.getByRole('menuitem').first().waitFor();
     await menu.getByRole('menuitem', { name: /Focar/ }).click();
-    await page.locator('[aria-label="Visões da prévia"]').getByRole('button', { pressed: true }).filter({ hasNotText: 'O que muda' }).waitFor();
+    await page.waitForFunction(() => {
+      const sel = document.querySelector('select[aria-label="Visão da prévia"]');
+      return sel && sel.selectedOptions[0]?.parentElement?.getAttribute('label')?.startsWith('Pedidas e navegadas');
+    });
     await frame().locator('[data-node="sistema-novo"]').waitFor();
   });
 

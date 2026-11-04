@@ -8,6 +8,7 @@ import { useDiagramTheme } from '../theme';
 type Tab = 'diagram' | 'plan';
 type Mode = 'base' | 'delta' | 'both';
 const TABS: [Tab, string][] = [['diagram', 'Diagrama'], ['plan', 'Plano']];
+const GROUPS: [PreviewView['kind'], string][] = [['change', 'O que muda'], ['saved', 'Visões salvas afetadas'], ['asked', 'Pedidas e navegadas']];
 const MODES: [Mode, string][] = [['base', 'Base atual'], ['delta', 'Com o delta'], ['both', 'Lado a lado']];
 const NO_BASE = 'Esta visão não existe na base atual (só aparece com o delta).';
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -167,15 +168,25 @@ export function PlanPreview({ base, draft, previews, onLoaded, onNavigate, onNav
       {d.warning && <div className="warn" role="status">{d.warning}</div>}
       {tab === 'diagram' && (
         <div className="preview-diagram">
-          <div className="toolbar" aria-label="Visões da prévia">
-            {views.map((v) => (
-              <button key={v.id} type="button" className={v.id === current?.id ? 'on' : ''} aria-pressed={v.id === current?.id} onClick={() => setPick(v.id)}>{v.title}</button>
-            ))}
-          </div>
-          <div className="toolbar" aria-label="Comparar">
-            {MODES.map(([m, label]) => (
-              <button key={m} type="button" className={mode === m ? 'on' : ''} aria-pressed={mode === m} onClick={() => setMode(m)}>{label}</button>
-            ))}
+          <div className="toolbar preview-pick">
+            <label className="view-pick">
+              <span>Visão</span>
+              <select aria-label="Visão da prévia" value={current?.id ?? ''} onChange={(e) => setPick(e.target.value)}>
+                {GROUPS.map(([kind, label]) => {
+                  const of = views.filter((v) => v.kind === kind);
+                  return of.length ? (
+                    <optgroup key={kind} label={`${label} (${of.length})`}>
+                      {of.map((v) => <option key={v.id} value={v.id}>{v.title}{v.error ? ' (não desenhada)' : ''}</option>)}
+                    </optgroup>
+                  ) : null;
+                })}
+              </select>
+            </label>
+            <div className="seg" role="group" aria-label="Comparar">
+              {MODES.map(([m, label]) => (
+                <button key={m} type="button" className={mode === m ? 'on' : ''} aria-pressed={mode === m} onClick={() => setMode(m)}>{label}</button>
+              ))}
+            </div>
           </div>
           {navError && <div className="warn" role="status">{navError}</div>}
           {loaded.failed.length > 0 && <div className="warn" role="status">{loaded.failed.length} visão(ões) pedida(s) na conversa não puderam ser desenhadas: {loaded.failed.join('; ')}</div>}

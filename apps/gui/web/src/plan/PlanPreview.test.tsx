@@ -88,11 +88,13 @@ describe('PlanPreview', () => {
       ? result({ views: [{ key: 'pedida', title: 'Impacto no checkout', html: '<p>pedida</p>', kind: 'asked', spec: asked }] })
       : result()));
     const { container } = render(<PlanPreview base="b" draft={withDelta} previews={[asked]} />);
-    const tab = await screen.findByRole('button', { name: 'Impacto no checkout' });
+    const pick = await screen.findByRole('combobox', { name: 'Visão da prévia' });
+    await screen.findByRole('option', { name: 'Impacto no checkout' });
     expect(planPreview).toHaveBeenCalledWith('b', withDelta, [asked]);
     expect(planPreview).toHaveBeenCalledWith('b', withDelta, undefined, undefined);
-    expect(screen.getByRole('button', { name: 'O que muda' })).toBeTruthy();
-    await u.click(tab);
+    expect(screen.getByRole('group', { name: 'O que muda (1)' })).toBeTruthy();
+    expect(screen.getByRole('group', { name: 'Pedidas e navegadas (1)' })).toBeTruthy();
+    await u.selectOptions(pick, 'Impacto no checkout');
     expect(frames(container)).toEqual(['<p>pedida</p>']);
   });
 
@@ -137,7 +139,8 @@ describe('PlanPreview', () => {
     // a view that is not the change view: the server flips it over the preview
     const ctxSpec = { key: 'nav-1', notation: 'c4', level: 'context', scope: 'x', title: 'Contexto' };
     rerender(<PlanPreview base="b" draft={withDelta} previews={[ctxSpec]} onNav={(n) => { nav = n; }} onNavigate={onNavigate} />);
-    await userEvent.setup().click(await screen.findByRole('button', { name: 'Contexto' }));
+    await screen.findByRole('option', { name: 'Contexto' });
+    await userEvent.setup().selectOptions(screen.getByRole('combobox', { name: 'Visão da prévia' }), 'Contexto');
     const flipped = { key: 'nav-2', notation: 'archimate', anchor: 'x', title: 'Em volta de X' };
     planFlip.mockResolvedValue({ spec: flipped });
     act(() => nav!.flip('archimate'));

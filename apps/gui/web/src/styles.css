@@ -166,3 +166,8 @@ body{font:14px/1.4 system-ui,sans-serif;background:var(--bg);color:var(--ink)}
 .delta-panel .chg-fields .before{color:var(--muted);text-decoration:line-through}
 .delta-panel .delta-questions li{border-left:3px solid var(--sel);padding-left:8px}
 .delta-empty{padding:0 12px}
+.preview-pick{align-items:center}
+.view-pick{display:flex;align-items:center;gap:6px;flex:1 1 260px;min-width:0;font-size:13px;color:var(--muted)}
+.view-pick select{flex:1;min-width:0;font:inherit;color:var(--ink);padding:4px 6px;border:1px solid var(--line);border-radius:6px;background:var(--bg)}
+.preview-pick .seg button{border:0;border-radius:0;padding:4px 10px}
+.preview-pick .seg button+button{border-left:1px solid var(--line)}
