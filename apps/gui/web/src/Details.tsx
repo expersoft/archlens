@@ -1,3 +1,4 @@
+import { Fragment } from 'react';
 import type { Card, RelRef, ViewEdge, ViewNode } from './api';
 import { layerLabel } from './labels';
 
@@ -27,6 +28,7 @@ export function Details({ card, viewNode, viewEdges, nodeId, onPick, onSelectInV
         {r.sentence ?? `${t}: ${r.name}`}{r.technology && <span className="chip">{r.technology}</span>}
       </li>
     )));
+  const props = Object.entries(card?.properties ?? {});
   const baseRels = card && !viewNode ? [...relList('out', card.outgoing), ...relList('in', card.incoming)] : [];
 
   return (
@@ -76,6 +78,11 @@ export function Details({ card, viewNode, viewEdges, nodeId, onPick, onSelectInV
             <dt>Id</dt><dd><code>{e.id}</code></dd>
             {e.status && <><dt>Status</dt><dd>{e.status}</dd></>}
           </dl>
+          {props.length > 0 && (
+            <><h3>Propriedades</h3><dl>{props.map(([k, v]) => (
+              <Fragment key={k}><dt>{k}</dt><dd>{Array.isArray(v) ? v.join(', ') : String(v)}</dd></Fragment>
+            ))}</dl></>
+          )}
           {baseRels.length > 0 && <><h3>Relações</h3><ul>{baseRels}</ul></>}
           {card.children.length > 0 && (
             <><h3>Filhos</h3><ul>{card.children.map((c) => <li key={c.id} className="go" onClick={() => onPick(c.id)}>{c.name}</li>)}</ul></>

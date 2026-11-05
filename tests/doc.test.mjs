@@ -113,3 +113,13 @@ test('generateDoc marks containers tagged bucket or storage as data stores', () 
   assert.match(md, /Bucket 🛢/);
   assert.match(md, /Files 🛢/);
 });
+
+test('generateDoc puts element properties in their own section before Fontes', () => {
+  const r = raw();
+  const api = r.model.elements.find(e => e.id === 'loja').children.find(c => c.id === 'loja.api');
+  api.properties = { squad: 'Checkout' };
+  const md = generateDoc(asBase(r));
+  assert.match(md, /## Propriedades\n\n\| Elemento \| Propriedade \| Valor \|\n\| --- \| --- \| --- \|\n\| API \| squad \| Checkout \|/);
+  assert.ok(md.indexOf('## Propriedades') < md.indexOf('## Fontes'));
+  assert.doesNotMatch(generateDoc(asBase(raw())), /## Propriedades/);
+});

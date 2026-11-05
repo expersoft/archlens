@@ -65,4 +65,16 @@ describe('Details', () => {
     expect(err.mock.calls.some((c) => String(c[0]).includes('same key'))).toBe(false);
     err.mockRestore();
   });
+
+  it('mostra as propriedades do cartão; sem propriedades não há rótulo', () => {
+    const withProps: Card = { ...card, properties: { squad: 'Checkout', canais: ['web', 'app'] } };
+    const { unmount } = render(<Details {...props} card={withProps} viewNode={null} viewEdges={edges} />);
+    expect(screen.getByText('Propriedades')).toBeTruthy();
+    expect(screen.getByText('squad')).toBeTruthy();
+    expect(screen.getByText('Checkout')).toBeTruthy();
+    expect(screen.getByText('web, app')).toBeTruthy();
+    unmount();
+    render(<Details {...props} card={card} viewNode={null} viewEdges={edges} />);
+    expect(screen.queryByText('Propriedades')).toBeNull();
+  });
 });

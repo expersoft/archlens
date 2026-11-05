@@ -194,6 +194,12 @@ export function generateDoc(raw, { notes = {}, source = 'architecture/' } = {}) 
     ]), '');
   }
 
+  // Properties (free-form key/value pairs of the elements)
+  const propRows = els
+    .flatMap(e => Object.entries(e.properties ?? {}).map(([k, v]) => [e.name, k, Array.isArray(v) ? v.join(', ') : v]))
+    .sort((a, b) => a[0].localeCompare(b[0]) || a[1].localeCompare(b[1]));
+  if (propRows.length) out.push('## Propriedades', '', table(['Elemento', 'Propriedade', 'Valor'], propRows), '');
+
   // Sources
   out.push('## Fontes', '');
   const bySource = new Map();
