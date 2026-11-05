@@ -10,6 +10,17 @@ const props = { turns: [] as Turn[], enabled: true, model: 'm1', onAsk: noop, on
 afterEach(() => vi.restoreAllMocks());
 
 describe('Conversation', () => {
+  it('o rodapé da chamada aparece na resposta e no erro; em andamento, não', () => {
+    const call = { startedAt: 0, endedAt: 2000, usage: { input: 10, output: 5, cacheRead: 0 } };
+    const turns: Turn[] = [
+      { id: 1, question: 'a', status: 'done', call },
+      { id: 2, question: 'b', status: 'error', error: 'caiu', call },
+      { id: 3, question: 'c', status: 'running' },
+    ];
+    render(<Conversation {...props} turns={turns} />);
+    expect(screen.getAllByText(/15 tokens/)).toHaveLength(2);
+  });
+
   it('Enter envia o texto e limpa; Shift+Enter quebra linha', async () => {
     const onAsk = vi.fn();
     const u = userEvent.setup();

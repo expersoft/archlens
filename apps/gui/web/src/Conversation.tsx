@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { AskOption, ViewAnswer } from './api';
+import { CallFooter } from './CallFooter';
 import type { Turn } from './question';
 
 export interface ConversationProps {
@@ -95,7 +96,7 @@ function TurnView({ turn, onChoose, onOpen }: { turn: Turn; onChoose: Conversati
           )}
         </div>
       )}
-      {turn.ms != null && turn.status === 'done' && <p className="meta">{Math.round(turn.ms)} ms</p>}
+      {turn.call && <CallFooter call={turn.call} />}
     </li>
   );
 }

@@ -112,12 +112,15 @@ export interface AskRequest {
   chosen?: string;
   history?: { question: string; title?: string }[];
 }
+export interface Usage { input: number; output: number; cacheRead: number }
+/** Last event of a call; `usage` is what the provider reported, summed over the rounds. */
+export interface CallMetrics { total: number; usage?: Usage; [k: string]: unknown }
 export type AskEvent =
   | { type: 'stage'; stage: string }
   | { type: 'tool'; name: string; ok: boolean; ms: number }
   | { type: 'result'; result: AskResult; view?: ViewResult; answer?: ViewAnswer; markdown?: string }
   | { type: 'error'; error: string; code?: string }
-  | { type: 'done'; metrics: { total: number; [k: string]: unknown } };
+  | { type: 'done'; metrics: CallMetrics };
 
 /** POST que responde em NDJSON: um evento por linha. Abortar o sinal fecha a conexão (e o servidor para o agente). */
 async function stream<E>(path: string, body: unknown, onEvent: (e: E) => void, signal: AbortSignal): Promise<void> {
@@ -175,7 +178,7 @@ export type PlanEvent =
   | { type: 'tool'; name: string; ok: boolean; ms: number }
   | { type: 'result'; draft: Draft; reply: PlanReply; previews: ViewSpec[]; opsHash?: string | null }
   | { type: 'error'; error: string; code?: string; draft: Draft; previews: ViewSpec[]; warning?: string }
-  | { type: 'done'; metrics: { total: number; [k: string]: unknown } };
+  | { type: 'done'; metrics: CallMetrics };
 
 export const planTurn = (base: string, body: PlanRequest, onEvent: (e: PlanEvent) => void, signal: AbortSignal) =>
   stream<PlanEvent>(`${b(base)}/plan`, body, onEvent, signal);
