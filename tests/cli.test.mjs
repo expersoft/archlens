@@ -1101,12 +1101,3 @@ test('check de um vault: editar o texto de uma página pede archlens build; buil
   assert.match(readFileSync(join(dir, 'ARCHITECTURE.md'), 'utf8'), /Texto escrito à mão\./);
   assert.equal(run(['check', 'architecture'], dir).status, 0);
 });
-
-test('every writeDoc call hands over the whole loaded base, so none can drop the node documentation', () => {
-  // the paths that regenerate ARCHITECTURE.md after a gbrain apply/undo, a convert or a migrate need a remote to run
-  const src = readFileSync(fileURLToPath(new URL('../scripts/archlens.mjs', import.meta.url)), 'utf8');
-  assert.match(src, /function writeDoc\(store, \{ raw, notes, docs \}/);
-  const calls = [...src.matchAll(/\bwriteDoc\(([^)]*)\)/g)].map(m => m[1]).filter(a => !a.startsWith('store, {'));
-  assert.equal(calls.length, 5);
-  for (const a of calls) assert.doesNotMatch(a, /\.raw|\.notes/, a);
-});

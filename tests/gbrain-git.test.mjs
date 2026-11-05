@@ -540,3 +540,19 @@ test('store convert to and from gbrain carries the text as it was, and to json d
   assert.equal(convertFromGbrain(resolveBase(dir), 'json', { force: true }).dropped.length, 1);
   assert.equal(openStore(resolveBase(dir)).supportsDocs, false);
 });
+
+test('the CLI converts a vault with text to the gbrain: ARCHITECTURE.md keeps the node documentation and check passes', () => {
+  const w = world();
+  const { dir, gbrain } = localBase(w, 'loja-online-vault');
+  const page = join(dir, 'business-actor', 'cliente.md');
+  writeFileSync(page, readFileSync(page, 'utf8').replace(/\n*$/, '\n') + '\nO cliente ligou ontem.\n');
+  const cli = (...a) => {
+    const r = spawnSync(process.execPath, [new URL('../scripts/archlens.mjs', import.meta.url).pathname, ...a], { encoding: 'utf8' });
+    assert.equal(r.status, 0, r.stderr + r.stdout);
+    return r.stdout;
+  };
+  cli('store', 'convert', dir, '--to', 'gbrain', '--mode', 'git', '--repo', join(dir, gbrain.repo));
+  const doc = readFileSync(join(dir, '..', 'ARCHITECTURE.md'), 'utf8');
+  assert.match(doc, /## Documentação dos nós[\s\S]*O cliente ligou ontem\./);
+  assert.match(cli('check', dir), /em dia/);
+});
