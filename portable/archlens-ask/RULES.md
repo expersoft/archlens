@@ -184,7 +184,8 @@ relação derivada entre os dois visíveis:
   - `depth` não traz vizinhos sem o valor; um `focus` sem o valor deixa o recorte vazio. `include` vence o filtro e
     conta como resultado.
   - `level:"dynamic"` ignora `where`: diga isso na resposta.
-  - Resultado vazio não é erro: responda que nenhum nó tem esse valor.
+  - Resultado vazio não é erro: responda que nenhum nó desta visão tem esse valor. Se achar páginas com o valor fora
+    do recorte, diga quantas e em que nível C4 ou tipo; não diga que a base não tem o valor.
 
 ## 7. Saída em markdown
 
@@ -198,9 +199,10 @@ relação derivada entre os dois visíveis:
    Dist. | Caminho`. "Relação" é "depende da âncora", "sustenta a âncora" ou "ambos". O caminho é a sequência
    `<relação> → <nome>` até o elemento. A matriz lista a travessia inteira e marca "(oculto na visão)" quem não está
    visível;
-5. notas: o que ficou de fora; com mais de 40 elementos, sugira recortar; com `where`, `Nenhum nó tem esse valor em
-   "where".` quando vazio e `A visão dinâmica ignora "where".` em `level:"dynamic"`. Nas tabelas, um ancestral que não
-   tem o valor leva `(moldura)` depois do nome.
+5. notas: o que ficou de fora; com mais de 40 elementos, sugira recortar; com `where`, `Nenhum nó desta visão tem esse
+   valor em "where".` quando vazio, seguido de `Fora dela, N nós têm o valor: container 2, business-process 1.` se
+   houver, e `A visão dinâmica ignora "where".` em `level:"dynamic"`. Nas tabelas, um ancestral que não tem o valor
+   leva `(moldura)` depois do nome.
 
 **Cartão do elemento** ("me fale de X"): nome, tipo, perfil C4, status, tecnologia, descrição; pai e filhos; relações
 de saída e de entrada agrupadas por tipo; propriedades; fontes (`sources`); as rodadas da página `<prefixo>/changelog` que citam o

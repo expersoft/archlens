@@ -64,7 +64,7 @@ test('texto sem ferramenta recebe lembrete', async () => {
 });
 
 const NINGUEM = { notation: 'c4', level: 'landscape', where: { owner: 'ninguém' } };
-const NO_VALUE = { kind: 'none', warning: 'Nenhum nó tem esse valor em "where".' };
+const NO_VALUE = { kind: 'none', warning: 'Nenhum nó desta visão tem esse valor em "where".' };
 
 test('tools mode: an empty where ends in one round with the answer', async () => {
   const { result, metrics } = await run([turn([['show_view', { spec: NINGUEM }]])]);
@@ -74,7 +74,7 @@ test('tools mode: an empty where ends in one round with the answer', async () =>
 
 test('tools mode: try_view then show_view on an empty where', async () => {
   const { result, metrics, provider } = await run([turn([['try_view', { spec: NINGUEM }]]), turn([['show_view', { spec: NINGUEM }]])]);
-  assert.ok(provider.seen[1].input.results[0].content.includes('nenhum nó tem esse valor'));
+  assert.ok(provider.seen[1].input.results[0].content.includes('Nenhum nó desta visão tem esse valor'));
   assert.deepEqual(result, NO_VALUE);
   assert.equal(metrics.rounds, 2);
 });

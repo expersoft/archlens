@@ -97,6 +97,7 @@ test('apply grava, roda o build e devolve o relatório', () => withPlan(async (u
   assert.deepEqual(out.entry.added, ['sistema-novo']);
   assert.equal(out.doc, 'ARCHITECTURE.md');
   assert.equal(out.notesDraftNeeded, true);
+  assert.deepEqual(out.preserved, []);
   assert.equal(typeof out.build.available, 'boolean');
   assert.equal(typeof out.build.problems, 'number');
   assert.ok(Array.isArray(out.build.results));
@@ -320,6 +321,18 @@ const setDoc = (dir, text) => {
 const docOf = dir => readFileSync(pageOf(dir), 'utf8').split(END)[1].trim();
 const withVault = (fn, setup) => { const copy = vaultCopy(); setDoc(copy.dir, setup ?? ''); return withPlan(fn, { copy }); };
 const answered = (plan, resolution) => ({ ...plan, items: plan.items.map(i => (i.kind === 'doc' && i.class === 'conflict' ? { ...i, resolution } : i)) });
+
+test('remover um nó com texto: a resposta diz para onde o texto foi', () => withVault(async (url, dir) => {
+  const page = join(dir, 'application-component', 'loja.pedidos.repo.md');
+  writeFileSync(page, `${readFileSync(page, 'utf8').trimEnd()}\n\nTexto do repositório.\n`);
+  const { draft } = await opened(url, { 'archlens-delta': '1.0', source: { kind: 'prompt', ref: 'teste' }, ops: [{ op: 'remove', id: 'loja.pedidos.repo' }] });
+  const reviewed = { ...draft, plan: { ...draft.plan, items: draft.plan.items.map(i => (i.resolution === null ? { ...i, resolution: 'yes' } : i)) } };
+  const { opsHash } = await (await post(url, 'plan/preview', { draft: reviewed })).json();
+  assert.ok(opsHash, 'plano final com a resposta');
+  const out = await withoutChromium(async () => (await post(url, 'plan/apply', { draft: reviewed, confirm: opsHash })).json());
+  assert.deepEqual(out.preserved, ['notes/removidos/application-component/loja.pedidos.repo.md']);
+  assert.match(readFileSync(join(dir, out.preserved[0]), 'utf8'), /Texto do repositório\./);
+}));
 
 test('editar o markdown durante a revisão: 409 E_GUI_PLAN_CHANGED e texto preservado', () => withVault(async (url, dir) => {
   const { draft } = await opened(url, docDelta('Texto novo da API.'));

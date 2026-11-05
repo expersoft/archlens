@@ -5,7 +5,8 @@ import { normalizeModel } from '../scripts/lib/model.mjs';
 import { resolveView } from '../scripts/lib/query.mjs';
 import { viewAnswer, formatViewAnswer } from '../scripts/lib/query-md.mjs';
 import { buildView } from '../scripts/lib/view-build.mjs';
-import { whereSpec, matchesWhere, cutByWhere } from '../scripts/lib/query-where.mjs';
+import { renderViews } from '../scripts/lib/build.mjs';
+import { whereSpec, matchesWhere, cutByWhere, whereEmptyNote } from '../scripts/lib/query-where.mjs';
 import { asBase } from './helpers.mjs';
 
 const PROPERTIES = {
@@ -24,11 +25,12 @@ function withProperties(elements, properties) {
   }
 }
 
-function shop(extra = {}) {
+function shopRaw(extra = {}) {
   const raw = JSON.parse(readFileSync(new URL('fixtures/shop.json', import.meta.url), 'utf8'));
   withProperties(raw.model.elements, { ...PROPERTIES, ...extra });
-  return normalizeModel(asBase(raw));
+  return asBase(raw);
 }
+const shop = extra => normalizeModel(shopRaw(extra));
 
 const ids = view => view.nodes.map(n => n.id).sort();
 const CHECKOUT = { squad: 'Checkout' };
@@ -90,7 +92,7 @@ test('o foco recorta os resultados', () => {
   const view = resolveView(shop(), spec);
   assert.deepEqual(view.nodes, []);
   assert.deepEqual(view.whereResults, []);
-  assert.match(formatViewAnswer(viewAnswer(shop(), spec)), /Nenhum nó tem/);
+  assert.match(formatViewAnswer(viewAnswer(shop(), spec)), /Nenhum nó desta visão tem esse valor em "where"\. Fora dela, 4 nós têm o valor: /);
 });
 
 test('include vence o filtro', () => {
@@ -162,7 +164,22 @@ test('sem where nada muda na visão', () => {
 
 test('resultado vazio não é erro', () => {
   const spec = { notation: 'c4', level: 'landscape', where: { squad: 'Inexistente' } };
-  assert.match(formatViewAnswer(viewAnswer(shop(), spec)), /Nenhum nó tem/);
+  assert.deepEqual(viewAnswer(shop(), spec).notes, ['Nenhum nó desta visão tem esse valor em "where".']);
+});
+
+test('sem resultado na visão, a resposta conta os nós com o valor fora dela, por nível ou tipo', () => {
+  const spec = { notation: 'c4', level: 'landscape', where: { squad: 'Vitrine' } };
+  assert.deepEqual(viewAnswer(shop(), spec).notes, ['Nenhum nó desta visão tem esse valor em "where". Fora dela, 2 nós têm o valor: component 1, application-service 1.']);
+  assert.equal(whereEmptyNote(shop(), { ...spec, where: { squad: 'Checkout', canais: 'web' } }), 'Nenhum nó desta visão tem esse valor em "where". Fora dela, 1 nó tem o valor: softwareSystem 1.');
+  assert.match(whereEmptyNote(shop(), { notation: 'archimate', viewpoint: 'business', where: { squad: 'Vitrine' } }), /2 nós têm o valor: application-component 1, application-service 1\.$/);
+});
+
+test('visão sem resultado explica o vazio com a mesma frase no buildView e no build', async () => {
+  const spec = { key: 'v', notation: 'c4', level: 'landscape', where: { squad: 'Vitrine' } };
+  const said = `visão "v": ${whereEmptyNote(shop(), spec)}`;
+  await assert.rejects(buildView(shop(), spec), e => e.code === 'E_VIEW_EMPTY' && e.message === said);
+  await assert.rejects(renderViews(shopRaw(), [spec]), e => e.code === 'E_BUILD_EMPTY' && e.warnings.includes(`  aviso: ${said}`));
+  await assert.rejects(buildView(shop(), { key: 'p', notation: 'c4', level: 'landscape', status: ['retired'] }), /ficou vazia — revise scope\/anchor\/filtros/);
 });
 
 test('normaliza valor simples e lista', () => {

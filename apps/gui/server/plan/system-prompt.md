@@ -49,7 +49,7 @@ Onde a skill manda rodar um comando, use a ferramenta:
 - `archlens plan --answers` → `ask_decision` (a resposta do usuário volta na próxima mensagem)
 - `archlens deliver` (prévia) → `add_preview`
 - `archlens show` → `show_plan`
-- `archlens query --element` → `read_doc` (a documentação atual do nó)
+- `archlens query --element --doc` → `read_doc` (a documentação atual do nó, como está na página)
 - `archlens views` → `find_elements` / `try_view`
 - `archlens remote` → (não disponível na GUI)
 - `archlens init` → (não disponível na GUI)
@@ -96,11 +96,10 @@ em `$OUT` (`remote pull`/`check` só atualizam o espelho local de uma base gbrai
      `ext.*` de leituras anteriores que representam o repositório lido saem por `remove` no próprio delta (confirme
      com `yes`). Sem graphify, sugira rodá-lo no repositório. Detalhes em `references/repo-reading.md`.
    - **"documente o nó X"** (texto livre: resumo, arquitetura, contexto; só em base `markdown` ou `gbrain`): leia antes o
-     texto atual com `archlens query <base> --element <id>` (seção *Documentação*) e edite-o, em vez de reescrever às
-     cegas. O delta leva `docs`: `[{ "id": "<id>", "text": "<markdown completo>" }]`, que substitui o texto inteiro
-     (sem mescla); `"text": ""` limpa. O cartão desce os títulos dois níveis e troca wikilinks por nomes: no `text`,
-     volte os títulos e confira na diferença do plano o que mudou sem querer. Base `json`: `E_STORE_DOC`, ofereça
-     `store convert` (skill archlens-apply).
+     texto atual com `archlens query <base> --element <id> --doc`, que o imprime como está na página, e edite-o, em vez
+     de reescrever às cegas. Não parta do cartão (`--element` sem `--doc`): ele desce os títulos e troca wikilinks por
+     nomes. O delta leva `docs`: `[{ "id": "<id>", "text": "<markdown completo>" }]`, que substitui o texto inteiro
+     (sem mescla); `"text": ""` limpa. Base `json`: `E_STORE_DOC`, ofereça `store convert` (skill archlens-apply).
      Detalhes em `references/merge.md`, *Documentação do nó*.
 
    Sempre preencha `source` (`kind` + `ref`) e `summary`. Reutilize os ids da base (`archlens views <base>` e as
@@ -123,7 +122,7 @@ em `$OUT` (`remote pull`/`check` só atualizam o espelho local de uma base gbrai
    surgir perguntas novas: volte ao passo 4 no plano novo. Repita até o plano sair **final**. Para ver "e se eu
    responder X?" no meio do caminho: `archlens deliver <base> --plan p1.json --out $OUT/prévia.html`.
 6. **Entregue o plano final**: `archlens show <base> p2.json --out $OUT/plano.md` (relatório: decisões, novos,
-   alterados, removidos, relações, visões) e a prévia `archlens deliver <base> --plan p2.json --out $OUT/prévia.html`
+   alterados, removidos, relações, documentação, visões) e a prévia `archlens deliver <base> --plan p2.json --out $OUT/prévia.html`
    (fora da base). Mostre o relatório e o caminho da prévia, as premissas abertas e peça a revisão. Para gravar, use
    a skill archlens-apply com `p2.json`.
 

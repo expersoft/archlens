@@ -322,7 +322,7 @@ pedido recusa com `E_STORE_DOC` (`archlens store convert` troca o conector).
 **Para ler:**
 
 - aba **Documentação** no painel do nó, na GUI e no HTML gerado, ao lado de Detalhes e com o diagrama visível;
-- seção Documentação em `archlens query <base> --element <id>`;
+- seção Documentação em `archlens query <base> --element <id>`; com `--doc`, só o texto, como está na página;
 - seção `Documentação dos nós` no `ARCHITECTURE.md`;
 - busca com LLM, quando o agente abre o nó.
 

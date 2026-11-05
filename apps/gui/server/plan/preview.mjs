@@ -5,6 +5,7 @@ import { preview as previewOf, show } from '../../../../scripts/lib/api.mjs';
 import { previewSummary, annotateView } from '../../../../scripts/lib/preview.mjs';
 import { normalizeModel } from '../../../../scripts/lib/model.mjs';
 import { resolveView } from '../../../../scripts/lib/query.mjs';
+import { emptyViewMessage } from '../../../../scripts/lib/query-where.mjs';
 import { layoutView } from '../../../../scripts/lib/layout.mjs';
 import { renderHtml, viewData } from '../../../../scripts/lib/render.mjs';
 import { lineDiff } from '../../../../scripts/lib/node-doc.mjs';
@@ -140,7 +141,7 @@ function deltaList(model, p) {
 
 async function drawView(model, p, spec, kind) {
   const view = resolveView(model, spec, { keep: p.keep });
-  if (!view.nodes.length) throw planError(`visão "${spec.key ?? 'view'}" ficou vazia — revise scope/anchor/filtros`, 'E_VIEW_EMPTY');
+  if (!view.nodes.length) throw planError(emptyViewMessage(model, { key: 'view', ...spec }, view), 'E_VIEW_EMPTY');
   const laid = await layoutView(annotateView(view, p));
   const html = renderHtml({ title: model.name, subtitle: 'archlens · prévia', views: [laid], embed: true });
   return { key: laid.key, title: laid.title, html, viewData: viewData(laid), kind, spec };

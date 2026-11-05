@@ -1,8 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, mkdtempSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdtempSync, cpSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { query } from '../scripts/lib/api.mjs';
@@ -194,4 +194,51 @@ test('a rodada que só mudou a documentação aparece no cartão do nó', () => 
   assert.deepEqual(rounds.at(-1), { id: round.id, date: round.date, summary: round.summary, how: ['documentação'] });
   assert.ok(query(doc, { element: 'loja.pedidos' }).includes('- 2026-11-04-01 (2026-11-04): texto da API [documentação]'));
   assert.ok(!query(doc, { element: 'loja.web', format: 'json' }).rounds.some(r => r.id === round.id));
+});
+
+// --- query --element --doc: the text as the page holds it, the only copy a whole-text edit can start from. ---
+const VAULT = fileURLToPath(new URL('../examples/loja-online-vault/architecture', import.meta.url));
+const DOC_TEXT = '# Título\n\n## Seção\n\nLiga em [[application-component/gateway|Gateway]] e [[bp-checkout]].\n\n```bash\nif [[ -f x ]]; then\n```';
+function vaultCopy(id, text) {
+  const dir = join(mkdtempSync(join(tmpdir(), 'archlens-qdoc-')), 'architecture');
+  cpSync(VAULT, dir, { recursive: true });
+  const page = join(dir, 'application-component', `${id}.md`);
+  const t = readFileSync(page, 'utf8');
+  const end = '<!-- archlens:end -->';
+  writeFileSync(page, `${t.slice(0, t.indexOf(end) + end.length)}\n\n${text}\n`);
+  return dir;
+}
+
+test('query --element --doc prints the text as it is, headings and wikilinks included', () => {
+  const r = run(['query', vaultCopy('loja.pedidos', DOC_TEXT), '--element', 'loja.pedidos', '--doc']);
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.stdout, `${DOC_TEXT}\n`);
+});
+
+test('query --element --doc writes the text to --out', () => {
+  const dir = vaultCopy('loja.pedidos', DOC_TEXT);
+  const out = join(dirname(dir), 'doc.md');
+  assert.equal(run(['query', dir, '--element', 'loja.pedidos', '--doc', '--out', out]).status, 0);
+  assert.equal(readFileSync(out, 'utf8'), `${DOC_TEXT}\n`);
+});
+
+test('query --element --doc says so on a node without text, with nothing on stdout', () => {
+  const dir = vaultCopy('loja.pedidos', '');
+  const out = join(dirname(dir), 'doc.md');
+  const r = run(['query', dir, '--element', 'loja.pedidos', '--doc', '--out', out]);
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.stdout, '');
+  assert.match(r.stderr, /"loja\.pedidos" não tem documentação/);
+  assert.ok(!existsSync(out));
+});
+
+test('query --element --doc refuses a base without documentation, an unknown id and bad combinations', () => {
+  const json = run(['query', BASE, '--element', 'loja.pedidos', '--doc']);
+  assert.equal(json.status, 1);
+  assert.match(json.stderr, /E_STORE_DOC.*store convert/);
+  const unknown = run(['query', VAULT, '--element', 'nao.existe', '--doc']);
+  assert.equal(unknown.status, 1);
+  assert.match(unknown.stderr, /E_UNKNOWN_REF/);
+  assert.match(run(['query', VAULT, '--view', 'x', '--doc']).stderr, /--doc.*--element/);
+  assert.match(run(['query', VAULT, '--element', 'loja.pedidos', '--doc', '--format', 'json']).stderr, /--doc.*--format/);
 });

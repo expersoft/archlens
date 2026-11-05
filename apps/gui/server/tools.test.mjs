@@ -37,8 +37,21 @@ test('try_view answers an empty where without failing', async () => {
   try {
     const r = await runTool(ctx, 'try_view', { spec: { notation: 'c4', level: 'landscape', where: { owner: 'ninguém' } } });
     assert.ok(r.ok, r.content);
-    assert.ok(r.content.includes('nenhum nó tem esse valor'));
+    assert.ok(r.content.includes('Nenhum nó desta visão tem esse valor'));
     assert.equal(r.best, undefined);
+  } finally { registry.close(); }
+});
+
+test('where sem resultado na visão diz o que há fora dela', async () => {
+  const { registry, ctx } = vaultWith('');
+  try {
+    const spec = { notation: 'c4', level: 'landscape', where: { squad: 'Checkout' } };
+    const tried = await runTool(ctx, 'try_view', { spec });
+    assert.ok(tried.ok, tried.content);
+    assert.match(tried.content, /Fora dela, 3 nós têm o valor: /);
+    const out = finalize(ctx, 'show_view', { spec });
+    assert.equal(out.result.kind, 'none');
+    assert.match(out.result.warning, /^Nenhum nó desta visão tem esse valor em "where"\. Fora dela, 3 nós têm o valor: /);
   } finally { registry.close(); }
 });
 
@@ -59,7 +72,7 @@ test('show_view ends an empty where with the answer', () => {
   const { registry, ctx } = open();
   try {
     const out = finalize(ctx, 'show_view', { spec: { notation: 'c4', level: 'landscape', where: { owner: 'ninguém' } } });
-    assert.deepEqual(out, { ok: true, result: { kind: 'none', warning: 'Nenhum nó tem esse valor em "where".' } });
+    assert.deepEqual(out, { ok: true, result: { kind: 'none', warning: 'Nenhum nó desta visão tem esse valor em "where".' } });
   } finally { registry.close(); }
 });
 

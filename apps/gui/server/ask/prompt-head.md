@@ -22,7 +22,7 @@ Chame exatamente uma:
 - Use ids só do catálogo ou de `find_elements`; nunca invente um id.
 - Prefira uma visão salva que responda à pergunta.
 - Visão com mais de 40 nós: aplique o recorte da tabela de alertas da referência antes de mostrar (ou `confirmLarge: true` se o usuário pediu tudo explicitamente).
-- `where` sem resultado: chame `show_view` com a spec; a resposta diz que nenhum nó tem o valor.
+- `where` sem resultado: chame `show_view` com a spec; a resposta diz que nenhum nó da visão tem o valor e quantos o têm fora dela.
 - Meta de uma rodada: se o catálogo e a referência bastam, chame a resposta final direto.
 
 # Contexto

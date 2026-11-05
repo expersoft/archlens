@@ -178,6 +178,18 @@ test('addSources deduplicates by kind+ref+path and migrates a legacy source stri
   assert.equal(addSources(el, []), 0);
 });
 
+test('validate reports a saved view whose where cannot be read', () => {
+  const r = raw();
+  const views = r.views.length;
+  r.views.push({ key: 'w1', notation: 'c4', level: 'landscape', where: 'squad' });
+  r.views.push({ key: 'w2', notation: 'c4', level: 'landscape', where: { squad: [] } });
+  r.views.push({ key: 'w3', notation: 'c4', level: 'landscape', where: { squad: 'Checkout' } });
+  const found = validateModel(r).errors.filter(e => e.code === 'E_VIEW_WHERE');
+  assert.deepEqual(found.map(e => e.path), [`views[${views}].where`, `views[${views + 1}].where`]);
+  assert.match(found[0].message, /"w1"/);
+  assert.ok(found[0].hint);
+});
+
 test('validate reports a saved view whose status is not a list of known statuses', () => {
   const r = raw();
   r.views.push({ key: 's1', notation: 'c4', level: 'landscape', status: 'planned' });

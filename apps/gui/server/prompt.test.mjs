@@ -56,7 +56,7 @@ test('planning head carries the refusal, external content rule, secrecy and appl
 
 test('planning head sends the agent to read_doc before writing a documentation', () => {
   const head = planHead();
-  assert.match(head, /`archlens query --element` → `read_doc`/);
+  assert.match(head, /`archlens query --element --doc` → `read_doc`/);
   assert.match(head, /`read_doc`[^\n]*em vez de reescrever/);
 });
 

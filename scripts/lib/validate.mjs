@@ -1,6 +1,7 @@
 // Model validation: errors block rendering, warnings are advisory. Codes are stable.
 import { normalizeModel } from './model.mjs';
 import { supportDirection, STATUSES } from './registry.mjs';
+import { whereSpec } from './query-where.mjs';
 
 export function validateModel(raw) {
   const model = normalizeModel(raw);
@@ -48,6 +49,9 @@ export function validateModel(raw) {
     if (v.status !== undefined && (!Array.isArray(v.status) || v.status.some(s => !STATUSES.includes(s)))) {
       errors.push({ code: 'E_VIEW_STATUS', message: `visão "${v.key}" tem "status" inválido: ${JSON.stringify(v.status)}`, path: `views[${i}].status`,
         hint: `use uma lista com ${STATUSES.join(' | ')}, ex.: ["planned","active"]` });
+    }
+    try { whereSpec(v); } catch (e) {
+      errors.push({ code: e.code, message: `visão "${v.key}" tem "where" inválido: ${JSON.stringify(v.where)}`, path: `views[${i}].where`, hint: e.hint });
     }
     const shown = Array.isArray(v.status) ? v.status : STATUSES.filter(s => s !== 'retired');
     for (const gid of Array.isArray(v.groups?.only) ? v.groups.only : []) {

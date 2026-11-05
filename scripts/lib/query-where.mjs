@@ -29,6 +29,29 @@ export function matchesWhere(el, where) {
   });
 }
 
+/**
+ * The answer for a view with no node matching its `where`. It speaks of the view only: the model may have the value
+ * elsewhere, as containers in a landscape, and then it says how many and at which C4 level or type.
+ */
+export function whereEmptyNote(model, spec) {
+  const where = whereSpec(spec);
+  const count = new Map();
+  for (const el of model.elements.values()) {
+    if (!matchesWhere(el, where)) continue;
+    const label = (spec.notation === 'c4' ? el.c4?.kind : null) ?? el.type;
+    count.set(label, (count.get(label) ?? 0) + 1);
+  }
+  const total = [...count.values()].reduce((a, b) => a + b, 0);
+  const note = 'Nenhum nó desta visão tem esse valor em "where".';
+  if (!total) return note;
+  return `${note} Fora dela, ${total === 1 ? '1 nó tem' : `${total} nós têm`} o valor: ${[...count].map(([k, n]) => `${k} ${n}`).join(', ')}.`;
+}
+
+/** What to say about a resolved view with no nodes. */
+export const emptyViewMessage = (model, spec, view) => (view.whereResults?.length === 0
+  ? `visão "${spec.key}": ${whereEmptyNote(model, spec)}`
+  : `visão "${spec.key}" ficou vazia — revise scope/anchor/filtros`);
+
 /** The cut of `where` over `nodeIds`: `results` match it or are named in `include`; `kept` adds their ancestors in `nodeIds`. */
 export function cutByWhere(model, where, nodeIds, { include = [] } = {}) {
   const results = new Set(include.filter(id => nodeIds.has(id)));

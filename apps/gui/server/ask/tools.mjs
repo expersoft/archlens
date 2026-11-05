@@ -1,5 +1,6 @@
 // The tools the search agent can call. Query tools return text for the model; final tools end the search.
 import { resolveView } from '../../../../scripts/lib/query.mjs';
+import { whereEmptyNote } from '../../../../scripts/lib/query-where.mjs';
 import { layoutView } from '../../../../scripts/lib/layout.mjs';
 import { viewAlerts } from '../../../../scripts/lib/view-build.mjs';
 import { query } from '../../../../scripts/lib/api.mjs';
@@ -97,7 +98,7 @@ export async function tryViewTool(ctx, { spec }) {
   const full = withKey(spec);
   let view;
   try { view = resolveView(ctx.model, full); } catch (e) { return fail(e.message); }
-  if (view.whereResults?.length === 0) return { ok: true, content: 'nenhum nó tem esse valor; encerre com show_view desta spec' };
+  if (view.whereResults?.length === 0) return { ok: true, content: `${whereEmptyNote(ctx.model, full)} Encerre com show_view desta spec.` };
   if (!view.nodes.length) return fail('a visão ficou vazia: nenhum elemento atende à spec; ajuste anchor, scope, layers ou status');
   const results = view.nodes.filter(n => !n.whereFrame);
   const frames = view.nodes.filter(n => n.whereFrame);
@@ -142,7 +143,7 @@ function showView(ctx, { spec, view, title, answer, confirmLarge }) {
   else return fail('informe "view" ou "spec"');
   let resolved;
   try { resolved = resolveView(ctx.model, picked); } catch (e) { return fail(e.message); }
-  if (resolved.whereResults?.length === 0) return { ok: true, result: { kind: 'none', warning: 'Nenhum nó tem esse valor em "where".' } };
+  if (resolved.whereResults?.length === 0) return { ok: true, result: { kind: 'none', warning: whereEmptyNote(ctx.model, picked) } };
   const n = resolved.nodes.length;
   if (!n) return fail('a visão ficou vazia: nenhum elemento atende à spec; ajuste anchor, scope, layers ou status');
   if (n > LARGE && !confirmLarge) {

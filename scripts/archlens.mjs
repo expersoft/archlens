@@ -64,6 +64,7 @@ Consultar (nunca grava a base)
   views     <base>                           lista as visões definidas e sugere novas
   query     <base> --view k | --spec J [--format md|json] [--out f]   responde em markdown (padrão) ou JSON: elementos por camada/nível, relações, matriz de impacto
   query     <base> --element id [--depth N] [--via t1,t2] [--format md|json]   cartão do elemento: pai, filhos, relações, fontes, rodadas; --depth N inclui "Em volta"
+  query     <base> --element id --doc [--out f]   documentação do nó como está na página, para editar (só markdown e gbrain)
   resolve   <base> --view k | --spec J       imprime o view IR (nós/arestas) de uma visão
   render    <base> --out f.html [seleção]    gera o HTML animado
   deliver   <base> --out f.html [seleção]    render + screenshots 1920×1080/1280×720 + checagens
@@ -305,7 +306,7 @@ function afterApply(store, res) {
   const doc = res.doc ?? writeDoc(store, saved);
   const e = res.entry;
   const st = Object.keys(e.status).length;
-  console.log(`✓ ${store.describe()} e ${relPath(doc)} (revisão ${saved.raw.changelog.length}, rodada ${e.id}): +${e.added.length} ~${e.changed.length} −${e.removed.length}${st ? `, ${st} mudança(s) de status` : ''}`);
+  console.log(`✓ ${store.describe()} e ${relPath(doc)} (revisão ${saved.raw.changelog.length}, rodada ${e.id}): +${e.added.length} ~${e.changed.length} −${e.removed.length}${e.docs?.length ? ` doc ${e.docs.length}` : ''}${st ? `, ${st} mudança(s) de status` : ''}`);
   for (const rel of res.preserved) console.log(`  texto da página removida guardado em ${relPath(join(store.locator.path, rel))}`);
   console.log(`  commit sugerido: git add ${relPath(store.locator.path)} ${relPath(doc)} && git commit -m ${JSON.stringify(`docs(arquitetura): ${e.summary}`)}`);
 }
@@ -501,6 +502,8 @@ async function main() {
     }
     case 'query': {
       const format = args.format === 'json' ? 'json' : args.format && args.format !== 'md' ? fail('--format aceita md ou json') : 'md';
+      if (args.doc && typeof args.element !== 'string') fail('--doc lê a documentação de um nó: use com --element <id>');
+      if (args.doc && args.format) fail('--doc imprime o texto como está na página: não use com --format');
       let text;
       try {
         const spec = loadSpecs(args.spec);
@@ -508,9 +511,10 @@ async function main() {
         if (!Number.isInteger(depth) || depth < 1) fail('--depth aceita um número inteiro (1 ou mais)');
         const via = typeof args.via === 'string' ? args.via.split(',').map(t => t.trim()).filter(Boolean) : undefined;
         const res = queryBase(store, { view: args.view === true ? undefined : args.view, spec: spec.length ? spec : undefined,
-          element: typeof args.element === 'string' ? args.element : undefined, depth, via, format });
-        text = format === 'json' ? JSON.stringify(res, null, 2) + '\n' : res;
+          element: typeof args.element === 'string' ? args.element : undefined, depth, via, format, doc: !!args.doc });
+        text = format === 'json' ? JSON.stringify(res, null, 2) + '\n' : args.doc && res ? `${res}\n` : res;
       } catch (e) { fail(e.message, 1); }
+      if (args.doc && !text) { console.warn(`  "${args.element}" não tem documentação`); break; }
       if (args.out && args.out !== true) { atomicWrite(args.out, text); console.log(`✓ ${args.out}`); } else process.stdout.write(text);
       break;
     }

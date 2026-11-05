@@ -65,3 +65,18 @@ test('wikilink aparece legível', () => {
 test('demoteHeadings respeita cerca de código', () => {
   assert.equal(demoteHeadings('# A\n```\n# nao\n```\n## B\n###### C', 3), '#### A\n```\n# nao\n```\n##### B\n###### C');
 });
+
+test('plainWikilinks leaves code alone', () => {
+  const bash = '```bash\nif [[ -f /etc/app/conf ]]; then\n  echo sim\nfi\n```';
+  assert.equal(plainWikilinks(bash), bash);
+  const tilde = '~~~python\ncols = df[["a","b"]]\n~~~';
+  assert.equal(plainWikilinks(tilde), tilde);
+  assert.equal(plainWikilinks('Use `df[["a","b"]]` e ``x ` [[y]]`` com [[a/b|Nome]].'), 'Use `df[["a","b"]]` e ``x ` [[y]]`` com Nome.');
+  assert.equal(plainWikilinks('Antes [[a/b]]\n```\n[[c]]\n```\nDepois [[d|D]]'), 'Antes b\n```\n[[c]]\n```\nDepois D');
+  assert.equal(plainWikilinks('Crase solta ` e [[a/b|Nome]]'), 'Crase solta ` e Nome');
+});
+
+test('docToHtml keeps the wikilink shape inside code', () => {
+  assert.match(docToHtml('```\nif [[ -f /etc/app/conf ]]; then\n```'), /if \[\[ -f \/etc\/app\/conf \]\]; then/);
+  assert.match(docToHtml('`df[["a"]]`'), /df\[\[&quot;a&quot;\]\]/);
+});

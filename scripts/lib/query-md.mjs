@@ -4,6 +4,7 @@ import { resolveView } from './query.mjs';
 import { explainEdge } from './explain.mjs';
 import { LAYER_ORDER, LAYER_LABELS } from './registry.mjs';
 import { plainWikilinks, demoteHeadings } from './node-doc.mjs';
+import { whereEmptyNote } from './query-where.mjs';
 
 const C4_SECTIONS = [['person', 'Pessoas'], ['softwareSystem', 'Sistemas de software'], ['container', 'Contêineres'], ['component', 'Componentes']];
 const MAX_NODES = 40;
@@ -27,7 +28,7 @@ export function viewAnswer(model, spec, opts) {
   if (view.nodes.length > MAX_NODES) {
     notes.push(`A visão tem mais de ${MAX_NODES} nós (${view.nodes.length}); considere recortar com focus/depth, collapse ou layers.`);
   }
-  if (view.whereResults?.length === 0) notes.push('Nenhum nó tem esse valor em "where".');
+  if (view.whereResults?.length === 0) notes.push(whereEmptyNote(model, spec));
   if (view.whereIgnored) notes.push('A visão dinâmica ignora "where".');
   return {
     title: view.title,

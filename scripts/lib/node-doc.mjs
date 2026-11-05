@@ -46,11 +46,8 @@ export function lineDiff(before, after) {
   return out;
 }
 
-/** `[[a/b|Nome]]` reads as `Nome`, `[[a/b]]` as `b`: outside Obsidian a wikilink is only a name. */
-export const plainWikilinks = text => text.replace(/\[\[([^\]|\n]*?)(?:\|([^\]\n]*))?\]\]/g, (_, target, label) => label ?? target.split('/').pop());
-
-/** Pushes the headings of `text` `by` levels down (up to ######), leaving fenced code alone. */
-export function demoteHeadings(text, by) {
+/** `text` with `fn` applied to each line outside fenced code. */
+function mapOutsideFences(text, fn) {
   let fence = null;
   return text.split('\n').map(line => {
     const f = /^ {0,3}(`{3,}|~{3,})/.exec(line);
@@ -59,11 +56,22 @@ export function demoteHeadings(text, by) {
       else if (f[1][0] === fence) fence = null;
       return line;
     }
-    if (fence) return line;
-    const h = /^( {0,3})(#{1,6})(?=\s|$)/.exec(line);
-    return h ? `${h[1]}${'#'.repeat(Math.min(6, h[2].length + by))}${line.slice(h[0].length)}` : line;
+    return fence ? line : fn(line);
   }).join('\n');
 }
+
+// An inline code span (kept as it is), or a wikilink.
+const CODE_OR_WIKILINK = /(?<!`)(`+)(?!`).*?(?<!`)\1(?!`)|\[\[([^\]|\n]*?)(?:\|([^\]\n]*))?\]\]/g;
+
+/** `[[a/b|Nome]]` reads as `Nome`, `[[a/b]]` as `b`: outside Obsidian a wikilink is only a name. Code keeps its brackets (`[[ -f x ]]`). */
+export const plainWikilinks = text => mapOutsideFences(text, line => line.replace(CODE_OR_WIKILINK,
+  (match, ticks, target, label) => (ticks ? match : label ?? target.split('/').pop())));
+
+/** Pushes the headings of `text` `by` levels down (up to ######), leaving fenced code alone. */
+export const demoteHeadings = (text, by) => mapOutsideFences(text, line => {
+  const h = /^( {0,3})(#{1,6})(?=\s|$)/.exec(line);
+  return h ? `${h[1]}${'#'.repeat(Math.min(6, h[2].length + by))}${line.slice(h[0].length)}` : line;
+});
 
 let md;
 const renderer = () => {

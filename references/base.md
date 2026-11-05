@@ -133,8 +133,8 @@ depois passa esse arquivo ao comando que a CLI indicar. Resposta que não corres
   `gbrain sweep` (ou use o modo git, cujo sync as lê).
 
 **Edição direta no gbrain**: possível, para escrever a documentação do nó (seção abaixo), mas não recomendada. Só o
-texto livre depois de `<!-- archlens:end -->` de cada página é preservado; o resto é regravado pelo archlens. Toda página termina com a marca
-`<!-- timeline -->` do gbrain (impede o gbrain de mover seções `## Timeline`/`## History`); não a apague. Uma linha
+texto livre depois de `<!-- archlens:end -->` e antes da marca `<!-- timeline -->` de cada página é preservado; o resto é regravado pelo archlens. Toda página termina com essa marca
+do gbrain (impede o gbrain de mover seções `## Timeline`/`## History`); não a apague. Uma linha
 `<!-- timeline -->` literal, ou uma linha `---` seguida de `## Timeline`, dentro de uma descrição ou do texto livre é
 normalizada pelo gbrain.
 
@@ -173,7 +173,7 @@ elemento, então só existe em base `markdown` ou `gbrain`.
 - **Conflito:** um plano que escreve a documentação de um nó cujo texto mudou depois da revisão é recusado com
   `E_STORE_CONFLICT`, sem gravar nada. Planos que só mexem em campos ou relações preservam o texto.
 - **Leitura:** aba Documentação na GUI e no HTML gerado, seção Documentação em `archlens query <base> --element <id>`
-  e seção `Documentação dos nós` no `ARCHITECTURE.md`. A busca por nome não olha dentro do texto. Detalhes em
+  (`--doc` imprime só o texto, como está na página) e seção `Documentação dos nós` no `ARCHITECTURE.md`. A busca por nome não olha dentro do texto. Detalhes em
   `references/knowledge-doc.md`.
 
 ## Erros comuns (todas as skills)

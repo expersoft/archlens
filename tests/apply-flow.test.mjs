@@ -167,3 +167,17 @@ test('CLI e funções dão o mesmo resultado', () => {
   assert.deepEqual(snapshot(viaCore), snapshot(viaCli));
   assert.equal(readFileSync(join(viaCore, 'ARCHITECTURE.md'), 'utf8'), readFileSync(join(viaCli, 'ARCHITECTURE.md'), 'utf8'));
 });
+
+test('apply de uma rodada só de documentação conta o texto na linha, no commit sugerido e no cartão', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'archlens-flow-'));
+  cpSync(fileURLToPath(new URL('../examples/loja-online-vault/architecture', import.meta.url)), join(dir, 'architecture'), { recursive: true });
+  cpSync(fileURLToPath(new URL('../examples/loja-online-vault/ARCHITECTURE.md', import.meta.url)), join(dir, 'ARCHITECTURE.md'));
+  const { summary, ...only } = { 'archlens-delta': '1.0', source: { kind: 'prompt', ref: 'rodada' }, summary: '', docs: [{ id: 'loja.web', text: 'Texto novo da loja.' }] };
+  writeFileSync(join(dir, 'd.json'), JSON.stringify(only));
+  assert.equal(run(['plan', 'architecture', 'd.json', '--out', 'p.json'], dir).status, 0);
+  const r = run(['apply', 'architecture', 'p.json'], dir);
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /: \+0 ~0 −0 doc 1\n/);
+  assert.match(r.stdout, /docs\(arquitetura\): \+0 ~0 −0 doc 1/);
+  assert.match(run(['query', 'architecture', '--element', 'loja.web'], dir).stdout, /: \+0 ~0 −0 doc 1 \[documentação\]/);
+});

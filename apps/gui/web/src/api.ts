@@ -222,6 +222,8 @@ export interface PlanApplyResult {
   /** The regenerated document; `{ error }` when the base was written but the document was not regenerated. */
   doc: string | { error: string } | null;
   build: { available: boolean; problems: number; results: QualityResult[]; reason?: string; error?: string; code?: string } | null;
+  /** Where the text of removed nodes went, relative to the base. */
+  preserved: string[];
   notesDraftNeeded: boolean;
 }
 /** Writes the confirmed plan; `confirm` is the opsHash the user was shown. */

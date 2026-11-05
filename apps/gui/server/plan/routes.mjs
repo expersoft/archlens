@@ -190,11 +190,11 @@ export function planRoutes({ registry, provider, config, telemetry, h }) {
       }
       return guiWrite(() => applyAndDocument(ctx.store, planned));
     });
-    if (!res.entry) return { entry: null, doc: null, build: null, notesDraftNeeded: false };
+    if (!res.entry) return { entry: null, doc: null, build: null, preserved: [], notesDraftNeeded: false };
     await registry.reload(b);
     // the base is written: a document that failed is reported, not thrown (the core's error names the machine's paths)
     const doc = res.docError ? { error: DOC_FAILED } : docName(ctx.store, res.doc);
-    return { entry: res.entry, doc, build: await registry.inTurn(b, () => rebuild(ctx.store)), notesDraftNeeded: true };
+    return { entry: res.entry, doc, build: await registry.inTurn(b, () => rebuild(ctx.store)), preserved: res.preserved, notesDraftNeeded: true };
   }
 
   async function notes(req, b) {

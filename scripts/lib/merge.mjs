@@ -746,7 +746,7 @@ function changelogEntry(ctx, date) {
   return {
     id: `${date}-${String(seq).padStart(2, '0')}`, date,
     ...(ctx.delta.source ? { source: ctx.delta.source } : {}),
-    summary: ctx.delta.summary ?? `+${added.length} ~${changed.size} −${removed.length}`,
+    summary: ctx.delta.summary ?? `+${added.length} ~${changed.size} −${removed.length}${docs.length ? ` doc ${docs.length}` : ''}`,
     added, changed: [...changed].filter(id => !added.includes(id)), status, removed, decisions, ...(docs.length ? { docs } : {}),
   };
 }

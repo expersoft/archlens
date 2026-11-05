@@ -48,7 +48,7 @@ Onde a skill manda rodar um comando, use a ferramenta:
 - `archlens plan --answers` → `ask_decision` (a resposta do usuário volta na próxima mensagem)
 - `archlens deliver` (prévia) → `add_preview`
 - `archlens show` → `show_plan`
-- `archlens query --element` → `read_doc` (a documentação atual do nó)
+- `archlens query --element --doc` → `read_doc` (a documentação atual do nó, como está na página)
 - `archlens views` → `find_elements` / `try_view`
 - `archlens remote` → (não disponível na GUI)
 - `archlens init` → (não disponível na GUI)

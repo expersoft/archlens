@@ -7,6 +7,7 @@ import { validateModel } from './validate.mjs';
 import { resolveView } from './query.mjs';
 import { layoutView } from './layout.mjs';
 import { viewAlerts } from './view-build.mjs';
+import { emptyViewMessage } from './query-where.mjs';
 import { renderHtml } from './render.mjs';
 import { suggestViews } from './suggest.mjs';
 import { annotateView } from './preview.mjs';
@@ -43,7 +44,7 @@ export async function renderViews(raw, specs, { title, preview, docs } = {}) {
       throw buildError('E_BUILD_VIEW', `visão "${spec.key}": ${e.message}`, { warnings });
     }
     if (preview) annotateView(view, preview);
-    if (!view.nodes.length) { warnings.push(`  aviso: visão "${spec.key}" ficou vazia — revise scope/anchor/filtros`); continue; }
+    if (!view.nodes.length) { warnings.push(`  aviso: ${emptyViewMessage(model, spec, view)}`); continue; }
     const l = await layoutView(view);
     if (l.layoutStyle) warnings.push(`  layout "${spec.key}": ${l.layoutStyle}${l.layoutAuto ? ` (auto; ${Object.entries(l.layoutScores).map(([k, q]) => `${k} ${q.score}`).join(', ')})` : ' (pedido na visão)'}`);
     for (const a of viewAlerts(view, l)) warnings.push(`  aviso: ${a}`);

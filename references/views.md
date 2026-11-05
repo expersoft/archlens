@@ -202,9 +202,11 @@ vira `bands-flow` com aviso no build. Com `nesting` aninhado, `bands` também vi
 - **`granularity`:** age antes de `where`. Em `impact` e `product-support`, cujo padrão é `container`, um sistema com o
   valor pode ficar de fora quando seus containers estão na visão; use `granularity: "system"` ou uma visão C4.
 - **Dinâmica** (`level: "dynamic"`): ignora `where`, porque os passos são autorais, e a resposta avisa.
-- **Resultado vazio:** não é erro. A consulta responde `Nenhum nó tem esse valor em "where".`; uma visão salva vazia
-  gera aviso no build e é pulada.
-- `E_VIEW_WHERE`: `where` que não é um objeto não vazio de texto, número, booleano ou lista desses.
+- **Resultado vazio:** não é erro. A consulta responde `Nenhum nó desta visão tem esse valor em "where".` e, se o modelo
+  tem o valor fora da visão, completa com quantos e em que nível C4 ou tipo: `Fora dela, 3 nós têm o valor: container 2,
+  business-process 1.` Uma visão salva vazia gera aviso com a mesma frase no build e é pulada.
+- `E_VIEW_WHERE`: `where` que não é um objeto não vazio de texto, número, booleano ou lista desses. Numa visão salva, o
+  `validate` e o `check` acusam e o plano sai bloqueado.
 
 ## Layout
 
@@ -242,11 +244,13 @@ bin/archlens query architecture/ --element loja.pedidos --depth 1               
 - relações: uma linha por aresta, com a frase da ajuda sobre relações (abaixo);
 - viewpoint `impact`: a matriz de dependência como tabela markdown;
 - visões com mais de 40 nós: nota no fim sugerindo recortar;
-- com `where`: ancestrais marcados com `(moldura)` e nota quando nenhum nó tem o valor ou a visão dinâmica o ignora.
+- com `where`: ancestrais marcados com `(moldura)` e nota quando nenhum nó da visão tem o valor ou a visão dinâmica o
+  ignora.
 
 **Cartão de elemento** (`--element id [--depth N] [--via t1,t2]`): nome, tipo, perfil C4, status, tecnologia,
-descrição, pai e filhos, relações de saída e de entrada agrupadas por tipo, propriedades, fontes (proveniência) e as
-rodadas do histórico que citam o id. Lê só o subgrafo em volta do elemento (padrão `depth: 1`); `--depth N` inclui os
+descrição, pai e filhos, relações de saída e de entrada agrupadas por tipo, propriedades, fontes (proveniência), as
+rodadas do histórico que citam o id e a Documentação do nó, quando há texto (títulos rebaixados, wikilinks como nomes;
+`--doc` imprime só o texto, como está na página). Lê só o subgrafo em volta do elemento (padrão `depth: 1`); `--depth N` inclui os
 vizinhos a N saltos numa seção "Em volta", e `--via` limita a travessia a esses tipos de relação. Id inexistente:
 `E_UNKNOWN_REF` com sugestões por nome e alias.
 

@@ -445,6 +445,12 @@ test('a delta view with a non-list status blocks the plan', () => {
   assert.ok(plan.errors.some(e => e.code === 'E_VIEW_STATUS'));
 });
 
+test('a delta view with a malformed where blocks the plan', () => {
+  const plan = planMerge(shop(), delta({}, { views: [{ key: 'squad', notation: 'c4', level: 'landscape', where: 'squad' }] }), TODAY);
+  assert.equal(plan.blocked, true);
+  assert.ok(plan.errors.some(e => e.code === 'E_VIEW_WHERE'));
+});
+
 test('a delta element with non-list aliases blocks the plan instead of matching letters', () => {
   const plan = planMerge(shop(), delta({ elements: [{ id: 'novo', type: 'c4:softwareSystem', name: 'Novo', aliases: 'loja' }] }), TODAY);
   assert.equal(plan.blocked, true);
@@ -843,6 +849,13 @@ test('docs: applyPlan devolve o estado final completo e registra só o que mudou
   assert.ok(res.entry.decisions.some(d => d.includes('documentação de a')));
   assert.ok(!res.entry.decisions.some(d => d.includes('novo')), 'a rodada não copia o texto');
   assert.deepEqual(docs, { a: 'velho', b: 'fica' }, 'não muda o que recebeu');
+});
+
+test('docs: o resumo padrão conta a documentação, e um resumo do delta continua valendo', () => {
+  const { summary, ...d } = docsDelta({ id: 'a', text: 'novo' }, { id: 'b', text: 'outro' });
+  const entryOf = delta => applyPlan(docBase(), planMerge(docBase(), delta, {}), { docs: {}, today: '2026-10-01' }).entry;
+  assert.equal(entryOf(d).summary, '+0 ~0 −0 doc 2');
+  assert.equal(entryOf({ ...d, summary: 'textos' }).summary, 'textos');
 });
 
 test('docs: limpar tira o id do estado final; manter não cria rodada, mas devolve o estado', () => {

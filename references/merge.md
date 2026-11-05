@@ -236,7 +236,8 @@ posições no delta).
 ### Documentação do nó
 
 `docs` escreve o texto livre do nó, o trecho depois do bloco do archlens na página. `text` substitui o trecho inteiro,
-sem mescla: leia antes o texto atual (`archlens query <base> --element <id>`) e mande o texto completo. Sem texto, `""`
+sem mescla: leia antes o texto atual com `archlens query <base> --element <id> --doc`, que o imprime como está na
+página (o cartão, sem `--doc`, desce os títulos e troca wikilinks por nomes), e mande o texto completo. Sem texto, `""`
 limpa. A comparação ignora espaços nas pontas.
 
 | Situação | Classe | Chave | Resposta |
