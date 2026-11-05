@@ -63,6 +63,28 @@ test('texto sem ferramenta recebe lembrete', async () => {
   assert.equal(result.kind, 'clarify');
 });
 
+const NINGUEM = { notation: 'c4', level: 'landscape', where: { owner: 'ninguém' } };
+const NO_VALUE = { kind: 'none', warning: 'Nenhum nó tem esse valor em "where".' };
+
+test('tools mode: an empty where ends in one round with the answer', async () => {
+  const { result, metrics } = await run([turn([['show_view', { spec: NINGUEM }]])]);
+  assert.deepEqual(result, NO_VALUE);
+  assert.equal(metrics.rounds, 1);
+});
+
+test('tools mode: try_view then show_view on an empty where', async () => {
+  const { result, metrics, provider } = await run([turn([['try_view', { spec: NINGUEM }]]), turn([['show_view', { spec: NINGUEM }]])]);
+  assert.ok(provider.seen[1].input.results[0].content.includes('nenhum nó tem esse valor'));
+  assert.deepEqual(result, NO_VALUE);
+  assert.equal(metrics.rounds, 2);
+});
+
+test('json mode: an empty where ends in one round with the answer', async () => {
+  const { result, metrics } = await run([text(JSON.stringify({ show_view: { spec: NINGUEM } }))], {}, { tools: false });
+  assert.deepEqual(result, NO_VALUE);
+  assert.equal(metrics.rounds, 1);
+});
+
 test('round ceiling returns the best view with a warning', async () => {
   const { result, provider, metrics } = await run(Array.from({ length: 4 }, () => turn([['try_view', { spec: SUPORTE }]])));
   assert.equal(result.kind, 'view');

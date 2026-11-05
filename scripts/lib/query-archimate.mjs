@@ -150,6 +150,7 @@ export function resolveArchimate(model, spec) {
     return {
       id, name: el.name, type: el.type, typeLabel: ELEMENT_TYPES[el.type].label, layer: el.layer, aspect: el.aspect,
       c4Kind: kind(el), technology: el.technology, description: el.description, tags: el.tags, properties: el.properties,
+      ...(whereCut && !whereCut.results.has(id) ? { whereFrame: true } : {}),
       isAnchor: id === anchor?.id, distance: i?.distance ?? null, role: i?.role ?? null, inferred: !!el.inferred, status: el.status ?? 'active', statusReason: el.statusReason,
       ...(groupOf(model, id) ? { group: groupOf(model, id) } : {}),
     };

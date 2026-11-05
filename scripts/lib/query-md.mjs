@@ -15,8 +15,7 @@ function sectionsOf(view) {
   const groups = view.notation === 'c4'
     ? [...C4_SECTIONS, [null, 'Outros']].map(([k, label]) => [label, view.nodes.filter(n => (C4_SECTIONS.some(([c]) => c === n.c4Kind) ? n.c4Kind : null) === k)])
     : [...LAYER_ORDER].map(l => [LAYER_LABELS[l], view.nodes.filter(n => n.layer === l)]);
-  const frame = n => view.whereResults && !view.whereResults.includes(n.id);
-  return groups.filter(([, nodes]) => nodes.length).map(([label, nodes]) => ({ label, rows: nodes.map(n => ({ ...rowOf(n), ...(frame(n) ? { frame: true } : {}) })) }));
+  return groups.filter(([, nodes]) => nodes.length).map(([label, nodes]) => ({ label, rows: nodes.map(n => ({ ...rowOf(n), ...(n.whereFrame ? { frame: true } : {}) })) }));
 }
 
 /** The structured answer for one view spec against a normalized model. */

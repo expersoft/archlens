@@ -76,14 +76,17 @@ export async function tryViewTool(ctx, { spec }) {
   const full = withKey(spec);
   let view;
   try { view = resolveView(ctx.model, full); } catch (e) { return fail(e.message); }
-  if (!view.nodes.length && view.whereResults) return { ok: true, content: 'nenhum nó tem esse valor' };
+  if (view.whereResults?.length === 0) return { ok: true, content: 'nenhum nó tem esse valor; encerre com show_view desta spec' };
   if (!view.nodes.length) return fail('a visão ficou vazia: nenhum elemento atende à spec; ajuste anchor, scope, layers ou status');
-  const lines = [`nós: ${view.nodes.length}`];
+  const results = view.nodes.filter(n => !n.whereFrame);
+  const frames = view.nodes.filter(n => n.whereFrame);
+  const namesOf = list => `${list.slice(0, NAMES_LIMIT).map(n => n.name).join(', ')}${list.length > NAMES_LIMIT ? `, … ${list.length - NAMES_LIMIT} mais` : ''}`;
+  const lines = [`nós: ${results.length}`];
   if (view.whereIgnored) lines.push('aviso: a visão dinâmica ignora "where"');
-  lines.push(`por ${full.notation === 'archimate' ? 'camada' : 'tipo'}: ` + countBy(view.nodes,
+  lines.push(`por ${full.notation === 'archimate' ? 'camada' : 'tipo'}: ` + countBy(results,
     n => full.notation === 'archimate' ? LAYER_LABELS[n.layer] ?? n.layer : n.c4Label ?? n.type));
-  const names = view.nodes.slice(0, NAMES_LIMIT).map(n => n.name).join(', ');
-  lines.push(`nomes: ${names}${view.nodes.length > NAMES_LIMIT ? `, … ${view.nodes.length - NAMES_LIMIT} mais` : ''}`);
+  lines.push(`nomes: ${namesOf(results)}`);
+  if (frames.length) lines.push(`molduras: ${namesOf(frames)}`);
   try {
     const alerts = viewAlerts(view, await layoutView(view));
     if (alerts.length) lines.push('alertas:', ...alerts.map(a => `- ${a}`));
@@ -118,6 +121,7 @@ function showView(ctx, { spec, view, title, answer, confirmLarge }) {
   else return fail('informe "view" ou "spec"');
   let resolved;
   try { resolved = resolveView(ctx.model, picked); } catch (e) { return fail(e.message); }
+  if (resolved.whereResults?.length === 0) return { ok: true, result: { kind: 'none', warning: 'Nenhum nó tem esse valor em "where".' } };
   const n = resolved.nodes.length;
   if (!n) return fail('a visão ficou vazia: nenhum elemento atende à spec; ajuste anchor, scope, layers ou status');
   if (n > LARGE && !confirmLarge) {

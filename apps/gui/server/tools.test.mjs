@@ -39,6 +39,27 @@ test('try_view answers an empty where without failing', async () => {
   } finally { registry.close(); }
 });
 
+test('try_view counts where results apart from their frames', async () => {
+  const { registry, ctx } = open();
+  try {
+    const spec = { notation: 'archimate', viewpoint: 'application', include: ['loja.pedidos'], where: { owner: 'ninguém' } };
+    const r = await runTool(ctx, 'try_view', { spec });
+    assert.ok(r.ok, r.content);
+    const lines = r.content.split('\n');
+    assert.ok(lines.includes('nós: 1'), r.content);
+    assert.ok(lines.includes('nomes: API de Pedidos'), r.content);
+    assert.ok(lines.includes('molduras: Plataforma de E-commerce'), r.content);
+  } finally { registry.close(); }
+});
+
+test('show_view ends an empty where with the answer', () => {
+  const { registry, ctx } = open();
+  try {
+    const out = finalize(ctx, 'show_view', { spec: { notation: 'c4', level: 'landscape', where: { owner: 'ninguém' } } });
+    assert.deepEqual(out, { ok: true, result: { kind: 'none', warning: 'Nenhum nó tem esse valor em "where".' } });
+  } finally { registry.close(); }
+});
+
 test('try_view warns that a dynamic view ignores where', async () => {
   const { registry, ctx } = open();
   try {

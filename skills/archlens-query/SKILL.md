@@ -69,6 +69,7 @@ disso o elemento fica ao lado, ligado pelo losango). Para agrupar ou desagrupar 
 | interações entre os sistemas de A e de B | acrescente `groups:{only:["A","B"]}` (molduras aparecem sozinhas) |
 | só o que cruza entre A e B | `groups:{only:["A","B"], crossOnly:true}` |
 | sem molduras | `groups:{frames:false}` |
+| quais sistemas têm squad S / só o que tem a propriedade P com valor V | `{notation:"c4", level:"landscape", where:{squad:"S"}}`; em outro recorte, acrescente `where:{P:"V"}` |
 | containers dentro do sistema, "caixas dentro de caixas" (ArchiMate) | acrescente `nesting:"nested"` (ou `nesting:{mode:"nested", depth:1}`) |
 | C4 sem as setas derivadas por serviços e interfaces | acrescente `derive:false` |
 | como está hoje (as-is) | acrescente `status:["active","deprecated"]` |
@@ -112,8 +113,8 @@ recorta com scope, focus, depth, anchor, traverse, layers, granularity, collapse
   application service por `realization`, service → processo por `serving`, tecnologia → container por
   `serving`/`realization`). Sem elas, "o que sustenta o produto" para no negócio: corrija o modelo pela skill
   archlens-plan.
-- **Atravessar por propriedade**: propriedade só filtra; "tudo da squad Checkout" pede um elemento (ver
-  *Propriedades* em `references/base.md`).
+- **Atravessar por propriedade**: propriedade filtra (`where`), não atravessa; "o que sustenta tudo da squad Checkout"
+  pede um elemento (ver *Propriedades* em `references/base.md`).
 - **Saída dentro da base**: `--out` vai para `$OUT`, fora da pasta `architecture/` (os diagramas salvos são do build).
 
 ## Referências

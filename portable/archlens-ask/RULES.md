@@ -176,7 +176,8 @@ relação derivada entre os dois visíveis:
     (OU). Ignore caixa e espaços nas pontas; uma propriedade em lista casa se algum item casar.
   - Não há herança: o valor de um sistema não vale para seus containers e componentes. O filtro não muda o nível do
     recorte: para perguntar por sistemas, use um recorte que mostre sistemas.
-  - Os ancestrais de um nó que entrou ficam como moldura, mesmo sem o valor, e não contam como resultado. `scope` e
+  - Os ancestrais de um nó que entrou ficam como moldura, mesmo sem o valor, e não contam como resultado; no
+    `flowchart`, marque-os com `classDef moldura opacity:0.55`. `scope` e
     `anchor` sem o valor seguem a mesma regra: moldura se tiverem filhos no resultado; nos demais casos saem. A fronteira
     do `scope` só aparece se restar nó interno. Uma âncora fora da visão continua medindo distância e papel, e a matriz
     continua inteira.

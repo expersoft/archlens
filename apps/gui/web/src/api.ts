@@ -39,7 +39,7 @@ export interface ViewResult {
 export interface Action { label: string; spec?: ViewSpec; sub?: Action[]; primary?: boolean; matrix?: boolean }
 export interface ViewNode {
   name: string; typeLabel?: string; c4Label?: string | null; layer?: string; technology?: string | null; description?: string | null;
-  role?: string | null; isAnchor?: boolean; distance?: number | null; status?: string;
+  role?: string | null; isAnchor?: boolean; distance?: number | null; status?: string; whereFrame?: boolean;
 }
 export interface ViewEdge {
   id: string; from: string; to: string; type: string; label?: string | null; technology?: string | null; derived?: boolean;

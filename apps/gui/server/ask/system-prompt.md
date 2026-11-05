@@ -23,6 +23,7 @@ Chame exatamente uma:
 - Use ids só do catálogo ou de `find_elements`; nunca invente um id.
 - Prefira uma visão salva que responda à pergunta.
 - Visão com mais de 40 nós: aplique o recorte da tabela de alertas da referência antes de mostrar (ou `confirmLarge: true` se o usuário pediu tudo explicitamente).
+- `where` sem resultado: chame `show_view` com a spec; a resposta diz que nenhum nó tem o valor.
 - Meta de uma rodada: se o catálogo e a referência bastam, chame a resposta final direto.
 
 # Contexto
@@ -226,7 +227,7 @@ vira `bands-flow` com aviso no build. Com `nesting` aninhado, `bands` também vi
 - **Só o que a visão mostraria:** `where` recorta os nós da visão, sem mudar o nível. Para perguntar por sistemas, use
   uma visão que mostre sistemas (`landscape`); por containers, `container`.
 - **Moldura:** os ancestrais de um nó que entrou ficam como contexto, mesmo sem o valor, e não contam como resultado.
-  Na consulta em markdown, aparecem com `(moldura)` depois do nome.
+  No diagrama aparecem esmaecidos; na consulta em markdown, com `(moldura)` depois do nome.
 - **Escopo e âncora:** o filtro é estrito, ao contrário de `groups.only`. Sem o valor, seguem a regra dos ancestrais:
   ficam como moldura se tiverem filhos no resultado e saem nos demais casos. A fronteira do `scope` só aparece se restar
   nó interno. Uma âncora fora da visão continua medindo `role` e `distance`, e a matriz de impacto continua inteira.
@@ -314,6 +315,7 @@ por visão.
 | interações entre os sistemas de A e de B | acrescente `groups:{only:["A","B"]}` (molduras aparecem sozinhas) |
 | só o que cruza entre A e B | `groups:{only:["A","B"], crossOnly:true}` |
 | sem molduras | `groups:{frames:false}` |
+| quais sistemas têm squad S / só o que tem a propriedade P com valor V | `{notation:"c4", level:"landscape", where:{squad:"S"}}`; em outro recorte, acrescente `where:{P:"V"}` |
 | containers dentro do sistema, "caixas dentro de caixas" (ArchiMate) | acrescente `nesting:"nested"` (ou `nesting:{mode:"nested", depth:1}`) |
 | C4 sem as setas derivadas por serviços e interfaces | acrescente `derive:false` |
 | como está hoje (as-is) | acrescente `status:["active","deprecated"]` |

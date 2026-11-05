@@ -180,7 +180,7 @@ function amNode(n, i, prefix) {
   const spec = ELEMENT_TYPES[n.type];
   const lv = LAYER_VAR[n.layer];
   const rx = spec.icon === 'service' ? h / 2 : spec.aspect === 'behavior' ? 14 : spec.icon === 'value-stream' ? 4 : 3;
-  const cls = `node am${n.isParent ? ' parent' : ''} l-${lv}${n.isAnchor ? ' anchor' : ''}${n.role ? ` r-${n.role}` : ''}${n.inferred ? ' inferred' : ''}${statusClass(n)}${sketchy(n) ? ' sketchy' : ''}${changeClass(n)}`;
+  const cls = `node am${n.isParent ? ' parent' : ''} l-${lv}${n.whereFrame ? ' where-frame' : ''}${n.isAnchor ? ' anchor' : ''}${n.role ? ` r-${n.role}` : ''}${n.inferred ? ' inferred' : ''}${statusClass(n)}${sketchy(n) ? ' sketchy' : ''}${changeClass(n)}`;
   const icon = ICONS[spec.icon] ?? '';
   const nameTop = y + (h - n.lines.title.length * 22) / 2;
   const tip = `${n.name} — ${spec.label}${n.technology ? ` [${n.technology}]` : ''}${n.description ? `\n${n.description}` : ''}${n.nestTip ? `\n${n.nestTip}` : ''}`;
@@ -352,7 +352,7 @@ export function viewData(v) {
       name: n.name, typeLabel: ELEMENT_TYPES[n.type]?.label, c4Label: n.c4Label ?? null, layer: n.layer,
       technology: n.technology ?? '', description: n.description ?? '', tags: n.tags ?? [], properties: n.properties ?? {},
       distance: n.distance ?? null, role: n.role ?? null, isAnchor: !!n.isAnchor, inferred: !!n.inferred, status: n.status ?? 'active', statusReason: n.statusReason ?? '', change: n.change ?? null, changeFields: n.changeFields ?? [], pending: n.pending ?? [],
-      nestedIn: n.nestedIn ?? null, band: band(n),
+      nestedIn: n.nestedIn ?? null, band: band(n), ...(n.whereFrame ? { whereFrame: true } : {}),
       x: n.x, y: n.y, w: n.w, h: n.h,
     }])),
     edges: v.edges.map(e => ({
@@ -497,6 +497,7 @@ body.presenting .stage{inset:0}
 .sketch-sample .shape{fill:none;stroke:none}.sketch-sample .sk-fill{stroke:var(--c4-container);stroke-width:.8;stroke-opacity:.55}.sketch-sample .sk-line{stroke:var(--sketch-ink);stroke-width:1.4}
 .node.sketchy.focus .shape,.node.sketchy.anchor .shape{stroke:var(--focus);stroke-width:5}
 .node.ch-removed,.node.ch-retired,.edge.ch-removed{opacity:.5}
+.node.where-frame{opacity:.55}
 .edge.ch-changed .sk-edge{stroke-width:3}
 .node .sk-strike{stroke:var(--removed);stroke-width:3}
 .node .ch-outline{fill:none;stroke:var(--sketch-ink);stroke-width:2.2}

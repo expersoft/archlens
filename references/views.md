@@ -193,7 +193,7 @@ vira `bands-flow` com aviso no build. Com `nesting` aninhado, `bands` também vi
 - **Só o que a visão mostraria:** `where` recorta os nós da visão, sem mudar o nível. Para perguntar por sistemas, use
   uma visão que mostre sistemas (`landscape`); por containers, `container`.
 - **Moldura:** os ancestrais de um nó que entrou ficam como contexto, mesmo sem o valor, e não contam como resultado.
-  Na consulta em markdown, aparecem com `(moldura)` depois do nome.
+  No diagrama aparecem esmaecidos; na consulta em markdown, com `(moldura)` depois do nome.
 - **Escopo e âncora:** o filtro é estrito, ao contrário de `groups.only`. Sem o valor, seguem a regra dos ancestrais:
   ficam como moldura se tiverem filhos no resultado e saem nos demais casos. A fronteira do `scope` só aparece se restar
   nó interno. Uma âncora fora da visão continua medindo `role` e `distance`, e a matriz de impacto continua inteira.

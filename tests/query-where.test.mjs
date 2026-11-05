@@ -55,6 +55,22 @@ test('o ancestral entra como moldura e não conta como resultado', () => {
   assert.match(md, /\| Catalogo \|/);
 });
 
+test('o diagrama mostra o ancestral como contexto', async () => {
+  const { html, data } = await buildView(shop(), { key: 'app', notation: 'archimate', viewpoint: 'application', where: { squad: 'Vitrine' } });
+  assert.equal(data.nodes['loja.api'].whereFrame, true);
+  assert.equal(data.nodes.loja.whereFrame, true);
+  assert.equal(data.nodes['loja.api.catalogo'].whereFrame, undefined);
+  const classOf = id => new RegExp(`<g class="([^"]*)"[^>]*data-node="${id.replace('.', '\\.')}"`).exec(html)?.[1];
+  assert.match(classOf('loja.api'), /\bwhere-frame\b/);
+  assert.doesNotMatch(classOf('loja.api.catalogo'), /\bwhere-frame\b/);
+});
+
+test('sem where nenhum nó é contexto', async () => {
+  const { html, data } = await buildView(shop(), { key: 'app', notation: 'archimate', viewpoint: 'application' });
+  assert.ok(Object.values(data.nodes).every(n => !('whereFrame' in n)));
+  assert.doesNotMatch(html, /class="node[^"]*where-frame/);
+});
+
 test('a fronteira do escopo fica só com nó interno no resultado', () => {
   const kept = resolveView(shop(), { ...CONTAINERS, where: CHECKOUT });
   assert.deepEqual(kept.boundaries.map(b => b.id), ['loja']);

@@ -153,9 +153,9 @@ gravada; por isso você pode escrever o delta como sempre (`references/merge.md`
 `properties` guarda o que o usuário quer anotar (squad, unidade de negócio, canais): valores texto, número, booleano
 ou **lista de textos**. Um catálogo opcional em `properties` do `archlens.json` (`label`, `type`, `values`,
 `appliesTo`) faz o `validate` avisar `W_PROPERTY` (chave desconhecida, tipo errado, valor fora da lista).
-Regra: **propriedade serve para filtrar, elemento serve para atravessar.** Se o usuário pedir uma visão que
-atravesse por um valor ("tudo da squad Checkout"), sugira promovê-lo a `business-actor` + `assignment` em vez de
-manter a propriedade (a promoção é um delta: skill archlens-plan).
+Regra: **propriedade serve para filtrar (`where`, veja `views.md`), elemento serve para atravessar.** Se o usuário
+pedir uma visão que atravesse por um valor ("o que sustenta tudo da squad Checkout"), sugira promovê-lo a
+`business-actor` + `assignment` em vez de manter a propriedade (a promoção é um delta: skill archlens-plan).
 
 ## Erros comuns (todas as skills)
 
