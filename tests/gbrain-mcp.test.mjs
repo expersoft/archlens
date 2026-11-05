@@ -1448,3 +1448,59 @@ test('merge --apply on an MCP base is refused and points to archlens apply: noth
   assert.deepEqual(mirrorFiles(w.dir), mirrorBefore);
   assert.equal(w.gbrain.page('archlens/application-component/vendas.cache'), null);
 });
+
+const VENDAS = 'archlens/application-component/vendas';
+/** `ops` through the read-check (with `expect`) and the receipts. */
+function applyThrough(w, ops, opts) {
+  const first = w.store.apply(ops, opts);
+  const second = first.request.step === 'read-check' ? w.store.apply(ops, { ...opts, readCheck: [w.gbrain.run(first.request)] }) : first;
+  return { request: second.request, done: w.store.remote.receipts([w.gbrain.run(second.request)]) };
+}
+
+test('putDoc writes the page guarded by its revision and read().docs gives it back', () => {
+  const w = ready();
+  assert.equal(w.store.supportsDocs, true);
+  assert.deepEqual(w.store.read().docs, {});
+  const expect = Object.fromEntries(w.store.objectVersions(['doc:vendas']));
+  assert.equal(expect['doc:vendas'], w.gbrain.page(VENDAS).revision); // the revision of the element's page
+  assert.equal(w.store.objectVersions(['doc:nada']).get('doc:nada'), null);
+  const { request, done } = applyThrough(w, [{ op: 'putDoc', id: 'vendas', text: '## Como funciona\n\nTexto.\n' }], { expect });
+  assert.equal(done.state, 'committed');
+  assert.deepEqual(pagesIn(request.calls).map(p => [p.slug, p.expected_revision]), [[VENDAS, expect['doc:vendas']]]);
+  assert.equal(w.store.read().docs.vendas, '## Como funciona\n\nTexto.');
+  assert.equal(w.store.readDoc('vendas'), '## Como funciona\n\nTexto.');
+  assert.equal(w.store.readDoc('rh'), null);
+  assert.ok(!JSON.stringify(w.store.read().raw).includes('Como funciona'));
+  // gbrain's serialization of the page reads back as the same text.
+  pull(w.store, w.gbrain);
+  assert.equal(w.store.readDoc('vendas'), '## Como funciona\n\nTexto.');
+  assert.equal(contentVersion(w.store.read()), contentVersion(base()));
+});
+
+test('a page changed in gbrain after the text was read refuses putDoc at the read-check', () => {
+  const w = ready();
+  const expect = Object.fromEntries(w.store.objectVersions(['doc:vendas']));
+  w.gbrain.write(new Map([[`${VENDAS}.md`, pagesOf(base(), { userText: '\nDe outra pessoa\n' }).get(`${VENDAS}.md`)]]));
+  const ops = [{ op: 'putDoc', id: 'vendas', text: 'Meu' }];
+  const first = w.store.apply(ops, { expect });
+  assert.equal(first.request.step, 'read-check');
+  assert.throws(() => w.store.apply(ops, { expect, readCheck: [w.gbrain.run(first.request)] }),
+    e => e.code === 'E_STORE_CONFLICT' && e.conflicts.some(c => c.ref === 'doc:vendas'));
+  assert.match(w.gbrain.content(VENDAS), /De outra pessoa/);
+});
+
+test('editing a field of a page in MCP mode keeps the text written in gbrain', () => {
+  const w = world();
+  w.gbrain.write(pagesOf(base(), { userText: '\nTexto de uma pessoa.\n' }));
+  const store = w.store();
+  pull(store, w.gbrain);
+  store.remote.checkIngest([w.gbrain.run(store.remote.check())]);
+  const cur = store.read();
+  assert.equal(cur.docs.vendas, 'Texto de uma pessoa.');
+  const next = structuredClone(cur);
+  next.raw.model.elements.find(e => e.id === 'vendas').name = 'Comercial';
+  const { done } = applyThrough({ ...w, store }, diffRaw(cur, next), { baseVersion: contentVersion(cur) });
+  assert.equal(done.state, 'committed');
+  assert.equal(store.readDoc('vendas'), 'Texto de uma pessoa.');
+  assert.match(w.gbrain.content(VENDAS), /Texto de uma pessoa\./);
+});

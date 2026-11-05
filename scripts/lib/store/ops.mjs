@@ -4,9 +4,10 @@ import { createHash } from 'node:crypto';
 import { canonicalJson, relationshipIds } from '../merge.mjs';
 import { sortParentsFirst } from '../canonical.mjs';
 import { NOTE_NAMES } from '../doc.mjs';
+import { checkDocText, docOf, docOfUserText } from '../node-doc.mjs';
 import { storeError } from './errors.mjs';
 
-export const OPS = ['setManifest', 'upsertElement', 'removeElement', 'upsertRelationship', 'removeRelationship', 'putView', 'removeView', 'putNote', 'appendHistory'];
+export const OPS = ['setManifest', 'upsertElement', 'removeElement', 'upsertRelationship', 'removeRelationship', 'putView', 'removeView', 'putNote', 'putDoc', 'appendHistory'];
 const BODY = ['model', 'views', 'changelog'];
 
 /** The manifest of a raw base: its top-level fields except the model, views and changelog. */
@@ -28,7 +29,11 @@ export function relationshipsById(raw) {
   return out;
 }
 
-/** Ops that turn `before` ({ raw, notes }, or null for a new base) into `after`. The history only grows. */
+/**
+ * Ops that turn `before` ({ raw, notes, docs? }, or null for a new base) into `after`. The history only grows. An `after`
+ * without `docs` says nothing about the documentation: the connector keeps it. The text of an element that goes is not
+ * cleared either: the connector moves it to notes/removidos/.
+ */
 export function diffRaw(before, after) {
   const a = before?.raw ?? null;
   const b = after.raw;
@@ -46,6 +51,13 @@ export function diffRaw(before, after) {
   for (const name of NOTE_NAMES) {
     const text = after.notes?.[name];
     if (text != null && text !== before?.notes?.[name]) ops.push({ op: 'putNote', name, text });
+  }
+  if (after.docs !== undefined) {
+    for (const id of [...new Set([...Object.keys(before?.docs ?? {}), ...Object.keys(after.docs)])].sort()) {
+      const text = docOf(after.docs, id) ?? '';
+      const doc = docOfUserText(text);
+      if (doc !== docOfUserText(docOf(before?.docs, id)) && (doc || eb.has(id))) ops.push({ op: 'putDoc', id, text });
+    }
   }
   const ha = a?.changelog ?? [], hb = b.changelog ?? [];
   if (hb.length < ha.length || !same(hb.slice(0, ha.length), ha)) {
@@ -69,7 +81,10 @@ function numbered(entry, history) {
   return e;
 }
 
-/** Reference implementation: `base` ({ raw, notes } or null) with `ops` applied, in order. E_STORE_OP on a bad op. */
+/**
+ * Reference implementation: `base` ({ raw, notes, docs? } or null) with `ops` applied, in order. E_STORE_OP on a bad op.
+ * `docs` is the documentation in the end (id → text, without empty texts), `docChanges` what these ops wrote ('' clears).
+ */
 export function applyOps(base, ops) {
   if (!Array.isArray(ops)) throw storeError('E_STORE_OP', 'as operações precisam ser uma lista');
   const src = base?.raw ? structuredClone(base.raw) : { model: { elements: [], relationships: [] } };
@@ -81,6 +96,8 @@ export function applyOps(base, ops) {
   let views = src.views ? [...src.views] : undefined;
   let changelog = src.changelog ? [...src.changelog] : undefined;
   const notes = { ...(base?.notes ?? {}) };
+  const docs = new Map(Object.entries(base?.docs ?? {}));
+  const docChanges = new Map();
   const bad = (i, why) => storeError('E_STORE_OP', `operação ${i + 1} (${ops[i]?.op ?? '?'}): ${why}`);
   const put = (list, item, keyOf) => {
     const at = list.findIndex(x => keyOf(x) === keyOf(item));
@@ -120,6 +137,15 @@ export function applyOps(base, ops) {
         if (!NOTE_NAMES.includes(op.name) || typeof op.text !== 'string') throw bad(i, `uma nota precisa de "name" (${NOTE_NAMES.join(' | ')}) e "text"`);
         notes[op.name] = op.text;
         break;
+      case 'putDoc': {
+        if (typeof op.id !== 'string' || typeof op.text !== 'string') throw bad(i, 'precisa de "id" e "text"');
+        if (!elements.some(e => e?.id === op.id)) throw bad(i, `o elemento "${op.id}" não existe na base`);
+        checkDocText(op.text, op.id);
+        const text = docOfUserText(op.text);
+        docChanges.set(op.id, text);
+        if (text) docs.set(op.id, text); else docs.delete(op.id);
+        break;
+      }
       case 'appendHistory':
         if (!op.entry || typeof op.entry !== 'object') throw bad(i, '"entry" precisa ser uma rodada do changelog');
         changelog = [...(changelog ?? []), numbered(op.entry, changelog ?? [])];
@@ -128,10 +154,14 @@ export function applyOps(base, ops) {
         throw bad(i, `operação desconhecida; use ${OPS.join(' | ')}`);
     }
   });
+  const alive = new Set(elements.map(e => e?.id));
+  for (const id of docChanges.keys()) {
+    if (!alive.has(id)) throw storeError('E_STORE_OP', `a documentação de "${id}" foi escrita, mas o elemento sai da base nas mesmas operações; o texto não teria onde ficar`);
+  }
   const raw = { ...manifest, model: { ...src.model, elements: sortParentsFirst(elements), relationships } };
   if (views !== undefined) raw.views = views;
   if (changelog !== undefined) raw.changelog = changelog;
-  return { raw, notes };
+  return { raw, notes, docs: Object.fromEntries([...docs].filter(([id]) => alive.has(id))), docChanges: Object.fromEntries(docChanges) };
 }
 
 /** Fields that say something: empty lists, maps and texts count as absent. */

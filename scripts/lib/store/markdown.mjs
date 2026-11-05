@@ -1,6 +1,7 @@
 // Base as an Obsidian/gbrain vault: manifest, views, changelog and notes as in the json connector, and one page per
 // element in a folder named after its ArchiMate type (<type>/<id>.md). Files outside the type folders are never read nor
-// removed; the text people write after the archlens block of a page is kept, in notes/removidos/ once its element goes.
+// removed; the text people write after the archlens block of a page is the node's documentation (read().docs, op putDoc):
+// kept as is by every other write, in notes/removidos/ once its element goes.
 import { existsSync, readFileSync, readdirSync, statSync, rmdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { ELEMENT_TYPES } from '../registry.mjs';
@@ -8,6 +9,7 @@ import { sortParentsFirst, isCanonicalFormat, FORMAT } from '../canonical.mjs';
 import { storeError } from './errors.mjs';
 import { MANIFEST, parseJson, noteFiles } from './folder.mjs';
 import { NOTE_NAMES } from '../doc.mjs';
+import { docOfUserText, userTextOfDoc } from '../node-doc.mjs';
 import { renderPage, parsePage, pagePath, BEGIN, END } from './markdown-page.mjs';
 import { gbrainPack, PACK_FILE } from './gbrain-pack.mjs';
 import { fileConnector } from './contract.mjs';
@@ -66,7 +68,8 @@ export function readVaultFiles(files, { anyFormat = false, where = '' } = {}) {
   if (files.has('changelog.json')) raw.changelog = json('changelog.json');
   const notes = {};
   for (const name of NOTE_NAMES) if (files.has(`notes/${name}.md`)) notes[name] = files.get(`notes/${name}.md`).replace(/\n$/, '');
-  return { raw, notes, ctx: { pages } };
+  const docs = Object.fromEntries([...pages].map(([id, p]) => [id, docOfUserText(p.userText)]).filter(([, text]) => text));
+  return { raw, notes, docs, ctx: { pages } };
 }
 
 /** The files of the vault for `raw`, from the file system of `dir`; see vaultFiles. */
@@ -78,9 +81,10 @@ export function vaultContents(dir, base, cur) {
 /**
  * Every file of the vault for `raw` (relative path → text, null for a page that goes). Pure: `exists(rel)` and
  * `read(rel)` stand for the files already there (the lint config, the notes, the file of removed text).
+ * `docChanges` (id → text, see applyOps) replaces the text people wrote in those pages; every other page keeps its own.
  * `linkPrefix`, `extraTags` and `gbrain` shape the pages for another layout (see gbrain-layout.mjs).
  */
-export function vaultFiles({ raw, notes }, cur, { exists, read = () => undefined, linkPrefix = '', extraTags = [], gbrain = false } = {}) {
+export function vaultFiles({ raw, notes, docChanges = {} }, cur, { exists, read = () => undefined, linkPrefix = '', extraTags = [], gbrain = false } = {}) {
   exists ??= rel => read(rel) !== undefined;
   const { model, views, changelog, ...top } = raw;
   const files = new Map([[MANIFEST, json({ ...top, store: { kind: 'markdown' } })]]);
@@ -114,7 +118,8 @@ export function vaultFiles({ raw, notes }, cur, { exists, read = () => undefined
     if (typeof el.description === 'string' && (el.description.includes(BEGIN) || el.description.includes(END))) {
       throw storeError('E_STORE_MD', `a descrição de "${el.id}" contém o marcador ${el.description.includes(BEGIN) ? BEGIN : END}, que delimita o bloco do archlens na página`);
     }
-    files.set(pagePath(el), renderPage(el, { outgoing: outgoing.get(el.id), children: children.get(el.id) ?? [], info, userText: old.get(el.id)?.userText, linkPrefix, extraTags, gbrain }));
+    const userText = Object.hasOwn(docChanges, el.id) ? userTextOfDoc(docChanges[el.id]) : old.get(el.id)?.userText;
+    files.set(pagePath(el), renderPage(el, { outgoing: outgoing.get(el.id), children: children.get(el.id) ?? [], info, userText, linkPrefix, extraTags, gbrain }));
   }
   for (const { rel } of old.values()) if (!files.has(rel)) files.set(rel, null);
   // The page of a removed element goes; what people wrote in it is kept (a retyped element carries it to its new page).
@@ -143,7 +148,7 @@ export function markdownConnector(locator, describe) {
   let emptied = new Set();
   let preserved = [];
   return fileConnector({
-    kind: 'markdown', dir, locator, describe, versioning: 'object', // a page per element: its relationships live in it
+    kind: 'markdown', dir, locator, describe, versioning: 'object', docs: true, // a page per element: its relationships live in it
     load: opts => (existsSync(join(dir, MANIFEST)) ? readVault(dir, opts) : null),
     contents: (next, cur) => {
       const files = vaultContents(dir, next, cur);

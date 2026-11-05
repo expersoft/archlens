@@ -9,7 +9,7 @@ import { gbrainGitConnector, gitEnvFor } from '../scripts/lib/store/gbrain-git.m
 import { initBase, validateStore } from '../scripts/lib/store/config.mjs';
 import { diffRaw, contentVersion } from '../scripts/lib/store/ops.mjs';
 import { plan, apply } from '../scripts/lib/api.mjs';
-import { convertToGbrain, convertFromGbrain } from '../scripts/lib/store/convert.mjs';
+import { convertToGbrain, convertFromGbrain, convertFolder } from '../scripts/lib/store/convert.mjs';
 import { canonicalJson } from '../scripts/lib/merge.mjs';
 
 // Hermetic git: no global or system config (identity, signing, hooks), messages in English.
@@ -480,4 +480,63 @@ test("converting back to local takes out the tip's worktree only, never the clon
   convertFromGbrain(resolveBase(dir), 'json');
   const listed = sh(clone, 'worktree', 'list', '--porcelain').split('\n').filter(l => l.startsWith('worktree ')).map(l => l.slice(9));
   assert.deepEqual(listed, [clone, theirs]);
+});
+
+test('putDoc writes the page in one commit and read().docs gives it back; a field change keeps it', () => {
+  const w = world();
+  const a = w.user('a');
+  seed(a.store());
+  const s = a.store();
+  assert.equal(s.supportsDocs, true);
+  assert.deepEqual(s.read().docs, {});
+  const version = s.version();
+  const res = s.apply([{ op: 'putDoc', id: 'vendas', text: '## Como funciona\n\nTexto.\n' }], { baseVersion: version });
+  assert.equal(res.version, version);
+  assert.equal(sh(w.remote, 'rev-list', '--count', 'main'), '2');
+  assert.match(w.show('archlens/application-component/vendas.md'), /<!-- archlens:end -->\n\n## Como funciona\n\nTexto\.\n/);
+  assert.equal(a.store().read().docs.vendas, '## Como funciona\n\nTexto.');
+  assert.equal(a.store().readDoc('vendas'), '## Como funciona\n\nTexto.');
+  assert.equal(a.store().readDoc('rh'), null);
+  assert.ok(!JSON.stringify(a.store().read().raw).includes('Como funciona'));
+
+  const cur = a.store().read();
+  const next = structuredClone(cur);
+  next.raw.model.elements.find(e => e.id === 'vendas').name = 'Comercial';
+  a.store().apply(diffRaw(cur, next), { baseVersion: a.store().version() });
+  assert.equal(a.store().readDoc('vendas'), '## Como funciona\n\nTexto.');
+
+  a.store().apply([{ op: 'putDoc', id: 'vendas', text: '' }], { baseVersion: a.store().version() });
+  assert.equal(a.store().readDoc('vendas'), null);
+  assert.ok(!w.show('archlens/application-component/vendas.md').includes('Como funciona'));
+});
+
+test('a plan that writes a documentation someone else changed is refused and nothing is pushed', () => {
+  const w = world();
+  const a = w.user('a'), b = w.user('b');
+  seed(a.store());
+  a.store().apply([{ op: 'putDoc', id: 'vendas', text: 'Visto' }], { baseVersion: a.store().version() });
+  const expect = Object.fromEntries(a.store().objectVersions(['doc:vendas']));
+  b.store().apply([{ op: 'putDoc', id: 'vendas', text: 'De outra pessoa' }], { baseVersion: b.store().version() });
+  const head = w.head();
+  refused(() => a.store().apply([{ op: 'putDoc', id: 'vendas', text: 'Meu' }], { expect }), 'E_STORE_CONFLICT');
+  assert.equal(w.head(), head);
+  assert.equal(a.store().readDoc('vendas'), 'De outra pessoa');
+});
+
+test('store convert to and from gbrain carries the text as it was, and to json drops it only with force', () => {
+  const w = world();
+  const { dir, loc, gbrain } = localBase(w, 'loja-online');
+  convertFolder(loc, 'markdown');
+  const page = 'business-actor/cliente.md';
+  const human = '\n  Texto com recuo e espaços no fim.  \n\n';
+  writeFileSync(join(dir, page), readFileSync(join(dir, page), 'utf8').replace(/\n*$/, '\n') + human);
+  const before = readFileSync(join(dir, page), 'utf8');
+  convertToGbrain(resolveBase(dir), gbrain);
+  assert.equal(openStore(resolveBase(dir)).readDoc('cliente'), human.trim());
+  assert.deepEqual(Object.keys(openStore(resolveBase(dir)).read().docs), ['cliente']);
+  convertFromGbrain(resolveBase(dir), 'markdown');
+  assert.equal(readFileSync(join(dir, page), 'utf8'), before);
+  convertToGbrain(resolveBase(dir), { ...gbrain, prefix: 'outro' });
+  assert.equal(convertFromGbrain(resolveBase(dir), 'json', { force: true }).dropped.length, 1);
+  assert.equal(openStore(resolveBase(dir)).supportsDocs, false);
 });

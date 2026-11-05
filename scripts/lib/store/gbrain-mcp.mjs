@@ -9,6 +9,7 @@ import { join, relative } from 'node:path';
 import { randomUUID, createHash } from 'node:crypto';
 import { parse as parseYaml, stringify as stringifyYaml } from '../../vendor/yaml/index.js';
 import { canonicalJson } from '../merge.mjs';
+import { docOf } from '../node-doc.mjs';
 import { ELEMENT_TYPES } from '../registry.mjs';
 import { applyOps, contentVersion, relationshipsById } from './ops.mjs';
 import { writeSetOf, checkExpect } from './versions.mjs';
@@ -102,7 +103,8 @@ export function pageOf(ref, snapshot, prefix) {
   const [kind, id] = at < 0 ? [ref, null] : [ref.slice(0, at), ref.slice(at + 1)];
   const elementPage = eid => { const e = (raw.model?.elements ?? []).find(x => x?.id === eid); return e ? `${prefix}/${e.type}/${e.id}` : null; };
   switch (kind) {
-    case 'element': return elementPage(id);
+    case 'element':
+    case 'doc': return elementPage(id); // the documentation is the end of the element's page
     case 'relationship': { const r = relationshipsById(raw).get(id); return r ? elementPage(r.from) : null; } // it lives on its origin's page
     case 'view': return (raw.views ?? []).some(v => v?.key === id) ? `${prefix}/views/${id}` : null;
     case 'note': return snapshot.notes?.[id] != null ? `${prefix}/notes/${id}` : null;
@@ -135,7 +137,7 @@ export function gbrainMcpConnector(locator, store, { describe = `${rel(locator.p
     const flat = fromGbrainFiles(files, { prefix });
     return { files, flat, base: readVaultFiles(flat) };
   }
-  const read = () => { const { base } = load(); return base && { raw: base.raw, notes: base.notes }; };
+  const read = () => { const { base } = load(); return base && { raw: base.raw, notes: base.notes, docs: base.docs }; };
 
   // The request in flight of each flow (pull, check): a response must answer it, and a new request replaces it.
   const pendingPath = flow => join(dir, REMOTE, `${flow}.json`);
@@ -468,7 +470,7 @@ export function gbrainMcpConnector(locator, store, { describe = `${rel(locator.p
   function apply(ops, { expect, baseVersion = null, recheck, plan, readCheck } = {}) {
     assertWrite();
     const cur = load();
-    const snapshot = cur.base && { raw: cur.base.raw, notes: cur.base.notes };
+    const snapshot = cur.base && { raw: cur.base.raw, notes: cur.base.notes, docs: cur.base.docs };
     if (expect) {
       const conflicts = [...checkExpect(c.objectVersions(Object.keys(expect), snapshot), expect), ...(recheck?.(snapshot) ?? [])];
       if (conflicts.length) throw objectConflictError(conflicts);
@@ -911,9 +913,10 @@ export function gbrainMcpConnector(locator, store, { describe = `${rel(locator.p
   };
 
   const c = {
-    kind: 'gbrain', mode: 'mcp', writable: true, locator, versioning: 'object', remote,
+    kind: 'gbrain', mode: 'mcp', writable: true, locator, versioning: 'object', supportsDocs: true, remote,
     describe: () => describe,
     read,
+    readDoc: id => docOf(read()?.docs, id),
     readSubgraph(query) {
       const r = read();
       if (!r) throw storeError('E_STORE_NOT_FOUND', `base não encontrada: ${describe}`);

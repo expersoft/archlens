@@ -259,3 +259,112 @@ test('two ids of one type that differ only by letter case are refused (one file 
     e => e.code === 'E_STORE_MD_ID' && /"n1"/.test(e.message) && /"N1"/.test(e.message));
   assert.deepEqual(readdirSync(dir).sort(), before);
 });
+
+const ID = 'loja.api.checkout';
+const PAGE = `application-component/${ID}.md`;
+const putDoc = (c, text, id = ID) => c.apply([{ op: 'putDoc', id, text }], { baseVersion: c.version() });
+const withText = (dir, text) => writeFileSync(join(dir, PAGE), page(dir, PAGE).replace(/\n*$/, '\n') + text);
+
+test('read expõe a documentação fora de raw', () => {
+  const { dir, c } = vault();
+  withText(dir, '\nTexto\n');
+  assert.equal(c().supportsDocs, true);
+  assert.equal(c().read().docs[ID], 'Texto');
+  assert.ok(!JSON.stringify(c().read().raw).includes('Texto'));
+  assert.equal(c().readDoc(ID), 'Texto');
+  assert.deepEqual(Object.keys(c().read().docs), [ID], 'só textos não vazios');
+  assert.equal(c().readDoc('loja.api'), null);
+  assert.equal(c().readDoc('nada'), null);
+  assert.equal(c().readDoc('constructor'), null);
+});
+
+test('putDoc grava só o trecho liberado', () => {
+  const { dir, c } = vault();
+  const before = page(dir, PAGE);
+  const others = readdirSync(join(dir, 'application-component')).filter(f => f !== `${ID}.md`).map(f => [f, page(dir, `application-component/${f}`)]);
+  const version = c().version();
+  const res = putDoc(c(), '# Como funciona\n\nTexto **novo**.\n');
+  assert.equal(page(dir, PAGE), `${before.replace(/\n$/, '')}\n\n# Como funciona\n\nTexto **novo**.\n`, 'frontmatter e bloco idênticos byte a byte');
+  for (const [f, text] of others) assert.equal(page(dir, `application-component/${f}`), text, f);
+  assert.equal(c().readDoc(ID), '# Como funciona\n\nTexto **novo**.');
+  assert.equal(res.version, version, 'a documentação fica fora da versão da base');
+  assert.equal(c().version(), version);
+});
+
+test('putDoc com texto vazio limpa o trecho', () => {
+  const { dir, c } = vault();
+  const before = page(dir, PAGE);
+  putDoc(c(), 'Texto');
+  assert.notEqual(page(dir, PAGE), before);
+  putDoc(c(), '');
+  assert.equal(page(dir, PAGE), before);
+  assert.equal(c().readDoc(ID), null);
+  assert.ok(!(ID in c().read().docs));
+  assert.ok(!existsSync(join(dir, 'notes', 'removidos')), 'limpar não é remover o elemento');
+});
+
+test('editar um campo preserva o texto', () => {
+  const { dir, c } = vault();
+  const human = '\n\n## Minhas notas\n\n  Texto com  espaços  exatos.\n\n\n';
+  withText(dir, human);
+  change(c(), raw => { raw.model.elements.find(e => e.id === ID).name = 'Outro nome'; });
+  assert.ok(page(dir, PAGE).endsWith(`<!-- archlens:end -->\n${human}`), 'o texto fica byte a byte');
+  assert.match(page(dir, PAGE), /title: Outro nome/);
+  change(c(), raw => { raw.model.elements.find(e => e.id === ID).type = 'application-service'; });
+  assert.equal(c().readDoc(ID), human.trim());
+  assert.ok(existsSync(join(dir, `application-service/${ID}.md`)));
+});
+
+test('putDoc junto com a mudança de tipo do elemento grava o texto novo na página nova', () => {
+  const { dir, c } = vault();
+  withText(dir, '\nAntigo\n');
+  const cur = c().read();
+  const next = structuredClone(cur);
+  next.raw.model.elements.find(e => e.id === ID).type = 'application-service';
+  next.docs[ID] = 'Novo';
+  c().apply(diffRaw(cur, next), { baseVersion: c().version() });
+  assert.equal(c().readDoc(ID), 'Novo');
+  assert.match(page(dir, `application-service/${ID}.md`), /<!-- archlens:end -->\n\nNovo\n$/);
+  assert.ok(!existsSync(join(dir, PAGE)));
+});
+
+test('putDoc com marcador recusa', () => {
+  const { dir, c } = vault();
+  const before = page(dir, PAGE);
+  for (const text of ['a <!-- archlens:begin --> b', 'a <!-- archlens:end --> b']) {
+    assert.throws(() => putDoc(c(), text), e => e.code === 'E_DELTA_DOC');
+  }
+  assert.equal(page(dir, PAGE), before);
+});
+
+test('o texto de um elemento removido vai para notes/removidos mesmo quando o novo estado traz docs', () => {
+  const { dir, c } = vault();
+  withText(dir, '\nTexto de quem escreveu\n');
+  const cur = c().read();
+  const next = structuredClone(cur);
+  next.raw.model.relationships = next.raw.model.relationships.filter(r => r.from !== ID && r.to !== ID);
+  next.raw.model.elements = next.raw.model.elements.filter(e => e.id !== ID);
+  delete next.docs[ID];
+  const ops = diffRaw(cur, next);
+  assert.ok(!ops.some(o => o.op === 'putDoc'), 'o texto não é limpo: ele muda de lugar');
+  c().apply(ops, { baseVersion: c().version() });
+  assert.match(page(dir, `notes/removidos/${PAGE}`), /Texto de quem escreveu/);
+  assert.equal(c().readDoc(ID), null);
+});
+
+test('um elemento com o nome de um membro de Object não ganha nem perde texto', () => {
+  const base = { raw: shop(), notes: {} };
+  for (const id of ['constructor', '__proto__']) base.raw.model.elements.push({ id, type: 'business-actor', name: id });
+  const { dir, c } = vault(base);
+  for (const id of ['constructor', '__proto__']) {
+    const rel = `business-actor/${id}.md`;
+    writeFileSync(join(dir, rel), `${page(dir, rel).replace(/\n*$/, '\n')}\nTexto de ${id}\n`);
+  }
+  assert.equal(c().readDoc('__proto__'), 'Texto de __proto__');
+  putDoc(c(), 'Nova', 'loja.api');
+  assert.equal(c().readDoc('constructor'), 'Texto de constructor');
+  assert.equal(c().readDoc('__proto__'), 'Texto de __proto__');
+  putDoc(c(), 'Trocado', '__proto__');
+  assert.equal(c().readDoc('__proto__'), 'Trocado');
+  assert.equal(c().readDoc('constructor'), 'Texto de constructor');
+});

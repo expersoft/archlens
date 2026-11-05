@@ -58,9 +58,10 @@ export function legacyNotes(raw, keeps) {
 export function legacyConnector(locator, { describe, error }) {
   const read = opts => { const { raw, keeps } = loadLegacy(locator.path, opts); return { raw, notes: legacyNotes(raw, keeps) }; };
   return {
-    kind: 'legacy', writable: false, locator, versioning: 'base',
+    kind: 'legacy', writable: false, locator, versioning: 'base', supportsDocs: false,
     describe: () => describe,
     read,
+    readDoc: () => null,
     readSubgraph: query => subgraphOf(read().raw, query),
     version: () => contentVersion(read()),
     objectVersions: (refs, snapshot = read()) => baseVersions(refs, snapshot),

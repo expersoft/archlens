@@ -122,6 +122,7 @@
               "putView",
               "removeView",
               "putNote",
+              "putDoc",
               "appendHistory"
             ]
           }

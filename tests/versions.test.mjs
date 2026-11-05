@@ -7,7 +7,8 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { openStore, resolveBase } from '../scripts/lib/store/index.mjs';
 import { diffRaw, contentVersion, applyOps } from '../scripts/lib/store/ops.mjs';
-import { checkExpect } from '../scripts/lib/store/versions.mjs';
+import { checkExpect, writeSetOf, objectVersionsOf } from '../scripts/lib/store/versions.mjs';
+import { docHash } from '../scripts/lib/node-doc.mjs';
 import { plan, apply } from '../scripts/lib/api.mjs';
 
 const TODAY = { today: '2026-10-17' };
@@ -238,4 +239,33 @@ test('CLI: a conflict names the objects and how to redo the plan with --answers'
   assert.match(r.stderr, /API de Vendas/);
   assert.match(r.stderr, /archlens plan architecture --answers pb\.json --out pb-2\.json/);
   assert.doesNotMatch(r.stderr, /<base>|<plano>|<novo>/);
+});
+
+test('doc:<id> is written only by putDoc', () => {
+  const el = base().raw.model.elements[0];
+  assert.ok(!writeSetOf([{ op: 'upsertElement', element: el }]).has(`doc:${el.id}`));
+  assert.deepEqual([...writeSetOf([{ op: 'putDoc', id: el.id, text: 'x' }])], [`doc:${el.id}`]);
+});
+
+test('doc:<id> changes with the text and leaves element:<id> alone', () => {
+  const b = base();
+  const refs = ['doc:vendas', 'element:vendas'];
+  const versions = docs => objectVersionsOf({ ...b, docs }, refs);
+  assert.equal(versions({}).get('doc:vendas'), null);
+  assert.equal(objectVersionsOf(b, refs).get('doc:vendas'), null);
+  assert.equal(versions({ vendas: 'A' }).get('doc:vendas'), docHash('A'));
+  assert.notEqual(versions({ vendas: 'A' }).get('doc:vendas'), versions({ vendas: 'B' }).get('doc:vendas'));
+  assert.equal(versions({ vendas: 'A' }).get('element:vendas'), versions({ vendas: 'B' }).get('element:vendas'));
+  assert.equal(objectVersionsOf({ ...b, docs: {} }, ['doc:constructor']).get('doc:constructor'), null);
+});
+
+test('a plan that writes a text changed by hand is refused, and nothing is written', () => {
+  const { at, store } = folder('markdown');
+  const page = join(at, 'application-component', 'vendas.md');
+  writeFileSync(page, `${readFileSync(page, 'utf8')}\nVisto\n`);
+  const expect = Object.fromEntries(store().objectVersions(['doc:vendas']));
+  const edited = `${readFileSync(page, 'utf8')}\nEditado depois\n`;
+  writeFileSync(page, edited);
+  assert.throws(() => store().apply([{ op: 'putDoc', id: 'vendas', text: 'Novo' }], { expect }), e => e.code === 'E_STORE_CONFLICT');
+  assert.equal(readFileSync(page, 'utf8'), edited);
 });

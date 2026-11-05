@@ -6,6 +6,7 @@ import { existsSync, readFileSync, readdirSync, writeFileSync, mkdirSync, rmSync
 import { spawnSync } from 'node:child_process';
 import { join, dirname, resolve, relative } from 'node:path';
 import { ELEMENT_TYPES } from '../registry.mjs';
+import { docOf } from '../node-doc.mjs';
 import { applyOps, contentVersion } from './ops.mjs';
 import { objectVersionsOf, checkExpect } from './versions.mjs';
 import { subgraphOf, conflictError, objectConflictError, appendedEntry } from './contract.mjs';
@@ -152,7 +153,7 @@ export function gbrainGitConnector(locator, store, { describe = `${relative(proc
     return { sha, files, flat, base: readVaultFiles(flat) };
   }
 
-  const read = () => { const { base } = load(); return base && { raw: base.raw, notes: base.notes }; };
+  const read = () => { const { base } = load(); return base && { raw: base.raw, notes: base.notes, docs: base.docs }; };
   /** A page of the layout under the prefix (manifest, history, views, notes, elements), base or not. */
   const layoutPage = path => {
     const r = path.slice(prefix.length + 1);
@@ -199,9 +200,10 @@ export function gbrainGitConnector(locator, store, { describe = `${relative(proc
   }
 
   const c = {
-    kind: 'gbrain', writable: true, locator, versioning: 'object',
+    kind: 'gbrain', writable: true, locator, versioning: 'object', supportsDocs: true,
     describe: () => describe,
     read,
+    readDoc: id => docOf(read()?.docs, id),
     readSubgraph(query) {
       const r = read();
       if (!r) throw storeError('E_STORE_NOT_FOUND', `base não encontrada: ${describe}`);

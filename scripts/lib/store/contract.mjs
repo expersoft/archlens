@@ -4,10 +4,11 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { applyOps, contentVersion, manifestOf } from './ops.mjs';
 import { writeFilesAtomically } from './atomic.mjs';
-import { storeError } from './errors.mjs';
+import { storeError, docsUnsupported } from './errors.mjs';
+import { docOf } from '../node-doc.mjs';
 import { objectVersionsOf, checkExpect } from './versions.mjs';
 
-export const CONNECTOR_METHODS = ['describe', 'read', 'readSubgraph', 'version', 'objectVersions', 'apply', 'history'];
+export const CONNECTOR_METHODS = ['describe', 'read', 'readDoc', 'readSubgraph', 'version', 'objectVersions', 'apply', 'history'];
 export const CONNECTOR_KINDS = ['json', 'markdown', 'gbrain', 'legacy'];
 // "object": each object has its own version (apply checks the plan's objects); "base": one version for the whole base.
 export const VERSIONING = ['object', 'base'];
@@ -15,6 +16,7 @@ export const VERSIONING = ['object', 'base'];
 export function checkConnector(c) {
   if (!CONNECTOR_KINDS.includes(c?.kind)) throw new Error(`conector de tipo desconhecido: ${c?.kind}`);
   if (!VERSIONING.includes(c.versioning)) throw new Error(`o conector ${c.kind} não declara versioning (${VERSIONING.join(' | ')})`);
+  if (typeof c.supportsDocs !== 'boolean') throw new Error(`o conector ${c.kind} não declara supportsDocs`);
   for (const m of CONNECTOR_METHODS) if (typeof c[m] !== 'function') throw new Error(`o conector ${c.kind} não tem ${m}()`);
   return c;
 }
@@ -66,18 +68,20 @@ export function subgraphOf(raw, { seeds = [], depth = 1, via } = {}) {
 export const appendedEntry = (next, ops) => (ops.some(o => o?.op === 'appendHistory') ? next.raw.changelog?.at(-1) ?? null : null);
 
 /**
- * A connector over a base folder. `load(opts)` reads it ({ raw, notes, ctx } or null when there is no base);
+ * A connector over a base folder. `load(opts)` reads it ({ raw, notes, ctx, docs? } or null when there is no base); `docs`:
+ * the base keeps the documentation of its nodes, in read().docs, and accepts putDoc;
  * `contents(next, cur)` lists every file the base should have (relative path → text, null to delete); `after(next)`
  * runs once the files are in place; `preserved()` lists the files this apply wrote to keep text people wrote in what it
  * removed. apply writes only the files whose text changes, all or nothing, once the plan's versions still hold: `expect`
  * (ref → version, for "object" connectors) or `baseVersion`; checked on the base it reads and again right before the swap,
  * with `recheck(base)`, the caller's own conflicts on that base (a duplicate created in parallel), alongside `expect`.
  */
-export function fileConnector({ kind, dir, locator, describe, load, contents, after, preserved, versioning = 'base' }) {
+export function fileConnector({ kind, dir, locator, describe, load, contents, after, preserved, versioning = 'base', docs = false }) {
   const c = {
-    kind, writable: true, locator, versioning,
+    kind, writable: true, locator, versioning, supportsDocs: docs,
     describe: () => describe,
-    read(opts) { const r = load(opts); return r && { raw: r.raw, notes: r.notes }; },
+    read(opts) { const r = load(opts); return r && { raw: r.raw, notes: r.notes, ...(docs ? { docs: r.docs } : {}) }; },
+    readDoc(id) { return docOf(c.read()?.docs, id); },
     readSubgraph(query) {
       const r = c.read();
       if (!r) throw storeError('E_STORE_NOT_FOUND', `base não encontrada: ${describe}`);
@@ -89,6 +93,7 @@ export function fileConnector({ kind, dir, locator, describe, load, contents, af
     },
     history() { return c.read()?.raw.changelog ?? []; },
     apply(ops, { expect, baseVersion = null, recheck } = {}) {
+      if (!docs && Array.isArray(ops) && ops.some(o => o?.op === 'putDoc')) throw docsUnsupported();
       const verify = base => {
         if (expect) {
           const conflicts = [...checkExpect(c.objectVersions(Object.keys(expect), base), expect), ...(recheck?.(base) ?? [])];

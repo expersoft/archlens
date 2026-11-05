@@ -124,7 +124,28 @@ test('checkConnector requires versioning and objectVersions', () => {
   assert.throws(() => checkConnector({ ...c, versioning: undefined }), /versioning/);
   assert.throws(() => checkConnector({ ...c, versioning: 'page' }), /versioning/);
   assert.throws(() => checkConnector({ ...c, objectVersions: undefined }), /objectVersions/);
+  assert.throws(() => checkConnector({ ...c, readDoc: undefined }), /readDoc/);
+  assert.throws(() => checkConnector({ ...c, supportsDocs: undefined }), /supportsDocs/);
   assert.doesNotThrow(() => checkConnector(c));
+});
+
+test('o conector json não guarda documentação: supportsDocs falso e putDoc recusa', () => {
+  const dir = fresh(dir => dir);
+  const c = create(dir);
+  assert.equal(c.supportsDocs, false);
+  assert.equal(c.read().docs, undefined);
+  assert.equal(c.readDoc('loja'), null);
+  const before = snapshot(dir);
+  assert.throws(() => c.apply([{ op: 'putDoc', id: 'loja', text: 'Texto' }], { baseVersion: c.version() }),
+    e => e.code === 'E_STORE_DOC' && e.message.includes('documentação do nó exige uma base markdown ou gbrain; converta com "archlens store convert"'));
+  assert.deepEqual(snapshot(dir), before, 'nada foi gravado');
+  assert.throws(() => c.apply('nao-lista', { baseVersion: c.version() }), e => e.code === 'E_STORE_OP');
+});
+
+test('o conector markdown declara supportsDocs', () => {
+  const c = connectorAt(fresh(KINDS.find(([k]) => k === 'markdown')[1]));
+  assert.equal(c.supportsDocs, true);
+  assert.equal(c.readDoc('x'), null);
 });
 
 test('a manifest with an unknown store kind is refused', () => {
