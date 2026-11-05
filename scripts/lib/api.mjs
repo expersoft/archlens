@@ -4,7 +4,7 @@ import { planMerge, applyPlan, hashRaw, openQuestions, canonicalJson, mergeError
 import { diffRaw, contentVersion, applyOps } from './store/ops.mjs';
 import { writeSetOf, objectVersionsOf, checkExpect } from './store/versions.mjs';
 import { conflictError, short, appendedEntry } from './store/contract.mjs';
-import { storeError } from './store/errors.mjs';
+import { storeError, docsUnsupported } from './store/errors.mjs';
 import { previewModel, diffModels } from './preview.mjs';
 import { validateModel } from './validate.mjs';
 import { reportData, formatReport } from './plan-report.mjs';
@@ -19,6 +19,12 @@ const EMPTY = { raw: null, notes: {} };
 /** A plan of the current format that was already finalized. */
 export const isFinal = doc => doc?.['archlens-plan'] === PLAN_VERSION && doc.state === 'final' && Array.isArray(doc.ops);
 
+/** Refuses a delta or plan that writes node documentation on a connector that has nowhere to keep it. */
+function assertDocs(store, doc) {
+  const writes = (doc.docs ?? doc.delta?.docs)?.length || (Array.isArray(doc.ops) && doc.ops.some(o => o?.op === 'putDoc'));
+  if (writes && !store.supportsDocs) throw docsUnsupported();
+}
+
 /**
  * `plan` with its store operations: applies the (fully answered) plan to the loaded base and adds `entry` and `ops`
  * (the last op is appendHistory; a plan that changes nothing has no ops and no entry). applyPlan's errors surface as they are.
@@ -26,8 +32,8 @@ export const isFinal = doc => doc?.['archlens-plan'] === PLAN_VERSION && doc.sta
  * `knownCandidates`, the possible duplicates each new element already had.
  */
 function finish(store, loaded, plan, today) {
-  const res = applyPlan(loaded.raw, plan, { today });
-  const ops = res.entry ? diffRaw(loaded.raw ? loaded : null, { raw: res.raw, notes: loaded.notes }) : [];
+  const res = applyPlan(loaded.raw, plan, { today, docs: loaded.docs });
+  const ops = res.entry ? diffRaw(loaded.raw ? loaded : null, { raw: res.raw, notes: loaded.notes, docs: res.docs }) : [];
   const refs = [...new Set([...res.read, ...writeSetOf(ops, loaded)])].sort();
   const versions = store.objectVersions?.(refs, loaded) ?? objectVersionsOf(loaded, refs);
   const sorted = obj => Object.fromEntries(Object.entries(obj).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
@@ -39,9 +45,10 @@ function finish(store, loaded, plan, today) {
  * (`answers`: key → resolution, from answersOf), final (with the ops that write it) otherwise.
  */
 export function plan(store, delta, { answers, today } = {}) {
+  assertDocs(store, delta ?? {});
   const loaded = store.read() ?? EMPTY;
   const storeVersion = contentVersion(loaded); // same read as the content, so the plan's version matches it
-  const planned = planMerge(loaded.raw, delta, { base: basename(store.locator.path), answers, storeVersion, today });
+  const planned = planMerge(loaded.raw, delta, { base: basename(store.locator.path), answers, storeVersion, today, docs: loaded.docs });
   if (planned.blocked || openQuestions(planned).length) return { plan: { ...planned, state: 'open' } };
   return { plan: finish(store, loaded, planned, today) };
 }
@@ -51,6 +58,7 @@ export function plan(store, delta, { answers, today } = {}) {
  * version (E_STORE_CONFLICT); without a version, applyPlan checks the base hash.
  */
 export function finalize(store, plan, { today } = {}) {
+  assertDocs(store, plan);
   const loaded = store.read() ?? EMPTY;
   const version = contentVersion(loaded);
   if ('storeVersion' in plan && plan.storeVersion !== version) throw conflictError(plan.storeVersion, version);
@@ -76,8 +84,9 @@ export function answersOf(doc, delta) {
  */
 export function preview(store, { delta, plan } = {}) {
   if (!delta === !plan) throw mergeError('E_PREVIEW_INPUT', 'informe um delta ou um plano (e não os dois)');
-  const loaded = store.read() ?? EMPTY;
   const doc = delta ?? plan;
+  assertDocs(store, doc);
+  const loaded = store.read() ?? EMPTY;
   const stale = 'storeVersion' in doc ? doc.storeVersion !== contentVersion(loaded) : doc.baseHash && doc.baseHash !== hashRaw(loaded.raw);
   const warning = plan && stale ? 'a base mudou depois deste plano; a prévia usa a base atual' : undefined;
   let p;
@@ -85,7 +94,7 @@ export function preview(store, { delta, plan } = {}) {
     const raw = applyOps(loaded, plan.ops).raw;
     p = diffModels(loaded.raw, structuredClone(raw), { deltaViews: plan.delta?.views });
     p.plan = plan;
-  } else p = previewModel(loaded.raw, delta ? { delta } : { plan });
+  } else p = previewModel(loaded.raw, { ...(delta ? { delta } : { plan }), docs: loaded.docs });
   return { raw: p.raw, preview: p, ...(warning ? { warning } : {}) };
 }
 
@@ -121,7 +130,7 @@ function conflictLabels(conflicts, raw, plan) {
 function conflictLabel(c, element) {
   const at = c.ref.indexOf(':');
   const [kind, id] = at < 0 ? [c.ref, null] : [c.ref.slice(0, at), c.ref.slice(at + 1)];
-  const what = { element: () => element(id), relationship: () => `relação ${id}`, view: () => `visão ${id}`, note: () => `nota ${id}`, manifest: () => 'manifesto da base', page: () => `página ${id}` }[kind]?.() ?? c.ref;
+  const what = { element: () => element(id), relationship: () => `relação ${id}`, view: () => `visão ${id}`, note: () => `nota ${id}`, doc: () => `documentação de ${element(id)}`, manifest: () => 'manifesto da base', page: () => `página ${id}` }[kind]?.() ?? c.ref;
   if (c.reason === 'possible-duplicate') return `${what}: possível duplicata de ${element(c.candidate)}, que não estava na base do plano`;
   return `${what}: ${c.planned == null ? 'criado' : c.current == null ? 'removido' : 'alterado'} depois do plano`;
 }
@@ -158,6 +167,10 @@ export function apply(store, plan, { readCheck } = {}) {
   const loaded = store.read();
   // Checked here too: against another base the model errors below would mislead.
   const expect = store.versioning === 'object' && plan.objects ? plan.objects : null;
+  // The version of the whole base ignores the documentation: without `objects`, a text edited since would go unnoticed.
+  if (!expect && store.supportsDocs && plan.ops.some(o => o?.op === 'putDoc')) {
+    throw mergeError('E_PLAN_SCHEMA', `o plano grava documentação, mas não traz "objects"; refaça-o: ${redo}`);
+  }
   if (expect) {
     const conflicts = [...checkExpect(store.objectVersions(Object.keys(expect), loaded), expect), ...parallelDuplicates(loaded, plan)];
     if (conflicts.length) throw changed(conflicts, loaded?.raw);

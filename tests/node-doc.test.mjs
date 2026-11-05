@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { docHash, checkDocText, docOfUserText, userTextOfDoc, docOf } from '../scripts/lib/node-doc.mjs';
+import { docHash, checkDocText, docOfUserText, userTextOfDoc, docOf, lineDiff } from '../scripts/lib/node-doc.mjs';
 import { BEGIN, END } from '../scripts/lib/store/markdown-page.mjs';
 
 test('docHash is the sha256 of the trimmed text', () => {
@@ -34,4 +34,17 @@ test('docOf reads only what the map holds: an id named after an Object member ha
   assert.equal(docOf(undefined, 'a'), null);
   assert.equal(docOf({}, 'constructor'), null);
   assert.equal(docOf({}, '__proto__'), null);
+});
+
+test('lineDiff marca as linhas iguais, removidas e novas', () => {
+  assert.deepEqual(lineDiff('a\nb\nc', 'a\nx\nc\nd'), [
+    { sign: ' ', line: 'a' }, { sign: '-', line: 'b' }, { sign: '+', line: 'x' }, { sign: ' ', line: 'c' }, { sign: '+', line: 'd' },
+  ]);
+});
+
+test('lineDiff com um lado vazio, sem linha fantasma, e ignorando espaços em volta do texto', () => {
+  assert.deepEqual(lineDiff('', 'a'), [{ sign: '+', line: 'a' }]);
+  assert.deepEqual(lineDiff('a\n', ''), [{ sign: '-', line: 'a' }]);
+  assert.deepEqual(lineDiff('', ''), []);
+  assert.deepEqual(lineDiff(' a\r\nb\n', 'a\nb'), [{ sign: ' ', line: 'a' }, { sign: ' ', line: 'b' }]);
 });

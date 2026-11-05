@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { planMerge, applyPlan, previewMerge, relationshipIds, canonicalJson } from '../scripts/lib/merge.mjs';
+import { planMerge, applyPlan, previewMerge, relationshipIds, canonicalJson, validResolution, openQuestions } from '../scripts/lib/merge.mjs';
+import { docHash } from '../scripts/lib/node-doc.mjs';
 import { normalizeModel } from '../scripts/lib/model.mjs';
 import { validateModel } from '../scripts/lib/validate.mjs';
 import { formatPlanReport } from '../scripts/lib/merge-report.mjs';
@@ -807,4 +808,99 @@ test('nesting.except: a name in a delta view resolves to the element id', () => 
   const d = delta({}, { views: [{ key: 'n', notation: 'archimate', layer: 'application', nesting: { mode: 'edges', except: ['orders-service'] } }] });
   const { raw } = applyPlan(base, planMerge(base, d, TODAY), TODAY);
   assert.deepEqual(raw.views.find(v => v.key === 'n').nesting.except, ['loja.api']);
+});
+
+const docBase = () => asBase({ archlens: '1.0', model: { elements: [{ id: 'a', type: 'c4:softwareSystem', name: 'A' }, { id: 'b', type: 'c4:softwareSystem', name: 'B' }], relationships: [] } });
+const docsDelta = (...docs) => ({ 'archlens-delta': '1.0', summary: 'docs', docs });
+const docItems = p => p.items.filter(i => i.kind === 'doc');
+
+test('docs: texto igual, base vazia e base com texto viram unchanged, enrich e conflict', () => {
+  const key = `doc:b:${docHash('velho').slice(7, 19)}`;
+  const p = planMerge(docBase(), docsDelta({ id: 'a', text: '  igual\n' }, { id: 'b', text: 'novo' }), { docs: { a: 'igual', b: 'velho' } });
+  assert.deepEqual(docItems(p).map(({ key: k, class: c, kind, field, target, base, delta }) => ({ k, c, kind, field, target, base, delta })), [
+    { k: 'doc:a', c: 'unchanged', kind: 'doc', field: 'doc', target: 'a', base: 'igual', delta: '  igual\n' },
+    { k: key, c: 'conflict', kind: 'doc', field: 'doc', target: 'b', base: 'velho', delta: 'novo' },
+  ]);
+  const q = planMerge(docBase(), docsDelta({ id: 'a', text: 'novo' }));
+  assert.deepEqual(docItems(q).map(i => [i.key, i.class, i.base, 'resolution' in i]), [['doc:a', 'enrich', '', false]]);
+  assert.equal(openQuestions(q).length, 0);
+});
+
+test('docs: só keep e take respondem à pergunta da documentação', () => {
+  const item = docItems(planMerge(docBase(), docsDelta({ id: 'a', text: 'novo' }), { docs: { a: 'velho' } }))[0];
+  assert.ok(validResolution(item, 'keep') && validResolution(item, 'take'));
+  assert.ok(!validResolution(item, 'value:outro'));
+  assert.ok(!validResolution(item, 'yes'));
+});
+
+test('docs: applyPlan devolve o estado final completo e registra só o que mudou', () => {
+  const docs = { a: 'velho', b: 'fica' };
+  const p = planMerge(docBase(), docsDelta({ id: 'a', text: 'novo' }), { docs });
+  for (const it of p.items) if (it.class === 'conflict') it.resolution = 'take';
+  const res = applyPlan(docBase(), p, { docs, today: '2026-10-01' });
+  assert.deepEqual(res.docs, { a: 'novo', b: 'fica' });
+  assert.deepEqual(res.entry.docs, ['a']);
+  assert.ok(res.entry.decisions.some(d => d.includes('documentação de a')));
+  assert.ok(!res.entry.decisions.some(d => d.includes('novo')), 'a rodada não copia o texto');
+  assert.deepEqual(docs, { a: 'velho', b: 'fica' }, 'não muda o que recebeu');
+});
+
+test('docs: limpar tira o id do estado final; manter não cria rodada, mas devolve o estado', () => {
+  const docs = { a: 'velho', b: 'fica' };
+  const run = (text, resolution) => {
+    const p = planMerge(docBase(), docsDelta({ id: 'a', text }), { docs });
+    for (const it of p.items) if (it.class === 'conflict') it.resolution = resolution;
+    return applyPlan(docBase(), p, { docs, today: '2026-10-01' });
+  };
+  assert.deepEqual(run('   ', 'take').docs, { b: 'fica' });
+  const kept = run('novo', 'keep');
+  assert.equal(kept.entry, null);
+  assert.deepEqual(kept.docs, docs);
+});
+
+test('docs: um plano sem documentação na base nem no delta segue sem docs na rodada', () => {
+  const d = { 'archlens-delta': '1.0', summary: 's', model: { elements: [{ id: 'c', type: 'c4:softwareSystem', name: 'C' }] } };
+  const res = applyPlan(docBase(), planMerge(docBase(), d), { today: '2026-10-01' });
+  assert.ok(!('docs' in res.entry));
+  assert.deepEqual(res.docs, {});
+});
+
+test('docs: o elemento removido sai do estado final', () => {
+  const docs = { a: 'texto', b: 'fica' };
+  const d = { 'archlens-delta': '1.0', ops: [{ op: 'remove', id: 'a' }] };
+  const p = planMerge(docBase(), d, { docs });
+  for (const it of p.items) if (it.op === 'remove') it.resolution = 'yes';
+  assert.deepEqual(applyPlan(docBase(), p, { docs, today: '2026-10-01' }).docs, { b: 'fica' });
+});
+
+test('docs: id que é membro de Object não confunde o estado', () => {
+  const base = asBase({ archlens: '1.0', model: { elements: [{ id: 'constructor', type: 'c4:softwareSystem', name: 'C' }], relationships: [] } });
+  const p = planMerge(base, docsDelta({ id: 'constructor', text: 'novo' }));
+  assert.deepEqual(docItems(p).map(i => [i.class, i.base]), [['enrich', '']]);
+  assert.equal(applyPlan(base, p, { today: '2026-10-01' }).docs.constructor, 'novo');
+});
+
+test('docs: delta malformado recusa com E_DELTA_SCHEMA', () => {
+  for (const docs of [{}, [null], [{ id: 'a' }], [{ text: 'x' }], [{ id: 'a', text: 1 }]]) {
+    assert.throws(() => planMerge(docBase(), { 'archlens-delta': '1.0', docs }), e => e.code === 'E_DELTA_SCHEMA');
+  }
+});
+
+test('docs: previewMerge usa o texto da base', () => {
+  const { plan: p } = previewMerge(docBase(), docsDelta({ id: 'a', text: 'novo' }), { docs: { a: 'velho' } });
+  assert.equal(docItems(p)[0].class, 'conflict');
+});
+
+test('docs: o relatório do plano mostra o texto novo de um nó vazio, que não tem pergunta', () => {
+  const out = formatPlanReport(planMerge(docBase(), docsDelta({ id: 'a', text: 'linha 1\nlinha 2' })));
+  assert.match(out, /Documentação nova de a:\n {6}\+ linha 1\n {6}\+ linha 2/);
+});
+
+test('docs: o relatório do plano mostra a pergunta com as linhas trocadas', () => {
+  const p = planMerge(docBase(), docsDelta({ id: 'a', text: 'igual\nnovo' }), { docs: { a: 'igual\nantigo' } });
+  const out = formatPlanReport(p);
+  assert.match(out, /documentação de a: o texto existente será trocado {2}→ keep \| take/);
+  assert.match(out, /^ {6}- antigo$/m);
+  assert.match(out, /^ {6}\+ novo$/m);
+  assert.match(out, /^ {8}igual$/m);
 });

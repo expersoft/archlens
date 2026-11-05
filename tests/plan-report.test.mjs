@@ -9,6 +9,7 @@ import { plan, answersOf, show } from '../scripts/lib/api.mjs';
 import { resolveBase, openStore } from '../scripts/lib/store/index.mjs';
 import { saveFolder } from '../scripts/lib/store/folder.mjs';
 import { hashRaw } from '../scripts/lib/merge.mjs';
+import { diffRaw } from '../scripts/lib/store/ops.mjs';
 import { asBase, memStore, matchSnapshot } from './helpers.mjs';
 
 const TODAY = { today: '2026-10-01' };
@@ -152,4 +153,44 @@ test('CLI: show of a plan made for a missing base prints the report and writes n
   assert.equal(r.status, 0, r.stderr);
   assert.match(r.stdout, /Sistema/);
   assert.deepEqual(readdirSync(tmp).sort(), ['d.json', 'p.json']);
+});
+
+const docVault = docs => {
+  const d = mkdtempSync(join(tmpdir(), 'archlens-doc-report-'));
+  writeFileSync(join(d, 'archlens.json'), JSON.stringify({ archlens: '2.0', name: 'x', store: { kind: 'markdown' } }));
+  const c = openStore(resolveBase(d));
+  c.apply(diffRaw(c.read(), { raw: shop(), notes: {}, docs }), { baseVersion: c.version() });
+  return openStore(resolveBase(d));
+};
+const docDelta = (...docs) => ({ 'archlens-delta': '1.0', summary: 'Documenta a API', docs });
+
+test('o relatório da pergunta de documentação mostra as linhas antigas e novas', () => {
+  const store = docVault({ 'loja.api': 'comum\nantigo' });
+  const { plan: p } = plan(store, docDelta({ id: 'loja.api', text: 'comum\nnovo' }), TODAY);
+  const md = show(store, p);
+  assert.match(md, /## Decisões pendentes\n- 1\. documentação de loja\.api: o texto existente será trocado/);
+  assert.match(md, /## Documentação\n- \*\*API\*\* \(`loja\.api`\): troca do texto\n\n```diff\n {2}comum\n- antigo\n\+ novo\n```/);
+  const data = show(store, p, { format: 'json' });
+  assert.deepEqual(data.docs, [{ id: 'loja.api', name: 'API', kind: 'replace', resolution: null, diff: [
+    { sign: ' ', line: 'comum' }, { sign: '-', line: 'antigo' }, { sign: '+', line: 'novo' }] }]);
+});
+
+test('o relatório lista o texto novo e a limpeza, sem o que não muda nem o que foi mantido', () => {
+  const store = docVault({ 'loja.api': 'A', 'loja.web': 'igual', 'pagamentos': 'fica' });
+  const d = docDelta({ id: 'loja.api', text: '' }, { id: 'loja.web', text: 'igual' }, { id: 'cliente', text: 'Novo' }, { id: 'pagamentos', text: 'outro' });
+  const open = plan(store, d, TODAY).plan;
+  const byId = Object.fromEntries(open.items.filter(i => i.class === 'conflict').map(i => [i.target, i.n]));
+  const { plan: p } = plan(store, d, { ...TODAY, answers: answersOf(fill(structuredClone(open), { [byId['loja.api']]: 'take', [byId.pagamentos]: 'keep' })).answers });
+  assert.equal(p.state, 'final');
+  const { docs } = show(store, p, { format: 'json' });
+  assert.deepEqual(docs.map(x => [x.id, x.kind]), [['cliente', 'new'], ['loja.api', 'clear']]);
+  assert.match(show(store, p), /\(`cliente`\): texto novo/);
+  assert.match(show(store, p), /\(`loja\.api`\): limpeza do texto/);
+});
+
+test('um plano sem documentação não ganha seção no relatório', () => {
+  const { mem, final } = telePlans();
+  const md = show(mem, final);
+  assert.ok(!md.includes('## Documentação'));
+  assert.deepEqual(show(mem, final, { format: 'json' }).docs, []);
 });

@@ -161,3 +161,43 @@ test('a failed atomic write removes the folders it created for its temp files, a
   assert.deepEqual(readdirSync(dir).sort(), ['node']);
   assert.deepEqual(readdirSync(join(dir, 'node')), [], 'the folder that was there stays, without temp files');
 });
+
+// recheck runs twice in an apply: the first time after the base was read and before the pages are built, the second
+// right before the swap, once the set of files to write is closed.
+const editedMidApply = (dir, rel, text, at = 1) => {
+  let calls = 0;
+  return () => {
+    if (++calls === at) writeFileSync(join(dir, rel), `${readFileSync(join(dir, rel), 'utf8')}\n${text}\n`);
+    return [];
+  };
+};
+const docPlanVault = () => {
+  const dir = fresh(KINDS.find(([k]) => k === 'markdown')[1]);
+  const c = connectorAt(dir);
+  const raw = { archlens: '2.0', name: 'x', model: { elements: [{ id: 'a', type: 'node', name: 'A' }, { id: 'b', type: 'node', name: 'B' }], relationships: [] } };
+  c.apply(diffRaw(c.read(), { raw, notes: {} }), { baseVersion: c.version() });
+  const rename = name => ({ op: 'upsertElement', element: { id: 'a', type: 'node', name } });
+  return { dir, c: connectorAt(dir), rename };
+};
+
+test('edição direta entre a leitura e a troca recusa um plano só de campos e preserva o texto', () => {
+  const { dir, c, rename } = docPlanVault();
+  assert.throws(() => c.apply([rename('A2')], { expect: {}, recheck: editedMidApply(dir, 'node/a.md', 'Escrito agora') }),
+    e => e.code === 'E_STORE_CONFLICT' && e.conflicts.some(x => x.ref === 'doc:a'));
+  assert.match(readFileSync(join(dir, 'node/a.md'), 'utf8'), /Escrito agora/);
+  assert.equal(c.read().raw.model.elements.find(e => e.id === 'a').name, 'A');
+});
+
+test('edição direta em outra página antes de montar os arquivos recusa, porque a página seria regravada com o texto velho', () => {
+  const { dir, c, rename } = docPlanVault();
+  assert.throws(() => c.apply([rename('A2')], { expect: {}, recheck: editedMidApply(dir, 'node/b.md', 'Escrito agora') }),
+    e => e.code === 'E_STORE_CONFLICT' && e.conflicts.some(x => x.ref === 'doc:b'));
+  assert.equal(c.readDoc('b'), 'Escrito agora');
+});
+
+test('edição direta numa página que o plano não grava, com os arquivos já montados, não atrapalha', () => {
+  const { dir, c, rename } = docPlanVault();
+  c.apply([rename('A2')], { expect: {}, recheck: editedMidApply(dir, 'node/b.md', 'Escrito agora', 2) });
+  assert.equal(c.read().raw.model.elements.find(e => e.id === 'a').name, 'A2');
+  assert.equal(c.readDoc('b'), 'Escrito agora');
+});

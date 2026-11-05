@@ -1,9 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { plan, finalize, answersOf, isFinal, apply, preview } from '../scripts/lib/api.mjs';
-import { planMerge, applyPlan, canonicalJson, relationshipIds } from '../scripts/lib/merge.mjs';
-import { applyOps, contentVersion } from '../scripts/lib/store/ops.mjs';
+import { planMerge, applyPlan, canonicalJson, relationshipIds, openQuestions } from '../scripts/lib/merge.mjs';
+import { applyOps, contentVersion, diffRaw } from '../scripts/lib/store/ops.mjs';
+import { docHash } from '../scripts/lib/node-doc.mjs';
+import { END } from '../scripts/lib/store/markdown-page.mjs';
 import { subgraphOf, conflictError } from '../scripts/lib/store/contract.mjs';
 import { fileURLToPath } from 'node:url';
 import { resolveBase, openStore } from '../scripts/lib/store/index.mjs';
@@ -354,4 +358,208 @@ test('the preview of a final plan has its changes and no pending questions', () 
   assert.equal(res.warning, undefined);
   store.apply(p.ops);
   assert.match(preview(store, { plan: p }).warning, /base mudou/);
+});
+
+// --- Documentation of a node: over a real vault, the only connector family that keeps it. ---
+const API_PAGE = 'application-component/loja.api.md';
+const docVault = (docs = {}) => {
+  const dir = mkdtempSync(join(tmpdir(), 'archlens-doc-'));
+  writeFileSync(join(dir, 'archlens.json'), JSON.stringify({ archlens: '2.0', name: 'x', store: { kind: 'markdown' } }));
+  const c = openStore(resolveBase(dir));
+  c.apply(diffRaw(c.read(), { raw: shop(), notes: {}, docs }), { baseVersion: c.version() });
+  return { dir, store: () => openStore(resolveBase(dir)) };
+};
+const docOfPage = (dir, rel = API_PAGE) => { const t = readFileSync(join(dir, rel), 'utf8'); return t.slice(t.indexOf(END) + END.length).trim(); };
+/** What a person does in the editor: only the part after the archlens block changes. */
+const editPage = (dir, text, rel = API_PAGE) => {
+  const t = readFileSync(join(dir, rel), 'utf8');
+  writeFileSync(join(dir, rel), `${t.slice(0, t.indexOf(END) + END.length)}\n\n${text}\n`);
+};
+const docDelta = (text, id = 'loja.api', extra = {}, model = {}) => delta(model, { docs: [{ id, text }], ...extra });
+const docKey = (text, id = 'loja.api') => `doc:${id}:${docHash(text).slice(7, 19)}`;
+const replan = (store, d, p, map) => plan(store, d, { ...TODAY, answers: answersOf(answer(structuredClone(p), map)).answers }).plan;
+
+test('nó sem texto: plano final direto, grava e registra na rodada', () => {
+  const { dir, store } = docVault();
+  const { plan: p } = plan(store(), docDelta('Texto novo'), TODAY);
+  assert.equal(p.state, 'final');
+  assert.equal(openQuestions(p).length, 0);
+  assert.deepEqual(p.ops.map(o => o.op), ['putDoc', 'appendHistory']);
+  assert.ok('doc:loja.api' in p.objects && p.objects['doc:loja.api'] === null);
+  const res = apply(store(), p);
+  assert.deepEqual(res.entry.docs, ['loja.api']);
+  assert.ok(!JSON.stringify(res.entry).includes('Texto novo'), 'a rodada não copia o texto');
+  assert.equal(docOfPage(dir), 'Texto novo');
+  assert.deepEqual(store().read().raw.changelog.at(-1).docs, ['loja.api']);
+});
+
+test('trocar texto existente abre pergunta com a diferença', () => {
+  const { store } = docVault({ 'loja.api': 'A' });
+  const { plan: p } = plan(store(), docDelta('B'), TODAY);
+  assert.equal(p.state, 'open');
+  const [q] = openQuestions(p);
+  assert.equal(q.key, `doc:loja.api:${docHash('A').slice(7, 19)}`);
+  assert.equal(q.base, 'A');
+  assert.equal(q.delta, 'B');
+});
+
+test('keep não grava; take grava', () => {
+  const { dir, store } = docVault({ 'loja.api': 'A' });
+  const d = docDelta('B');
+  const open = plan(store(), d, TODAY).plan;
+  const kept = replan(store(), d, open, { [docKey('A')]: 'keep' });
+  assert.equal(kept.state, 'final');
+  assert.deepEqual(kept.ops, []);
+  assert.equal(kept.entry, null);
+  assert.equal(apply(store(), kept).entry, null);
+  assert.equal(docOfPage(dir), 'A');
+  const taken = replan(store(), d, open, { [docKey('A')]: 'take' });
+  assert.deepEqual(taken.ops.map(o => o.op), ['putDoc', 'appendHistory']);
+  apply(store(), taken);
+  assert.equal(docOfPage(dir), 'B');
+});
+
+test('um plano que toca a documentação de um nó não emite putDoc para os outros', () => {
+  const { dir, store } = docVault({ 'loja.api': 'A', 'loja.web': 'Texto da web' });
+  const d = docDelta('B');
+  const p = replan(store(), d, plan(store(), d, TODAY).plan, { [docKey('A')]: 'take' });
+  assert.deepEqual(p.ops.filter(o => o.op === 'putDoc').map(o => o.id), ['loja.api']);
+  apply(store(), p);
+  assert.equal(docOfPage(dir, 'application-component/loja.web.md'), 'Texto da web');
+  const fields = plan(store(), renameApi(), { ...TODAY, answers: new Map([['el:loja.api:name', 'take']]) }).plan;
+  assert.ok(!fields.ops.some(o => o.op === 'putDoc'), 'um plano sem docs no delta não mexe em documentação nenhuma');
+});
+
+test('limpar é explícito e conta como troca', () => {
+  const { dir, store } = docVault({ 'loja.api': 'A' });
+  const d = docDelta('');
+  const open = plan(store(), d, TODAY).plan;
+  assert.equal(open.state, 'open');
+  assert.equal(openQuestions(open)[0].key, docKey('A'));
+  const res = apply(store(), replan(store(), d, open, { [docKey('A')]: 'take' }));
+  assert.deepEqual(res.entry.docs, ['loja.api']);
+  assert.equal(docOfPage(dir), '');
+  assert.equal(store().readDoc('loja.api'), null);
+});
+
+test('edição depois do plano final recusa com E_STORE_CONFLICT e preserva o texto', () => {
+  const { dir, store } = docVault({ 'loja.api': 'A' });
+  const d = docDelta('B');
+  const p = replan(store(), d, plan(store(), d, TODAY).plan, { [docKey('A')]: 'take' });
+  editPage(dir, 'Editado à mão');
+  assert.throws(() => apply(store(), p), e => e.code === 'E_STORE_CONFLICT' && /documentação de "API" \(loja\.api\)/.test(e.message) && !e.message.includes('doc:loja.api'));
+  assert.equal(docOfPage(dir), 'Editado à mão');
+});
+
+test('nó vazio ao planejar e preenchido depois também recusa', () => {
+  const { dir, store } = docVault();
+  const { plan: p } = plan(store(), docDelta('Novo'), TODAY);
+  editPage(dir, 'Escrito à mão');
+  assert.throws(() => apply(store(), p), e => e.code === 'E_STORE_CONFLICT');
+  assert.equal(docOfPage(dir), 'Escrito à mão');
+});
+
+test('resposta antiga não vale para texto que mudou: replanejar reabre a pergunta', () => {
+  const { dir, store } = docVault({ 'loja.api': 'A' });
+  const d = docDelta('B');
+  const open = plan(store(), d, TODAY).plan;
+  const answered = answer(structuredClone(open), { [docKey('A')]: 'take' });
+  editPage(dir, 'A2');
+  const again = plan(store(), d, { ...TODAY, answers: answersOf(answered).answers }).plan;
+  assert.equal(again.state, 'open');
+  assert.equal(openQuestions(again)[0].key, docKey('A2'));
+  assert.throws(() => finalize(store(), answered, TODAY), e => e.code === 'E_PLAN_REPLAN', 'fechar o plano antigo sobre o texto novo também recusa');
+});
+
+test('plano aberto com nó vazio e preenchido antes de fechar não sobrescreve', () => {
+  const { dir, store } = docVault();
+  const d = docDelta('Novo', 'loja.api', {}, { elements: [{ id: 'loja.api', type: 'c4:container', name: 'API Nova' }] });
+  const open = plan(store(), d, TODAY).plan;
+  assert.equal(open.state, 'open');
+  const answered = answer(structuredClone(open), { 'el:loja.api:name': 'take' });
+  editPage(dir, 'Escrito à mão');
+  assert.throws(() => finalize(store(), answered, TODAY), e => e.code === 'E_PLAN_REPLAN');
+  assert.equal(plan(store(), d, { ...TODAY, answers: answersOf(answered).answers }).plan.state, 'open');
+  assert.equal(docOfPage(dir), 'Escrito à mão');
+});
+
+test('plano que só muda campo do nó aplica depois de edição direta e mantém o texto', () => {
+  const { dir, store } = docVault({ 'loja.api': 'A' });
+  const p = plan(store(), renameApi(), { ...TODAY, answers: new Map([['el:loja.api:name', 'take']]) }).plan;
+  assert.equal(p.state, 'final');
+  assert.ok(!Object.keys(p.objects).some(r => r.startsWith('doc:')));
+  editPage(dir, 'Editado à mão');
+  apply(store(), p);
+  assert.equal(store().read().raw.model.elements.find(e => e.id === 'loja.api').name, 'API Nova');
+  assert.equal(docOfPage(dir), 'Editado à mão');
+});
+
+test('base JSON recusa delta com docs com E_STORE_DOC', () => {
+  const store = openStore(resolveBase(fileURLToPath(new URL('../examples/loja-online/architecture', import.meta.url))));
+  assert.equal(store.supportsDocs, false);
+  const refused = e => e.code === 'E_STORE_DOC' && e.message.includes('store convert');
+  const d = docDelta('Texto');
+  assert.throws(() => plan(store, d, TODAY), refused);
+  assert.throws(() => preview(store, { delta: d }), refused);
+  // A plan made elsewhere (a vault that was converted): neither its delta nor its ops get past the JSON base.
+  const { plan: p } = plan(docVault().store(), d, TODAY);
+  assert.throws(() => preview(store, { plan: p }), refused);
+  assert.throws(() => preview(store, { plan: { ...p, delta: delta() } }), refused);
+  assert.throws(() => finalize(store, { ...p, storeVersion: store.version() }, TODAY), refused);
+});
+
+test('id desconhecido, elemento sendo removido e marcador recusam com E_DELTA_DOC', () => {
+  const { dir, store } = docVault();
+  const blocked = (d, re) => {
+    const { plan: p } = plan(store(), d, TODAY);
+    assert.equal(p.blocked, true);
+    assert.equal(p.state, 'open');
+    const err = p.errors.find(e => e.code === 'E_DELTA_DOC');
+    assert.match(err.message, re);
+    assert.ok(!err.message.startsWith('E_DELTA_DOC'));
+  };
+  blocked(docDelta('x', 'nao.existe'), /"nao\.existe" não existe/);
+  blocked(docDelta('x', 'loja.api', { ops: [{ op: 'remove', id: 'loja.api' }] }), /removido/);
+  blocked(docDelta('x', 'loja.api.checkout', { ops: [{ op: 'remove', id: 'loja.api' }] }), /removido/);
+  blocked(docDelta('antes <!-- archlens:end --> depois'), /marcador/);
+  blocked(docDelta('<!-- archlens:begin -->'), /marcador/);
+  blocked(delta({}, { docs: [{ id: 'loja.api', text: 'a' }, { id: 'loja.api', text: 'b' }] }), /mais de uma vez/);
+  assert.equal(docOfPage(dir), '');
+});
+
+test('documentação de elemento novo do mesmo delta', () => {
+  const { dir, store } = docVault();
+  const d = docDelta('Texto do cache', 'loja.cache', {}, { elements: [{ id: 'loja.cache', type: 'c4:container', name: 'Cache', parent: 'loja' }] });
+  const { plan: p } = plan(store(), d, TODAY);
+  assert.equal(p.state, 'final');
+  assert.deepEqual(p.items.filter(i => i.kind === 'doc').map(i => [i.key, i.class]), [['doc:loja.cache', 'enrich']]);
+  const res = apply(store(), p);
+  assert.deepEqual(res.entry.added, ['loja.cache']);
+  assert.deepEqual(res.entry.docs, ['loja.cache']);
+  const [{ type }] = store().read().raw.model.elements.filter(e => e.id === 'loja.cache');
+  assert.equal(docOfPage(dir, `${type}/loja.cache.md`), 'Texto do cache');
+});
+
+test('a documentação segue o id final: alias do delta chega ao elemento da base', () => {
+  const { dir, store } = docVault();
+  const d = delta({}, { docs: [{ id: 'API de vendas', text: 'Texto' }], ops: [{ op: 'alias', id: 'loja.api', add: ['API de vendas'] }] });
+  const { plan: p } = plan(store(), d, TODAY);
+  assert.deepEqual(p.items.filter(i => i.kind === 'doc').map(i => i.target), ['loja.api']);
+  apply(store(), p);
+  assert.equal(docOfPage(dir), 'Texto');
+});
+
+test('um plano que grava documentação sem "objects" recusa: a versão da base não vê o texto', () => {
+  const { dir, store } = docVault();
+  const { objects, ...p } = plan(store(), docDelta('Novo'), TODAY).plan;
+  assert.ok(objects);
+  assert.throws(() => apply(store(), p), e => e.code === 'E_PLAN_SCHEMA' && e.message.includes('objects'));
+  assert.equal(docOfPage(dir), '');
+});
+
+test('a prévia de um delta com docs mostra a pergunta pendente sobre o texto da base', () => {
+  const { store } = docVault({ 'loja.api': 'A' });
+  const { preview: p } = preview(store(), { delta: docDelta('B') });
+  assert.deepEqual(p.pending.get('loja.api').map(q => [q.key, q.options]), [[docKey('A'), ['keep', 'take']]]);
+  assert.match(p.pending.get('loja.api')[0].question, /documentação de loja\.api: o texto existente será trocado/);
 });

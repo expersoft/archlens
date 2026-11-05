@@ -62,7 +62,8 @@
               "element",
               "relationship",
               "view",
-              "assumption"
+              "assumption",
+              "doc"
             ]
           },
           "field": {

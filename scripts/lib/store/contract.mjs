@@ -75,6 +75,8 @@ export const appendedEntry = (next, ops) => (ops.some(o => o?.op === 'appendHist
  * removed. apply writes only the files whose text changes, all or nothing, once the plan's versions still hold: `expect`
  * (ref → version, for "object" connectors) or `baseVersion`; checked on the base it reads and again right before the swap,
  * with `recheck(base)`, the caller's own conflicts on that base (a duplicate created in parallel), alongside `expect`.
+ * The pages are built from what was read: right before the swap, a page about to be rewritten must also still hold the
+ * same documentation (`cur.ctx.pages`: id → { rel }), or a text saved in between, which no plan names, would be lost.
  */
 export function fileConnector({ kind, dir, locator, describe, load, contents, after, preserved, versioning = 'base', docs = false }) {
   const c = {
@@ -112,7 +114,13 @@ export function fileConnector({ kind, dir, locator, describe, load, contents, af
         const exists = existsSync(path);
         if (text === null ? exists : !(exists && readFileSync(path, 'utf8') === text)) changes.set(rel, text);
       }
-      writeFilesAtomically(dir, changes, { check: () => verify(load()) });
+      const verifyDocs = base => {
+        if (!docs || !cur || !base) return;
+        const refs = [...new Set([...cur.ctx.pages, ...base.ctx.pages].filter(([, p]) => changes.has(p.rel)).map(([id]) => `doc:${id}`))];
+        const conflicts = checkExpect(objectVersionsOf(base, refs), Object.fromEntries(objectVersionsOf(cur, refs)));
+        if (conflicts.length) throw objectConflictError(conflicts);
+      };
+      writeFilesAtomically(dir, changes, { check: () => { const base = load(); verify(base); verifyDocs(base); } });
       after?.(next);
       return { version: contentVersion(next), preserved: preserved?.() ?? [], entry: appendedEntry(next, ops) };
     },
