@@ -9,6 +9,7 @@ import { catalog, findElements, labelsOf } from './catalog.mjs';
 import { renderSpec, createViewCache } from './views.mjs';
 import { actionsFor, flipSpec } from './navigation.mjs';
 import { viewAnswer, formatViewAnswer } from '../../../scripts/lib/query-md.mjs';
+import { plainWikilinks } from '../../../scripts/lib/node-doc.mjs';
 import { createProvider } from './ask/providers.mjs';
 import { DEFAULT_MAX_HISTORY } from './ask/context.mjs';
 import { runAsk } from './ask/agent.mjs';
@@ -214,7 +215,14 @@ export async function startServer({ config, staticDir, registry, provider } = {}
       const card = query(ctx.snapshot, { element: id, format: 'json' });
       const el = ctx.model.elements.get(id);
       if (card?.element && el) Object.assign(card.element, labelsOf(ctx, el));
-      return { card, actions: actionsFor(ctx, id) };
+      return { card, actions: actionsFor(ctx, id), docs: ctx.store.supportsDocs };
+    }],
+    // The documentation of a node, only when its tab opens: the current text, not the one of the snapshot in memory.
+    ['GET', /^\/api\/bases\/([^/]+)\/elements\/([^/]+)\/doc$/, async (_req, [b, id]) => {
+      const ctx = registry.get(b);
+      if (!ctx.model.elements.has(id)) throw httpError(400, `"${id}" não existe na base`, 'E_UNKNOWN_REF');
+      const text = await ctx.readDoc(id);
+      return { text: text ? plainWikilinks(text) : null };
     }],
     // Only the actions (context menu, double click): from the model in memory, no card.
     ['GET', /^\/api\/bases\/([^/]+)\/elements\/([^/]+)\/actions$/, async (_req, [b, id]) => {

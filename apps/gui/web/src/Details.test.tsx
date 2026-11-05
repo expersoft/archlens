@@ -1,8 +1,11 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+
+vi.mock('./api', async (orig) => ({ ...(await orig<typeof import('./api')>()), getDoc: vi.fn() }));
+
 import { Details } from './Details';
-import type { Card, ViewEdge, ViewNode } from './api';
+import { getDoc, type Card, type ViewEdge, type ViewNode } from './api';
 
 const card: Card = {
   element: { id: 'tele.api', name: 'API de Agendamento', type: 'application-component', kind: 'container', typeLabel: 'Application Component', c4Label: 'Container', status: 'active', technology: 'REST', description: 'Agenda', aliases: ['api'] },
@@ -20,6 +23,8 @@ const edges: ViewEdge[] = [
 const props = { nodeId: 'tele.api', onPick: () => {}, onSelectInView: () => {}, onGlossary: () => {} };
 
 describe('Details', () => {
+  beforeEach(() => { vi.mocked(getDoc).mockReset(); vi.mocked(getDoc).mockResolvedValue({ text: 'Texto do nó' }); });
+
   it('mostra Nesta visão e Na base, a frase da relação e o chip de tecnologia', () => {
     render(<Details {...props} card={card} viewNode={node} viewEdges={edges} />);
     expect(screen.getByText('Nesta visão')).toBeTruthy();
@@ -76,5 +81,43 @@ describe('Details', () => {
     unmount();
     render(<Details {...props} card={card} viewNode={null} viewEdges={edges} />);
     expect(screen.queryByText('Propriedades')).toBeNull();
+  });
+
+  it('sem docsEnabled não há aba Documentação', () => {
+    render(<Details {...props} card={card} viewNode={null} viewEdges={edges} base="b" docsEnabled={false} />);
+    expect(screen.queryByRole('tab')).toBeNull();
+    expect(screen.queryByText('Documentação')).toBeNull();
+    expect(screen.getByText('Filho X')).toBeTruthy();
+  });
+
+  it('a aba só busca a documentação ao ser aberta; Detalhes volta ao cartão', async () => {
+    render(<Details {...props} card={card} viewNode={null} viewEdges={edges} base="b" docsEnabled />);
+    expect(screen.getByRole('tab', { name: 'Detalhes' }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByText('Filho X')).toBeTruthy();
+    expect(getDoc).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole('tab', { name: 'Documentação' }));
+    expect(await screen.findByText('Texto do nó')).toBeTruthy();
+    expect(getDoc).toHaveBeenCalledWith('b', 'tele.api');
+    expect(screen.queryByText('Filho X')).toBeNull();
+    await userEvent.click(screen.getByRole('tab', { name: 'Detalhes' }));
+    expect(screen.getByText('Filho X')).toBeTruthy();
+    expect(screen.queryByText('Texto do nó')).toBeNull();
+  });
+
+  it('a aba aberta acompanha a troca de nó', async () => {
+    const view = { card, viewNode: null, viewEdges: edges, base: 'b', docsEnabled: true };
+    const { rerender } = render(<Details {...props} {...view} />);
+    await userEvent.click(screen.getByRole('tab', { name: 'Documentação' }));
+    await screen.findByText('Texto do nó');
+    rerender(<Details {...props} {...view} nodeId="outro" card={null} />);
+    expect(getDoc).toHaveBeenLastCalledWith('b', 'outro');
+  });
+
+  it('numa base sem documentação a aba aberta cede lugar aos detalhes', async () => {
+    const view = { card, viewNode: null, viewEdges: edges, base: 'b' };
+    const { rerender } = render(<Details {...props} {...view} docsEnabled />);
+    await userEvent.click(screen.getByRole('tab', { name: 'Documentação' }));
+    rerender(<Details {...props} {...view} docsEnabled={false} />);
+    expect(screen.getByText('Filho X')).toBeTruthy();
   });
 });

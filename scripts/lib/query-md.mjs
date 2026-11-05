@@ -3,6 +3,7 @@
 import { resolveView } from './query.mjs';
 import { explainEdge } from './explain.mjs';
 import { LAYER_ORDER, LAYER_LABELS } from './registry.mjs';
+import { plainWikilinks, demoteHeadings } from './node-doc.mjs';
 
 const C4_SECTIONS = [['person', 'Pessoas'], ['softwareSystem', 'Sistemas de software'], ['container', 'Contêineres'], ['component', 'Componentes']];
 const MAX_NODES = 40;
@@ -61,13 +62,14 @@ const aliasesOf = el => (Array.isArray(el.aliases) ? el.aliases : []);
 /** True when `text` names `id` as a whole token (not as a prefix such as `id.child`, nor inside a longer id). */
 const cites = (text, id) => typeof text === 'string' && new RegExp(`(?<![\\w.:-])${id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\w-]|\\.\\w)`).test(text);
 
-/** The changelog entries that cite `id` as added, changed, removed, with a status, or in a decision. */
+/** The changelog entries that cite `id` as added, changed, with its documentation changed, removed, with a status, or in a decision. */
 function roundsOf(history, id) {
   const out = [];
   for (const h of history ?? []) {
     const how = [];
     if ((h.added ?? []).includes(id)) how.push('adicionado');
     if ((h.changed ?? []).includes(id)) how.push('alterado');
+    if ((h.docs ?? []).includes(id)) how.push('documentação');
     if ((h.removed ?? []).includes(id)) how.push('removido');
     if (h.status && Object.hasOwn(h.status, id)) how.push(`status: ${h.status[id]}`);
     if ((h.decisions ?? []).some(d => cites(d, id))) how.push('decisão');
@@ -127,7 +129,14 @@ export function elementCard(subRaw, id, { history = [], depth = 1 } = {}) {
 
 const edgeLines = groups => Object.entries(groups).flatMap(([type, list]) => [`### ${type}`, '', ...list.map(e => `- ${e.sentence}${e.technology ? ` [${e.technology}]` : ''}`), '']);
 
-export function formatElementCard(c) {
+/** The "Documentação" section: below the card's headings, and cut at `docMax` characters without splitting a surrogate pair. */
+function docLines(doc, docMax) {
+  const text = demoteHeadings(plainWikilinks(doc), 2);
+  if (docMax === undefined || text.length <= docMax) return ['## Documentação', '', text, ''];
+  return ['## Documentação', '', text.slice(0, docMax).replace(/[\uD800-\uDBFF]$/, ''), '', `[documentação cortada em ${docMax} caracteres]`, ''];
+}
+
+export function formatElementCard(c, { doc, docMax } = {}) {
   const e = c.element;
   const out = [`# ${e.name}`, '', `- Id: \`${e.id}\``, `- Tipo: ${e.type}${e.kind ? ` (perfil C4: ${e.kind})` : ''}`, `- Status: ${e.status}`];
   if (e.technology) out.push(`- Tecnologia: ${e.technology}`);
@@ -143,5 +152,6 @@ export function formatElementCard(c) {
   if (c.sources.length) out.push('## Fontes', '', ...c.sources.map(s => `- ${s.kind}${s.ref ? `: ${s.ref}` : ''}${s.date ? ` (${s.date})` : ''}`), '');
   if (c.rounds.length) out.push('## Rodadas', '', ...c.rounds.map(r => `- ${r.id}${r.date ? ` (${r.date})` : ''}: ${r.summary} [${r.how.join(', ')}]`), '');
   if (c.around.length) out.push('## Em volta', '', ...table(['Nome', 'Tipo', 'Saltos'], c.around.map(r => [r.name, r.kind && r.kind !== r.type ? `${r.type} (${r.kind})` : r.type, r.distance])), '');
+  if (doc) out.push(...docLines(doc, docMax));
   return out.join('\n').replace(/\n+$/, '\n');
 }

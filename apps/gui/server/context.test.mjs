@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtempSync, cpSync, readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createBaseRegistry } from './bases.mjs';
@@ -63,4 +65,18 @@ test('user message carries view, selection, choice and history', () => {
 test('loadPrompt appends the json protocol only in json mode', () => {
   const t = loadPrompt({ mode: 'tools' }), j = loadPrompt({ mode: 'json' });
   assert.ok(j.startsWith(t) && j.length > t.length);
+});
+
+test('o contexto inicial não contém a documentação', () => {
+  const dir = join(mkdtempSync(join(tmpdir(), 'archlens-context-')), 'arch');
+  cpSync(join(root, 'examples/loja-online-vault/architecture'), dir, { recursive: true });
+  const page = join(dir, 'application-component/loja.pedidos.md');
+  writeFileSync(page, `${readFileSync(page, 'utf8').trimEnd()}\n\nMARCADOR-DA-DOCUMENTACAO\n`);
+  const registry = createBaseRegistry({ port: 0, bases: [{ id: 'v', path: dir }] }, { pollMs: 1e6 });
+  try {
+    const ctx = registry.get('v');
+    assert.ok(ctx.store.readDoc('loja.pedidos').includes('MARCADOR-DA-DOCUMENTACAO'));
+    const first = [loadPrompt({ mode: 'tools' }), compactCatalog(ctx).text, relationsDigest(ctx), userMessage({ question: 'o que é?', chosen: 'loja.pedidos' }, ctx)];
+    assert.ok(!JSON.stringify(first).includes('MARCADOR-DA-DOCUMENTACAO'));
+  } finally { registry.close(); }
 });

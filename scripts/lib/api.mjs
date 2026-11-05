@@ -209,9 +209,10 @@ export function show(store, plan, { format = 'md' } = {}) {
  * Answers a question about the base without writing it. Views (`view` keys, comma-separated, and/or `spec` objects):
  * markdown, or the structures for `json` (one view → the object, several → a list). `element` gives the card of one element,
  * read with `readSubgraph` (`depth` hops, over the relationship types in `via`); the whole base is read only to suggest names.
+ * In markdown the card also brings the node's documentation, cut at `docMax` characters when given.
  */
-export function query(store, { view, spec, element, depth = 1, via, format = 'md' } = {}) {
-  if (element) return elementAnswer(store, { element, depth, via, format });
+export function query(store, { view, spec, element, depth = 1, via, format = 'md', docMax } = {}) {
+  if (element) return elementAnswer(store, { element, depth, via, format, docMax });
   const keys = view ? String(view).split(',') : [];
   const specs = spec == null ? [] : Array.isArray(spec) ? spec : [spec];
   if (!keys.length && !specs.length) {
@@ -242,7 +243,7 @@ function similarTo(raw, id) {
   return [...found.values()].sort((a, b) => b.score - a.score || a.id.localeCompare(b.id)).slice(0, 5).map(c => ({ ...c, name: name.get(c.id) }));
 }
 
-function elementAnswer(store, { element, depth, via, format }) {
+function elementAnswer(store, { element, depth, via, format, docMax }) {
   let sub;
   try {
     sub = store.readSubgraph({ seeds: [element], depth, ...(via?.length ? { via } : {}) });
@@ -253,5 +254,5 @@ function elementAnswer(store, { element, depth, via, format }) {
     throw Object.assign(new Error(`${e.message}${hint}`), { code: 'E_UNKNOWN_REF', suggestions });
   }
   const card = elementCard(sub, element, { history: store.history(), depth });
-  return format === 'json' ? card : formatElementCard(card);
+  return format === 'json' ? card : formatElementCard(card, { doc: store.readDoc?.(element), docMax });
 }

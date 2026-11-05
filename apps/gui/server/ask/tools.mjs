@@ -14,7 +14,7 @@ const obj = (properties, required = []) => ({ type: 'object', properties, requir
 export const QUERY_TOOLS = [
   { name: 'find_elements', description: 'Busca elementos da base pelo nome, id ou apelido. Devolve até 10 linhas "id | nome | tipo | c4".',
     input_schema: obj({ text: str }, ['text']) },
-  { name: 'element_card', description: 'Cartão de um elemento: descrição, relações, filhos e histórico.',
+  { name: 'element_card', description: 'Cartão de um elemento: descrição, relações, filhos, histórico e documentação.',
     input_schema: obj({ id: str }, ['id']) },
   { name: 'relations', description: 'Relações que tocam os elementos dados, com uma frase cada. "via" filtra pelos tipos de relação.',
     input_schema: obj({ ids: { type: 'array', items: str }, via: { type: 'array', items: str } }, ['ids']) },
@@ -35,6 +35,8 @@ export const FINAL_TOOLS = [
 export const ALL_TOOLS = [...QUERY_TOOLS, ...FINAL_TOOLS];
 
 const FIND_LIMIT = 10, RELATIONS_LIMIT = 80, NAMES_LIMIT = 40, LARGE = 40;
+/** The most of a node's documentation one card brings to the model. */
+export const DOC_LLM_MAX = 8000;
 const fail = content => ({ ok: false, content });
 const withKey = spec => ({ key: 'ask', ...spec });
 const isObject = v => v && typeof v === 'object' && !Array.isArray(v);
@@ -45,9 +47,10 @@ export function findTool(ctx, { text }) {
   return { ok: true, content: found.map(e => [e.id, e.name, e.type, e.kind ?? '-'].join(' | ')).join('\n') };
 }
 
-export function cardTool(ctx, { id }) {
+export async function cardTool(ctx, { id }) {
   try {
-    return { ok: true, content: query(ctx.snapshot, { element: id, format: 'md' }) };
+    const doc = ctx.model.elements.has(id) ? await ctx.readDoc(id) : null;
+    return { ok: true, content: query({ ...ctx.snapshot, readDoc: () => doc }, { element: id, format: 'md', docMax: DOC_LLM_MAX }) };
   } catch (e) { return fail(e.message); }
 }
 

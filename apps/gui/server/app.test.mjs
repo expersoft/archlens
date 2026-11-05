@@ -2,11 +2,16 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, cpSync, writeFileSync, readFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve, dirname } from 'node:path';
+import { join, resolve, dirname, relative } from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { request } from 'node:http';
 import { startServer } from './app.mjs';
 import { createBaseRegistry } from './bases.mjs';
+import { runTool } from './ask/tools.mjs';
+import { openStore, resolveBase } from '../../../scripts/lib/store/index.mjs';
+import { initBase } from '../../../scripts/lib/store/config.mjs';
+import { diffRaw } from '../../../scripts/lib/store/ops.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const ex = n => join(root, 'examples', n, 'architecture');
@@ -20,6 +25,36 @@ async function withServer(fn, opts = {}) {
 }
 const post = (url, body) => fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: typeof body === 'string' ? body : JSON.stringify(body) });
 const LAND = { notation: 'c4', level: 'landscape' };
+
+/** Two people over one gbrain git remote, base already written; git is hermetic, and the workers inherit process.env. */
+function gbrainUsers() {
+  const env = { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1', LC_ALL: 'C' };
+  Object.assign(process.env, env);
+  const sh = (cwd, ...args) => {
+    const r = spawnSync('git', ['-C', cwd, ...args], { encoding: 'utf8', env });
+    assert.equal(r.status, 0, `git ${args.join(' ')}: ${r.stderr}`);
+  };
+  const d = tmp();
+  const remote = join(d, 'remote.git');
+  sh(d, 'init', '-q', '--bare', '-b', 'main', remote);
+  const user = name => {
+    const clone = join(d, `${name}-clone`);
+    sh(d, 'clone', '-q', remote, clone);
+    sh(clone, 'config', 'user.name', name);
+    sh(clone, 'config', 'user.email', `${name}@example.com`);
+    const at = join(d, `${name}-base`);
+    initBase(at, { name: 'Empresa', store: { kind: 'gbrain', mode: 'git', repo: relative(at, clone), branch: 'main' } });
+    return { dir: at, store: () => openStore(resolveBase(at)) };
+  };
+  const ana = user('ana'), bia = user('bia');
+  const s = ana.store();
+  s.apply(diffRaw(s.read(), { notes: {}, raw: {
+    archlens: '2.0', name: 'Empresa',
+    model: { elements: [{ id: 'vendas', type: 'application-component', name: 'Vendas', c4: { kind: 'softwareSystem' } }], relationships: [] },
+    changelog: [{ id: '2026-10-01-01', date: '2026-10-01', summary: 'início', added: [], changed: [], status: {}, removed: [], decisions: [] }],
+  } }), { baseVersion: s.version() });
+  return { ana, bia };
+}
 
 test('GET /api/bases lista as duas bases de exemplo', () => withServer(async url => {
   const r = await fetch(`${url}/api/bases`);
@@ -84,6 +119,75 @@ test('o cartão sai do snapshot em memória, sem reler o conector', async () => 
     const r = await fetch(`${srv.url}/api/bases/l/elements/${encodeURIComponent(id)}`);
     assert.equal(r.status, 200);
     assert.equal((await r.json()).card.element.id, id);
+  } finally { await srv.close(); registry.close(); }
+});
+
+// --- Documentation of a node: its own route, read when the tab opens. ---
+const END = '<!-- archlens:end -->';
+const PEDIDOS = 'application-component/loja.pedidos.md';
+const MARK = 'MARCADOR-DA-DOCUMENTACAO';
+/** What a person does in the editor: only the part after the archlens block changes. */
+const editPage = (dir, text, rel = PEDIDOS) => {
+  const t = readFileSync(join(dir, rel), 'utf8');
+  writeFileSync(join(dir, rel), `${t.slice(0, t.indexOf(END) + END.length)}\n\n${text}\n`);
+};
+async function withVault(fn) {
+  const dir = join(tmp(), 'arch');
+  cpSync(join(root, 'examples/loja-online-vault/architecture'), dir, { recursive: true });
+  editPage(dir, `${MARK} com [[loja/pagamentos|Pagamentos]].`);
+  const cfg = { port: 0, bases: [{ id: 'v', path: dir }] };
+  const registry = createBaseRegistry(cfg, { pollMs: 100000 });
+  const srv = await startServer({ config: cfg, registry });
+  try { await fn(srv.url, dir); } finally { await srv.close(); registry.close(); }
+}
+const docUrl = (url, id = 'loja.pedidos', base = 'v') => `${url}/api/bases/${base}/elements/${encodeURIComponent(id)}/doc`;
+
+test('GET doc: o texto do nó sem wikilink, null quando não há, e id desconhecido é 400', () => withVault(async url => {
+  assert.deepEqual(await (await fetch(docUrl(url))).json(), { text: `${MARK} com Pagamentos.` });
+  assert.deepEqual(await (await fetch(docUrl(url, 'loja.web'))).json(), { text: null });
+  const bad = await fetch(docUrl(url, 'nao-existe'));
+  assert.equal(bad.status, 400);
+  assert.equal((await bad.json()).code, 'E_UNKNOWN_REF');
+}));
+
+test('o cartão e a visão não transportam a documentação', () => withVault(async url => {
+  const card = await (await fetch(`${url}/api/bases/v/elements/loja.pedidos`)).text();
+  assert.equal(JSON.parse(card).docs, true);
+  assert.ok(!card.includes(MARK));
+  const view = await (await post(`${url}/api/bases/v/view`, { spec: { notation: 'c4', level: 'container', scope: 'loja' } })).text();
+  assert.ok(view.includes('loja.pedidos'));
+  assert.ok(!view.includes(MARK));
+}));
+
+test('edição direta aparece sem reiniciar', () => withVault(async (url, dir) => {
+  editPage(dir, 'Texto novo, escrito no editor.');
+  assert.deepEqual(await (await fetch(docUrl(url))).json(), { text: 'Texto novo, escrito no editor.' });
+}));
+
+test('`docs` é false em base JSON', () => withServer(async url => {
+  assert.equal((await (await fetch(`${url}/api/bases/loja-online/elements/loja`)).json()).docs, false);
+  assert.deepEqual(await (await fetch(docUrl(url, 'loja', 'loja-online'))).json(), { text: null });
+}));
+
+test('base gbrain git: a rota lê fora da thread principal e devolve o texto atual do remoto', async () => {
+  const { ana, bia } = gbrainUsers();
+  const put = text => { const s = ana.store(); s.apply([{ op: 'putDoc', id: 'vendas', text }], { baseVersion: s.version() }); };
+  put('Primeiro texto');
+  const cfg = { port: 0, bases: [{ id: 'g', path: bia.dir }] };
+  const registry = createBaseRegistry(cfg, { pollMs: 100000, remotePollMs: 100000 });
+  const srv = await startServer({ config: cfg, registry });
+  try {
+    const { store } = registry.get('g');
+    store.readDoc = store.read = () => assert.fail('leu o remoto na thread principal');
+    const route = async () => (await fetch(docUrl(srv.url, 'vendas', 'g'))).json();
+    assert.deepEqual(await route(), { text: 'Primeiro texto' });
+    put('Texto mudou no remoto');
+    // The reads of one base share the worktree of the tip: alongside the check, none trips over another.
+    const [a, b] = await Promise.all([route(), route(), registry.refresh()]);
+    assert.deepEqual([a, b], [{ text: 'Texto mudou no remoto' }, { text: 'Texto mudou no remoto' }]);
+    assert.equal(registry.list()[0].error, undefined);
+    const card = await runTool(registry.get('g'), 'element_card', { id: 'vendas' });
+    assert.ok(card.content.includes('Texto mudou no remoto'), card.content);
   } finally { await srv.close(); registry.close(); }
 });
 

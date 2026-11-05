@@ -1,10 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtempSync, cpSync, readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createBaseRegistry } from './bases.mjs';
 import { resolveView } from '../../../scripts/lib/query.mjs';
-import { ALL_TOOLS, QUERY_TOOLS, FINAL_TOOLS, runTool, finalize } from './ask/tools.mjs';
+import { ALL_TOOLS, QUERY_TOOLS, FINAL_TOOLS, DOC_LLM_MAX, runTool, finalize } from './ask/tools.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const open = () => {
@@ -145,5 +147,46 @@ test('relations caps the list', async () => {
     assert.ok(r.content.split('\n').filter(l => l.includes('->')).length <= 80);
     const few = await runTool(ctx, 'relations', { ids: ['loja.web'] });
     assert.ok(few.content.includes('(') && few.content.includes('-serving->'));
+  } finally { registry.close(); }
+});
+
+// --- Documentation of a node, over a copy of the vault example. ---
+const vaultWith = text => {
+  const dir = join(mkdtempSync(join(tmpdir(), 'archlens-tools-')), 'arch');
+  cpSync(join(root, 'examples/loja-online-vault/architecture'), dir, { recursive: true });
+  const page = join(dir, 'application-component/loja.pedidos.md');
+  const t = readFileSync(page, 'utf8');
+  const end = '<!-- archlens:end -->';
+  writeFileSync(page, `${t.slice(0, t.indexOf(end) + end.length)}\n\n${text}\n`);
+  const registry = createBaseRegistry({ port: 0, bases: [{ id: 'v', path: dir }] }, { pollMs: 1e6 });
+  return { registry, ctx: registry.get('v') };
+};
+
+test('element_card traz a documentação do nó', async () => {
+  const { registry, ctx } = vaultWith('Texto da API de Pedidos.');
+  try {
+    const r = await runTool(ctx, 'element_card', { id: 'loja.pedidos' });
+    assert.ok(r.ok, r.content);
+    assert.ok(r.content.includes('## Documentação') && r.content.includes('Texto da API de Pedidos.'));
+    assert.ok(!(await runTool(ctx, 'element_card', { id: 'loja.web' })).content.includes('Texto da API de Pedidos.'));
+  } finally { registry.close(); }
+});
+
+test('element_card respeita DOC_LLM_MAX', async () => {
+  const { registry, ctx } = vaultWith('x'.repeat(DOC_LLM_MAX + 500));
+  try {
+    assert.equal(DOC_LLM_MAX, 8000);
+    const { content } = await runTool(ctx, 'element_card', { id: 'loja.pedidos' });
+    assert.ok(content.includes('x'.repeat(DOC_LLM_MAX)) && !content.includes('x'.repeat(DOC_LLM_MAX + 1)));
+    assert.ok(content.includes(`[documentação cortada em ${DOC_LLM_MAX} caracteres]`));
+  } finally { registry.close(); }
+});
+
+test('element_card de um id desconhecido segue dizendo o que há de parecido', async () => {
+  const { registry, ctx } = vaultWith('Texto.');
+  try {
+    const r = await runTool(ctx, 'element_card', { id: 'loja.pedido' });
+    assert.equal(r.ok, false);
+    assert.ok(r.content.includes('loja.pedidos'));
   } finally { registry.close(); }
 });

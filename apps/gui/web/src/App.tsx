@@ -28,6 +28,7 @@ export function App() {
   const [bases, setBases] = useState<BaseInfo[]>([]);
   const [base, setBase] = useState<string | null>(null);
   const [card, setCard] = useState<Card | null>(null);
+  const [docsEnabled, setDocsEnabled] = useState(false);
   const [hits, setHits] = useState<FindHit[]>([]);
   const [chatRequest, setChatRequest] = useState(0);
   const [rightRequest, setRightRequest] = useState(0);
@@ -146,6 +147,7 @@ export function App() {
     dispatch({ type: 'reset' });
     setSelected(null);
     setCard(null);
+    setDocsEnabled(false);
     setHits([]);
     setNotice(null);
     setCatalog(null);
@@ -160,7 +162,7 @@ export function App() {
     if (!base || !selected) { setCard(null); return; }
     let dead = false;
     setCard(null);
-    getElement(base, selected).then((d) => { if (!dead) setCard(d.card); }).catch(() => { /* sem cartão: a seleção continua */ });
+    getElement(base, selected).then((d) => { if (!dead) { setCard(d.card); setDocsEnabled(!!d.docs); } }).catch(() => { /* sem cartão: a seleção continua */ });
     return () => { dead = true; };
   }, [base, selected]);
 
@@ -412,6 +414,8 @@ export function App() {
           <div className="ph">Detalhes</div>
           <Details
             card={card}
+            base={base}
+            docsEnabled={docsEnabled}
             viewNode={selected ? viewData?.nodes?.[selected] ?? null : null}
             viewEdges={viewData?.edges ?? []}
             nodeId={selected}

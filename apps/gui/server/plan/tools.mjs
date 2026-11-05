@@ -219,7 +219,7 @@ async function grepTool(_ctx, session, input) {
 
 const RUN = {
   find_elements: (ctx, _s, i) => fromBase(findTool(ctx, i)),
-  element_card: (ctx, _s, i) => fromBase(cardTool(ctx, i)),
+  element_card: async (ctx, _s, i) => fromBase(await cardTool(ctx, i)),
   relations: (ctx, _s, i) => fromBase(relationsTool(ctx, i)),
   try_view: async (ctx, _s, i) => fromBase(await tryViewTool(ctx, i)),
   read_reference: readReference, set_delta: setDelta, plan_draft: planDraftTool, show_plan: showPlan, set_note: setNote,

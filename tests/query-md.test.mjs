@@ -150,3 +150,48 @@ test('query --element needs a depth that is an integer of 1 or more', () => {
   }
   assert.equal(run(['query', BASE, '--element', 'loja', '--depth', '2']).status, 0);
 });
+
+// --- Documentation of the node in the card. ---
+const withDoc = text => ({ ...open(), readDoc: () => text });
+
+test('o cartão em markdown traz a documentação, sem wikilink e com os títulos abaixo da seção', () => {
+  const md = query(withDoc('# Como funciona\n\nVeja [[loja/pagamentos|Pagamentos]] e [[loja.web]].\n\n## Limites'), { element: 'loja.pedidos' });
+  const doc = md.slice(md.indexOf('## Documentação'));
+  assert.ok(doc.includes('\n### Como funciona\n'));
+  assert.ok(doc.includes('\n#### Limites\n'));
+  assert.ok(doc.includes('Veja Pagamentos e loja.web.'));
+});
+
+test('o cartão de um nó sem texto não tem a seção Documentação', () => {
+  assert.ok(!query(withDoc(null), { element: 'loja.pedidos' }).includes('## Documentação'));
+  assert.ok(!query({ ...open(), readDoc: undefined }, { element: 'loja.pedidos' }).includes('## Documentação'));
+});
+
+test('o cartão em json não lê nem traz a documentação', () => {
+  const store = { ...open(), readDoc: () => assert.fail('leu a documentação') };
+  assert.ok(!JSON.stringify(query(store, { element: 'loja.pedidos', format: 'json' })).includes('Documentação'));
+});
+
+test('docMax corta a documentação e termina com o aviso', () => {
+  const md = query(withDoc('a'.repeat(30)), { element: 'loja.pedidos', docMax: 10 });
+  assert.ok(md.includes(`\n${'a'.repeat(10)}\n`));
+  assert.ok(!md.includes('a'.repeat(11)));
+  assert.ok(md.trimEnd().endsWith('[documentação cortada em 10 caracteres]'));
+  assert.ok(!query(withDoc('a'.repeat(10)), { element: 'loja.pedidos', docMax: 10 }).includes('cortada'));
+});
+
+test('docMax não parte um caractere em dois', () => {
+  const md = query(withDoc(`abc${'😀'.repeat(5)}`), { element: 'loja.pedidos', docMax: 4 });
+  assert.ok(md.includes('\nabc\n'));
+});
+
+test('a rodada que só mudou a documentação aparece no cartão do nó', () => {
+  const store = open();
+  const round = { id: '2026-11-04-01', date: '2026-11-04', summary: 'texto da API', added: [], changed: [], removed: [], status: {}, decisions: [], docs: ['loja.pedidos'] };
+  const history = [...store.history(), round];
+  const doc = { ...store, history: () => history };
+  const { rounds } = query(doc, { element: 'loja.pedidos', format: 'json' });
+  assert.deepEqual(rounds.at(-1), { id: round.id, date: round.date, summary: round.summary, how: ['documentação'] });
+  assert.ok(query(doc, { element: 'loja.pedidos' }).includes('- 2026-11-04-01 (2026-11-04): texto da API [documentação]'));
+  assert.ok(!query(doc, { element: 'loja.web', format: 'json' }).rounds.some(r => r.id === round.id));
+});

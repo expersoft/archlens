@@ -58,7 +58,7 @@ export interface Card {
   sources?: { kind?: string; ref?: string; excerpt?: string; date?: string }[];
   rounds?: { id?: string; date?: string; summary?: string; how?: string[] }[];
 }
-export interface ElementDetail { card: Card | null; actions: Action[] }
+export interface ElementDetail { card: Card | null; actions: Action[]; docs?: boolean }
 
 async function call<T>(path: string, body?: unknown): Promise<T> {
   const res = await fetch(path, body === undefined ? undefined : {
@@ -82,6 +82,7 @@ export const getCatalog = (base: string) => call<Catalog>(`${b(base)}/catalog`);
 export const find = (base: string, q: string) => call<FindHit[]>(`${b(base)}/find?q=${encodeURIComponent(q)}`);
 export const getView = (base: string, spec: ViewSpec) => call<ViewResult>(`${b(base)}/view`, { spec });
 export const getElement = (base: string, id: string) => call<ElementDetail>(`${b(base)}/elements/${encodeURIComponent(id)}`);
+export const getDoc = (base: string, id: string) => call<{ text: string | null }>(`${b(base)}/elements/${encodeURIComponent(id)}/doc`);
 /** Só as ações (menu de contexto, duplo clique, Explorador), sem o cartão. */
 export const getActions = (base: string, id: string) => call<{ actions: Action[] }>(`${b(base)}/elements/${encodeURIComponent(id)}/actions`);
 export const flip = (base: string, spec: ViewSpec) => call<{ spec: ViewSpec }>(`${b(base)}/flip`, { spec });
