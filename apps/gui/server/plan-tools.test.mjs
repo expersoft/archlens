@@ -41,7 +41,7 @@ const hashDir = dir => {
 
 test('PLAN_TOOLS tem ordem fixa', () => {
   assert.deepEqual(PLAN_TOOLS.map(t => t.name), ['find_elements', 'element_card', 'relations', 'try_view', 'read_reference',
-    'set_delta', 'plan_draft', 'show_plan', 'set_note', 'add_preview', 'ask_decision', 'ask_user', 'reply', 'draft_notes', 'read_notes', 'scan_repo', 'read_file', 'grep']);
+    'set_delta', 'plan_draft', 'show_plan', 'set_note', 'add_preview', 'ask_decision', 'ask_user', 'reply', 'draft_notes', 'read_notes', 'read_doc', 'scan_repo', 'read_file', 'grep']);
 });
 
 test('read_reference só abre references/*.md da lista', () => withBase(async ctx => {
@@ -250,4 +250,63 @@ test('set_delta recusa delta que estoura o teto do rascunho', () => withBase(asy
   assert.equal(r.ok, false);
   assert.match(r.content, /grande demais/);
   assert.equal(s.draft.delta, null);
+}));
+
+// --- Documentation of a node, over a copy of the vault example. ---
+const END = '<!-- archlens:end -->';
+function withVault(text, fn) {
+  const dir = join(mkdtempSync(join(tmpdir(), 'archlens-pdocs-')), 'arch');
+  cpSync(join(root, 'examples/loja-online-vault/architecture'), dir, { recursive: true });
+  const page = join(dir, 'application-component/loja.pedidos.md');
+  const t = readFileSync(page, 'utf8');
+  writeFileSync(page, `${t.slice(0, t.indexOf(END) + END.length)}\n\n${text}\n`);
+  const reg = createBaseRegistry({ port: 1, bases: [{ id: 'v', path: dir }] }, { pollMs: 100000 });
+  return Promise.resolve(fn(reg.get('v'))).finally(() => reg.close());
+}
+const docDelta = text => ({ 'archlens-delta': '1.0', source: { kind: 'prompt', ref: 'teste' }, model: { elements: [], relationships: [] }, docs: [{ id: 'loja.pedidos', text }] });
+
+test('read_doc devolve o texto atual do nó, entre as marcas de conteúdo externo', () => withVault('Texto da API de Pedidos.', async ctx => {
+  const r = await runPlanTool(ctx, sessionOf(ctx), 'read_doc', { id: 'loja.pedidos' });
+  assert.ok(r.ok, r.content);
+  assert.equal(r.content, external('base', 'Texto da API de Pedidos.'));
+}));
+
+test('read_doc de um nó sem texto, de um id desconhecido e de uma leitura que falha', () => withVault('', async ctx => {
+  const s = sessionOf(ctx);
+  const empty = await runPlanTool(ctx, s, 'read_doc', { id: 'loja.pedidos' });
+  assert.deepEqual(empty, { ok: true, content: 'o nó não tem documentação' });
+  const unknown = await runPlanTool(ctx, s, 'read_doc', { id: 'nao.existe' });
+  assert.equal(unknown.ok, false);
+  assert.equal((await runPlanTool(ctx, s, 'read_doc', {})).ok, false);
+  const broken = { ...ctx, readDoc: async () => { throw new Error('git falhou em https://eu:segredo@host/repo\nsegunda linha'); } };
+  const r = await runPlanTool(broken, s, 'read_doc', { id: 'loja.pedidos' });
+  assert.equal(r.ok, false);
+  assert.ok(r.content.includes('git falhou em https://host/repo') && !r.content.includes('segredo') && !r.content.includes('segunda'), r.content);
+}));
+
+test('read_doc em base JSON diz que ela não guarda documentação', () => withBase(async ctx => {
+  const r = await runPlanTool(ctx, sessionOf(ctx), 'read_doc', { id: 'loja.pedidos' });
+  assert.equal(r.ok, false);
+  assert.match(r.content, /store convert/);
+}));
+
+test('set_delta com docs em base JSON falha com a frase de E_STORE_DOC', () => withBase(async ctx => {
+  const s = sessionOf(ctx);
+  const r = await runPlanTool(ctx, s, 'set_delta', { delta: docDelta('Texto.') });
+  assert.equal(r.ok, false);
+  assert.match(r.content, /documentação do nó exige uma base markdown ou gbrain.*store convert/);
+  assert.equal(s.draft.delta, null);
+}));
+
+test('pergunta de documentação só oferece keep e take', () => withVault('Texto antigo.', async ctx => {
+  const s = sessionOf(ctx);
+  assert.ok((await runPlanTool(ctx, s, 'set_delta', { delta: docDelta('Texto novo.') })).ok);
+  await runPlanTool(ctx, s, 'plan_draft', {});
+  const key = s.draft.plan.items.find(i => i.kind === 'doc').key;
+  const bad = await runPlanTool(ctx, s, 'ask_decision', { key, recommendation: 'value:outra coisa', reason: 'x' });
+  assert.equal(bad.ok, false);
+  assert.match(bad.content, /use uma de: keep, take$/);
+  const good = await runPlanTool(ctx, s, 'ask_decision', { key, recommendation: 'take', reason: 'o texto novo é mais completo' });
+  assert.ok(good.ok, good.content);
+  assert.deepEqual(good.final.item.options, ['keep', 'take']);
 }));

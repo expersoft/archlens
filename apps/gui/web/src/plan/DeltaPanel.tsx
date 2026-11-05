@@ -29,11 +29,30 @@ function Change({ c, selected, onPick }: { c: PreviewChange; selected: boolean; 
   );
 }
 
+const LINE_CLASS = { ' ': 'same', '-': 'del', '+': 'add' } as const;
+
+function DocChange({ c, selected, onPick }: { c: PreviewChange; selected: boolean; onPick?: (id: string) => void }) {
+  return (
+    <li className={`chg ${SIGN_CLASS[c.sign]}${selected ? ' sel' : ''}`}>
+      <div className="chg-head">
+        <b aria-label={SIGN_WORD[c.sign]}>{c.sign}</b>
+        {onPick
+          ? <button type="button" className="chg-name" title="Mostrar no diagrama" onClick={() => onPick(c.id)}>{c.name}</button>
+          : <span className="chg-name">{c.name}</span>}
+      </div>
+      <pre className="doc-diff">
+        {(c.diff ?? []).map((l, i) => <span key={i} className={`ln ${LINE_CLASS[l.sign]}`}>{`${l.sign} ${l.line}`}</span>)}
+      </pre>
+    </li>
+  );
+}
+
 /** The right panel of Planejar: what the draft changes, as text, and the questions still open. */
 export function DeltaPanel({ result, selected, onPick }: { result: PlanPreviewResult | null; selected?: string | null; onPick?: (id: string) => void }) {
   if (!result) return <p className="meta delta-empty">Nada planejado ainda.</p>;
   const elements = result.changes.filter((c) => c.kind === 'element');
   const relations = result.changes.filter((c) => c.kind === 'relationship');
+  const docs = result.changes.filter((c) => c.kind === 'doc');
   return (
     <div className="delta-panel">
       <p className="meta">{result.summary}</p>
@@ -48,6 +67,12 @@ export function DeltaPanel({ result, selected, onPick }: { result: PlanPreviewRe
         <section>
           <h3>Relações ({relations.length})</h3>
           <ul aria-label="Relações alteradas">{relations.map((c) => <Change key={c.id} c={c} selected={!!selected && !!c.ends?.includes(selected)} />)}</ul>
+        </section>
+      )}
+      {docs.length > 0 && (
+        <section>
+          <h3>Documentação ({docs.length})</h3>
+          <ul aria-label="Documentação alterada">{docs.map((c) => <DocChange key={c.id} c={c} selected={c.id === selected} onPick={onPick} />)}</ul>
         </section>
       )}
       {result.questions.length > 0 && (

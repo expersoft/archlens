@@ -300,3 +300,83 @@ test('uma leitura que falha não trava a fila, e o que vem depois roda na ordem'
     await assert.rejects(registry.inTurn('zzz', () => {}), /base desconhecida/);
   } finally { registry.close(); }
 });
+
+// --- Documentation of a node, over a copy of the vault example. ---
+const END = '<!-- archlens:end -->';
+const DOC_ID = 'loja.pedidos';
+const docDelta = text => ({ 'archlens-delta': '1.0', source: { kind: 'prompt', ref: 'teste' }, model: { elements: [], relationships: [] }, docs: [{ id: DOC_ID, text }] });
+function vaultCopy() {
+  const top = mkdtempSync(join(tmpdir(), 'archlens-pdoc-'));
+  const dir = join(top, 'architecture');
+  cpSync(join(root, 'examples/loja-online-vault/architecture'), dir, { recursive: true });
+  cpSync(join(root, 'examples/loja-online-vault/ARCHITECTURE.md'), join(top, 'ARCHITECTURE.md'));
+  return { top, dir };
+}
+const pageOf = dir => join(dir, 'application-component', `${DOC_ID}.md`);
+const setDoc = (dir, text) => {
+  const t = readFileSync(pageOf(dir), 'utf8');
+  writeFileSync(pageOf(dir), `${t.slice(0, t.indexOf(END) + END.length)}\n\n${text}\n`);
+};
+const docOf = dir => readFileSync(pageOf(dir), 'utf8').split(END)[1].trim();
+const withVault = (fn, setup) => { const copy = vaultCopy(); setDoc(copy.dir, setup ?? ''); return withPlan(fn, { copy }); };
+const answered = (plan, resolution) => ({ ...plan, items: plan.items.map(i => (i.kind === 'doc' && i.class === 'conflict' ? { ...i, resolution } : i)) });
+
+test('editar o markdown durante a revisão: 409 E_GUI_PLAN_CHANGED e texto preservado', () => withVault(async (url, dir) => {
+  const { draft } = await opened(url, docDelta('Texto novo da API.'));
+  const asked = draft.plan.items.find(i => i.kind === 'doc');
+  assert.equal(asked.class, 'conflict');
+  const reviewed = { ...draft, plan: answered(draft.plan, 'take') };
+  const { opsHash } = await (await post(url, 'plan/preview', { draft: reviewed })).json();
+  assert.ok(opsHash, 'plano final com a resposta');
+  setDoc(dir, 'Alguém escreveu isto no Obsidian.');
+  const r = await post(url, 'plan/apply', { draft: reviewed, confirm: opsHash });
+  assert.equal(r.status, 409);
+  assert.equal((await r.json()).code, 'E_GUI_PLAN_CHANGED');
+  assert.equal(docOf(dir), 'Alguém escreveu isto no Obsidian.');
+}, 'Texto original.'));
+
+test('nó vazio ao planejar e preenchido na revisão: 409 e texto preservado', () => withVault(async (url, dir) => {
+  const { draft, opsHash } = await opened(url, docDelta('Texto do agente.'));
+  assert.equal(draft.plan.state, 'final');
+  assert.equal(draft.plan.items.find(i => i.kind === 'doc').class, 'enrich');
+  setDoc(dir, 'Escrito à mão enquanto o plano era revisado.');
+  const r = await post(url, 'plan/apply', { draft, confirm: opsHash });
+  assert.equal(r.status, 409);
+  const e = await r.json();
+  assert.equal(e.code, 'E_GUI_PLAN_CHANGED');
+  assert.equal(e.opsHash, null);
+  assert.equal(docOf(dir), 'Escrito à mão enquanto o plano era revisado.');
+}));
+
+test('a prévia lista a documentação inteira, com a diferença por linha e sem o corte dos campos', () => withVault(async url => {
+  const long = Array.from({ length: 40 }, (_, i) => `Linha ${i} ${'x'.repeat(20)}`).join('\n');
+  const { draft } = await opened(url, docDelta(long));
+  const out = await (await post(url, 'plan/preview', { draft })).json();
+  const change = out.changes.find(c => c.kind === 'doc');
+  assert.equal(change.sign, '+');
+  assert.equal(change.id, DOC_ID);
+  assert.equal(change.name, 'API de Pedidos');
+  assert.equal(change.diff.length, 40);
+  assert.ok(change.diff.every(l => l.sign === '+'));
+  assert.ok(JSON.stringify(change.diff).length > 300);
+  assert.ok(!JSON.stringify(out.views).includes('Linha 0 xxx'), 'a documentação não entra nas visões');
+}));
+
+test('a prévia de uma troca de texto marca ~ e as linhas - e +', () => withVault(async url => {
+  const { draft } = await opened(url, docDelta('Texto novo.'));
+  const out = await (await post(url, 'plan/preview', { draft })).json();
+  const change = out.changes.find(c => c.kind === 'doc');
+  assert.equal(change.sign, '~');
+  assert.deepEqual(change.diff, [{ sign: '-', line: 'Texto antigo.' }, { sign: '+', line: 'Texto novo.' }]);
+}, 'Texto antigo.'));
+
+test('aplicar grava só o trecho liberado e regenera o documento',() => withVault(async (url, dir, top) => {
+  const before = readFileSync(pageOf(dir), 'utf8');
+  const { draft, opsHash } = await opened(url, docDelta('Texto do agente.'));
+  const r = await post(url, 'plan/apply', { draft, confirm: opsHash });
+  assert.equal(r.status, 200);
+  const after = readFileSync(pageOf(dir), 'utf8');
+  assert.equal(after.slice(0, after.indexOf(END)), before.slice(0, before.indexOf(END)), 'o bloco do archlens não muda');
+  assert.equal(docOf(dir), 'Texto do agente.');
+  assert.match(readFileSync(join(top, 'ARCHITECTURE.md'), 'utf8'), /Texto do agente\./);
+}));

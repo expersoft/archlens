@@ -7,6 +7,7 @@ import { normalizeModel } from '../../../../scripts/lib/model.mjs';
 import { resolveView } from '../../../../scripts/lib/query.mjs';
 import { layoutView } from '../../../../scripts/lib/layout.mjs';
 import { renderHtml, viewData } from '../../../../scripts/lib/render.mjs';
+import { lineDiff } from '../../../../scripts/lib/node-doc.mjs';
 import { ELEMENT_TYPES } from '../../../../scripts/lib/registry.mjs';
 import { navHelpers } from '../bases.mjs';
 import { actionsFor, flipSpec, titleFor } from '../navigation.mjs';
@@ -101,7 +102,7 @@ const fieldsOf = c => (c.fields ?? []).map(f => ({ field: f.field, before: text(
 
 /**
  * What the draft adds (+), changes (~) and removes (−), elements then relationships, with the type, the description of
- * what is added and the fields that change, and the questions still open.
+ * what is added and the fields that change, the documentation written (with its line diff), and the questions still open.
  */
 function deltaList(model, p) {
   const changes = [...p.changes].map(([id, c]) => {
@@ -119,6 +120,13 @@ function deltaList(model, p) {
       sign: SIGN[c.kind], kind: 'relationship', id, name, type: r?.type ?? '', ends: r ? [r.from, r.to] : [],
       ...(c.kind === 'added' && r?.description ? { description: text(r.description) } : {}), fields: fieldsOf(c),
     });
+  }
+  // The documentation travels apart from the model: its changes come from the plan's items, in full (no VALUE_MAX cut).
+  for (const it of p.plan?.items ?? []) {
+    if (it.kind !== 'doc' || it.class === 'unchanged' || it.resolution === 'keep') continue;
+    const before = it.base ?? '', after = it.delta ?? '';
+    const sign = !before.trim() ? '+' : !after.trim() ? '−' : '~';
+    changes.push({ sign, kind: 'doc', id: it.target, name: model.elements.get(it.target)?.name ?? it.target, diff: lineDiff(before, after) });
   }
   const seen = new Set();
   const questions = [];

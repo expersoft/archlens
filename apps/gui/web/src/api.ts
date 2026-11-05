@@ -185,11 +185,13 @@ export const planOpen = (base: string, draft: Draft) => call<{ draft: Draft; war
 export interface PreviewView { key: string; title: string; html?: string; viewData?: unknown; kind: 'change' | 'saved' | 'asked'; error?: string; spec: ViewSpec }
 export interface PreviewField { field: string; before: string; after: string }
 export interface PreviewChange {
-  sign: '+' | '~' | '−'; kind: 'element' | 'relationship'; id: string; name: string;
+  sign: '+' | '~' | '−'; kind: 'element' | 'relationship' | 'doc'; id: string; name: string;
   /** Element type label, or the relationship type. */
   type?: string; description?: string; fields?: PreviewField[];
   /** A relationship's ends (ids). */
   ends?: string[];
+  /** A doc's line diff, whole: ' ' is a line kept. */
+  diff?: { sign: ' ' | '-' | '+'; line: string }[];
 }
 export interface PreviewQuestion { key: string; question: string; options: string[]; assumed: string | null }
 export interface PlanPreviewResult {

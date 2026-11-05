@@ -180,6 +180,11 @@ body{font:14px/1.4 system-ui,sans-serif;background:var(--bg);color:var(--ink)}
 .delta-panel .chg-fields dt{font-size:11px;color:var(--muted)}
 .delta-panel .chg-fields dd{margin:0;overflow-wrap:anywhere}
 .delta-panel .chg-fields .before{color:var(--muted);text-decoration:line-through}
+.delta-panel .doc-diff{margin:4px 0 0 1.4em;font:12px/1.4 ui-monospace,monospace;white-space:pre-wrap;overflow-wrap:anywhere}
+.delta-panel .doc-diff .ln{display:block}
+.delta-panel .doc-diff .ln.add{background:rgba(42,138,62,.15)}
+.delta-panel .doc-diff .ln.del{background:rgba(192,57,43,.15);text-decoration:line-through}
+.delta-panel .doc-diff .ln.same{color:var(--muted)}
 .delta-panel .delta-questions li{border-left:3px solid var(--sel);padding-left:8px}
 .delta-empty{padding:0 12px}
 .preview-pick{align-items:center}

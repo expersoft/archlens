@@ -52,7 +52,7 @@ export function findTool(ctx, { text }) {
 }
 
 /** The node's text for its card: { doc }, or { why } it was not read. All the rest of the card is in memory, so this never fails it. */
-async function docForCard(ctx, id, signal) {
+export async function docForCard(ctx, id, signal) {
   const { ctl, done } = combine(signal, DOC_WAIT_MS);
   const reading = ctx.readDoc(id);
   reading.catch(() => {}); // a read that outlives the wait has no one left to answer to
