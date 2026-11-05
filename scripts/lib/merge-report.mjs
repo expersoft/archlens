@@ -10,7 +10,9 @@ const docDiff = it => lineDiff(it.base, it.delta).map(({ sign, line }) => `     
 export function describeItem(it) {
   const cond = it.when ? ` (só se [${it.when.slice(0, it.when.lastIndexOf('='))}] = same)` : '';
   if (it.class === 'conflict' && it.kind === 'view') return `conflito na visão "${it.target}": a definição mudou  → keep | take`;
-  if (it.class === 'conflict' && it.kind === 'doc') return `documentação de ${it.target}: o texto existente será trocado  → keep | take`;
+  if (it.class === 'conflict' && it.kind === 'doc') {
+    return `documentação de ${it.target}: ${it.base.trim() ? 'o texto existente será trocado' : 'o texto foi esvaziado depois da resposta anterior; gravar o texto novo?'}  → keep | take`;
+  }
   if (it.class === 'conflict') return `conflito ${it.target}.${it.field}: base ${show(it.base)} ≠ delta ${show(it.delta)}${cond}  → keep | take | value:<x>`;
   if (it.class === 'possible-duplicate') return `possível duplicata: "${it.target}" parece "${it.candidate}" (${it.score}; ${it.why})  → same | different`;
   if (it.op === 'remove') {

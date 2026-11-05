@@ -4,7 +4,8 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, exist
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openStore, resolveBase } from '../scripts/lib/store/index.mjs';
-import { checkConnector, CONNECTOR_METHODS } from '../scripts/lib/store/contract.mjs';
+import { checkConnector, CONNECTOR_METHODS, fileConnector } from '../scripts/lib/store/contract.mjs';
+import { readVault, vaultContents } from '../scripts/lib/store/markdown.mjs';
 import { writeFilesAtomically } from '../scripts/lib/store/atomic.mjs';
 import { diffRaw, contentVersion } from '../scripts/lib/store/ops.mjs';
 import { planMerge, applyPlan } from '../scripts/lib/merge.mjs';
@@ -162,12 +163,11 @@ test('a failed atomic write removes the folders it created for its temp files, a
   assert.deepEqual(readdirSync(join(dir, 'node')), [], 'the folder that was there stays, without temp files');
 });
 
-// recheck runs twice in an apply: the first time after the base was read and before the pages are built, the second
-// right before the swap, once the set of files to write is closed.
-const editedMidApply = (dir, rel, text, at = 1) => {
-  let calls = 0;
+// recheck runs first after apply read the base and before it builds the pages: an edit there comes before the file list.
+const editedBeforePages = (dir, rel, text) => {
+  let done = false;
   return () => {
-    if (++calls === at) writeFileSync(join(dir, rel), `${readFileSync(join(dir, rel), 'utf8')}\n${text}\n`);
+    if (!done) { done = true; writeFileSync(join(dir, rel), `${readFileSync(join(dir, rel), 'utf8')}\n${text}\n`); }
     return [];
   };
 };
@@ -182,7 +182,7 @@ const docPlanVault = () => {
 
 test('edição direta entre a leitura e a troca recusa um plano só de campos e preserva o texto', () => {
   const { dir, c, rename } = docPlanVault();
-  assert.throws(() => c.apply([rename('A2')], { expect: {}, recheck: editedMidApply(dir, 'node/a.md', 'Escrito agora') }),
+  assert.throws(() => c.apply([rename('A2')], { expect: {}, recheck: editedBeforePages(dir, 'node/a.md', 'Escrito agora') }),
     e => e.code === 'E_STORE_CONFLICT' && e.conflicts.some(x => x.ref === 'doc:a'));
   assert.match(readFileSync(join(dir, 'node/a.md'), 'utf8'), /Escrito agora/);
   assert.equal(c.read().raw.model.elements.find(e => e.id === 'a').name, 'A');
@@ -190,14 +190,21 @@ test('edição direta entre a leitura e a troca recusa um plano só de campos e 
 
 test('edição direta em outra página antes de montar os arquivos recusa, porque a página seria regravada com o texto velho', () => {
   const { dir, c, rename } = docPlanVault();
-  assert.throws(() => c.apply([rename('A2')], { expect: {}, recheck: editedMidApply(dir, 'node/b.md', 'Escrito agora') }),
+  assert.throws(() => c.apply([rename('A2')], { expect: {}, recheck: editedBeforePages(dir, 'node/b.md', 'Escrito agora') }),
     e => e.code === 'E_STORE_CONFLICT' && e.conflicts.some(x => x.ref === 'doc:b'));
   assert.equal(c.readDoc('b'), 'Escrito agora');
 });
 
 test('edição direta numa página que o plano não grava, com os arquivos já montados, não atrapalha', () => {
-  const { dir, c, rename } = docPlanVault();
-  c.apply([rename('A2')], { expect: {}, recheck: editedMidApply(dir, 'node/b.md', 'Escrito agora', 2) });
-  assert.equal(c.read().raw.model.elements.find(e => e.id === 'a').name, 'A2');
-  assert.equal(c.readDoc('b'), 'Escrito agora');
+  const { dir, c: real, rename } = docPlanVault();
+  // A generator: apply walks it to build the set of files, so what follows the yield runs after the set is closed and
+  // before the check right before the swap reads the base again.
+  const contents = function* (next, cur) {
+    yield* vaultContents(dir, next, cur);
+    writeFileSync(join(dir, 'node/b.md'), `${readFileSync(join(dir, 'node/b.md'), 'utf8')}\nEscrito agora\n`);
+  };
+  const c = fileConnector({ kind: 'markdown', dir, locator: real.locator, describe: 'x', versioning: 'object', docs: true, load: () => readVault(dir), contents });
+  c.apply([rename('A2')], { expect: {} });
+  assert.equal(real.read().raw.model.elements.find(e => e.id === 'a').name, 'A2');
+  assert.equal(real.readDoc('b'), 'Escrito agora');
 });

@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { plan, finalize, answersOf, isFinal, apply, preview } from '../scripts/lib/api.mjs';
 import { planMerge, applyPlan, canonicalJson, relationshipIds, openQuestions } from '../scripts/lib/merge.mjs';
 import { applyOps, contentVersion, diffRaw } from '../scripts/lib/store/ops.mjs';
+import { describeItem } from '../scripts/lib/merge-report.mjs';
 import { docHash } from '../scripts/lib/node-doc.mjs';
 import { END } from '../scripts/lib/store/markdown-page.mjs';
 import { subgraphOf, conflictError } from '../scripts/lib/store/contract.mjs';
@@ -481,6 +482,55 @@ test('plano aberto com nó vazio e preenchido antes de fechar não sobrescreve',
   assert.throws(() => finalize(store(), answered, TODAY), e => e.code === 'E_PLAN_REPLAN');
   assert.equal(plan(store(), d, { ...TODAY, answers: answersOf(answered).answers }).plan.state, 'open');
   assert.equal(docOfPage(dir), 'Escrito à mão');
+});
+
+for (const answerGiven of ['keep', 'take']) {
+  test(`texto esvaziado à mão depois de responder ${answerGiven}: fechar o plano recusa e nada é gravado`, () => {
+    const { dir, store } = docVault({ 'loja.api': 'A' });
+    const d = docDelta('B');
+    const answered = answer(structuredClone(plan(store(), d, TODAY).plan), { [docKey('A')]: answerGiven });
+    editPage(dir, '');
+    assert.throws(() => finalize(store(), answered, TODAY), e => e.code === 'E_PLAN_REPLAN' && /documentação de "loja\.api" mudou/.test(e.message) && !e.message.includes('same'));
+    assert.equal(docOfPage(dir), '');
+  });
+
+  test(`texto esvaziado à mão depois de responder ${answerGiven}: replanejar reabre a decisão`, () => {
+    const { dir, store } = docVault({ 'loja.api': 'A' });
+    const d = docDelta('B');
+    const answered = answer(structuredClone(plan(store(), d, TODAY).plan), { [docKey('A')]: answerGiven });
+    editPage(dir, '');
+    const again = plan(store(), d, { ...TODAY, answers: answersOf(answered).answers }).plan;
+    assert.equal(again.state, 'open');
+    const [q] = openQuestions(again);
+    assert.equal(q.key, docKey(''));
+    assert.equal(q.base, '');
+    assert.match(describeItem(q), /documentação de loja\.api: o texto foi esvaziado depois da resposta anterior; gravar o texto novo\? {2}→ keep \| take/);
+  });
+}
+
+test('a decisão reaberta sobre o texto esvaziado vale: keep não grava, take grava', () => {
+  const { dir, store } = docVault({ 'loja.api': 'A' });
+  const d = docDelta('B');
+  const answered = answer(structuredClone(plan(store(), d, TODAY).plan), { [docKey('A')]: 'keep' });
+  editPage(dir, '');
+  const again = plan(store(), d, { ...TODAY, answers: answersOf(answered).answers }).plan;
+  const kept = replan(store(), d, again, { [docKey('')]: 'keep' });
+  assert.equal(kept.state, 'final');
+  assert.deepEqual(kept.ops, []);
+  const taken = replan(store(), d, again, { [docKey('')]: 'take' });
+  assert.deepEqual(taken.ops.map(o => o.op), ['putDoc', 'appendHistory']);
+  assert.equal(taken.objects['doc:loja.api'], null);
+  apply(store(), taken);
+  assert.equal(docOfPage(dir), 'B');
+});
+
+test('texto igual ao do delta na revisão e esvaziado à mão depois: fechar o plano recusa', () => {
+  const { dir, store } = docVault({ 'loja.api': 'A' });
+  const d = docDelta('A', 'loja.api', {}, { elements: [{ id: 'loja.api', type: 'c4:container', name: 'API Nova' }] });
+  const answered = answer(structuredClone(plan(store(), d, TODAY).plan), { 'el:loja.api:name': 'take' });
+  editPage(dir, '');
+  assert.throws(() => finalize(store(), answered, TODAY), e => e.code === 'E_PLAN_REPLAN');
+  assert.equal(docOfPage(dir), '');
 });
 
 test('plano que só muda campo do nó aplica depois de edição direta e mantém o texto', () => {

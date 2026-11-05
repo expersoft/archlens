@@ -85,7 +85,9 @@ export function applyPlan(baseRaw, plan, { today, docs } = {}) {
   const bad = open.filter(i => !validResolution(i, i.resolution));
   if (bad.length) throw mergeError('E_PLAN_RESOLUTION', `resposta inválida no(s) item(ns) ${bad.map(i => `${i.n} ("${i.resolution}")`).join(', ')}`);
   const date = today ?? isoToday();
-  const ctx = runMerge(baseRaw, plan.delta, { mode: 'apply', resolutions, docs });
+  // The text each documentation item was reviewed against: its hash in a key is not enough once the text is gone.
+  const reviewed = new Map(plan.items.filter(i => i.kind === 'doc').map(i => [i.target, i.base]));
+  const ctx = runMerge(baseRaw, plan.delta, { mode: 'apply', resolutions, docs, reviewed });
   const errors = [...ctx.errors, ...validateModel(ctx.raw).errors];
   if (errors.length) throw mergeError('E_MERGE_INVALID', `o resultado do merge é inválido (${errors.length} erro(s)); nada foi gravado`, { errors });
   // What the merge's decisions relied on, and the possible duplicates of each new element (answered or not).
@@ -136,7 +138,7 @@ function emptyBase(delta) {
   };
 }
 
-function runMerge(baseRaw, delta, { mode, resolutions = new Map(), docs = {} }) {
+function runMerge(baseRaw, delta, { mode, resolutions = new Map(), docs = {}, reviewed = new Map() }) {
   const raw = baseRaw ? structuredClone(baseRaw) : emptyBase(delta);
   raw.model.elements ??= [];
   raw.model.relationships ??= [];
@@ -145,7 +147,7 @@ function runMerge(baseRaw, delta, { mode, resolutions = new Map(), docs = {} }) 
     raw, delta, mode, resolutions, items: [], errors: [],
     tree: indexTree(raw), aliases: new Map(), idMap: new Map(), fresh: new Set(), freshSources: new WeakSet(),
     log: { added: [], changed: new Set(), status: {}, removed: [], decisions: [], docs: [] },
-    read: new Set(), candidates: new Map(), docs: new Map(Object.entries(docs)),
+    read: new Set(), candidates: new Map(), docs: new Map(Object.entries(docs)), reviewed,
   };
   // The base's own objects, so that only they enter the read set (not what this delta adds).
   ctx.inBase = { elements: new Set(ctx.tree.keys()), relationships: new Set(raw.model.relationships), views: new Set((raw.views || []).map(v => v?.key)) };
@@ -625,6 +627,8 @@ function runOps(ctx) {
 /**
  * The delta's documentation, after the ops, so a node they remove is refused. Filling an empty node needs no question;
  * replacing a text does, and its key carries the hash of that text: an answer given for it does not hold for another.
+ * Neither does it vanish when the text was emptied since: the node then asks again, with the hash of the empty text.
+ * Apply refuses a text other than the one the plan's item was reviewed against.
  */
 function mergeDocs(ctx) {
   const seen = new Set();
@@ -636,17 +640,23 @@ function mergeDocs(ctx) {
     seen.add(id);
     try { checkDocText(d.text, id); } catch (e) { return fail(e.message.slice(e.code.length + 2)); }
     const base = ctx.docs.get(id) ?? '';
+    const seenBase = ctx.reviewed.get(id);
+    if (seenBase !== undefined && seenBase.trim() !== base.trim()) {
+      throw mergeError('E_PLAN_REPLAN', `a documentação de "${id}" mudou depois que o plano foi revisado; nada foi gravado. Gere o plano de novo reaproveitando as respostas: archlens plan <base> --answers <plano> --out <novo>`);
+    }
     const item = { kind: 'doc', target: id, field: 'doc', base, delta: d.text };
     const write = () => {
       if (d.text.trim()) ctx.docs.set(id, d.text); else ctx.docs.delete(id);
       ctx.log.docs.push(id);
     };
     if (d.text.trim() === base.trim()) return note(ctx, { key: `doc:${id}`, class: 'unchanged', ...item });
-    if (!base.trim()) {
+    const prefix = `doc:${id}:`;
+    const answeredBefore = [...ctx.resolutions.keys()].some(k => k.startsWith(prefix) && k.length === prefix.length + 12);
+    if (!base.trim() && !answeredBefore) {
       write();
       return note(ctx, { key: `doc:${id}`, class: 'enrich', ...item });
     }
-    if (decide(ctx, { key: `doc:${id}:${docHash(base).slice(7, 19)}`, class: 'conflict', ...item }, 'take') !== 'take') return undefined;
+    if (decide(ctx, { key: `${prefix}${docHash(base).slice(7, 19)}`, class: 'conflict', ...item }, 'take') !== 'take') return undefined;
     write();
     ctx.log.decisions.push(`documentação de ${id}: take`); // never the text: the round only says who changed
     return undefined;
