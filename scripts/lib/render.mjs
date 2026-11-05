@@ -363,9 +363,13 @@ export function viewData(v) {
   };
 }
 
-export function renderHtml({ title, subtitle = '', views, preview, embed = false }) {
+// `docs`: id -> safe HTML (node-doc.docToHtml). Kept once per node, outside viewData, and only for nodes in some view; the
+// embed has no drawer, so it never carries them.
+export function renderHtml({ title, subtitle = '', views, preview, embed = false, docs }) {
   const data = views.map(viewData);
-  const json = JSON.stringify({ title, minScreenPx: MIN_SCREEN_PX, views: data, ...(embed ? { embed: true } : {}) }).replace(/</g, '\\u003c');
+  const inViews = new Set(views.flatMap(v => v.nodes.map(n => n.id)));
+  const pageDocs = embed ? {} : Object.fromEntries(Object.entries(docs ?? {}).filter(([id, h]) => inViews.has(id) && h));
+  const json = JSON.stringify({ title, minScreenPx: MIN_SCREEN_PX, views: data, ...(embed ? { embed: true } : {}), ...(Object.keys(pageDocs).length ? { docs: pageDocs } : {}) }).replace(/</g, '\\u003c');
   const sections = views.map((v, i) => `<section class="view" data-view="${esc(v.key)}" data-index="${i}"${i ? ' hidden' : ''}>${viewSvg(v, i)}<div class="legend" hidden>${legend(v)}</div></section>`).join('');
   const options = views.map((v, i) => `<option value="${esc(v.key)}"${i ? '' : ' selected'}>${i + 1}. ${esc(v.title)}</option>`).join('');
   // Embed: the bar is gone, so its height is zero. Keep the space in ":root {": scripts/gen-ask.mjs (themeColors)
@@ -586,6 +590,13 @@ body.presenting.reveal-right .drawer.open{transform:none}
 .drawer h3{font-size:14px;margin:16px 0 6px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
 .drawer ul{margin:0;padding-left:18px}
 .drawer li{margin:2px 0;cursor:pointer}
+.dtabs{display:flex;gap:4px;margin:0 28px 12px 0;border-bottom:1px solid var(--line)}
+.dtabs button{border:0;background:none;color:var(--muted);font:inherit;padding:6px 10px;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px}
+.dtabs button.on{color:var(--ink);border-bottom-color:var(--ink)}
+.drawer .doc{overflow-wrap:anywhere}
+.drawer .doc li{cursor:auto}
+.drawer .doc img{max-inline-size:100%}
+.drawer .doc pre{overflow:auto}
 .chip{display:inline-block;padding:1px 8px;border-radius:99px;background:var(--bg);border:1px solid var(--line);font-size:13px;margin:2px 4px 2px 0}
 .warn{color:var(--down)}
 .caption{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 18px;font-size:18px;box-shadow:0 8px 30px rgba(0,0,0,.15);z-index:25;max-width:calc(100vw - 32px)}
@@ -979,9 +990,19 @@ const JS = String.raw`
     if (n.tags && n.tags.length) h += n.tags.map(t => '<span class="chip">' + escH(t) + '</span>').join('');
     if (rels.length) h += '<h3>Relações</h3><ul>' + rels.map(e => '<li data-go="' + escH(e.from === id ? e.to : e.from) + '">' + rel(e) + '</li>').join('') + '</ul><button class="linkish" data-act="glossary">Como ler as relações?</button>';
     h += '<p style="color:var(--muted);font-size:13px;margin-top:18px">' + (v.notation === 'c4' ? 'Laranja: o que ele usa (downstream) · Azul: quem o usa (upstream).' : 'Laranja: o que o sustenta · Azul: o que depende dele.') + ' <kbd>F</kbd> foca, <kbd>Esc</kbd> limpa.</p>';
-    $('.drawer-body').innerHTML = h;
+    const doc = DATA.docs && DATA.docs[id];
+    $('.drawer-body').innerHTML = doc ? '<div class="dtabs" role="tablist"><button role="tab" class="on" data-tab="details" aria-selected="true">Detalhes</button><button role="tab" data-tab="doc" aria-selected="false">Documentação</button></div><div class="dpane" data-pane="details">' + h + '</div><div class="dpane doc" data-pane="doc" data-id="' + escH(id) + '" hidden></div>' : h;
     $('.drawer').classList.add('open');
   }
+  tb('.drawer').addEventListener('click', e => {
+    const t = e.target.closest('[data-tab]');
+    if (!t) return;
+    const body = $('.drawer-body'), doc = $('[data-pane="doc"]', body);
+    // the text of the documentation enters the DOM on the first click on its tab
+    if (t.dataset.tab === 'doc' && !doc.firstChild) doc.innerHTML = DATA.docs[doc.dataset.id];
+    $$('[data-tab]', body).forEach(b => { const on = b === t; b.classList.toggle('on', on); b.setAttribute('aria-selected', on); });
+    $$('[data-pane]', body).forEach(p => { p.hidden = p.dataset.pane !== t.dataset.tab; });
+  });
   tb('.drawer').addEventListener('click', e => { const li = e.target.closest('[data-go]'); if (li) { trace(li.dataset.go); } });
 
   // ---------- animations: story (C4 dynamic), impact (anchored ArchiMate), layers, reveal
