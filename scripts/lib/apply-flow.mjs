@@ -34,16 +34,16 @@ export function assertDocOwned(store, out = store.locator.docPath, { replacing }
 }
 
 /** Regenerates ARCHITECTURE.md (or `out`) from a folder base and returns its path; `source:` is the folder relative to it. */
-export function writeDocument(store, raw, notes, { out = store.locator.docPath, replacing } = {}) {
+export function writeDocument(store, raw, notes, { docs, out = store.locator.docPath, replacing } = {}) {
   assertDocOwned(store, out, { replacing });
-  atomicWrite(out, generateDoc(raw, { notes, source: docSource(store, out) }));
+  atomicWrite(out, generateDoc(raw, { notes, docs, source: docSource(store, out) }));
   return out;
 }
 
 /** The document regenerated from what is on disk (a split model regroups items by file). */
 const documentStored = store => {
   const saved = store.read();
-  return writeDocument(store, saved.raw, saved.notes);
+  return writeDocument(store, saved.raw, saved.notes, { docs: saved.docs });
 };
 
 /**

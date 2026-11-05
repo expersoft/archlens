@@ -136,8 +136,8 @@ function assertDocOwned(store, out, opts) {
 }
 
 /** Regenerates ARCHITECTURE.md (or `out`) from a folder base; exits when the document is not this base's. */
-function writeDoc(store, raw, notes, out, { replacing } = {}) {
-  try { return writeDocument(store, raw, notes, { out, replacing }); } catch (e) { fail(e.message); }
+function writeDoc(store, raw, notes, out, { replacing, docs } = {}) {
+  try { return writeDocument(store, raw, notes, { docs, out, replacing }); } catch (e) { fail(e.message); }
 }
 
 function fail(msg, code = 1) { console.error(`archlens: ${msg}`); process.exit(code); }
@@ -471,7 +471,7 @@ async function main() {
       assertWritable(store);
       const { errors } = validateModel(base.raw);
       if (errors.length) { printIssues(errors, 'ERRO'); fail('corrija os erros antes de gerar o documento', 2); }
-      const out = writeDoc(store, base.raw, base.notes, args.out && args.out !== true ? args.out : undefined);
+      const out = writeDoc(store, base.raw, base.notes, args.out && args.out !== true ? args.out : undefined, { docs: base.docs });
       console.log(`✓ ${relPath(out)}`);
       break;
     }
@@ -539,7 +539,7 @@ async function main() {
         assertWritable(store);
         const { errors } = validateModel(raw);
         if (errors.length) { printIssues(errors, 'ERRO'); fail('corrija os erros do modelo', 2); }
-        console.log(`✓ ${relPath(writeDoc(store, raw, base.notes))}`);
+        console.log(`✓ ${relPath(writeDoc(store, raw, base.notes, undefined, { docs: base.docs }))}`);
       }
       const problems = await deliver(buildDiagrams(store, raw, { dir: args['out-dir'] && args['out-dir'] !== true ? args['out-dir'] : undefined,
         name: args.name && args.name !== true ? args.name : undefined, specs: specsOf(model), ...deliverOpts(args, preview) }), args);
@@ -684,16 +684,16 @@ async function main() {
     }
     case 'check': {
       assertWritable(store);
-      const { raw, notes } = base;
+      const { raw, notes, docs } = base;
       const { errors } = validateModel(raw);
       const docPath = store.locator.docPath;
       const lf = t => t.replace(/\r\n/g, '\n');
       const stale = !errors.length && (!existsSync(docPath)
-        || lf(readFileSync(docPath, 'utf8')) !== lf(generateDoc(raw, { notes, source: docSource(store) })));
+        || lf(readFileSync(docPath, 'utf8')) !== lf(generateDoc(raw, { notes, docs, source: docSource(store) })));
       if (args.json) console.log(JSON.stringify({ ok: !errors.length && !stale, errors, stale }, null, 2));
       else {
         printIssues(errors, 'ERRO');
-        if (stale) console.log(`✗ ${relPath(docPath)} desatualizado: foi editado à mão ou falta rodar "archlens doc". Edite ${relPath(store.locator.path)}/notes/*.md e regenere.`);
+        if (stale) console.log(`✗ ${relPath(docPath)} desatualizado: rode "archlens build" (a base, a documentação de um nó ou as notas mudaram, ou o arquivo foi editado à mão).`);
         else if (!errors.length) console.log(`✓ ${relPath(docPath)} em dia com ${store.describe()}`);
       }
       process.exitCode = errors.length || stale ? 1 : 0;

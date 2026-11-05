@@ -1,6 +1,7 @@
 // The documentation of a node: the text people write after the archlens block of its page. It travels apart from the
 // model (read().docs, op putDoc), never in raw. Pure.
 import { createHash } from 'node:crypto';
+import { createRequire } from 'node:module';
 import { BEGIN, END } from './store/markdown-page.mjs';
 import { storeError } from './store/errors.mjs';
 
@@ -44,3 +45,40 @@ export function lineDiff(before, after) {
   }
   return out;
 }
+
+/** `[[a/b|Nome]]` reads as `Nome`, `[[a/b]]` as `b`: outside Obsidian a wikilink is only a name. */
+export const plainWikilinks = text => text.replace(/\[\[([^\]|\n]*?)(?:\|([^\]\n]*))?\]\]/g, (_, target, label) => label ?? target.split('/').pop());
+
+/** Pushes the headings of `text` `by` levels down (up to ######), leaving fenced code alone. */
+export function demoteHeadings(text, by) {
+  let fence = null;
+  return text.split('\n').map(line => {
+    const f = /^ {0,3}(`{3,}|~{3,})/.exec(line);
+    if (f) {
+      if (!fence) fence = f[1][0];
+      else if (f[1][0] === fence) fence = null;
+      return line;
+    }
+    if (fence) return line;
+    const h = /^( {0,3})(#{1,6})(?=\s|$)/.exec(line);
+    return h ? `${h[1]}${'#'.repeat(Math.min(6, h[2].length + by))}${line.slice(h[0].length)}` : line;
+  }).join('\n');
+}
+
+let md;
+const renderer = () => {
+  if (md) return md;
+  // vendored as .cjs: the package is "type": "module"
+  const MarkdownIt = createRequire(import.meta.url)('../vendor/markdown-it.min.cjs');
+  md = new MarkdownIt({ html: false, linkify: false });
+  const open = md.renderer.rules.link_open ?? ((tokens, i, options, env, self) => self.renderToken(tokens, i, options));
+  md.renderer.rules.link_open = (tokens, i, options, env, self) => {
+    tokens[i].attrSet('target', '_blank');
+    tokens[i].attrSet('rel', 'noopener noreferrer');
+    return open(tokens, i, options, env, self);
+  };
+  return md;
+};
+
+/** The HTML of a documentation text: raw HTML in it is escaped, unsafe link schemes are not linked. */
+export const docToHtml = text => renderer().render(plainWikilinks(text));

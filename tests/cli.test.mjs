@@ -406,7 +406,7 @@ test('check: 0 when the document is current, 1 when it was edited by hand or the
   writeFileSync(md, readFileSync(md, 'utf8').replace('# Loja Mini', '# Loja Mini editada'));
   const stale = run(['check', 'architecture'], dir);
   assert.equal(stale.status, 1);
-  assert.match(stale.stdout, /desatualizado[\s\S]*architecture\/notes/);
+  assert.match(stale.stdout, /desatualizado: rode "archlens build"/);
   const j = run(['check', '--json'], dir);
   assert.deepEqual(JSON.parse(j.stdout), { ok: false, errors: [], stale: true });
   run(['doc', 'architecture'], dir);
@@ -1083,4 +1083,21 @@ test('serve --llm --env-file: sobe, cita o arquivo e nunca a chave', { timeout: 
   } finally { child.kill('SIGTERM'); }
   assert.ok(out.includes(`busca em texto: anthropic claude-haiku-5-5 (chave de ANTHROPIC_API_KEY, ${envFile})`), out);
   assert.ok(!out.includes('sk-x'));
+});
+
+test('check de um vault: editar o texto de uma página pede archlens build; build deixa em dia', () => {
+  const dir = setup();
+  const arch = join(dir, 'architecture');
+  assert.equal(run(['store', 'convert', 'architecture', '--to', 'markdown'], dir).status, 0);
+  assert.equal(run(['check', 'architecture'], dir).status, 0);
+  const page = join(arch, 'application-component', 'loja.api.md');
+  writeFileSync(page, readFileSync(page, 'utf8').trimEnd() + '\n\nTexto escrito à mão.\n');
+  const c = run(['check', 'architecture'], dir);
+  assert.equal(c.status, 1);
+  assert.match(c.stdout, /rode "archlens build"/);
+  assert.doesNotMatch(c.stdout, /foi editado à mão ou falta/);
+  const b = run(['build', 'architecture'], dir);
+  assert.ok([0, 3].includes(b.status), b.stderr);
+  assert.match(readFileSync(join(dir, 'ARCHITECTURE.md'), 'utf8'), /Texto escrito à mão\./);
+  assert.equal(run(['check', 'architecture'], dir).status, 0);
 });
