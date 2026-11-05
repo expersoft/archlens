@@ -199,6 +199,8 @@ vira `bands-flow` com aviso no build. Com `nesting` aninhado, `bands` também vi
   nó interno. Uma âncora fora da visão continua medindo `role` e `distance`, e a matriz de impacto continua inteira.
 - **`depth` e `focus`:** `depth` não traz vizinhos sem o valor. Um `focus` sem o valor deixa a visão vazia.
 - **`include`:** vence o filtro, porque é pedido nominal, e conta como resultado.
+- **`granularity`:** age antes de `where`. Em `impact` e `product-support`, cujo padrão é `container`, um sistema com o
+  valor pode ficar de fora quando seus containers estão na visão; use `granularity: "system"` ou uma visão C4.
 - **Dinâmica** (`level: "dynamic"`): ignora `where`, porque os passos são autorais, e a resposta avisa.
 - **Resultado vazio:** não é erro. A consulta responde `Nenhum nó tem esse valor em "where".`; uma visão salva vazia
   gera aviso no build e é pulada.

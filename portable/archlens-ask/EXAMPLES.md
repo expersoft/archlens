@@ -296,7 +296,8 @@ C4Container
 
 **Recorte:** cartão do elemento `loja.pedidos` (`RULES.md` §7).
 
-**Chamadas:** `get_page archlens/application-component/loja.pedidos` (identidade, `parent`, relações de saída);
+**Chamadas:** `get_page archlens/application-component/loja.pedidos` (identidade, `parent`, relações de saída e, em
+`compiled_truth`, a documentação do nó, depois de `<!-- archlens:end -->`);
 `get_backlinks` dela (relações de entrada e filhos, confirmados com `get_page` de cada candidata);
 `get_page archlens/changelog` (rodadas que citam o id).
 
@@ -344,6 +345,20 @@ C4Container
 > - Redis (ElastiCache) serve API de Pedidos.
 > - Hospedagem de contêineres serve API de Pedidos.
 > - Mensageria serve API de Pedidos.
+>
+> ## Documentação
+>
+> ### Responsabilidades
+>
+> A API de Pedidos é dona do carrinho e do ciclo de vida do pedido: criação, pagamento, faturamento e entrega.
+>
+> ### Pagamento
+>
+> A autorização passa pelo Pagamento Adapter, que chama o Gateway de Pagamentos.
+
+O texto da página tem `# Responsabilidades`, `# Pagamento` e `[[archlens/application-component/gateway|Gateway de
+Pagamentos]]`: no cartão, os títulos descem dois níveis e o wikilink vira nome. Sem texto depois de
+`<!-- archlens:end -->`, a seção `## Documentação` não aparece.
 
 ---
 

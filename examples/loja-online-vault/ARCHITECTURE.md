@@ -321,9 +321,74 @@ _Nenhuma premissa registrada._
 
 | Elemento | Propriedade | Valor |
 | --- | --- | --- |
+| API de Pedidos | squad | Checkout |
+| Checkout | squad | Checkout |
+| Checkout Controller | squad | Checkout |
 | ERP | owner | TI Corporativa |
+| Gateway de Pagamentos | squad | Pagamentos |
 | Plataforma de E-commerce | criticidade | alta |
 | Plataforma de E-commerce | owner | Squad Checkout |
+
+## Documentação dos nós
+
+### API de Pedidos (`loja.pedidos`)
+
+##### Responsabilidades
+
+A API de Pedidos é dona do carrinho e do ciclo de vida do pedido: criação, pagamento, faturamento e entrega. Nenhum outro
+container grava em pedidos; o CRM e o atendimento consultam por REST.
+
+##### Arquitetura
+
+- **Entrada:** o Checkout Controller recebe o fechamento vindo do BFF.
+- **Pagamento:** o Pagamento Adapter isola o gateway externo.
+- **Eventos:** cada mudança de estado sai pelo Publicador de Eventos.
+
+##### Operação
+
+| Sinal | Alvo |
+|---|---|
+| p95 do checkout | abaixo de 2 s |
+| Pedidos sem evento publicado | zero |
+
+Em incidente, comece pelos pedidos parados em `AGUARDANDO_PAGAMENTO`.
+
+### Checkout (`bp-checkout`)
+
+##### O processo
+
+Começa quando a pessoa confirma o carrinho e termina com o pedido pago, que dispara o
+Faturamento.
+
+##### Regras de negócio
+
+- Estoque é reservado no início e liberado depois de 15 minutos sem pagamento.
+- Pix vale por 30 minutos; cartão recusado permite uma nova tentativa com outro meio.
+
+O objetivo acompanhado é reduzir o abandono de carrinho.
+
+### Checkout Controller (`loja.pedidos.checkout`)
+
+##### Fluxo do fechamento
+
+1. Valida o carrinho e recalcula o total.
+2. Pede a análise de risco antes de cobrar.
+3. Chama o Pagamento Adapter.
+4. Grava o pedido e publica `PedidoCriado`.
+
+O fechamento é idempotente pela chave `Idempotency-Key`: repetir a chamada devolve o mesmo pedido.
+
+### Gateway de Pagamentos (`gateway`)
+
+##### Contrato
+
+Fornecedor externo de cartões e Pix, acessado por HTTPS. O contrato prevê 99,9% de disponibilidade e janela de
+manutenção aos domingos, das 2h às 4h.
+
+##### Quando falha
+
+Timeouts não são recusa de pagamento: o Pagamento Adapter consulta a
+transação antes de tentar de novo, para não cobrar duas vezes.
 
 ## Fontes
 

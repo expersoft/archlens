@@ -54,6 +54,12 @@ test('planning head carries the refusal, external content rule, secrecy and appl
   assert.ok(/aplicar é só o botão/i.test(head));
 });
 
+test('planning head sends the agent to read_doc before writing a documentation', () => {
+  const head = planHead();
+  assert.match(head, /`archlens query --element` → `read_doc`/);
+  assert.match(head, /`read_doc`[^\n]*em vez de reescrever/);
+});
+
 test('planning head maps every command the skill runs to a tool', () => {
   const head = planHead();
   const cmds = new Set([...planSkill.matchAll(/archlens (scan|plan|deliver|show|views|remote|init)\b/g)].map(m => m[1]));

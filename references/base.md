@@ -58,7 +58,7 @@ Procure `architecture/archlens.json` (a CLI também acha sozinha, subindo a part
   por elemento) ou `gbrain` (seção abaixo), escolhido por `store.kind` no `archlens.json`. `archlens store convert <base>
   --to markdown|json` (skill archlens-apply) troca de conector mantendo a versão e os arquivos do usuário. Para abrir no
   Obsidian, abra a pasta da base como vault. Nunca edite as páginas à mão fora do texto
-  depois do bloco do archlens (`archlens:end`): o resto é regravado. Esse texto é preservado por toda gravação markdown
+  depois do bloco do archlens (`archlens:end`), a documentação do nó: o resto é regravado. Esse texto é preservado por toda gravação markdown
   (se o elemento é removido, vai para `notes/removidos/<tipo>/<id>.md`, e o `apply` diz onde) e só se perde ao
   converter para `json`, que exige `--force` (sem ele, `E_STORE_CONVERT` e nada é gravado).
 
@@ -132,8 +132,8 @@ depois passa esse arquivo ao comando que a CLI indicar. Resposta que não corres
   `[[wikilinks]]`, como `mentions`). Para a IA corporativa ver os tipos ArchiMate no grafo, o servidor precisa rodar
   `gbrain sweep` (ou use o modo git, cujo sync as lê).
 
-**Edição direta no gbrain**: possível, para acrescentar descrições, mas não recomendada. Só o texto livre depois de
-`<!-- archlens:end -->` de cada página é preservado; o resto é regravado pelo archlens. Toda página termina com a marca
+**Edição direta no gbrain**: possível, para escrever a documentação do nó (seção abaixo), mas não recomendada. Só o
+texto livre depois de `<!-- archlens:end -->` de cada página é preservado; o resto é regravado pelo archlens. Toda página termina com a marca
 `<!-- timeline -->` do gbrain (impede o gbrain de mover seções `## Timeline`/`## History`); não a apague. Uma linha
 `<!-- timeline -->` literal, ou uma linha `---` seguida de `## Timeline`, dentro de uma descrição ou do texto livre é
 normalizada pelo gbrain.
@@ -156,6 +156,25 @@ ou **lista de textos**. Um catálogo opcional em `properties` do `archlens.json`
 Regra: **propriedade serve para filtrar (`where`, veja `views.md`), elemento serve para atravessar.** Se o usuário
 pedir uma visão que atravesse por um valor ("o que sustenta tudo da squad Checkout"), sugira promovê-lo a
 `business-actor` + `assignment` em vez de manter a propriedade (a promoção é um delta: skill archlens-plan).
+
+## Documentação do nó
+
+Cada nó carrega, além das `properties` (fatos curtos, para filtrar), um texto livre em markdown: o que iria numa wiki
+(resumo das funcionalidades, da arquitetura, contexto). É o trecho depois de `<!-- archlens:end -->` na página do
+elemento, então só existe em base `markdown` ou `gbrain`.
+
+- **Base `json`:** pedir documentação recusa com `E_STORE_DOC`; a saída é `archlens store convert` (skill archlens-apply).
+  Converter para `json` perde o texto: exige `--force` e lista os nós afetados.
+- **Pelo plano** (skill archlens-plan ou Planejar, na GUI): `docs` no delta. Trocar ou limpar um texto existente é
+  sempre pergunta ao usuário, com a diferença à vista; o texto antigo fica só no git da base.
+- **Direto no markdown:** dois passos, editar só esse trecho e rodar `archlens build <base>` (skill archlens-apply). A
+  edição não entra no histórico. A GUI, a consulta e a busca leem o texto atual; o `ARCHITECTURE.md` e os HTML salvos só
+  mudam no `build`, e até lá o `archlens check` falha indicando-o.
+- **Conflito:** um plano que escreve a documentação de um nó cujo texto mudou depois da revisão é recusado com
+  `E_STORE_CONFLICT`, sem gravar nada. Planos que só mexem em campos ou relações preservam o texto.
+- **Leitura:** aba Documentação na GUI e no HTML gerado, seção Documentação em `archlens query <base> --element <id>`
+  e seção `Documentação dos nós` no `ARCHITECTURE.md`. A busca por nome não olha dentro do texto. Detalhes em
+  `references/knowledge-doc.md`.
 
 ## Erros comuns (todas as skills)
 

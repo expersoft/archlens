@@ -7,6 +7,8 @@ aliases:
 c4: container
 parent: "[[application-component/loja|Plataforma de E-commerce]]"
 technology: Java / Spring Boot
+properties:
+  squad: Checkout
 relationships:
   - id: loja.pedidos-serving-crm
     type: serving
@@ -49,3 +51,23 @@ Carrinho, checkout e ciclo de vida do pedido
 - [[application-component/loja.pedidos.repo|Pedido Repository]]
 
 <!-- archlens:end -->
+
+## Responsabilidades
+
+A API de Pedidos é dona do carrinho e do ciclo de vida do pedido: criação, pagamento, faturamento e entrega. Nenhum outro
+container grava em pedidos; o [[application-component/crm|CRM]] e o atendimento consultam por REST.
+
+## Arquitetura
+
+- **Entrada:** o [[application-component/loja.pedidos.checkout|Checkout Controller]] recebe o fechamento vindo do BFF.
+- **Pagamento:** o [[application-component/loja.pedidos.pagamento|Pagamento Adapter]] isola o gateway externo.
+- **Eventos:** cada mudança de estado sai pelo [[application-component/loja.pedidos.eventos|Publicador de Eventos]].
+
+## Operação
+
+| Sinal | Alvo |
+|---|---|
+| p95 do checkout | abaixo de 2 s |
+| Pedidos sem evento publicado | zero |
+
+Em incidente, comece pelos pedidos parados em `AGUARDANDO_PAGAMENTO`.

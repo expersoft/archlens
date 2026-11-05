@@ -16,13 +16,28 @@ for (const ex of ['loja-online', 'telemedicina', 'repos', 'loja-online-vault']) 
     const dir = fileURLToPath(new URL(`../examples/${ex}/`, import.meta.url));
     const store = openStore(resolveBase('ARCHITECTURE.md', { cwd: dir }));
     assert.equal(store.kind, ex.endsWith('-vault') ? 'markdown' : 'json');
-    const { raw, notes } = store.read();
+    const { raw, notes, docs } = store.read();
     assert.deepEqual(validateModel(raw).errors, []);
     const model = normalizeModel(raw);
     for (const v of model.views) assert.ok(resolveView(model, v).nodes.length, v.key);
-    assert.equal(readFileSync(store.locator.docPath, 'utf8'), generateDoc(raw, { notes, source: 'architecture/' }));
+    assert.equal(readFileSync(store.locator.docPath, 'utf8'), generateDoc(raw, { notes, docs, source: 'architecture/' }));
   });
 }
+
+test('example loja-online-vault: documented nodes carry a squad and reach every saved output', () => {
+  const dir = fileURLToPath(new URL('../examples/loja-online-vault/', import.meta.url));
+  const store = openStore(resolveBase('ARCHITECTURE.md', { cwd: dir }));
+  const { raw, docs } = store.read();
+  const doc = readFileSync(store.locator.docPath, 'utf8');
+  const html = readFileSync(join(dir, 'architecture/diagrams/architecture.html'), 'utf8');
+  const element = id => raw.model.elements.find(e => e.id === id);
+  for (const id of ['loja.pedidos', 'loja.pedidos.checkout', 'gateway', 'bp-checkout']) {
+    assert.ok(docs[id]?.trim(), `${id} sem documentação`);
+    assert.ok(element(id).properties?.squad, `${id} sem squad`);
+    assert.ok(doc.includes(`### ${element(id).name} (\`${id}\`)`), `${id} fora do ARCHITECTURE.md`);
+    assert.ok(html.includes(`"${id}":"\\u003c`), `${id} fora do HTML salvo`);
+  }
+});
 
 test('telemedicina plano-02-final is current', () => {
   const src = fileURLToPath(new URL('../examples/telemedicina/', import.meta.url));

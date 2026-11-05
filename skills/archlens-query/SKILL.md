@@ -30,8 +30,9 @@ Esta skill **nunca grava a base**: `views`, `query`, `resolve`, `render` e `deli
 4. **Pergunta em texto** ("o que sustenta P?", "o que depende de A?"):
    `archlens query <base> --view <key> | --spec '<json>' [--format md|json] [--out $OUT/x.md]` (elementos por camada ou
    nível, relações em frases, matriz de impacto). **"Me fale do sistema X"**:
-   `archlens query <base> --element <id> [--depth N] [--via t1,t2]` (pai, filhos, relações, fontes, rodadas;
-   `--depth N` inclui "Em volta"). Id desconhecido: `E_UNKNOWN_REF` com sugestões por nome e alias.
+   `archlens query <base> --element <id> [--depth N] [--via t1,t2]` (pai, filhos, relações, fontes, rodadas e, em
+   markdown, a seção Documentação, com o texto atual do nó; `--depth N` inclui "Em volta"). Id desconhecido:
+   `E_UNKNOWN_REF` com sugestões por nome e alias.
 5. **Diagrama**: `archlens deliver <base> --view <key> | --spec '<json>' --out $OUT/x.html` (HTML + screenshots
    1920×1080 / 1280×720 + checagens; `--suggested` inclui as sugeridas, `--open` abre no navegador).
    `archlens resolve <base> --spec '<json>'` mostra os nós e arestas sem renderizar.

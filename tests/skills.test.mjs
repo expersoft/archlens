@@ -107,6 +107,30 @@ test('only archlens-apply runs init, apply, build, doc, migrate or store convert
   }
 });
 
+test('the documentation of a node: plan reads the current text and asks, apply tells the two steps of a direct edit', () => {
+  const plan = read(skillPath('archlens-plan'));
+  assert.match(plan, /`docs`/, 'archlens-plan: vira docs no delta');
+  assert.match(plan, /archlens query <base> --element <id>/, 'archlens-plan: lê o texto atual antes');
+  assert.match(plan, /diferença/, 'archlens-plan: trocar texto mostra a diferença');
+  const apply = read(skillPath('archlens-apply'));
+  assert.match(apply, /archlens:end[\s\S]*archlens build <base>/, 'archlens-apply: editar e build');
+  assert.match(apply, /E_STORE_DOC/, 'archlens-apply: recusa em base json');
+  assert.match(read(skillPath('archlens-query')), /Documentação/, 'archlens-query: o cartão traz a documentação');
+});
+
+test('the references document the documentation of a node as built', () => {
+  const ref = name => read(join(ROOT, 'references', name));
+  const merge = ref('merge.md');
+  for (const term of ['`docs`', '`doc:<id>', 'keep', 'take', 'E_DELTA_DOC', 'E_STORE_DOC']) assert.ok(merge.includes(term), `merge.md: ${term}`);
+  const knowledge = ref('knowledge-doc.md');
+  for (const term of ['`putDoc`', '`doc:<id>`', 'Documentação dos nós', '`archlens build`']) assert.ok(knowledge.includes(term), `knowledge-doc.md: ${term}`);
+  const base = ref('base.md');
+  for (const term of ['## Documentação do nó', 'E_STORE_DOC', 'store convert', '`archlens build']) assert.ok(base.includes(term), `base.md: ${term}`);
+  const filter = ref('views.md').split('## Filtro por propriedade')[1];
+  assert.match(filter, /`granularity`.*antes de `where`/, 'views.md: granularity age antes de where');
+  assert.match(read(join(ROOT, 'README.md')), /aba \*\*Documentação\*\*/, 'README: como ler');
+});
+
 test('archlens-apply runs init; without a base, plan and query ask the repository type and hand init over to it', () => {
   assert.match(read(skillPath('archlens-apply')), /archlens init <pasta> --store json\|markdown\|gbrain/);
   for (const name of ['archlens-plan', 'archlens-query']) {

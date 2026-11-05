@@ -11,11 +11,12 @@ A base é uma **pasta** (padrão `architecture/`, ao lado do `ARCHITECTURE.md`):
 | `notes/overview.md` | visão geral: propósito, decisões, riscos | pessoas / agente |
 | `notes/notes.md` | decisões, riscos, pendências | pessoas / agente |
 | `notes/assumptions.md` | prosa de premissas (opcional; sem ele, a lista de `assumptions`) | pessoas / agente |
+| páginas de elementos, depois de `<!-- archlens:end -->` | documentação do nó (só `markdown` e `gbrain`) | pessoas / agente |
 | `diagrams/` | HTML e screenshots do `build` | build |
 
 O **`ARCHITECTURE.md` é 100% gerado** (por `apply`, `doc` e `build`): resumo, contexto, modelo C4, camadas
-ArchiMate, relacionamentos, rastreabilidade, ciclo de vida, premissas, fontes, visões, histórico e notas. O
-frontmatter traz `source:` (a pasta), e a CLI aceita o `.md` como atalho para ela. Não edite o `.md`.
+ArchiMate, relacionamentos, rastreabilidade, ciclo de vida, premissas, propriedades, documentação dos nós, fontes,
+visões, histórico e notas. O frontmatter traz `source:` (a pasta), e a CLI aceita o `.md` como atalho para ela. Não edite o `.md`.
 
 ## Formato 2.0
 
@@ -60,22 +61,51 @@ arquivo de onde veio; elementos novos vão para o arquivo do pai ou, sem pai, pa
 ## Manter em dia
 
 - `archlens check` valida o modelo e confere se o `ARCHITECTURE.md` corresponde à pasta (código 1 se não). Use no CI
-  ou no pre-commit.
+  ou no pre-commit. Depois de uma edição direta da documentação de um nó, ele falha e indica o `archlens build`.
 - `archlens doc architecture/` regenera o documento depois de editar as notas.
+
+## Documentação do nó
+
+O texto livre da página de um elemento, depois de `<!-- archlens:end -->`, é a documentação do nó: o que iria numa wiki
+(resumo das funcionalidades, da arquitetura, contexto), em markdown e sem modelo de seções. O formato da página não
+mudou: um texto que já estava ali passa a ser a documentação. Só existe nos conectores `markdown` e `gbrain`; a base
+`json` não tem onde guardá-lo e recusa com `E_STORE_DOC`, citando `store convert` (na GUI, a aba não aparece).
+
+**Escrita.** Pelo plano (GUI ou skill): `docs` no delta, com a pergunta e a diferença de `references/merge.md`, e a
+operação `putDoc` no apply, que substitui o trecho inteiro sem tocar no cabeçalho nem no bloco. Direto no markdown: dois
+passos, editar o trecho e rodar `archlens build`; essa edição não entra no histórico.
+
+**Leitura.** O texto viaja à parte do modelo, em `read().docs` e `readDoc(id)`, e nunca entra em `raw`, em `viewData`,
+na rota do cartão nem na de visão.
+
+| Saída | Como a documentação aparece | Quando atualiza |
+|---|---|---|
+| GUI | aba Documentação no painel do nó, buscada só ao abrir | na hora, sem reiniciar o servidor |
+| `query --element` em markdown | seção `## Documentação`, com os títulos rebaixados e os wikilinks como nomes (o `--format json` não a traz) | na hora |
+| busca com LLM | só quando o agente abre o nó, com teto de tamanho | na hora |
+| HTML de `deliver`, `render` e `build` | aba Documentação, no próprio arquivo, uma vez por nó; montada ao abrir a aba e com HTML do texto escapado. Prévias e o HTML dentro da GUI não a levam | ao gerar |
+| `ARCHITECTURE.md` | seção `## Documentação dos nós`, por nome, com os títulos rebaixados; nós sem texto ficam de fora | no próximo `archlens build` (ou `apply`, `doc`) |
+
+Uma edição direta só chega ao `ARCHITECTURE.md` e aos HTML salvos em `diagrams/` no próximo `archlens build`. Até lá, o
+`check` falha com `rode "archlens build"`.
 
 ## Conectores
 
 A base é lida e gravada por um **conector**; o CLI só usa o contrato dele: `read` (a base inteira), `readSubgraph`
 (um recorte), `version`, `objectVersions(refs)` (a versão de cada objeto; veja *Versão por objeto* em
-`references/merge.md`), `apply(ops, { expect | baseVersion })` e `history`. Cada conector declara `versioning`: `base`
+`references/merge.md`), `apply(ops, { expect | baseVersion })` e `history`, mais `readDoc(id)` (a documentação de um nó,
+`null` sem texto) e `supportsDocs` (se ele guarda documentação). Cada conector declara `versioning`: `base`
 (`json`: a versão da base inteira vale para todo objeto) ou `object` (`markdown`, `gbrain`). A gravação é por operações, todas ou nenhuma. São
-nove: `setManifest`, `upsertElement`, `removeElement`, `upsertRelationship`, `removeRelationship`, `putView`,
-`removeView`, `putNote` e `appendHistory`. Operação desconhecida ou malformada dá `E_STORE_OP` e nada é gravado. Não
-existe operação para remover uma nota.
+dez: `setManifest`, `upsertElement`, `removeElement`, `upsertRelationship`, `removeRelationship`, `putView`,
+`removeView`, `putNote`, `putDoc` e `appendHistory`. Operação desconhecida ou malformada dá `E_STORE_OP` e nada é gravado. Não
+existe operação para remover uma nota. `putDoc` (`{ id, text }`) substitui a documentação de um nó, e `text` vazio a
+limpa; um conector sem documentação a recusa com `E_STORE_DOC`. Refs de versão: `element:<id>`, `relationship:<id>`,
+`view:<key>`, `note:<nome>`, `doc:<id>` (o hash do texto, ou `null` sem texto; no modo MCP, a `revision` da página) e
+`manifest`.
 
 **Versão.** É `sha256:` mais o hash do conteúdo (manifesto, elementos, relações, visões, changelog e notas), igual entre
 conectores: a mesma base em `json` e em `markdown` tem a mesma versão. Ordem dos elementos, listas e textos vazios não
-contam, e `store`/`layout` (configuração do conector) ficam de fora. Se uma versão em `expect` (ou a `baseVersion`) não é
+contam, e `store`/`layout` (configuração do conector) e a documentação dos nós (que tem a ref `doc:<id>`) ficam de fora. Se uma versão em `expect` (ou a `baseVersion`) não é
 a do store, o resultado é `E_STORE_CONFLICT` e nada é gravado; o plano guarda as versões em que foi gerado.
 
 **`store`** no `archlens.json` escolhe o conector (gravado por `archlens init` ou `store convert`): `kind` ausente ou `json` é
@@ -91,7 +121,8 @@ Relações ficam na página do elemento de origem; a hierarquia é o campo `pare
 sempre uma página (sem frontmatter válido, `E_STORE_MD`); `.md` fora delas, `.obsidian/` e anexos são ignorados e nunca
 apagados. Só se remove uma pasta de tipo que o próprio `apply` esvaziou. Ids com `[`, `]`, `|`, `#` ou `^` são recusados
 (`E_STORE_MD_ID`), como também dois ids do mesmo tipo que só diferem em maiúsculas e minúsculas (seriam um arquivo só em
-sistemas que não as distinguem), e descrições que contêm os marcadores do archlens (`E_STORE_MD`).
+sistemas que não as distinguem), e descrições que contêm os marcadores do archlens (`E_STORE_MD`; na documentação do nó,
+`E_DELTA_DOC`).
 
 ```markdown
 ---
@@ -131,7 +162,7 @@ Texto das pessoas fica aqui e é preservado.
   leitura tira de volta, e segue com os aliases do modelo. Os campos de ligação por tipo de relação (`serving`, `access`, …) e as `tags` são derivados e
   regravados a cada escrita: tags que não sejam `archlens/tag/*` são reescritas na próxima gravação.
 - Tudo entre o título da página e o bloco do archlens é a **descrição**. O bloco `archlens:begin` … `archlens:end` é
-  regenerado. Só o texto **depois** do bloco é das pessoas: é preservado por toda gravação do conector markdown, inclusive se o elemento mudar de tipo (e de pasta). Se o elemento é removido, a página sai e esse texto vai, na mesma gravação, para `notes/removidos/<tipo>/<id>.md` (uma linha de cabeçalho com o nome e o id, depois o texto; uma nova remoção do mesmo id acrescenta ao fim); o `apply` diz o caminho. Essa pasta não faz parte da base e o archlens nunca a apaga. Só se perde ao converter para `json`, que não tem onde guardá-lo (veja `store convert`).
+  regenerado. Só o texto **depois** do bloco é das pessoas, a **documentação do nó**: é preservado por toda gravação do conector markdown, inclusive se o elemento mudar de tipo (e de pasta). Se o elemento é removido, a página sai e esse texto vai, na mesma gravação, para `notes/removidos/<tipo>/<id>.md` (uma linha de cabeçalho com o nome e o id, depois o texto; uma nova remoção do mesmo id acrescenta ao fim); o `apply` diz o caminho. Essa pasta não faz parte da base e o archlens nunca a apaga. Só se perde ao converter para `json`, que não tem onde guardá-lo (veja `store convert`).
 - Wikilinks são sempre `[[<tipo>/<id>|<nome>]]`; renomear um elemento atualiza os links nas outras páginas.
 
 ### `gbrain-pack.yaml`

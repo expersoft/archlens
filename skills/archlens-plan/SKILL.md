@@ -11,7 +11,7 @@ Leia `references/base.md` antes do primeiro comando (caminhos relativos a `$ARCH
 simbólico da instalação; sem ele, o `..` sai pelo `~/.claude` e não acha o repositório). CLI: `"$ARCHLENS/bin/archlens" <comando>` (abaixo,
 `archlens <comando>`). `$OUT` = uma pasta **fora** da base (ex.: `/tmp/archlens`).
 
-Esta skill **nunca grava a base**: usa só `scan`, `plan`, `show` e a prévia `deliver --delta/--plan`, com a saída
+Esta skill **nunca grava a base**: usa só `scan`, `plan`, `show`, `query --element` e a prévia `deliver --delta/--plan`, com a saída
 em `$OUT` (`remote pull`/`check` só atualizam o espelho local de uma base gbrain no modo MCP). Gravar é da skill archlens-apply, e só com o plano final que esta skill entrega.
 
 ## Fluxo
@@ -42,6 +42,13 @@ em `$OUT` (`remote pull`/`check` só atualizam o espelho local de uma base gbrai
      apontar a base que o apply vai criar, e `--system` pode nomear um sistema novo (o delta o cria). Placeholders
      `ext.*` de leituras anteriores que representam o repositório lido saem por `remove` no próprio delta (confirme
      com `yes`). Sem graphify, sugira rodá-lo no repositório. Detalhes em `references/repo-reading.md`.
+   - **"documente o nó X"** (texto livre: resumo, arquitetura, contexto; só em base `markdown` ou `gbrain`): leia antes o
+     texto atual com `archlens query <base> --element <id>` (seção *Documentação*) e edite-o, em vez de reescrever às
+     cegas. O delta leva `docs`: `[{ "id": "<id>", "text": "<markdown completo>" }]`, que substitui o texto inteiro
+     (sem mescla); `"text": ""` limpa. O cartão desce os títulos dois níveis e troca wikilinks por nomes: no `text`,
+     volte os títulos e confira na diferença do plano o que mudou sem querer. Base `json`: `E_STORE_DOC`, ofereça
+     `store convert` (skill archlens-apply).
+     Detalhes em `references/merge.md`, *Documentação do nó*.
 
    Sempre preencha `source` (`kind` + `ref`) e `summary`. Reutilize os ids da base (`archlens views <base>` e as
    tabelas do `ARCHITECTURE.md` mostram os ids).
@@ -55,7 +62,9 @@ em `$OUT` (`remote pull`/`check` só atualizam o espelho local de uma base gbrai
 4. **Pergunte, uma decisão por vez**: cada item com `resolution: null` (conflito, possível duplicata, remoção,
    `retired`), na ordem de `n`, com a sua recomendação e o motivo. **Comece pelas possíveis duplicatas.** Pule os
    itens com `when` se a duplicata foi respondida `different`. **Nunca decida sozinho.** Grave cada resposta no
-   campo `resolution` do item em `p1.json`.
+   campo `resolution` do item em `p1.json`. **Trocar ou limpar documentação existente** é sempre decisão do usuário
+   (`keep` | `take`): mostre a diferença entre o texto antigo e o novo, que o `plan` imprime; o texto antigo fica só no
+   git da base.
 5. **Refaça o plano com as respostas**: `archlens plan <base> --answers p1.json --out p2.json` (sem o delta: usa o
    do plano). Depois de uma duplicata `same`, relações e filhos passam a apontar para o elemento da base e podem
    surgir perguntas novas: volte ao passo 4 no plano novo. Repita até o plano sair **final**. Para ver "e se eu
@@ -85,6 +94,7 @@ em `$OUT` (`remote pull`/`check` só atualizam o espelho local de uma base gbrai
 - **`draft` × `planned`**: `draft` é "em discussão"; `planned` é "decidido, ainda não existe".
 - **Direção do `uses`**: em C4 é consumidor → provedor (`cliente uses web`). A CLI converte para
   ArchiMate (`web serving cliente`). Não inverta à mão.
+- **Documentação escrita sem ler a atual**: `text` substitui tudo; o que não estiver nele some. Leia o texto antes.
 - **Propriedade onde cabe um elemento**: se a pergunta é "o que depende de X" por um valor, a propriedade não
   atravessa; promova a elemento (ver *Propriedades* em `references/base.md`).
 - **Camadas desconectadas**: travessias ArchiMate só cruzam camadas por relações. Ligue containers C4

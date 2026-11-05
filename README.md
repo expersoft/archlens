@@ -152,7 +152,8 @@ O que faz:
   ArchiMate e C4; o tema da interface (botão da barra do topo) e o do diagrama (o mesmo botão ☀/☾ na barra do diagrama, ou `T`
   no diagrama) são escolhidos em separado; o painel esquerdo (`Ctrl+B`) e o direito (`Ctrl+Alt+B` ou `Ctrl+Shift+B`) seguem o seu gosto.
 - **Detalhes** do elemento: "Nesta visão" (tipo C4 e ArchiMate, papel, distância, relações como frases) e "Na base"
-  (apelidos, pai, filhos, fontes e rodadas).
+  (apelidos, pai, filhos, propriedades, fontes e rodadas). Em base `markdown` ou `gbrain`, a aba Documentação traz o
+  texto do nó.
 - **Busca por nome** (`Ctrl+K`), seletor de base, e a troca de base reinicia o histórico.
 
 - **Agrupar e desagrupar** (visões ArchiMate com elementos aninháveis): os botões `Agrupar tudo` e `Desagrupar tudo`
@@ -301,6 +302,32 @@ avaliação desses limites roda sem chave no `gui:test` e, com um LLM real:
 ```bash
 npm --prefix apps/gui run eval -- --plan-limits [--config archlens-gui.json] [--provider P] [--model M] [--dry]
 ```
+
+## Documentação do nó
+
+Cada nó da base (sistema, processo de negócio ou qualquer outro) carrega duas coisas: `properties`, fatos curtos para
+filtrar (squad, linguagem), e **documentação**, texto livre em markdown com o que iria numa wiki. O texto fica na página
+do elemento, depois de `<!-- archlens:end -->`, por isso exige uma base `markdown` ou `gbrain`; numa base `json`, o
+pedido recusa com `E_STORE_DOC` (`archlens store convert` troca o conector).
+
+**Para escrever:**
+
+- **Pelo plano** (Planejar na GUI ou skill `archlens-plan`): peça "documente o nó X". O texto entra em `docs` no delta e
+  é revisado antes do apply. Trocar ou limpar um texto existente abre uma pergunta, com a diferença à vista; o texto
+  antigo fica só no git da base.
+- **Direto no markdown**, em dois passos: edite só o trecho depois do bloco e rode `archlens build`. Até o build, o
+  `ARCHITECTURE.md` e os HTML salvos ficam com o texto antigo e o `archlens check` falha. Essa edição não entra no
+  histórico.
+
+**Para ler:**
+
+- aba **Documentação** no painel do nó, na GUI e no HTML gerado, ao lado de Detalhes e com o diagrama visível;
+- seção Documentação em `archlens query <base> --element <id>`;
+- seção `Documentação dos nós` no `ARCHITECTURE.md`;
+- busca com LLM, quando o agente abre o nó.
+
+Para filtrar uma visão por valor de propriedade, use `where` (`references/views.md`): `{"notation":"c4","level":"landscape","where":{"squad":"Checkout"}}`.
+O exemplo `examples/loja-online-vault` traz nós documentados. Detalhes em `references/base.md` e `references/merge.md`.
 
 ## Manter o ARCHITECTURE.md em dia
 

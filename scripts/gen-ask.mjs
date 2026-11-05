@@ -138,7 +138,7 @@ export function buildReference() {
   out.push('');
   out.push('| página (slug) | conteúdo útil |');
   out.push('|---|---|');
-  out.push('| `<prefixo>/<tipo>/<id>` | `get_page` devolve `type` (tipo ArchiMate), `title` (nome), `tags` (acima) e `frontmatter`: `id`, `c4` (kind), `parent` e `group` (wikilinks), `aliases`, `technology`, `status` (**ausente = `active`**), `external`, `relationships` e um campo por tipo de relação com os wikilinks dos destinos (`serving: [[<prefixo>/<tipo>/<id>\\|Nome]]`); `compiled_truth`: descrição + seção "Relações" em frases |');
+  out.push('| `<prefixo>/<tipo>/<id>` | `get_page` devolve `type` (tipo ArchiMate), `title` (nome), `tags` (acima) e `frontmatter`: `id`, `c4` (kind), `parent` e `group` (wikilinks), `aliases`, `technology`, `status` (**ausente = `active`**), `external`, `relationships` e um campo por tipo de relação com os wikilinks dos destinos (`serving: [[<prefixo>/<tipo>/<id>\\|Nome]]`); `compiled_truth`: descrição + seção "Relações" em frases + a documentação do nó (o texto depois de `<!-- archlens:end -->`) |');
   out.push('| `<prefixo>/views/<key>` | visão salva: resumo + spec num bloco ```` ```archlens-json ```` |');
   out.push('| `<prefixo>/manifest` | tipo de página `archlens-manifest` (ache com `list_pages {"type":"archlens-manifest"}`); nome e descrição da base; o formato (`"archlens": "2.0"`) está no bloco `archlens-json` do corpo, não no frontmatter |');
   out.push('| `<prefixo>/notes/<nome>` | notas de interpretação |');

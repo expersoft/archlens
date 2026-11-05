@@ -192,7 +192,7 @@ Todas as páginas da base ficam sob um prefixo (padrão `archlens/`) e levam a t
 
 | página (slug) | conteúdo útil |
 |---|---|
-| `<prefixo>/<tipo>/<id>` | `get_page` devolve `type` (tipo ArchiMate), `title` (nome), `tags` (acima) e `frontmatter`: `id`, `c4` (kind), `parent` e `group` (wikilinks), `aliases`, `technology`, `status` (**ausente = `active`**), `external`, `relationships` e um campo por tipo de relação com os wikilinks dos destinos (`serving: [[<prefixo>/<tipo>/<id>\|Nome]]`); `compiled_truth`: descrição + seção "Relações" em frases |
+| `<prefixo>/<tipo>/<id>` | `get_page` devolve `type` (tipo ArchiMate), `title` (nome), `tags` (acima) e `frontmatter`: `id`, `c4` (kind), `parent` e `group` (wikilinks), `aliases`, `technology`, `status` (**ausente = `active`**), `external`, `relationships` e um campo por tipo de relação com os wikilinks dos destinos (`serving: [[<prefixo>/<tipo>/<id>\|Nome]]`); `compiled_truth`: descrição + seção "Relações" em frases + a documentação do nó (o texto depois de `<!-- archlens:end -->`) |
 | `<prefixo>/views/<key>` | visão salva: resumo + spec num bloco ```` ```archlens-json ```` |
 | `<prefixo>/manifest` | tipo de página `archlens-manifest` (ache com `list_pages {"type":"archlens-manifest"}`); nome e descrição da base; o formato (`"archlens": "2.0"`) está no bloco `archlens-json` do corpo, não no frontmatter |
 | `<prefixo>/notes/<nome>` | notas de interpretação |
