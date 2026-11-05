@@ -136,7 +136,7 @@ function assertDocOwned(store, out, opts) {
 }
 
 /** Regenerates ARCHITECTURE.md (or `out`) from a folder base; exits when the document is not this base's. */
-function writeDoc(store, raw, notes, out, { replacing, docs } = {}) {
+function writeDoc(store, { raw, notes, docs }, out, { replacing } = {}) {
   try { return writeDocument(store, raw, notes, { docs, out, replacing }); } catch (e) { fail(e.message); }
 }
 
@@ -302,7 +302,7 @@ function planCommand(store, deltaPath, args, out, names) {
 /** Revision, preserved texts, regenerated document and suggested commit after a write by apply / merge --apply. */
 function afterApply(store, res) {
   const saved = loadBase(store); // the document follows what is on disk (a split model regroups items by file)
-  const doc = res.doc ?? writeDoc(store, saved.raw, saved.notes);
+  const doc = res.doc ?? writeDoc(store, saved);
   const e = res.entry;
   const st = Object.keys(e.status).length;
   console.log(`✓ ${store.describe()} e ${relPath(doc)} (revisão ${saved.raw.changelog.length}, rodada ${e.id}): +${e.added.length} ~${e.changed.length} −${e.removed.length}${st ? `, ${st} mudança(s) de status` : ''}`);
@@ -352,7 +352,7 @@ function remoteApply(store, flow, args, names, { committed, convert } = {}) {
   }
   if (res.state === 'undone') {
     const saved = loadBase(store);
-    const doc = saved.raw ? writeDoc(store, saved.raw, saved.notes) : null;
+    const doc = saved.raw ? writeDoc(store, saved) : null;
     console.log(`✓ apply ${res.id} desfeito: ${res.committed.length} página(s) do gbrain de volta ao que eram${doc ? `; ${relPath(doc)} regenerado` : ''}`);
     return;
   }
@@ -381,7 +381,7 @@ function remoteApply(store, flow, args, names, { committed, convert } = {}) {
 function afterConvert(loc, res) {
   const converted = openStore(resolveBase(loc.path));
   const back = loadBase(converted);
-  const doc = writeDoc(converted, back.raw, back.notes, loc.docPath);
+  const doc = writeDoc(converted, back, loc.docPath);
   console.log(`✓ ${relPath(loc.path)}/ agora usa o conector ${res.to} (era ${res.from}); a versão da base não mudou; ${relPath(doc)} regenerado`);
   if (res.to === 'gbrain' && res.commit) console.log(`  ${res.pages} página(s) gravadas no commit ${res.commit.slice(0, 12)} (push feito); rode o sync do gbrain para indexá-las`);
   if (res.to === 'gbrain' && !res.commit) console.log(`  ${res.pages} página(s) criadas no gbrain pelo MCP; o espelho local está em ${relPath(join(loc.path, '.archlens', 'mirror'))}`);
@@ -471,7 +471,7 @@ async function main() {
       assertWritable(store);
       const { errors } = validateModel(base.raw);
       if (errors.length) { printIssues(errors, 'ERRO'); fail('corrija os erros antes de gerar o documento', 2); }
-      const out = writeDoc(store, base.raw, base.notes, args.out && args.out !== true ? args.out : undefined, { docs: base.docs });
+      const out = writeDoc(store, base, args.out && args.out !== true ? args.out : undefined);
       console.log(`✓ ${relPath(out)}`);
       break;
     }
@@ -539,7 +539,7 @@ async function main() {
         assertWritable(store);
         const { errors } = validateModel(raw);
         if (errors.length) { printIssues(errors, 'ERRO'); fail('corrija os erros do modelo', 2); }
-        console.log(`✓ ${relPath(writeDoc(store, raw, base.notes, undefined, { docs: base.docs }))}`);
+        console.log(`✓ ${relPath(writeDoc(store, { ...base, raw }))}`);
       }
       const problems = await deliver(buildDiagrams(store, raw, { dir: args['out-dir'] && args['out-dir'] !== true ? args['out-dir'] : undefined,
         name: args.name && args.name !== true ? args.name : undefined, specs: specsOf(model), ...deliverOpts(args, preview) }), args);
@@ -628,7 +628,7 @@ async function main() {
       if (back.notes.assumptions != null && res.raw.assumptions?.length) {
         console.warn(`  aviso: notes/assumptions.md substitui a lista de premissas do manifesto no documento`);
       }
-      const doc = writeDoc(dest, back.raw, back.notes, docPath, { replacing });
+      const doc = writeDoc(dest, back, docPath, { replacing });
       console.log(`✓ ${dest.describe()} no formato ${FORMAT}; ${relPath(doc)} regenerado`);
       if (res.report) {
         for (const l of reportLines(res.report)) console.log(`  ${l}`);
