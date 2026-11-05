@@ -1,11 +1,11 @@
 // The search agent: drives a provider through the tools until a validated final answer, within round/time ceilings.
 import { compactCatalog, relationsDigest, userMessage, loadPrompt } from './context.mjs';
 import { ALL_TOOLS, QUERY_TOOLS, runTool, finalize } from './tools.mjs';
+import { abortError, combine, raceAbort } from './abort.mjs';
 
 const REMINDER = 'Responda chamando show_view, show_element ou clarify.';
 const FINAL_NAMES = ['show_view', 'show_element', 'clarify'];
 const isQuery = name => QUERY_TOOLS.some(t => t.name === name);
-const abortError = () => Object.assign(new Error('busca cancelada'), { code: 'E_LLM_ABORT' });
 const sum = (a, b) => ({ input: a.input + (b?.input ?? 0), output: a.output + (b?.output ?? 0), cacheRead: a.cacheRead + (b?.cacheRead ?? 0) });
 
 // First balanced `{...}` in the text (strings respected), parsed.
@@ -23,26 +23,6 @@ function firstJson(text) {
     }
   }
   throw new Error('a resposta não tem um objeto JSON válido');
-}
-
-// Node 18 has no AbortSignal.any.
-export function combine(signal, ms) {
-  const ctl = new AbortController();
-  const timer = setTimeout(() => { ctl.timedOut = true; ctl.abort(); }, ms);
-  const onAbort = () => ctl.abort();
-  if (signal?.aborted) ctl.abort(); else signal?.addEventListener('abort', onAbort, { once: true });
-  return { ctl, done: () => { clearTimeout(timer); signal?.removeEventListener('abort', onAbort); } };
-}
-
-// Rejects as soon as the signal aborts, even if the provider ignores it.
-export function raceAbort(promise, signal) {
-  if (!signal) return promise;
-  return new Promise((resolve, reject) => {
-    const onAbort = () => reject(abortError());
-    if (signal.aborted) return onAbort();
-    signal.addEventListener('abort', onAbort, { once: true });
-    promise.then(resolve, reject).finally(() => signal.removeEventListener('abort', onAbort));
-  });
 }
 
 /** @returns {Promise<{ result: object, metrics: object }>} */
@@ -116,7 +96,7 @@ export async function runAsk(ctx, req, { provider, maxRounds = 4, maxHistory, ti
         let out;
         if (isQuery(call.name)) {
           emit({ type: 'stage', stage: 'consultando a base' });
-          out = await runTool(ctx, call.name, call.input);
+          out = await runTool(ctx, call.name, call.input, { signal: ctl.signal });
           if (out.best) best = out.best;
         } else {
           emit({ type: 'stage', stage: 'montando a visão' });

@@ -64,8 +64,12 @@ function readOffThread(data, workers) {
   });
 }
 
-/** Runs `read` after the remote reads of this base under way: they all fetch and check out in the same worktree of the tip. */
-const inTurn = (slot, read) => (slot.remoteRead = (slot.remoteRead ?? Promise.resolve()).then(read, read));
+/**
+ * Runs `fn` once what is queued for this base is done, even if that failed. On gbrain git every read fetches, checks out
+ * and cleans the worktree of the tip, where a write puts its files before `git add`: a read in the middle would wipe them.
+ * `fn` must not wait on the queue itself (reload, ctx.readDoc), or it waits for its own end.
+ */
+const inTurn = (slot, fn) => (slot.turn = (slot.turn ?? Promise.resolve()).then(() => fn(), () => fn()));
 
 const describe = e => `${e.code ? `${e.code}: ` : ''}${e.message}`;
 
@@ -74,7 +78,7 @@ const describe = e => `${e.code ? `${e.code}: ` : ''}${e.message}`;
  * worker thread so its `git fetch` does not stall the requests.
  */
 export function createBaseRegistry(config, { pollMs = 5000, remotePollMs = 30000 } = {}) {
-  const slots = new Map(); // id → { entry, store?, remote, ctx?, error?, busy?, remoteRead? }
+  const slots = new Map(); // id → { entry, store?, remote, ctx?, error?, busy?, turn? }
   const workers = new Set();
   for (const entry of config.bases) slots.set(entry.id, { entry, remote: false });
 
@@ -114,6 +118,12 @@ export function createBaseRegistry(config, { pollMs = 5000, remotePollMs = 30000
 
   return {
     refresh: () => refresh(),
+    /** Runs `fn` in the turn of the base (see inTurn): the GUI's writes, and its reads on this thread that a plan depends on. */
+    async inTurn(id, fn) {
+      const slot = slots.get(id);
+      if (!slot) throw guiError(`base desconhecida: ${id}`);
+      return inTurn(slot, fn);
+    },
     /** Reads one base again now (after the GUI wrote it), after any read already under way. */
     async reload(id) {
       const slot = slots.get(id);

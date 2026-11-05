@@ -1,4 +1,4 @@
-import test from 'node:test';
+import test, { mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, cpSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { createBaseRegistry } from './bases.mjs';
 import { resolveView } from '../../../scripts/lib/query.mjs';
 import { ALL_TOOLS, QUERY_TOOLS, FINAL_TOOLS, DOC_LLM_MAX, runTool, finalize } from './ask/tools.mjs';
+import { runPlanTool } from './plan/tools.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const open = () => {
@@ -188,5 +189,49 @@ test('element_card de um id desconhecido segue dizendo o que há de parecido', a
     const r = await runTool(ctx, 'element_card', { id: 'loja.pedido' });
     assert.equal(r.ok, false);
     assert.ok(r.content.includes('loja.pedidos'));
+  } finally { registry.close(); }
+});
+
+const CARD = { id: 'loja.pedidos' };
+const hung = () => new Promise(() => {});
+
+test('falha ao ler a documentação custa só o texto: o cartão vem com o aviso, sem credencial', async () => {
+  const { registry, ctx } = open();
+  try {
+    const broken = { ...ctx, readDoc: async () => { throw new Error('git falhou em https://eu:segredo@host/repo\nsegunda linha'); } };
+    const r = await runTool(broken, 'element_card', CARD);
+    assert.ok(r.ok, r.content);
+    assert.ok(r.content.startsWith('# API de Pedidos\n'));
+    assert.ok(r.content.endsWith('## Documentação\n\n[documentação indisponível: git falhou em https://host/repo]\n'), r.content);
+    const planned = await runPlanTool(broken, {}, 'element_card', CARD);
+    assert.ok(planned.ok && planned.content.includes('[documentação indisponível: '), planned.content);
+  } finally { registry.close(); }
+});
+
+test('leitura presa da documentação: o cartão não espera além do limite', async () => {
+  const { registry, ctx } = open();
+  mock.timers.enable({ apis: ['setTimeout'] });
+  try {
+    const pending = runTool({ ...ctx, readDoc: hung }, 'element_card', CARD);
+    await new Promise(setImmediate);
+    mock.timers.tick(5000);
+    const r = await pending;
+    assert.ok(r.ok, r.content);
+    assert.ok(r.content.includes('[documentação indisponível: a leitura passou de 5 s]'), r.content);
+  } finally { mock.timers.reset(); registry.close(); }
+});
+
+test('cancelar a busca solta o cartão que espera a documentação', async () => {
+  const { registry, ctx } = open();
+  try {
+    const stop = new AbortController();
+    for (const run of [
+      () => runTool({ ...ctx, readDoc: hung }, 'element_card', CARD, { signal: stop.signal }),
+      () => runPlanTool({ ...ctx, readDoc: hung }, {}, 'element_card', CARD, { signal: stop.signal }),
+    ]) {
+      const pending = run();
+      setImmediate(() => stop.abort());
+      assert.ok((await pending).content.includes('[documentação indisponível: leitura cancelada]'));
+    }
   } finally { registry.close(); }
 });

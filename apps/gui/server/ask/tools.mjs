@@ -7,6 +7,8 @@ import { explainEdge } from '../../../../scripts/lib/explain.mjs';
 import { suggestViews } from '../../../../scripts/lib/suggest.mjs';
 import { LAYER_LABELS } from '../../../../scripts/lib/registry.mjs';
 import { findElements, labelsOf } from '../catalog.mjs';
+import { combine, raceAbort } from './abort.mjs';
+import { scrubCredentials } from '../plan/repo.mjs';
 
 const str = { type: 'string' };
 const obj = (properties, required = []) => ({ type: 'object', properties, required, additionalProperties: false });
@@ -37,6 +39,8 @@ export const ALL_TOOLS = [...QUERY_TOOLS, ...FINAL_TOOLS];
 const FIND_LIMIT = 10, RELATIONS_LIMIT = 80, NAMES_LIMIT = 40, LARGE = 40;
 /** The most of a node's documentation one card brings to the model. */
 export const DOC_LLM_MAX = 8000;
+/** How long a card waits for that text: on a remote base the read fetches, and git can take minutes to give up. */
+const DOC_WAIT_MS = 5000;
 const fail = content => ({ ok: false, content });
 const withKey = spec => ({ key: 'ask', ...spec });
 const isObject = v => v && typeof v === 'object' && !Array.isArray(v);
@@ -47,10 +51,24 @@ export function findTool(ctx, { text }) {
   return { ok: true, content: found.map(e => [e.id, e.name, e.type, e.kind ?? '-'].join(' | ')).join('\n') };
 }
 
-export async function cardTool(ctx, { id }) {
+/** The node's text for its card: { doc }, or { why } it was not read. All the rest of the card is in memory, so this never fails it. */
+async function docForCard(ctx, id, signal) {
+  const { ctl, done } = combine(signal, DOC_WAIT_MS);
+  const reading = ctx.readDoc(id);
+  reading.catch(() => {}); // a read that outlives the wait has no one left to answer to
   try {
-    const doc = ctx.model.elements.has(id) ? await ctx.readDoc(id) : null;
-    return { ok: true, content: query({ ...ctx.snapshot, readDoc: () => doc }, { element: id, format: 'md', docMax: DOC_LLM_MAX }) };
+    return { doc: await raceAbort(reading, ctl.signal) };
+  } catch (e) {
+    if (ctl.timedOut) return { why: `a leitura passou de ${DOC_WAIT_MS / 1000} s` };
+    return { why: signal?.aborted ? 'leitura cancelada' : scrubCredentials(e.message).split('\n')[0] };
+  } finally { done(); }
+}
+
+export async function cardTool(ctx, { id }, { signal } = {}) {
+  try {
+    const { doc, why } = ctx.model.elements.has(id) ? await docForCard(ctx, id, signal) : {};
+    const card = query({ ...ctx.snapshot, readDoc: () => doc }, { element: id, format: 'md', docMax: DOC_LLM_MAX });
+    return { ok: true, content: why ? `${card}\n## Documentação\n\n[documentação indisponível: ${why}]\n` : card };
   } catch (e) { return fail(e.message); }
 }
 
@@ -100,10 +118,10 @@ export async function tryViewTool(ctx, { spec }) {
 const QUERY = { find_elements: findTool, element_card: cardTool, relations: relationsTool, try_view: tryViewTool };
 
 /** Runs one query tool for the model. Never throws: errors come back as `ok: false`. */
-export async function runTool(ctx, name, input) {
+export async function runTool(ctx, name, input, opts) {
   const fn = QUERY[name];
   if (!fn) return fail(`ferramenta desconhecida: ${name}`);
-  try { return await fn(ctx, input ?? {}); } catch (e) { return fail(e.message); }
+  try { return await fn(ctx, input ?? {}, opts); } catch (e) { return fail(e.message); }
 }
 
 function suggestionsFor(ctx, text) {

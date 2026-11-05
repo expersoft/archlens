@@ -1,7 +1,7 @@
 // The planning agent: drives a provider through the planning tools until a final reply, within round/token/time ceilings.
 import { openQuestions } from '../../../../scripts/lib/merge.mjs';
 import { compactCatalog } from '../ask/context.mjs';
-import { combine, raceAbort } from '../ask/agent.mjs';
+import { combine, raceAbort } from '../ask/abort.mjs';
 import { loadPlanPrompt } from './prompt.mjs';
 import { PLAN_TOOLS, runPlanTool, external } from './tools.mjs';
 import { replanDraft } from './draft.mjs';
@@ -139,7 +139,7 @@ export async function runPlan(ctx, req, { provider, maxRounds = 12, timeoutMs = 
         metrics.calls++;
         emit({ type: 'stage', stage: stageOf(c.name) });
         const s = Date.now();
-        const r = await runPlanTool(ctx, session, c.name, c.input);
+        const r = await runPlanTool(ctx, session, c.name, c.input, { signal: ctl.signal });
         const ms = Date.now() - s;
         metrics.tools += ms;
         emit({ type: 'tool', name: c.name, ok: r.ok, ms });

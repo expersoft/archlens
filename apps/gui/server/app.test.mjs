@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, cpSync, writeFileSync, readFileSync, mkdirSync } from 'node:fs';
+import { mkdtempSync, cpSync, writeFileSync, readFileSync, mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve, dirname, relative } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -53,7 +53,7 @@ function gbrainUsers() {
     model: { elements: [{ id: 'vendas', type: 'application-component', name: 'Vendas', c4: { kind: 'softwareSystem' } }], relationships: [] },
     changelog: [{ id: '2026-10-01-01', date: '2026-10-01', summary: 'início', added: [], changed: [], status: {}, removed: [], decisions: [] }],
   } }), { baseVersion: s.version() });
-  return { ana, bia };
+  return { ana, bia, remote };
 }
 
 test('GET /api/bases lista as duas bases de exemplo', () => withServer(async url => {
@@ -189,6 +189,18 @@ test('base gbrain git: a rota lê fora da thread principal e devolve o texto atu
     const card = await runTool(registry.get('g'), 'element_card', { id: 'vendas' });
     assert.ok(card.content.includes('Texto mudou no remoto'), card.content);
   } finally { await srv.close(); registry.close(); }
+});
+
+test('base gbrain git: sem o remoto, element_card traz o cartão e avisa que o texto não foi lido', async () => {
+  const { bia, remote } = gbrainUsers();
+  const registry = createBaseRegistry({ port: 0, bases: [{ id: 'g', path: bia.dir }] }, { pollMs: 100000, remotePollMs: 100000 });
+  try {
+    rmSync(remote, { recursive: true });
+    const r = await runTool(registry.get('g'), 'element_card', { id: 'vendas' });
+    assert.ok(r.ok, r.content);
+    assert.ok(r.content.startsWith('# Vendas\n'));
+    assert.match(r.content, /\n\[documentação indisponível: .+\]\n$/);
+  } finally { registry.close(); }
 });
 
 test('GET find: busca por nome', () => withServer(async url => {

@@ -44,6 +44,14 @@ const PATHS = /\/home|\/tmp|[A-Z]:\\|archlens plan/;
 const flat = els => els.flatMap(e => [e, ...flat(e.children ?? [])]);
 const elementOf = (dir, id) => flat(modelOf(dir).elements).find(e => e.id === id);
 
+/** Holds the turn of the base as a remote read under way does; `release` lets the queue go on. */
+function holdTurn(registry) {
+  let release;
+  const held = registry.inTurn('loja', () => new Promise(done => { release = done; }));
+  return { held, release: () => release() };
+}
+const settle = () => new Promise(done => setTimeout(done, 150));
+
 async function withoutChromium(fn) {
   const saved = process.env.PLAYWRIGHT_BROWSERS_PATH;
   process.env.PLAYWRIGHT_BROWSERS_PATH = mkdtempSync(join(tmpdir(), 'archlens-nobrowser-'));
@@ -175,7 +183,7 @@ const racing = dir => {
     store.apply = () => { throw storeError('E_STORE_CONFLICT', 'a base mudou'); };
     return { ...ctx, store };
   };
-  return { list: () => real.list(), close: () => real.close(), reload: id => real.reload(id), get: id => wrap(real.get(id)) };
+  return { list: () => real.list(), close: () => real.close(), reload: id => real.reload(id), inTurn: (id, fn) => real.inTurn(id, fn), get: id => wrap(real.get(id)) };
 };
 
 test('apply com conflito na gravação → 409 com mensagem da GUI, sem comando da CLI', () => withPlan(async (url, dir) => {
@@ -246,3 +254,49 @@ test('documento que falha depois da gravação: sucesso com doc.error sem caminh
   };
   return reg;
 } }));
+
+test('a gravação do plano espera a leitura na fila: nada do apply entra na worktree dela', () => withoutChromium(async () => {
+  let registry;
+  await withPlan(async (url, dir) => {
+    const { draft, opsHash } = await opened(url, NEW);
+    const { held, release } = holdTurn(registry);
+    const pending = post(url, 'plan/apply', { draft, confirm: opsHash });
+    await settle();
+    assert.equal(elementOf(dir, 'sistema-novo'), undefined);
+    release();
+    await held;
+    assert.equal((await pending).status, 200);
+    assert.ok(elementOf(dir, 'sistema-novo'));
+  }, { registry: dir => (registry = createBaseRegistry({ port: 0, bases: [{ id: 'loja', path: dir }] }, { pollMs: 1e6 })) });
+  registry.close();
+}));
+
+test('a gravação das notas espera a leitura na fila', async () => {
+  let registry;
+  await withPlan(async (url, dir) => {
+    const notes = () => openStore(resolveBase(dir)).read().notes.notes ?? '';
+    const { held, release } = holdTurn(registry);
+    const pending = post(url, 'plan/notes', { notes: 'Nota escrita na vez dela.\n' });
+    await settle();
+    assert.ok(!notes().includes('Nota escrita na vez dela.'));
+    release();
+    await held;
+    assert.equal((await pending).status, 200);
+    assert.ok(notes().includes('Nota escrita na vez dela.'));
+  }, { registry: dir => (registry = createBaseRegistry({ port: 0, bases: [{ id: 'loja', path: dir }] }, { pollMs: 1e6 })) });
+  registry.close();
+});
+
+test('uma leitura que falha não trava a fila, e o que vem depois roda na ordem', async () => {
+  const dir = lojaCopy().dir;
+  const registry = createBaseRegistry({ port: 0, bases: [{ id: 'loja', path: dir }] }, { pollMs: 1e6 });
+  try {
+    const order = [];
+    const failed = registry.inTurn('loja', async () => { order.push('leitura'); throw new Error('falhou'); });
+    const after = registry.inTurn('loja', () => { order.push('gravação'); return 'ok'; });
+    await assert.rejects(failed, /falhou/);
+    assert.equal(await after, 'ok');
+    assert.deepEqual(order, ['leitura', 'gravação']);
+    await assert.rejects(registry.inTurn('zzz', () => {}), /base desconhecida/);
+  } finally { registry.close(); }
+});

@@ -219,7 +219,7 @@ async function grepTool(_ctx, session, input) {
 
 const RUN = {
   find_elements: (ctx, _s, i) => fromBase(findTool(ctx, i)),
-  element_card: async (ctx, _s, i) => fromBase(await cardTool(ctx, i)),
+  element_card: async (ctx, _s, i, opts) => fromBase(await cardTool(ctx, i, opts)),
   relations: (ctx, _s, i) => fromBase(relationsTool(ctx, i)),
   try_view: async (ctx, _s, i) => fromBase(await tryViewTool(ctx, i)),
   read_reference: readReference, set_delta: setDelta, plan_draft: planDraftTool, show_plan: showPlan, set_note: setNote,
@@ -231,8 +231,8 @@ const RUN = {
  * Runs one planning tool; `session` ({ draft, previews, attach?, git? }) is changed in place. `attach` is the
  * repository the user attached in this message; `git` ({ env, plan }) the server's git settings. Never throws: errors come back as `ok: false`.
  */
-export async function runPlanTool(ctx, session, name, input) {
+export async function runPlanTool(ctx, session, name, input, opts) {
   const fn = Object.hasOwn(RUN, name) ? RUN[name] : null;
   if (!fn) return fail(`ferramenta desconhecida: ${name}`);
-  try { return await fn(ctx, session, input ?? {}); } catch (e) { return fail(e.message); }
+  try { return await fn(ctx, session, input ?? {}, opts); } catch (e) { return fail(e.message); }
 }
