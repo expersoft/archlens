@@ -42,6 +42,22 @@ describe('PlanView', () => {
     expect(screen.getByTestId('delta-panel')).toBeTruthy();
   });
 
+  it('o rodapé mostra os tokens da chamada, também depois de um erro, e fica salvo com a conversa', async () => {
+    const u = userEvent.setup();
+    const usage = { input: 1200, output: 34, cacheRead: 0 };
+    respond(result({ kind: 'text', text: 'montei o delta' }), { type: 'done', metrics: { total: 1, usage } });
+    const { unmount } = render(<PlanView base="rodape" />);
+    await say(u, 'adicione Pagamentos');
+    expect(await screen.findByText(/1\.234 tokens \(entrada 1\.200, saída 34\)/)).toBeTruthy();
+    respond({ type: 'error', error: 'provedor caiu', draft: draft(1), previews: [] }, { type: 'done', metrics: { total: 1, usage: { input: 7, output: 2, cacheRead: 0 } } });
+    await say(u, 'continue');
+    expect(await screen.findByText(/9 tokens/)).toBeTruthy();
+    unmount();
+    planOpen.mockResolvedValue({ draft: draft(1) } as Awaited<ReturnType<typeof api.planOpen>>);
+    render(<PlanView base="rodape" />);
+    expect(await screen.findByText(/1\.234 tokens/)).toBeTruthy();
+  });
+
   it('Limpar apaga a conversa e o histórico do agente, mas o rascunho continua', async () => {
     const u = userEvent.setup();
     respond(result({ kind: 'text', text: 'montei o delta' }), done);

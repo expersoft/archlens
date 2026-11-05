@@ -37,6 +37,15 @@ const req = (ctx, extra = {}) => ({ draft: newDraft(ctx), message: 'adicione o c
 const dupKey = ctx => openQuestions(planDelta(ctx.store, DUP).plan)[0].key;
 const abortErr = () => Object.assign(new Error('x'), { code: 'E_LLM_ABORT' });
 
+test('uma falha leva o que já foi gasto', () => withBase(async ctx => {
+  const p = scripted([turn([call('set_delta', { delta: DUP })]), new Error('provedor caiu')]);
+  await assert.rejects(runPlan(ctx, req(ctx), opts(p)), e => {
+    assert.deepEqual(e.metrics.usage, U);
+    assert.equal(e.metrics.rounds, 2);
+    return true;
+  });
+}));
+
 test('texto, set_delta, plan_draft e ask_decision terminam em decisão', () => withBase(async ctx => {
   const events = [];
   const p = scripted([
