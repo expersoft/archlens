@@ -1,5 +1,6 @@
 // The tools the search agent can call. Query tools return text for the model; final tools end the search.
 import { resolveView } from '../../../../scripts/lib/query.mjs';
+import { whereEmptyNote } from '../../../../scripts/lib/query-where.mjs';
 import { layoutView } from '../../../../scripts/lib/layout.mjs';
 import { viewAlerts } from '../../../../scripts/lib/view-build.mjs';
 import { query } from '../../../../scripts/lib/api.mjs';
@@ -7,6 +8,8 @@ import { explainEdge } from '../../../../scripts/lib/explain.mjs';
 import { suggestViews } from '../../../../scripts/lib/suggest.mjs';
 import { LAYER_LABELS } from '../../../../scripts/lib/registry.mjs';
 import { findElements, labelsOf } from '../catalog.mjs';
+import { combine, raceAbort } from './abort.mjs';
+import { scrubCredentials } from '../plan/repo.mjs';
 
 const str = { type: 'string' };
 const obj = (properties, required = []) => ({ type: 'object', properties, required, additionalProperties: false });
@@ -14,7 +17,7 @@ const obj = (properties, required = []) => ({ type: 'object', properties, requir
 export const QUERY_TOOLS = [
   { name: 'find_elements', description: 'Busca elementos da base pelo nome, id ou apelido. Devolve até 10 linhas "id | nome | tipo | c4".',
     input_schema: obj({ text: str }, ['text']) },
-  { name: 'element_card', description: 'Cartão de um elemento: descrição, relações, filhos e histórico.',
+  { name: 'element_card', description: 'Cartão de um elemento: descrição, relações, filhos, histórico e documentação.',
     input_schema: obj({ id: str }, ['id']) },
   { name: 'relations', description: 'Relações que tocam os elementos dados, com uma frase cada. "via" filtra pelos tipos de relação.',
     input_schema: obj({ ids: { type: 'array', items: str }, via: { type: 'array', items: str } }, ['ids']) },
@@ -35,6 +38,10 @@ export const FINAL_TOOLS = [
 export const ALL_TOOLS = [...QUERY_TOOLS, ...FINAL_TOOLS];
 
 const FIND_LIMIT = 10, RELATIONS_LIMIT = 80, NAMES_LIMIT = 40, LARGE = 40;
+/** The most of a node's documentation one card brings to the model. */
+export const DOC_LLM_MAX = 8000;
+/** How long a card waits for that text: on a remote base the read fetches, and git can take minutes to give up. */
+const DOC_WAIT_MS = 5000;
 const fail = content => ({ ok: false, content });
 const withKey = spec => ({ key: 'ask', ...spec });
 const isObject = v => v && typeof v === 'object' && !Array.isArray(v);
@@ -45,9 +52,24 @@ export function findTool(ctx, { text }) {
   return { ok: true, content: found.map(e => [e.id, e.name, e.type, e.kind ?? '-'].join(' | ')).join('\n') };
 }
 
-export function cardTool(ctx, { id }) {
+/** The node's text for its card: { doc }, or { why } it was not read. All the rest of the card is in memory, so this never fails it. */
+export async function docForCard(ctx, id, signal) {
+  const { ctl, done } = combine(signal, DOC_WAIT_MS);
+  const reading = ctx.readDoc(id);
+  reading.catch(() => {}); // a read that outlives the wait has no one left to answer to
   try {
-    return { ok: true, content: query(ctx.snapshot, { element: id, format: 'md' }) };
+    return { doc: await raceAbort(reading, ctl.signal) };
+  } catch (e) {
+    if (ctl.timedOut) return { why: `a leitura passou de ${DOC_WAIT_MS / 1000} s` };
+    return { why: signal?.aborted ? 'leitura cancelada' : scrubCredentials(e.message).split('\n')[0] };
+  } finally { done(); }
+}
+
+export async function cardTool(ctx, { id }, { signal } = {}) {
+  try {
+    const { doc, why } = ctx.model.elements.has(id) ? await docForCard(ctx, id, signal) : {};
+    const card = query({ ...ctx.snapshot, readDoc: () => doc }, { element: id, format: 'md', docMax: DOC_LLM_MAX });
+    return { ok: true, content: why ? `${card}\n## Documentação\n\n[documentação indisponível: ${why}]\n` : card };
   } catch (e) { return fail(e.message); }
 }
 
@@ -76,12 +98,17 @@ export async function tryViewTool(ctx, { spec }) {
   const full = withKey(spec);
   let view;
   try { view = resolveView(ctx.model, full); } catch (e) { return fail(e.message); }
+  if (view.whereResults?.length === 0) return { ok: true, content: `${whereEmptyNote(ctx.model, full)} Encerre com show_view desta spec.` };
   if (!view.nodes.length) return fail('a visão ficou vazia: nenhum elemento atende à spec; ajuste anchor, scope, layers ou status');
-  const lines = [`nós: ${view.nodes.length}`];
-  lines.push(`por ${full.notation === 'archimate' ? 'camada' : 'tipo'}: ` + countBy(view.nodes,
+  const results = view.nodes.filter(n => !n.whereFrame);
+  const frames = view.nodes.filter(n => n.whereFrame);
+  const namesOf = list => `${list.slice(0, NAMES_LIMIT).map(n => n.name).join(', ')}${list.length > NAMES_LIMIT ? `, … ${list.length - NAMES_LIMIT} mais` : ''}`;
+  const lines = [`nós: ${results.length}`];
+  if (view.whereIgnored) lines.push('aviso: a visão dinâmica ignora "where"');
+  lines.push(`por ${full.notation === 'archimate' ? 'camada' : 'tipo'}: ` + countBy(results,
     n => full.notation === 'archimate' ? LAYER_LABELS[n.layer] ?? n.layer : n.c4Label ?? n.type));
-  const names = view.nodes.slice(0, NAMES_LIMIT).map(n => n.name).join(', ');
-  lines.push(`nomes: ${names}${view.nodes.length > NAMES_LIMIT ? `, … ${view.nodes.length - NAMES_LIMIT} mais` : ''}`);
+  lines.push(`nomes: ${namesOf(results)}`);
+  if (frames.length) lines.push(`molduras: ${namesOf(frames)}`);
   try {
     const alerts = viewAlerts(view, await layoutView(view));
     if (alerts.length) lines.push('alertas:', ...alerts.map(a => `- ${a}`));
@@ -92,10 +119,10 @@ export async function tryViewTool(ctx, { spec }) {
 const QUERY = { find_elements: findTool, element_card: cardTool, relations: relationsTool, try_view: tryViewTool };
 
 /** Runs one query tool for the model. Never throws: errors come back as `ok: false`. */
-export async function runTool(ctx, name, input) {
+export async function runTool(ctx, name, input, opts) {
   const fn = QUERY[name];
   if (!fn) return fail(`ferramenta desconhecida: ${name}`);
-  try { return await fn(ctx, input ?? {}); } catch (e) { return fail(e.message); }
+  try { return await fn(ctx, input ?? {}, opts); } catch (e) { return fail(e.message); }
 }
 
 function suggestionsFor(ctx, text) {
@@ -116,6 +143,7 @@ function showView(ctx, { spec, view, title, answer, confirmLarge }) {
   else return fail('informe "view" ou "spec"');
   let resolved;
   try { resolved = resolveView(ctx.model, picked); } catch (e) { return fail(e.message); }
+  if (resolved.whereResults?.length === 0) return { ok: true, result: { kind: 'none', warning: whereEmptyNote(ctx.model, picked) } };
   const n = resolved.nodes.length;
   if (!n) return fail('a visão ficou vazia: nenhum elemento atende à spec; ajuste anchor, scope, layers ou status');
   if (n > LARGE && !confirmLarge) {

@@ -74,6 +74,83 @@ test('history only grows; bad ops are refused before anything changes', () => {
   for (const bad of [[{ op: 'apagarTudo' }], [{ op: 'upsertElement', element: { name: 'sem id' } }], [{ op: 'putNote', name: 'diario', text: 'x' }], 'nao-lista']) {
     assert.throws(() => applyOps(b, bad), e => e.code === 'E_STORE_OP', JSON.stringify(bad));
   }
-  assert.deepEqual(OPS, ['setManifest', 'upsertElement', 'removeElement', 'upsertRelationship', 'removeRelationship', 'putView', 'removeView', 'putNote', 'appendHistory']);
+  assert.deepEqual(OPS, ['setManifest', 'upsertElement', 'removeElement', 'upsertRelationship', 'removeRelationship', 'putView', 'removeView', 'putNote', 'putDoc', 'appendHistory']);
   assert.ok(!('model' in manifestOf(b.raw)) && !('changelog' in manifestOf(b.raw)) && manifestOf(b.raw).name === 'Loja Mini');
+});
+
+const withDocs = (docs = {}) => ({ raw: shop(), notes: {}, docs });
+
+test('diffRaw sem docs não mexe na documentação', () => {
+  const before = withDocs({ 'loja.api': 'Texto' });
+  assert.deepEqual(diffRaw(before, { raw: before.raw, notes: {} }), []);
+  assert.deepEqual(diffRaw(before, { raw: before.raw, notes: {}, docs: undefined }), []);
+});
+
+test('diffRaw emite putDoc só para o texto que difere, depois dos elementos e antes do histórico', () => {
+  const before = withDocs({ 'loja.api': 'Igual', 'loja.web': 'Antigo', 'loja.db': 'Sai' });
+  before.raw.changelog = [];
+  const after = structuredClone(before);
+  after.raw.model.elements.push({ id: 'novo', type: 'c4:softwareSystem', name: 'Novo' });
+  after.raw.changelog.push({ id: '2026-10-17-01', date: '2026-10-17', summary: 's' });
+  after.docs = { 'loja.api': '\nIgual\n', 'loja.web': 'Novo', novo: 'Do novo' };
+  const ops = diffRaw(before, after);
+  assert.deepEqual(ops.filter(o => o.op === 'putDoc'), [
+    { op: 'putDoc', id: 'loja.db', text: '' },
+    { op: 'putDoc', id: 'loja.web', text: 'Novo' },
+    { op: 'putDoc', id: 'novo', text: 'Do novo' },
+  ]);
+  const kinds = ops.map(o => o.op);
+  assert.ok(kinds.indexOf('upsertElement') < kinds.indexOf('putDoc'));
+  assert.equal(kinds.at(-1), 'appendHistory');
+  assert.deepEqual(applyOps(before, ops).docs, { 'loja.api': 'Igual', 'loja.web': 'Novo', novo: 'Do novo' });
+});
+
+test('diffRaw não limpa a documentação de um elemento removido', () => {
+  const before = withDocs({ cliente: 'Texto' });
+  const after = structuredClone(before);
+  after.raw.model.relationships = after.raw.model.relationships.filter(r => r.from !== 'cliente' && r.to !== 'cliente');
+  after.raw.model.elements = after.raw.model.elements.filter(e => e.id !== 'cliente');
+  after.docs = {};
+  const next = applyOps(before, diffRaw(before, after));
+  assert.deepEqual(next.docs, {});
+  assert.deepEqual(next.docChanges, {});
+});
+
+test('applyOps devolve o estado final de docs e o que esta aplicação mudou', () => {
+  const before = withDocs({ 'loja.api': 'Fica', 'loja.web': 'Sai' });
+  const next = applyOps(before, [{ op: 'putDoc', id: 'loja.web', text: ' ' }, { op: 'putDoc', id: 'loja.db', text: '\nNovo\n' }]);
+  assert.deepEqual(next.docs, { 'loja.api': 'Fica', 'loja.db': 'Novo' });
+  assert.deepEqual(next.docChanges, { 'loja.web': '', 'loja.db': 'Novo' });
+  assert.deepEqual(before.docs, { 'loja.api': 'Fica', 'loja.web': 'Sai' }, 'a base de entrada não muda');
+  assert.deepEqual(applyOps(before, []).docChanges, {});
+  assert.deepEqual(applyOps({ raw: shop(), notes: {} }, []).docs, {});
+});
+
+test('putDoc de elemento inexistente recusa', () => {
+  const b = withDocs();
+  assert.throws(() => applyOps(b, [{ op: 'putDoc', id: 'nada', text: 'x' }]), e => e.code === 'E_STORE_OP' && e.message.includes('"nada"'));
+  assert.throws(() => applyOps(b, [{ op: 'putDoc', id: 'constructor', text: 'x' }]), e => e.code === 'E_STORE_OP');
+  assert.throws(() => applyOps(b, [{ op: 'putDoc', id: 'loja.api' }]), e => e.code === 'E_STORE_OP');
+  assert.throws(() => applyOps(b, [{ op: 'putDoc', text: 'x' }]), e => e.code === 'E_STORE_OP');
+});
+
+test('putDoc num elemento que a mesma lista remove recusa: o texto novo não teria onde ficar', () => {
+  const b = withDocs();
+  const remove = { op: 'removeElement', id: 'cliente' };
+  assert.throws(() => applyOps(b, [{ op: 'putDoc', id: 'cliente', text: 'x' }, remove]), e => e.code === 'E_STORE_OP');
+  assert.throws(() => applyOps(b, [remove, { op: 'putDoc', id: 'cliente', text: 'x' }]), e => e.code === 'E_STORE_OP');
+});
+
+test('remover e recriar um elemento na mesma lista mantém a documentação, como o conector mantém a página', () => {
+  const b = withDocs({ cliente: 'Texto' });
+  const el = b.raw.model.elements.find(e => e.id === 'cliente');
+  assert.deepEqual(applyOps(b, [{ op: 'removeElement', id: 'cliente' }, { op: 'upsertElement', element: el }]).docs, { cliente: 'Texto' });
+});
+
+test('putDoc com marcador do bloco recusa', () => {
+  assert.throws(() => applyOps(withDocs(), [{ op: 'putDoc', id: 'loja.api', text: 'a <!-- archlens:end --> b' }]), e => e.code === 'E_DELTA_DOC');
+});
+
+test('contentVersion ignora a documentação', () => {
+  assert.equal(contentVersion(withDocs({ 'loja.api': 'Texto' })), contentVersion(withDocs()));
 });

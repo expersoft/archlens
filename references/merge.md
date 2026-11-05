@@ -47,7 +47,7 @@ qualquer caso, gere o plano de novo.
 `archlens show <base> p.json [--out f.md] [--json]` escreve um markdown determinístico, para colar num PR ou numa
 conversa: título (o `summary` do delta), base e versão, fonte, data e estado (**aberto** ou **final**), contagens, e
 as seções `Decisões pendentes` (só no aberto, com as opções de cada pergunta), `Decisões`, `Novos`, `Alterados`
-(antes → depois), `Removidos`, `Relações` e `Visões`. Seções vazias são omitidas. Se a base mudou desde o plano, a
+(antes → depois), `Removidos`, `Relações`, `Documentação` (a diferença de cada texto) e `Visões`. Seções vazias são omitidas. Se a base mudou desde o plano, a
 primeira linha avisa. `--json` dá o mesmo conteúdo estruturado. Nunca grava a base.
 
 ## Conflito de versão: refazer com `--answers`
@@ -62,7 +62,7 @@ O `apply` recusa, sem gravar nada:
 
 ### Versão por objeto: applies em paralelo
 
-Um **objeto** é um elemento (por `id`), uma relação, uma visão (por `key`), uma nota ou o manifesto. O plano final guarda
+Um **objeto** é um elemento (por `id`), uma relação, uma visão (por `key`), uma nota, a documentação de um nó ou o manifesto. O plano final guarda
 em `objects` a versão lida de cada um (`null`: não existia) em dois conjuntos:
 
 - **escrita**: todo objeto que as `ops` criam, alteram ou removem;
@@ -80,6 +80,10 @@ outro sem refazer. A versão de um objeto depende do conector:
 | `markdown` | objeto | hash do conteúdo canônico do objeto |
 | `gbrain` modo git | objeto | o mesmo hash, sobre a ponta remota depois do `fetch` |
 | `gbrain` modo MCP | objeto | a `revision` da página no gbrain |
+
+A documentação de um nó (`doc:<id>`) tem versão própria, o hash do texto: mudar o texto não muda a versão do elemento, e
+mudar o elemento não muda a do texto. No modo MCP, as duas são a `revision` da página, que é mais estrita: recusa sem
+perder texto.
 
 As relações moram na página do elemento de origem: a versão de uma relação é a dessa página. Planos antigos (só
 `storeVersion`) continuam aceitos, com a regra da base inteira.
@@ -143,6 +147,9 @@ gravada, sem acrescentá-la de novo.
     { "op": "alias",  "id": "loja.pedidos", "add": ["orders-service"] },
     { "op": "status", "id": "erp", "status": "deprecated", "reason": "migração para SAP" },
     { "op": "remove", "id": "loja.temp" }
+  ],
+  "docs": [
+    { "id": "loja.pedidos", "text": "## Como funciona\n\nTexto em markdown…" }
   ]
 }
 ```
@@ -154,6 +161,7 @@ gravada, sem acrescentá-la de novo.
 | relações | `from`/`to` aceitam id ou alias. `A uses B` casa com o `B serving A` que já estiver na base |
 | `views` | key nova entra; key existente com definição diferente vira conflito (`keep` \| `take`) |
 | `ops` | `rename` (o nome antigo vira alias), `alias`, `status` (+ `reason`), `remove` (cascata: filhos, relações, visões) |
+| `docs` | documentação de nós que já existem, ou que o delta cria: `{ id, text }`, com `id` por id ou alias. Só em base `markdown` ou `gbrain`. Veja *Documentação do nó* |
 | `source` num item | texto livre: `"source": "<trecho literal>"` vira `excerpt` junto da fonte do delta |
 
 ## Tradução na entrada
@@ -199,7 +207,7 @@ Duas regras de detalhe:
 | `new` | não casou: entra como novo | — |
 | `unchanged` | casou e nada difere (só ganha a fonte) | — |
 | `enrich` | preenche campos vazios, tags, aliases, fontes | — |
-| `conflict` | um campo preenchido difere | `keep` \| `take` \| `value:<valor>` (visões: `keep` \| `take`) |
+| `conflict` | um campo preenchido difere | `keep` \| `take` \| `value:<valor>` (visões e documentação: `keep` \| `take`) |
 | `possible-duplicate` | parece um elemento da base | `same` (vira alias e o item é mesclado) \| `different` (entra como novo) |
 | `op` | operação explícita | `remove` e `status: retired`: `yes` \| `no` (o item lista em `cascade.views` / `views` as visões salvas afetadas) |
 
@@ -225,6 +233,33 @@ posições no delta).
 - `status: retired` num agrupamento listado em `groups.only` de uma visão: o item avisa em `views`, e o plano fica
   bloqueado (`E_VIEW_GROUP`) até o delta tirar o agrupamento da visão ou acrescentar `"retired"` ao `status` dela.
 
+### Documentação do nó
+
+`docs` escreve o texto livre do nó, o trecho depois do bloco do archlens na página. `text` substitui o trecho inteiro,
+sem mescla: leia antes o texto atual com `archlens query <base> --element <id> --doc`, que o imprime como está na
+página (o cartão, sem `--doc`, desce os títulos e troca wikilinks por nomes), e mande o texto completo. Sem texto, `""`
+limpa. A comparação ignora espaços nas pontas.
+
+| Situação | Classe | Chave | Resposta |
+|---|---|---|---|
+| o nó não tem texto | `enrich` | `doc:<id>` | nenhuma: o plano mostra o texto novo |
+| o texto é igual ao da base | `unchanged` | `doc:<id>` | nenhuma: nada é gravado |
+| o nó tem texto e o delta troca ou limpa | `conflict` | `doc:<id>:<hash do texto da base>` | `keep` (fica o da base) \| `take` (grava o do delta) |
+
+O relatório do `plan` e o `show` (seção `Documentação`) mostram a diferença linha a linha; é com ela à vista que o
+usuário decide. O archlens não guarda o texto antigo: ele fica só no git da base. A rodada do histórico lista os nós
+com a documentação alterada, sem copiar o texto.
+
+A pergunta leva o hash do texto que foi revisado, então um texto que mudou depois da resposta volta como pergunta nova
+no `plan --answers`, com a diferença atual. O plano final guarda em `objects` a versão `doc:<id>` de cada texto que ele
+grava: se o texto mudou desde então (uma edição direta, por exemplo), o `apply` recusa com `E_STORE_CONFLICT` e nada é
+gravado, e o `merge --apply` com `E_PLAN_REPLAN`. Na GUI, o botão Aplicar recusa com o 409 `E_GUI_PLAN_CHANGED`. Planos
+que só mexem em campos ou relações do nó não conferem esse texto: o conector o preserva.
+
+Plano bloqueado (`E_DELTA_DOC`): `id` que não existe ou que o delta remove, `id` repetido em `docs`, ou texto com
+`<!-- archlens:begin -->` ou `<!-- archlens:end -->`. Base `json`: `plan` e `apply` recusam com `E_STORE_DOC` (a
+documentação exige uma base `markdown` ou `gbrain`; converta com `store convert`).
+
 ## Perguntando ao usuário
 
 - Mostre o resumo do relatório (contagens e novos).
@@ -233,6 +268,7 @@ posições no delta).
 - Faça **uma pergunta por item** com `resolution: null`, na ordem de `n`, com a sua recomendação e o motivo.
   Ex.: *"A base diz que a API de Pedidos é Java/Spring; o repo mostra Kotlin. Recomendo `take` (o repo é mais recente). Ok?"*
 - Pule os itens com `when` se a duplicata foi respondida `different`.
+- Numa troca de documentação, mostre a diferença junto da pergunta.
 - Grave as respostas no `plano.json` (campo `resolution` de cada item) e rode `plan <base> --answers plano.json --out
   plano2.json`; repita até o plano sair `final`, mostre o `show` e a prévia, e só então o `apply` (skill archlens-apply).
 
@@ -242,6 +278,8 @@ posições no delta).
 |---|---|---|
 | `E_DELTA_SCHEMA` | falta `"archlens-delta": "1.0"` ou op sem `op`/`id` | corrija o delta |
 | plano `blocked` | o resultado teria erros de validação (`E_UNKNOWN_REF`, `E_UNKNOWN_TYPE`…) | corrija o delta e planeje de novo |
+| `E_DELTA_DOC` | item de `docs` com `id` desconhecido, removido ou repetido, ou texto com os marcadores do archlens (plano bloqueado) | corrija o delta e planeje de novo |
+| `E_STORE_DOC` | delta ou plano com documentação do nó numa base `json` | `store convert <base> --to markdown` (ou gbrain) e planeje de novo |
 | `E_PARENT_CYCLE` | o delta move um elemento para dentro de um descendente seu (plano bloqueado) | corrija o `parent` no delta e planeje de novo |
 | `E_PLAN_OPEN` | `apply` de um plano aberto (perguntas sem resposta ou bloqueado) | responda e rode `plan <base> --answers p.json --out p2.json` |
 | `E_PLAN_SCHEMA` | `apply`, `show` ou `--answers` com um arquivo que não é plano (ex.: o delta) | rode `plan` primeiro |
@@ -255,7 +293,7 @@ posições no delta).
 | `E_MERGE_INVALID` | o resultado com as respostas reais é inválido | reveja as respostas (ex.: `value:` com id inexistente) |
 | `E_PLAN_RESOLUTION` | resposta fora das opções (atalho `merge --apply`; o `plan --answers` ignora) | use as opções da tabela |
 | `E_PLAN_PENDING` | há `resolution: null` (atalho `merge --apply`) | responda os itens listados |
-| `E_PLAN_REPLAN` | o `merge --apply` encontrou uma decisão que não está no plano (típico: duplicata `same` sem replanejar) | rode `plan <base> --answers p.json --out p2.json` e responda as perguntas novas |
+| `E_PLAN_REPLAN` | o `merge --apply` encontrou uma decisão que não está no plano (típico: duplicata `same` sem replanejar), ou a documentação de um nó mudou depois da revisão | rode `plan <base> --answers p.json --out p2.json` e responda as perguntas novas |
 | `E_PLAN_STALE` | atalho `merge --apply` com um plano antigo (sem `storeVersion`): a base mudou depois dele | gere o plano de novo |
 
 ## Pré-visualizando (antes do apply)

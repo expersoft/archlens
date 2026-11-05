@@ -72,3 +72,11 @@ test('buildGabarito queries the base a question names', async () => {
   const g = buildGabarito([{ id: 't', pergunta: 'x', base: 'examples/telemedicina/architecture', element: 'pep' }]);
   assert.equal(JSON.parse(g.get('portable/archlens-ask/eval/gabarito/t.json')).element.id, 'pep');
 });
+
+test('the card of the package reads the documentation of a node after the archlens block', () => {
+  const rules = readFileSync(new URL('../portable/archlens-ask/RULES.md', import.meta.url), 'utf8');
+  const card = rules.slice(rules.indexOf('**Cartão do elemento**'));
+  assert.match(card.slice(0, card.indexOf('## 8.')), /documentação[\s\S]*<!-- archlens:end -->/i);
+  assert.match(buildReference(), /texto depois de `<!-- archlens:end -->`/);
+  assert.match(readFileSync(new URL('../portable/archlens-ask/EXAMPLES.md', import.meta.url), 'utf8'), /> ## Documentação/);
+});

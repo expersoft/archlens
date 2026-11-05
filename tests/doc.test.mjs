@@ -113,3 +113,31 @@ test('generateDoc marks containers tagged bucket or storage as data stores', () 
   assert.match(md, /Bucket 🛢/);
   assert.match(md, /Files 🛢/);
 });
+
+test('generateDoc puts element properties in their own section before Fontes', () => {
+  const r = raw();
+  const api = r.model.elements.find(e => e.id === 'loja').children.find(c => c.id === 'loja.api');
+  api.properties = { squad: 'Checkout' };
+  const md = generateDoc(asBase(r));
+  assert.match(md, /## Propriedades\n\n\| Elemento \| Propriedade \| Valor \|\n\| --- \| --- \| --- \|\n\| API \| squad \| Checkout \|/);
+  assert.ok(md.indexOf('## Propriedades') < md.indexOf('## Fontes'));
+  assert.doesNotMatch(generateDoc(asBase(raw())), /## Propriedades/);
+});
+
+test('seção de documentação depois de Propriedades, só com nós com texto', () => {
+  const r = raw();
+  const [a, b] = r.model.elements;
+  const docs = { [b.id]: '# Título\n\nTexto de [[x/y|Link]].', [a.id]: '' };
+  const md = generateDoc(asBase(r), { docs });
+  assert.match(md, new RegExp(`## Documentação dos nós\\n\\n### ${b.name.replace(/[()]/g, '\\$&')} \\(\`${b.id.replace(/\./g, '\\.')}\`\\)\\n\\n#### Título\\n\\nTexto de Link\\.`));
+  assert.ok(md.indexOf('## Documentação dos nós') > md.indexOf('## Premissas e inferências'));
+  assert.ok(md.indexOf('## Documentação dos nós') < md.indexOf('## Fontes'));
+  assert.doesNotMatch(md, new RegExp(`### ${a.name} \\(`));
+  assert.doesNotMatch(generateDoc(asBase(raw())), /## Documentação dos nós/);
+});
+
+test('histórico mostra a documentação alterada', () => {
+  const r = raw();
+  r.changelog = [{ date: '2026-01-01', summary: 'só texto', added: [], changed: [], removed: [], docs: ['a', 'b'] }];
+  assert.match(generateDoc(asBase(r)), /\| \+0 ~0 −0 doc 2 \|/);
+});

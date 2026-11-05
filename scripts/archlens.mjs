@@ -64,6 +64,7 @@ Consultar (nunca grava a base)
   views     <base>                           lista as visões definidas e sugere novas
   query     <base> --view k | --spec J [--format md|json] [--out f]   responde em markdown (padrão) ou JSON: elementos por camada/nível, relações, matriz de impacto
   query     <base> --element id [--depth N] [--via t1,t2] [--format md|json]   cartão do elemento: pai, filhos, relações, fontes, rodadas; --depth N inclui "Em volta"
+  query     <base> --element id --doc [--out f]   documentação do nó como está na página, para editar (só markdown e gbrain)
   resolve   <base> --view k | --spec J       imprime o view IR (nós/arestas) de uma visão
   render    <base> --out f.html [seleção]    gera o HTML animado
   deliver   <base> --out f.html [seleção]    render + screenshots 1920×1080/1280×720 + checagens
@@ -136,8 +137,8 @@ function assertDocOwned(store, out, opts) {
 }
 
 /** Regenerates ARCHITECTURE.md (or `out`) from a folder base; exits when the document is not this base's. */
-function writeDoc(store, raw, notes, out, { replacing } = {}) {
-  try { return writeDocument(store, raw, notes, { out, replacing }); } catch (e) { fail(e.message); }
+function writeDoc(store, { raw, notes, docs }, out, { replacing } = {}) {
+  try { return writeDocument(store, raw, notes, { docs, out, replacing }); } catch (e) { fail(e.message); }
 }
 
 function fail(msg, code = 1) { console.error(`archlens: ${msg}`); process.exit(code); }
@@ -198,8 +199,8 @@ async function rendered(promise) {
   }
 }
 
-async function buildHtml(raw, specs, title, preview) {
-  const res = await rendered(renderViews(raw, specs, { title, preview }));
+async function buildHtml(raw, specs, title, preview, docs) {
+  const res = await rendered(renderViews(raw, specs, { title, preview, docs }));
   printWarnings(res.warnings);
   return res;
 }
@@ -211,7 +212,7 @@ function openFile(path) {
 }
 
 /** The options of deliverHtml / buildDiagrams from the command line (--title, --shots, --strict). */
-const deliverOpts = (args, preview) => ({ title: args.title, preview, shots: args.shots && args.shots !== true ? args.shots : true, strict: !!args.strict });
+const deliverOpts = (args, preview, docs) => ({ title: args.title, preview, docs: preview ? undefined : docs, shots: args.shots && args.shots !== true ? args.shots : true, strict: !!args.strict });
 
 /** Prints a delivery (rendering lines, quality table, result) and returns its problem count; exits 3 when --strict refused it. */
 async function deliver(delivery, args) {
@@ -302,10 +303,10 @@ function planCommand(store, deltaPath, args, out, names) {
 /** Revision, preserved texts, regenerated document and suggested commit after a write by apply / merge --apply. */
 function afterApply(store, res) {
   const saved = loadBase(store); // the document follows what is on disk (a split model regroups items by file)
-  const doc = res.doc ?? writeDoc(store, saved.raw, saved.notes);
+  const doc = res.doc ?? writeDoc(store, saved);
   const e = res.entry;
   const st = Object.keys(e.status).length;
-  console.log(`✓ ${store.describe()} e ${relPath(doc)} (revisão ${saved.raw.changelog.length}, rodada ${e.id}): +${e.added.length} ~${e.changed.length} −${e.removed.length}${st ? `, ${st} mudança(s) de status` : ''}`);
+  console.log(`✓ ${store.describe()} e ${relPath(doc)} (revisão ${saved.raw.changelog.length}, rodada ${e.id}): +${e.added.length} ~${e.changed.length} −${e.removed.length}${e.docs?.length ? ` doc ${e.docs.length}` : ''}${st ? `, ${st} mudança(s) de status` : ''}`);
   for (const rel of res.preserved) console.log(`  texto da página removida guardado em ${relPath(join(store.locator.path, rel))}`);
   console.log(`  commit sugerido: git add ${relPath(store.locator.path)} ${relPath(doc)} && git commit -m ${JSON.stringify(`docs(arquitetura): ${e.summary}`)}`);
 }
@@ -352,7 +353,7 @@ function remoteApply(store, flow, args, names, { committed, convert } = {}) {
   }
   if (res.state === 'undone') {
     const saved = loadBase(store);
-    const doc = saved.raw ? writeDoc(store, saved.raw, saved.notes) : null;
+    const doc = saved.raw ? writeDoc(store, saved) : null;
     console.log(`✓ apply ${res.id} desfeito: ${res.committed.length} página(s) do gbrain de volta ao que eram${doc ? `; ${relPath(doc)} regenerado` : ''}`);
     return;
   }
@@ -381,7 +382,7 @@ function remoteApply(store, flow, args, names, { committed, convert } = {}) {
 function afterConvert(loc, res) {
   const converted = openStore(resolveBase(loc.path));
   const back = loadBase(converted);
-  const doc = writeDoc(converted, back.raw, back.notes, loc.docPath);
+  const doc = writeDoc(converted, back, loc.docPath);
   console.log(`✓ ${relPath(loc.path)}/ agora usa o conector ${res.to} (era ${res.from}); a versão da base não mudou; ${relPath(doc)} regenerado`);
   if (res.to === 'gbrain' && res.commit) console.log(`  ${res.pages} página(s) gravadas no commit ${res.commit.slice(0, 12)} (push feito); rode o sync do gbrain para indexá-las`);
   if (res.to === 'gbrain' && !res.commit) console.log(`  ${res.pages} página(s) criadas no gbrain pelo MCP; o espelho local está em ${relPath(join(loc.path, '.archlens', 'mirror'))}`);
@@ -471,7 +472,7 @@ async function main() {
       assertWritable(store);
       const { errors } = validateModel(base.raw);
       if (errors.length) { printIssues(errors, 'ERRO'); fail('corrija os erros antes de gerar o documento', 2); }
-      const out = writeDoc(store, base.raw, base.notes, args.out && args.out !== true ? args.out : undefined);
+      const out = writeDoc(store, base, args.out && args.out !== true ? args.out : undefined);
       console.log(`✓ ${relPath(out)}`);
       break;
     }
@@ -501,6 +502,8 @@ async function main() {
     }
     case 'query': {
       const format = args.format === 'json' ? 'json' : args.format && args.format !== 'md' ? fail('--format aceita md ou json') : 'md';
+      if (args.doc && typeof args.element !== 'string') fail('--doc lê a documentação de um nó: use com --element <id>');
+      if (args.doc && args.format) fail('--doc imprime o texto como está na página: não use com --format');
       let text;
       try {
         const spec = loadSpecs(args.spec);
@@ -508,9 +511,10 @@ async function main() {
         if (!Number.isInteger(depth) || depth < 1) fail('--depth aceita um número inteiro (1 ou mais)');
         const via = typeof args.via === 'string' ? args.via.split(',').map(t => t.trim()).filter(Boolean) : undefined;
         const res = queryBase(store, { view: args.view === true ? undefined : args.view, spec: spec.length ? spec : undefined,
-          element: typeof args.element === 'string' ? args.element : undefined, depth, via, format });
-        text = format === 'json' ? JSON.stringify(res, null, 2) + '\n' : res;
+          element: typeof args.element === 'string' ? args.element : undefined, depth, via, format, doc: !!args.doc });
+        text = format === 'json' ? JSON.stringify(res, null, 2) + '\n' : args.doc && res ? `${res}\n` : res;
       } catch (e) { fail(e.message, 1); }
+      if (args.doc && !text) { console.warn(`  "${args.element}" não tem documentação`); break; }
       if (args.out && args.out !== true) { atomicWrite(args.out, text); console.log(`✓ ${args.out}`); } else process.stdout.write(text);
       break;
     }
@@ -518,7 +522,7 @@ async function main() {
       const raw = load();
       const model = normalizeModel(raw);
       if (!args.out || args.out === true) fail('informe --out arquivo.html');
-      const { html } = await buildHtml(raw, specsOf(model), args.title, preview);
+      const { html } = await buildHtml(raw, specsOf(model), args.title, preview, preview ? undefined : base.docs);
       atomicWrite(args.out, html);
       console.log(`✓ ${args.out}`);
       if (args.open) openFile(args.out);
@@ -528,7 +532,7 @@ async function main() {
       const raw = load();
       const model = normalizeModel(raw);
       if (!args.out || args.out === true) fail('informe --out arquivo.html');
-      const problems = await deliver(deliverHtml(raw, specsOf(model), args.out, deliverOpts(args, preview)), args);
+      const problems = await deliver(deliverHtml(raw, specsOf(model), args.out, deliverOpts(args, preview, base?.docs)), args);
       process.exitCode = problems ? 3 : 0;
       break;
     }
@@ -539,7 +543,7 @@ async function main() {
         assertWritable(store);
         const { errors } = validateModel(raw);
         if (errors.length) { printIssues(errors, 'ERRO'); fail('corrija os erros do modelo', 2); }
-        console.log(`✓ ${relPath(writeDoc(store, raw, base.notes))}`);
+        console.log(`✓ ${relPath(writeDoc(store, { ...base, raw }))}`);
       }
       const problems = await deliver(buildDiagrams(store, raw, { dir: args['out-dir'] && args['out-dir'] !== true ? args['out-dir'] : undefined,
         name: args.name && args.name !== true ? args.name : undefined, specs: specsOf(model), ...deliverOpts(args, preview) }), args);
@@ -628,7 +632,7 @@ async function main() {
       if (back.notes.assumptions != null && res.raw.assumptions?.length) {
         console.warn(`  aviso: notes/assumptions.md substitui a lista de premissas do manifesto no documento`);
       }
-      const doc = writeDoc(dest, back.raw, back.notes, docPath, { replacing });
+      const doc = writeDoc(dest, back, docPath, { replacing });
       console.log(`✓ ${dest.describe()} no formato ${FORMAT}; ${relPath(doc)} regenerado`);
       if (res.report) {
         for (const l of reportLines(res.report)) console.log(`  ${l}`);
@@ -684,16 +688,16 @@ async function main() {
     }
     case 'check': {
       assertWritable(store);
-      const { raw, notes } = base;
+      const { raw, notes, docs } = base;
       const { errors } = validateModel(raw);
       const docPath = store.locator.docPath;
       const lf = t => t.replace(/\r\n/g, '\n');
       const stale = !errors.length && (!existsSync(docPath)
-        || lf(readFileSync(docPath, 'utf8')) !== lf(generateDoc(raw, { notes, source: docSource(store) })));
+        || lf(readFileSync(docPath, 'utf8')) !== lf(generateDoc(raw, { notes, docs, source: docSource(store) })));
       if (args.json) console.log(JSON.stringify({ ok: !errors.length && !stale, errors, stale }, null, 2));
       else {
         printIssues(errors, 'ERRO');
-        if (stale) console.log(`✗ ${relPath(docPath)} desatualizado: foi editado à mão ou falta rodar "archlens doc". Edite ${relPath(store.locator.path)}/notes/*.md e regenere.`);
+        if (stale) console.log(`✗ ${relPath(docPath)} desatualizado: rode "archlens build" (a base, a documentação de um nó ou as notas mudaram, ou o arquivo foi editado à mão).`);
         else if (!errors.length) console.log(`✓ ${relPath(docPath)} em dia com ${store.describe()}`);
       }
       process.exitCode = errors.length || stale ? 1 : 0;

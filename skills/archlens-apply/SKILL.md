@@ -71,11 +71,12 @@ ferramentas do MCP configurado, na ordem, sem decidir nada, gravando o resultado
    |---|---|
    | `E_PLAN_OPEN` | o plano tem perguntas sem resposta ou está bloqueado: skill archlens-plan |
    | `E_PLAN_SCHEMA` | não é um plano (ex.: um delta): skill archlens-plan, `archlens plan` primeiro |
-   | `E_STORE_CONFLICT` | um objeto do plano mudou depois dele (outro apply em paralelo), ou um elemento parecido foi criado em paralelo: a mensagem lista os objetos. No modo MCP, `archlens remote <base> pull` antes; refaça com `archlens plan <base> --answers p2.json --out p3.json` (skill archlens-plan), revise e aplique o novo |
+   | `E_STORE_CONFLICT` | um objeto do plano mudou depois dele (outro apply em paralelo, ou a documentação de um nó que o plano grava foi editada direto), ou um elemento parecido foi criado em paralelo: a mensagem lista os objetos. No modo MCP, `archlens remote <base> pull` antes; refaça com `archlens plan <base> --answers p2.json --out p3.json` (skill archlens-plan), revise e aplique o novo |
    | `E_REMOTE_STALE` | base MCP sem espelho: `archlens remote <base> pull` (acima) |
    | `E_STORE_APPLY` | modo MCP: `--resume`/`--undo` sem o que retomar ou desfazer, `--resume` com conflito, ou `--undo` com chamadas sem recibo: siga a mensagem (`--receipts` do pedido em aberto, `--resume <id>`, ou `--undo <id>`) |
    | `E_STORE_GBRAIN_SIZE` | modo MCP: página acima de 8 MB (limite do `put_pages`): reduza a página ou use o modo git |
    | `E_STORE_UNSUPPORTED` | `merge --apply` numa base MCP: feche com `archlens plan --answers` e use `archlens apply` |
+   | `E_STORE_DOC` | plano com documentação do nó numa base `json`: `archlens store convert <base> --to markdown` (abaixo) e refaça o plano |
    | `E_STORE_GBRAIN_SLUG` / `E_STORE_GBRAIN_RESERVED` | id que não é slug do gbrain (minúsculas, sem acento) ou nome/campo reservado do gbrain: corrija o delta (skill archlens-plan) |
    | `E_MERGE_INVALID` | o resultado com as respostas é inválido: reveja as respostas (skill archlens-plan) |
    | `E_STORE_FORMAT` | base 1.x: migre (abaixo) e refaça o plano |
@@ -97,9 +98,10 @@ ferramentas do MCP configurado, na ordem, sem decidir nada, gravando o resultado
 | levar a base local ao gbrain, modo git | `archlens store convert <base> --to gbrain --mode git --repo <clone> [--remote origin] [--branch main] [--prefix archlens]` (um commit; o prefixo precisa estar vazio) |
 | levar a base local ao gbrain, modo MCP | `archlens remote <base> check --server <S>` (funciona na base local; siga o pedido), depois `archlens store convert <base> --to gbrain --mode mcp --server <S> [--source-id ID] [--prefix archlens]`: pedido só de criação; faça as chamadas e conclua com `archlens apply <base> --receipts resposta.json` (a pasta local só muda com o último recibo) |
 | trazer a base do gbrain para local | `archlens store convert <base> --to json\|markdown` (modo MCP: lê o espelho; rode o `pull` antes) |
+| editar a documentação de um nó direto no markdown (base `markdown` ou `gbrain`) | dois passos: edite só o texto depois de `<!-- archlens:end -->` na página do nó (no gbrain, antes da marca `<!-- timeline -->`) e rode `archlens build <base>` (modo MCP: `archlens remote <base> pull` antes). A GUI, a consulta e a busca leem o texto atual; `ARCHITECTURE.md` e os HTML salvos só mudam no `build`, e o `check` falha até lá. Não entra no histórico. Com plano, o texto passa pela revisão: skill archlens-plan |
 | regenerar só o documento | `archlens doc <base>` (depois de editar `architecture/notes/*.md`) |
 | regenerar documento e diagramas salvos | `archlens build <base>` |
-| conferir no CI / pre-commit | `archlens check <base>` (valida e confere se o `ARCHITECTURE.md` está em dia) |
+| conferir no CI / pre-commit | `archlens check <base>` (valida e confere se o `ARCHITECTURE.md` está em dia; depois de uma edição direta, falha e indica `archlens build`) |
 
 ## Alertas do deliver/build (e o que fazer)
 
@@ -120,7 +122,7 @@ As ações mudam visões salvas: monte o delta com `views` e use a skill archlen
 - **Aplicar para "ver como fica"**: use a prévia da skill archlens-plan. O apply grava a base e entra no histórico.
 - **Aplicar plano aberto ou feito sobre objetos que mudaram**: o apply recusa; refaça o plano com `--answers`.
 - **Gravar no gbrain pelos dois caminhos**: cada base tem um só (git ou MCP, escolhido no `init`); não grave as páginas
-  da base pelo outro. Edição direta no gbrain só no texto depois de `<!-- archlens:end -->`.
+  da base pelo outro. Edição direta no gbrain só no texto depois de `<!-- archlens:end -->` e antes da marca `<!-- timeline -->`.
 - **Modo MCP: decidir no lugar da CLI**: faça exatamente as chamadas do pedido, na ordem, e guarde o resultado bruto
   (resposta que não corresponde: `E_REMOTE_RESPONSE`).
 - **Aplicar sem olhar os `retired` sugeridos** por uma nova leitura: confira no `show` que cada um foi confirmado.

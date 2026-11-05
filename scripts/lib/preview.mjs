@@ -1,7 +1,7 @@
 // Preview of an unmerged delta (or a partly answered plan): the model the merge would produce, what changed
 // against the base, the questions still open, and removed items kept as "ghosts" so views can show what goes
 // away. Pure: never writes, never mutates its inputs.
-import { previewMerge, relationshipIds, relationshipKeys, canonicalJson, mergeError } from './merge.mjs';
+import { previewMerge, relationshipIds, relationshipKeys, canonicalJson, mergeError, resolutionKind } from './merge.mjs';
 import { indexTree, attach } from './raw-tree.mjs';
 import { describeItem } from './merge-report.mjs';
 
@@ -26,10 +26,10 @@ const groupBy = (list, keyOf) => {
   return out;
 };
 
-export function previewModel(baseRaw, { delta, plan } = {}) {
+export function previewModel(baseRaw, { delta, plan, docs } = {}) {
   if (!delta === !plan) throw mergeError('E_PREVIEW_INPUT', 'informe um delta ou um plano (e não os dois)');
   const answers = plan ? new Map(plan.items.filter(i => i.resolution != null).map(i => [i.key, i.resolution])) : undefined;
-  const merged = previewMerge(baseRaw, plan ? plan.delta : delta, { answers, ...(plan?.base ? { base: plan.base } : {}) });
+  const merged = previewMerge(baseRaw, plan ? plan.delta : delta, { answers, docs, ...(plan?.base ? { base: plan.base } : {}) });
   if (merged.plan.blocked) {
     throw mergeError('E_PREVIEW_BLOCKED', `o plano está bloqueado (${merged.plan.errors.length} erro(s)); corrija o delta antes de pré-visualizar`,
       { errors: merged.plan.errors, plan: merged.plan });
@@ -190,7 +190,7 @@ function pendingByTarget(plan, idMap, relMap = new Map()) {
   for (const it of plan.items) {
     if (!('resolution' in it) || it.resolution != null || !applies(it)) continue;
     const entry = { n: it.n, key: it.key, question: describeItem(it), assumed: ASSUMED[it.class] ?? null,
-      options: OPTIONS[it.class === 'conflict' && it.kind === 'view' ? 'view-conflict' : it.class] ?? [] };
+      options: OPTIONS[resolutionKind(it)] ?? [] };
     if (it.class === 'possible-duplicate') {
       add(idMap.get(it.target) ?? it.target, entry);
       add(it.candidate, entry);
@@ -205,9 +205,10 @@ export function previewSummary(p) {
     const count = kinds => [...map.values()].filter(c => kinds.includes(c.kind)).length;
     return `+${count(['added'])} ~${count(['changed'])} −${count(['removed', 'retired'])}`;
   };
+  const docs = p.plan.items.filter(i => i.kind === 'doc' && i.class !== 'unchanged' && i.resolution !== 'keep').length;
   const rels = p.relChanges?.size ? ` · relações ${tally(p.relChanges)}` : '';
   const questions = new Set([...p.pending.values()].flat().map(e => e.key)).size;
-  return `${tally(p.changes)}${rels}${questions ? `, ${questions} decisão(ões) pendente(s)` : ''}`;
+  return `${tally(p.changes)}${docs ? ` doc ${docs}` : ''}${rels}${questions ? `, ${questions} decisão(ões) pendente(s)` : ''}`;
 }
 
 /** Marks a resolved view (IR) with the preview: node.change / changeFields / pending, edge.change / pending. */

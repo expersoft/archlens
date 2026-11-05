@@ -1,5 +1,6 @@
 // ARCHITECTURE.md: the human-readable knowledge-base document, generated from the base folder (never read back).
 import { normalizeModel, c4KindOf, childrenOf, c4Orientation } from './model.mjs';
+import { plainWikilinks, demoteHeadings } from './node-doc.mjs';
 import { resolveView } from './query.mjs';
 import { ELEMENT_TYPES, LAYER_ORDER, LAYER_LABELS, C4_LABELS, STORE_TAGS } from './registry.mjs';
 
@@ -43,7 +44,7 @@ const table = (head, rows) => rows.length
   ? [`| ${head.join(' | ')} |`, `| ${head.map(() => '---').join(' | ')} |`, ...rows.map(r => `| ${r.map(cell).join(' | ')} |`)].join('\n')
   : '_Nenhum._';
 
-export function generateDoc(raw, { notes = {}, source = 'architecture/' } = {}) {
+export function generateDoc(raw, { notes = {}, source = 'architecture/', docs } = {}) {
   const model = normalizeModel(raw);
   const src = source.endsWith('/') ? source : `${source}/`;
   const note = name => notes[name] ?? noteDefaults(raw)[name];
@@ -194,6 +195,22 @@ export function generateDoc(raw, { notes = {}, source = 'architecture/' } = {}) 
     ]), '');
   }
 
+  // Properties (free-form key/value pairs of the elements)
+  const propRows = els
+    .flatMap(e => Object.entries(e.properties ?? {}).map(([k, v]) => [e.name, k, Array.isArray(v) ? v.join(', ') : v]))
+    .sort((a, b) => a[0].localeCompare(b[0]) || a[1].localeCompare(b[1]));
+  if (propRows.length) out.push('## Propriedades', '', table(['Elemento', 'Propriedade', 'Valor'], propRows), '');
+
+  // Documentation of the nodes (the text people write on their pages), by name; headings go under the node's own
+  const documented = els
+    .map(e => [e, (docs && Object.hasOwn(docs, e.id) ? docs[e.id] : '').trim()])
+    .filter(([, text]) => text)
+    .sort((a, b) => a[0].name.localeCompare(b[0].name) || a[0].id.localeCompare(b[0].id));
+  if (documented.length) {
+    out.push('## Documentação dos nós', '');
+    for (const [e, text] of documented) out.push(`### ${e.name} (\`${e.id}\`)`, '', demoteHeadings(plainWikilinks(text), 3), '');
+  }
+
   // Sources
   out.push('## Fontes', '');
   const bySource = new Map();
@@ -224,7 +241,8 @@ export function generateDoc(raw, { notes = {}, source = 'architecture/' } = {}) 
     out.push(table(['Data', 'Fonte', 'Resumo', 'Mudanças', 'Decisões'], changelog.slice(-10).reverse().map(e => [
       e.date, e.source ? `${e.source.kind}${e.source.ref ? ` ${e.source.ref}` : ''}` : '—', e.summary,
       [`+${e.added?.length ?? 0}`, `~${e.changed?.length ?? 0}`, `−${e.removed?.length ?? 0}`,
-        Object.keys(e.status ?? {}).length ? `status ${Object.keys(e.status).length}` : ''].filter(Boolean).join(' '),
+        Object.keys(e.status ?? {}).length ? `status ${Object.keys(e.status).length}` : '',
+        e.docs?.length ? `doc ${e.docs.length}` : ''].filter(Boolean).join(' '),
       (e.decisions ?? []).join('; '),
     ])), '');
     if (changelog.length > 10) out.push(`_Mostrando as 10 rodadas mais recentes de ${changelog.length}; o histórico completo está em \`${src}changelog.json\`._`, '');

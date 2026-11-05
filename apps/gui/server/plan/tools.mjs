@@ -1,13 +1,14 @@
 // The tools the planning agent can call. Query tools reuse the search executors; none of them writes the base.
 import { readFileSync } from 'node:fs';
 import { plan as planDelta, show } from '../../../../scripts/lib/api.mjs';
-import { openQuestions, validResolution } from '../../../../scripts/lib/merge.mjs';
+import { openQuestions, validResolution, resolutionKind } from '../../../../scripts/lib/merge.mjs';
 import { describeItem } from '../../../../scripts/lib/merge-report.mjs';
-import { QUERY_TOOLS, findTool, cardTool, relationsTool, tryViewTool } from '../ask/tools.mjs';
+import { QUERY_TOOLS, docForCard, findTool, cardTool, relationsTool, tryViewTool } from '../ask/tools.mjs';
 import { summarize, formatSummary } from '../../../../scripts/lib/scan/summary.mjs';
 import { toDelta } from '../../../../scripts/lib/scan/to-delta.mjs';
 import { normalizeRepoUrl } from '../../../../scripts/lib/scan/git.mjs';
 import { c4KindOf } from '../../../../scripts/lib/model.mjs';
+import { docsUnsupported } from '../../../../scripts/lib/store/errors.mjs';
 import { replanDraft, draftBytes, DRAFT_MAX_BYTES } from './draft.mjs';
 import { openRepo, readRepoFile, grepRepo, checkRepo, READ_MAX, GREP_MAX } from './repo.mjs';
 
@@ -17,7 +18,7 @@ const obj = (properties, required = []) => ({ type: 'object', properties, requir
 export const REFERENCES = ['merge', 'free-text', 'repo-reading', 'base', 'notation', 'archimate', 'c4', 'views'];
 
 const OPTIONS = { conflict: ['keep', 'take', 'value:<x>'], 'view-conflict': ['keep', 'take'], 'possible-duplicate': ['same', 'different'], op: ['yes', 'no'] };
-const optionsOf = it => OPTIONS[it.class === 'conflict' && it.kind === 'view' ? 'view-conflict' : it.class] ?? [];
+const optionsOf = it => OPTIONS[resolutionKind(it)] ?? [];
 
 const PLAN_ONLY = [
   { name: 'read_reference', description: `Lê uma referência do archlens (references/<nome>.md). Nomes: ${REFERENCES.join(', ')}.`,
@@ -42,6 +43,8 @@ const PLAN_ONLY = [
     input_schema: obj({ overview: str, notes: str }) },
   { name: 'read_notes', description: 'Lê as notas de interpretação atuais da base (overview e notes), para draft_notes atualizá-las em vez de reescrever.',
     input_schema: obj({}) },
+  { name: 'read_doc', description: 'Lê a documentação atual de um nó (o texto que as pessoas escrevem na página dele), para você editá-la em vez de reescrevê-la às cegas. Devolve "o nó não tem documentação" quando não há texto.',
+    input_schema: obj({ id: str }, ['id']) },
 ];
 
 const REPO_TOOLS = [
@@ -156,6 +159,14 @@ function readNotes(ctx) {
   return { ok: true, content: external('base', `${part('overview', 'overview')}\n\n${part('notes', 'notes')}`) };
 }
 
+async function readDoc(ctx, _session, { id }, { signal } = {}) {
+  if (typeof id !== 'string' || !ctx.model.elements.has(id)) return fail(`"${id}" não é um elemento da base; use find_elements para achar o id`);
+  if (!ctx.store.supportsDocs) throw docsUnsupported();
+  const { doc, why } = await docForCard(ctx, id, signal);
+  if (why) return fail(`documentação indisponível: ${why}`);
+  return { ok: true, content: typeof doc === 'string' && doc.trim() ? external('base', doc.trim()) : 'o nó não tem documentação' };
+}
+
 export const ONE_REPO = 'um repositório por rascunho: aplique ou descarte o atual';
 const sameRepo = (a, b) => normalizeRepoUrl(a.trim()) === normalizeRepoUrl(b.trim());
 
@@ -219,11 +230,11 @@ async function grepTool(_ctx, session, input) {
 
 const RUN = {
   find_elements: (ctx, _s, i) => fromBase(findTool(ctx, i)),
-  element_card: (ctx, _s, i) => fromBase(cardTool(ctx, i)),
+  element_card: async (ctx, _s, i, opts) => fromBase(await cardTool(ctx, i, opts)),
   relations: (ctx, _s, i) => fromBase(relationsTool(ctx, i)),
   try_view: async (ctx, _s, i) => fromBase(await tryViewTool(ctx, i)),
   read_reference: readReference, set_delta: setDelta, plan_draft: planDraftTool, show_plan: showPlan, set_note: setNote,
-  add_preview: addPreview, ask_decision: askDecision, ask_user: askUser, reply, draft_notes: draftNotes, read_notes: readNotes,
+  add_preview: addPreview, ask_decision: askDecision, ask_user: askUser, reply, draft_notes: draftNotes, read_notes: readNotes, read_doc: readDoc,
   scan_repo: scanRepo, read_file: readFileTool, grep: grepTool,
 };
 
@@ -231,8 +242,8 @@ const RUN = {
  * Runs one planning tool; `session` ({ draft, previews, attach?, git? }) is changed in place. `attach` is the
  * repository the user attached in this message; `git` ({ env, plan }) the server's git settings. Never throws: errors come back as `ok: false`.
  */
-export async function runPlanTool(ctx, session, name, input) {
+export async function runPlanTool(ctx, session, name, input, opts) {
   const fn = Object.hasOwn(RUN, name) ? RUN[name] : null;
   if (!fn) return fail(`ferramenta desconhecida: ${name}`);
-  try { return await fn(ctx, session, input ?? {}); } catch (e) { return fail(e.message); }
+  try { return await fn(ctx, session, input ?? {}, opts); } catch (e) { return fail(e.message); }
 }

@@ -317,6 +317,14 @@ _Todos os elementos e relações estão ativos._
 
 _Nenhuma premissa registrada._
 
+## Propriedades
+
+| Elemento | Propriedade | Valor |
+| --- | --- | --- |
+| ERP | owner | TI Corporativa |
+| Plataforma de E-commerce | criticidade | alta |
+| Plataforma de E-commerce | owner | Squad Checkout |
+
 ## Fontes
 
 | Tipo | Referência | Data | Itens |

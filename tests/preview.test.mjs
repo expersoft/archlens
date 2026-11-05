@@ -105,6 +105,15 @@ test('a delta on a missing base previews everything as added', () => {
   assert.equal(previewSummary(p), '+1 ~0 −0');
 });
 
+test('the summary counts the documentation the delta would write', () => {
+  const docs = { 'loja.api': 'velho', 'loja.web': 'igual' };
+  const d = delta({}, { docs: [{ id: 'loja.api', text: 'novo' }, { id: 'loja.web', text: 'igual' }, { id: 'loja.db', text: 'texto' }] });
+  assert.equal(previewSummary(previewModel(shop(), { delta: d, docs })), '+0 ~0 −0 doc 2, 1 decisão(ões) pendente(s)');
+  const plan = planMerge(shop(), d, { ...TODAY, docs });
+  for (const it of plan.items) if (it.class === 'conflict') it.resolution = 'keep';
+  assert.equal(previewSummary(previewModel(shop(), { plan, docs })), '+0 ~0 −0 doc 1');
+});
+
 test('ghosts keep a top-level parent when the child is listed before it', () => {
   const base = asBase({ archlens: '1.0', name: 'X', model: {
     elements: [{ id: 'c', type: 'c4:container', name: 'C', parent: 'a' }, { id: 'a', type: 'c4:softwareSystem', name: 'A' }],

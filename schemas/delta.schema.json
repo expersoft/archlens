@@ -145,6 +145,26 @@
           }
         ]
       }
+    },
+    "docs": {
+      "description": "documentation of nodes: the text replaces the whole of it, \"\" clears it",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "text"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          }
+        }
+      }
     }
   },
   "$defs": {

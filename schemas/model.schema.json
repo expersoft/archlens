@@ -466,6 +466,13 @@
           "items": {
             "type": "string"
           }
+        },
+        "docs": {
+          "description": "nodes whose documentation this round changed (never the text)",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       }
     }

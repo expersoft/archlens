@@ -5,8 +5,10 @@ import { preview as previewOf, show } from '../../../../scripts/lib/api.mjs';
 import { previewSummary, annotateView } from '../../../../scripts/lib/preview.mjs';
 import { normalizeModel } from '../../../../scripts/lib/model.mjs';
 import { resolveView } from '../../../../scripts/lib/query.mjs';
+import { emptyViewMessage } from '../../../../scripts/lib/query-where.mjs';
 import { layoutView } from '../../../../scripts/lib/layout.mjs';
 import { renderHtml, viewData } from '../../../../scripts/lib/render.mjs';
+import { lineDiff } from '../../../../scripts/lib/node-doc.mjs';
 import { ELEMENT_TYPES } from '../../../../scripts/lib/registry.mjs';
 import { navHelpers } from '../bases.mjs';
 import { actionsFor, flipSpec, titleFor } from '../navigation.mjs';
@@ -101,7 +103,7 @@ const fieldsOf = c => (c.fields ?? []).map(f => ({ field: f.field, before: text(
 
 /**
  * What the draft adds (+), changes (~) and removes (−), elements then relationships, with the type, the description of
- * what is added and the fields that change, and the questions still open.
+ * what is added and the fields that change, the documentation written (with its line diff), and the questions still open.
  */
 function deltaList(model, p) {
   const changes = [...p.changes].map(([id, c]) => {
@@ -120,6 +122,13 @@ function deltaList(model, p) {
       ...(c.kind === 'added' && r?.description ? { description: text(r.description) } : {}), fields: fieldsOf(c),
     });
   }
+  // The documentation travels apart from the model: its changes come from the plan's items, in full (no VALUE_MAX cut).
+  for (const it of p.plan?.items ?? []) {
+    if (it.kind !== 'doc' || it.class === 'unchanged' || it.resolution === 'keep') continue;
+    const before = it.base ?? '', after = it.delta ?? '';
+    const sign = !before.trim() ? '+' : !after.trim() ? '−' : '~';
+    changes.push({ sign, kind: 'doc', id: it.target, name: model.elements.get(it.target)?.name ?? it.target, diff: lineDiff(before, after) });
+  }
   const seen = new Set();
   const questions = [];
   for (const q of [...p.pending.values()].flat()) {
@@ -132,7 +141,7 @@ function deltaList(model, p) {
 
 async function drawView(model, p, spec, kind) {
   const view = resolveView(model, spec, { keep: p.keep });
-  if (!view.nodes.length) throw planError(`visão "${spec.key ?? 'view'}" ficou vazia — revise scope/anchor/filtros`, 'E_VIEW_EMPTY');
+  if (!view.nodes.length) throw planError(emptyViewMessage(model, { key: 'view', ...spec }, view), 'E_VIEW_EMPTY');
   const laid = await layoutView(annotateView(view, p));
   const html = renderHtml({ title: model.name, subtitle: 'archlens · prévia', views: [laid], embed: true });
   return { key: laid.key, title: laid.title, html, viewData: viewData(laid), kind, spec };

@@ -106,6 +106,8 @@ const NOTATIONS = new Set(['archimate', 'c4']);
 export function planRoutes({ registry, provider, config, telemetry, h }) {
   const { readJson, httpError, STREAMED, NDJSON_HEADERS } = h;
   const read = (req, limit = BODY_MAX) => bodyOf(readJson, req, httpError, limit);
+  // Replanning reads the connector on this thread: in the turn of the base, it does not cross a read in a worker.
+  const replan = (b, ctx, draft) => registry.inTurn(b, () => draftFrom(ctx, draft));
 
   async function plan(req, res, b) {
     const body = await read(req);
@@ -126,7 +128,7 @@ export function planRoutes({ registry, provider, config, telemetry, h }) {
     // `history` holds the prior turns only; the current text goes only in `message` (the agent adds it itself).
     const history = historyOf(body.history, httpError);
     const applied = appliedOf(body.applied, httpError);
-    const replanned = draftFrom(ctx, body.draft === undefined ? newDraft(ctx) : body.draft);
+    const replanned = await replan(b, ctx, body.draft === undefined ? newDraft(ctx) : body.draft);
     const had = replanned.draft.repo;
     if (attach && had && normalizeRepoUrl(had.url) !== normalizeRepoUrl(attach.url)) throw httpError(409, ONE_REPO, 'E_GUI_REPO');
 
@@ -173,23 +175,26 @@ export function planRoutes({ registry, provider, config, telemetry, h }) {
     assertLocal(registry.get(b));
     await registry.reload(b); // another write may have landed since the last poll
     const ctx = registry.get(b);
-    const replanned = draftFrom(ctx, draft);
-    const { plan: planned } = replanned.draft;
-    const opsHash = opsHashOf(planned);
-    if (opsHash === null || opsHash !== confirm) {
-      const message = opsHash === null
-        ? `o plano não está final; responda as perguntas abertas antes de aplicar${replanned.warning ? ` (${replanned.warning})` : ''}`
-        : 'o plano mudou desde a confirmação (a base mudou); revise o plano novo e confirme de novo';
-      throw Object.assign(httpError(409, message, 'E_GUI_PLAN_CHANGED'), {
-        extra: { draft: replanned.draft, opsHash, questions: questionsOf(planned), ...(replanned.warning ? { warning: replanned.warning } : {}) },
-      });
-    }
-    const res = guiWrite(() => applyAndDocument(ctx.store, planned));
-    if (!res.entry) return { entry: null, doc: null, build: null, notesDraftNeeded: false };
+    // One turn from the check to the write: no read of the base gets between them.
+    const res = await registry.inTurn(b, () => {
+      const replanned = draftFrom(ctx, draft);
+      const { plan: planned } = replanned.draft;
+      const opsHash = opsHashOf(planned);
+      if (opsHash === null || opsHash !== confirm) {
+        const message = opsHash === null
+          ? `o plano não está final; responda as perguntas abertas antes de aplicar${replanned.warning ? ` (${replanned.warning})` : ''}`
+          : 'o plano mudou desde a confirmação (a base mudou); revise o plano novo e confirme de novo';
+        throw Object.assign(httpError(409, message, 'E_GUI_PLAN_CHANGED'), {
+          extra: { draft: replanned.draft, opsHash, questions: questionsOf(planned), ...(replanned.warning ? { warning: replanned.warning } : {}) },
+        });
+      }
+      return guiWrite(() => applyAndDocument(ctx.store, planned));
+    });
+    if (!res.entry) return { entry: null, doc: null, build: null, preserved: [], notesDraftNeeded: false };
     await registry.reload(b);
     // the base is written: a document that failed is reported, not thrown (the core's error names the machine's paths)
     const doc = res.docError ? { error: DOC_FAILED } : docName(ctx.store, res.doc);
-    return { entry: res.entry, doc, build: await rebuild(ctx.store), notesDraftNeeded: true };
+    return { entry: res.entry, doc, build: await registry.inTurn(b, () => rebuild(ctx.store)), preserved: res.preserved, notesDraftNeeded: true };
   }
 
   async function notes(req, b) {
@@ -202,7 +207,7 @@ export function planRoutes({ registry, provider, config, telemetry, h }) {
     }
     const ctx = registry.get(b);
     assertLocal(ctx);
-    const { doc } = guiWrite(() => writeNotes(ctx.store, Object.fromEntries(given.map(k => [k, body[k]]))));
+    const { doc } = await registry.inTurn(b, () => guiWrite(() => writeNotes(ctx.store, Object.fromEntries(given.map(k => [k, body[k]])))));
     await registry.reload(b);
     return { doc: docName(ctx.store, doc) };
   }
@@ -211,7 +216,7 @@ export function planRoutes({ registry, provider, config, telemetry, h }) {
     ['POST', /^\/api\/bases\/([^/]+)\/plan$/, (req, [b], _url, res) => plan(req, res, b)],
     ['POST', /^\/api\/bases\/([^/]+)\/plan\/open$/, async (req, [b]) => {
       const { draft } = await read(req);
-      const out = draftFrom(registry.get(b), draft);
+      const out = await replan(b, registry.get(b), draft);
       return { ...out, opsHash: opsHashOf(out.draft.plan) };
     }],
     ['POST', /^\/api\/bases\/([^/]+)\/plan\/preview$/, async (req, [b]) => {
@@ -220,7 +225,7 @@ export function planRoutes({ registry, provider, config, telemetry, h }) {
       if (specs && specs.length > SPECS_MAX) throw httpError(400, `no máximo ${SPECS_MAX} visões por pedido`);
       if (notation !== undefined && !NOTATIONS.has(notation)) throw httpError(400, 'notation deve ser archimate ou c4');
       const ctx = registry.get(b);
-      const { draft: replanned } = draftFrom(ctx, draft);
+      const { draft: replanned } = await replan(b, ctx, draft);
       return { ...(await buildPreview(ctx, replanned, specs, { notation })), opsHash: opsHashOf(replanned.plan) };
     }],
     // Navigation over the preview: the context menu and the notation flip see what the draft adds.
@@ -228,13 +233,13 @@ export function planRoutes({ registry, provider, config, telemetry, h }) {
       const { draft, id } = await read(req);
       if (typeof id !== 'string' || !id) throw httpError(400, 'informe o id do elemento');
       const ctx = registry.get(b);
-      return { actions: previewActions(ctx, draftFrom(ctx, draft).draft, id) };
+      return { actions: previewActions(ctx, (await replan(b, ctx, draft)).draft, id) };
     }],
     ['POST', /^\/api\/bases\/([^/]+)\/plan\/flip$/, async (req, [b]) => {
       const { draft, spec } = await read(req);
       if (!isObject(spec)) throw httpError(400, 'informe a visão em {spec}');
       const ctx = registry.get(b);
-      return { spec: previewFlip(ctx, draftFrom(ctx, draft).draft, spec) };
+      return { spec: previewFlip(ctx, (await replan(b, ctx, draft)).draft, spec) };
     }],
     ['POST', /^\/api\/bases\/([^/]+)\/plan\/apply$/, async (req, [b]) => apply(req, b)],
     ['POST', /^\/api\/bases\/([^/]+)\/plan\/notes$/, async (req, [b]) => notes(req, b)],

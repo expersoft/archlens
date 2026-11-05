@@ -31,6 +31,8 @@ a migração de base 1.x e o `init` não estão disponíveis na GUI.
 - Uma decisão por vez: cada item com `resolution: null` vai ao usuário com `ask_decision` (`key`, `recommendation`,
   `reason`). A resposta volta na próxima mensagem. Nunca decida sozinho.
 - Cada rodada termina com uma destas ferramentas: `ask_decision`, `ask_user`, `reply` ou `draft_notes`.
+- Antes de escrever a documentação de um nó, leia o texto atual com `read_doc` e edite-o em vez de reescrever às cegas:
+  `docs` no delta substitui o texto inteiro. Trocar texto existente vira decisão do usuário, com a diferença no painel Delta.
 - Depois que o usuário aplica, a GUI pede "rascunhe as notas de interpretação desta rodada": escreva `overview`
   (propósito, decisões, riscos) e `notes` (o que a rodada mudou e por quê) e entregue com `draft_notes`. Leia antes as
   notas atuais com `read_notes` e atualize-as em vez de reescrever. Quem grava as notas é o usuário, depois de revisar.
@@ -46,6 +48,7 @@ Onde a skill manda rodar um comando, use a ferramenta:
 - `archlens plan --answers` → `ask_decision` (a resposta do usuário volta na próxima mensagem)
 - `archlens deliver` (prévia) → `add_preview`
 - `archlens show` → `show_plan`
+- `archlens query --element --doc` → `read_doc` (a documentação atual do nó, como está na página)
 - `archlens views` → `find_elements` / `try_view`
 - `archlens remote` → (não disponível na GUI)
 - `archlens init` → (não disponível na GUI)

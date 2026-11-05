@@ -4,6 +4,8 @@ type: business-process
 title: Checkout
 aliases:
   - Checkout
+properties:
+  squad: Checkout
 relationships:
   - id: bp-checkout-realization-bs-compra
     type: realization
@@ -47,3 +49,15 @@ Do carrinho ao pedido pago
 - **realization** → [[goal/goal-abandono|Reduzir abandono de carrinho]]
 
 <!-- archlens:end -->
+
+## O processo
+
+Começa quando a pessoa confirma o carrinho e termina com o pedido pago, que dispara o
+[[business-process/bp-faturamento|Faturamento]].
+
+## Regras de negócio
+
+- Estoque é reservado no início e liberado depois de 15 minutos sem pagamento.
+- Pix vale por 30 minutos; cartão recusado permite uma nova tentativa com outro meio.
+
+O objetivo acompanhado é [[goal/goal-abandono|reduzir o abandono de carrinho]].

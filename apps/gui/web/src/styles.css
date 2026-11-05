@@ -61,6 +61,22 @@ body{font:14px/1.4 system-ui,sans-serif;background:var(--bg);color:var(--ink)}
 .dp .go{cursor:pointer}.dp .go:hover{color:var(--accent)}
 .chip{display:inline-block;font-size:11.5px;border:1px solid var(--line);border-radius:10px;padding:0 7px;margin-left:4px;background:var(--bg);color:var(--ink)}
 .dp .linkish{border:0;background:none;color:var(--accent);padding:0;cursor:pointer;font:inherit;text-decoration:underline;margin-top:8px}
+.dp-tabs{display:flex;gap:4px;margin:8px 0 10px;border-bottom:1px solid var(--line)}
+.dp-tabs button{border:0;border-bottom:2px solid transparent;border-radius:0;background:none;color:var(--muted);padding:4px 8px;cursor:pointer;font:inherit}
+.dp-tabs button.on{color:inherit;border-bottom-color:var(--accent)}
+.dp .err{color:#c0392b}
+.dp .doc-text{overflow-wrap:anywhere}
+.dp .doc-text h1,.dp .doc-text h2{font-size:16px;margin:14px 0 6px}
+.dp .doc-text h3,.dp .doc-text h4,.dp .doc-text h5,.dp .doc-text h6{font-size:14px;margin:12px 0 4px;color:inherit;text-transform:none;letter-spacing:0}
+.dp .doc-text p,.dp .doc-text ul,.dp .doc-text ol{margin:6px 0}
+.dp .doc-text ol{padding-left:18px}
+.dp .doc-text code{font-family:ui-monospace,monospace;font-size:12px;background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:0 4px}
+.dp .doc-text pre{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:8px;overflow:auto}
+.dp .doc-text pre code{border:0;padding:0;background:none}
+.dp .doc-text table{border-collapse:collapse;margin:8px 0;display:block;overflow-x:auto}
+.dp .doc-text th,.dp .doc-text td{border:1px solid var(--line);padding:4px 8px;text-align:left;vertical-align:top}
+.dp .doc-text blockquote{margin:6px 0;padding-left:10px;border-left:3px solid var(--line);color:var(--muted)}
+.dp .doc-text a{color:var(--accent)}
 .dp .sec{border-top:1px solid var(--line);margin-top:16px;padding-top:4px}
 .tag{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:8px 12px 2px}
 .dp .tag{margin:8px 0 2px}
@@ -164,6 +180,11 @@ body{font:14px/1.4 system-ui,sans-serif;background:var(--bg);color:var(--ink)}
 .delta-panel .chg-fields dt{font-size:11px;color:var(--muted)}
 .delta-panel .chg-fields dd{margin:0;overflow-wrap:anywhere}
 .delta-panel .chg-fields .before{color:var(--muted);text-decoration:line-through}
+.delta-panel .doc-diff{margin:4px 0 0 1.4em;font:12px/1.4 ui-monospace,monospace;white-space:pre-wrap;overflow-wrap:anywhere}
+.delta-panel .doc-diff .ln{display:block}
+.delta-panel .doc-diff .ln.add{background:rgba(42,138,62,.15)}
+.delta-panel .doc-diff .ln.del{background:rgba(192,57,43,.15);text-decoration:line-through}
+.delta-panel .doc-diff .ln.same{color:var(--muted)}
 .delta-panel .delta-questions li{border-left:3px solid var(--sel);padding-left:8px}
 .delta-empty{padding:0 12px}
 .preview-pick{align-items:center}

@@ -7,6 +7,7 @@ import { aliasKey, findCandidates } from './match.mjs';
 import { addSources, deltaSources } from './sources.mjs';
 import { indexTree, orderDelta, attach, detach, descendantsOf } from './raw-tree.mjs';
 import { FORMAT, canonicalElements, canonicalRelationship, sortParentsFirst } from './canonical.mjs';
+import { docHash, checkDocText } from './node-doc.mjs';
 
 export const PLAN_VERSION = '1.0';
 const ELEMENT_FIELDS = ['type', 'name', 'description', 'technology', 'external', 'c4', 'owner', 'url', 'status', 'statusReason', 'group'];
@@ -44,6 +45,7 @@ const isoToday = () => new Date().toISOString().slice(0, 10);
 /**
  * `answers` (Map or object, key → resolution) pre-fills questions answered in an earlier plan, so that
  * a possible duplicate answered "same" is planned (and its follow-up questions asked) as apply will see it.
+ * `docs` (id → text): the documentation of the base's nodes, which travels apart from the model.
  */
 export function planMerge(baseRaw, delta, opts = {}) {
   return planContext(baseRaw, delta, opts).plan;
@@ -58,10 +60,10 @@ export function previewMerge(baseRaw, delta, opts = {}) {
   return { plan, raw: ctx.raw, idMap: ctx.idMap };
 }
 
-function planContext(baseRaw, delta, { base = 'ARCHITECTURE.md', today, answers, storeVersion } = {}) {
+function planContext(baseRaw, delta, { base = 'ARCHITECTURE.md', today, answers, storeVersion, docs } = {}) {
   checkDelta(delta);
   const earlier = answers instanceof Map ? answers : new Map(Object.entries(answers ?? {}));
-  const ctx = runMerge(baseRaw, delta, { mode: 'plan', resolutions: earlier });
+  const ctx = runMerge(baseRaw, delta, { mode: 'plan', resolutions: earlier, docs });
   const errors = [...ctx.errors, ...validateModel(ctx.raw).errors];
   const summary = {};
   for (const it of ctx.items) if (!it.when) summary[it.class] = (summary[it.class] ?? 0) + 1;
@@ -72,7 +74,8 @@ function planContext(baseRaw, delta, { base = 'ARCHITECTURE.md', today, answers,
   return { ctx, plan };
 }
 
-export function applyPlan(baseRaw, plan, { today } = {}) {
+/** `docs` as in planMerge; the result's `docs` is the whole documentation in the end, not only what the plan changed. */
+export function applyPlan(baseRaw, plan, { today, docs } = {}) {
   if (plan?.['archlens-plan'] !== PLAN_VERSION) throw mergeError('E_PLAN_SCHEMA', 'o arquivo não é um plano do archlens (gere com "archlens merge --plan")');
   // Plans made against a connector carry its version, which the connector checks when it applies the ops.
   if (!('storeVersion' in plan) && hashRaw(baseRaw) !== plan.baseHash) throw mergeError('E_PLAN_STALE', 'a base mudou depois que o plano foi gerado; rode "archlens merge --plan" de novo');
@@ -82,12 +85,14 @@ export function applyPlan(baseRaw, plan, { today } = {}) {
   const bad = open.filter(i => !validResolution(i, i.resolution));
   if (bad.length) throw mergeError('E_PLAN_RESOLUTION', `resposta inválida no(s) item(ns) ${bad.map(i => `${i.n} ("${i.resolution}")`).join(', ')}`);
   const date = today ?? isoToday();
-  const ctx = runMerge(baseRaw, plan.delta, { mode: 'apply', resolutions });
+  // The text each documentation item was reviewed against: its hash in a key is not enough once the text is gone.
+  const reviewed = new Map(plan.items.filter(i => i.kind === 'doc').map(i => [i.target, i.base]));
+  const ctx = runMerge(baseRaw, plan.delta, { mode: 'apply', resolutions, docs, reviewed });
   const errors = [...ctx.errors, ...validateModel(ctx.raw).errors];
   if (errors.length) throw mergeError('E_MERGE_INVALID', `o resultado do merge é inválido (${errors.length} erro(s)); nada foi gravado`, { errors });
   // What the merge's decisions relied on, and the possible duplicates of each new element (answered or not).
-  const seen = { read: ctx.read, candidates: Object.fromEntries(ctx.candidates) };
-  if (baseRaw && canonicalJson(ctx.raw) === canonicalJson(baseRaw)) return { raw: baseRaw, entry: null, ...seen };
+  const seen = { read: ctx.read, candidates: Object.fromEntries(ctx.candidates), docs: Object.fromEntries([...ctx.docs].filter(([id]) => ctx.tree.has(id))) };
+  if (baseRaw && !ctx.log.docs.length && canonicalJson(ctx.raw) === canonicalJson(baseRaw)) return { raw: baseRaw, entry: null, ...seen };
   const entry = changelogEntry(ctx, date);
   ctx.raw.changelog = [...(ctx.raw.changelog || []), entry];
   return { raw: ctx.raw, entry, ...seen };
@@ -111,7 +116,7 @@ export const openQuestions = plan => questionsOf(plan).applicable.filter(i => !v
 
 const isQuestion = it => it.class === 'conflict' || it.class === 'possible-duplicate'
   || (it.class === 'op' && !it.noop && !it.error && (it.op === 'remove' || (it.op === 'status' && it.status === 'retired')));
-const resolutionKind = it => (it.class === 'conflict' && it.kind === 'view' ? 'view-conflict' : it.class);
+export const resolutionKind = it => (it.class === 'conflict' && (it.kind === 'view' || it.kind === 'doc') ? 'view-conflict' : it.class);
 
 function checkDelta(delta) {
   if (!delta || typeof delta !== 'object' || delta['archlens-delta'] !== '1.0') {
@@ -119,6 +124,10 @@ function checkDelta(delta) {
   }
   for (const [i, op] of (delta.ops || []).entries()) {
     if (!op || !op.op || !op.id) throw mergeError('E_DELTA_SCHEMA', `ops[${i}] precisa de "op" e "id"`);
+  }
+  if (delta.docs !== undefined && !Array.isArray(delta.docs)) throw mergeError('E_DELTA_SCHEMA', '"docs" precisa ser uma lista de { id, text }');
+  for (const [i, d] of (delta.docs || []).entries()) {
+    if (!d?.id || typeof d.text !== 'string') throw mergeError('E_DELTA_SCHEMA', `docs[${i}] precisa de "id" e "text"`);
   }
 }
 
@@ -129,7 +138,7 @@ function emptyBase(delta) {
   };
 }
 
-function runMerge(baseRaw, delta, { mode, resolutions = new Map() }) {
+function runMerge(baseRaw, delta, { mode, resolutions = new Map(), docs = {}, reviewed = new Map() }) {
   const raw = baseRaw ? structuredClone(baseRaw) : emptyBase(delta);
   raw.model.elements ??= [];
   raw.model.relationships ??= [];
@@ -137,8 +146,8 @@ function runMerge(baseRaw, delta, { mode, resolutions = new Map() }) {
   const ctx = {
     raw, delta, mode, resolutions, items: [], errors: [],
     tree: indexTree(raw), aliases: new Map(), idMap: new Map(), fresh: new Set(), freshSources: new WeakSet(),
-    log: { added: [], changed: new Set(), status: {}, removed: [], decisions: [] },
-    read: new Set(), candidates: new Map(),
+    log: { added: [], changed: new Set(), status: {}, removed: [], decisions: [], docs: [] },
+    read: new Set(), candidates: new Map(), docs: new Map(Object.entries(docs)), reviewed,
   };
   // The base's own objects, so that only they enter the read set (not what this delta adds).
   ctx.inBase = { elements: new Set(ctx.tree.keys()), relationships: new Set(raw.model.relationships), views: new Set((raw.views || []).map(v => v?.key)) };
@@ -162,6 +171,7 @@ function runMerge(baseRaw, delta, { mode, resolutions = new Map() }) {
   mergeViews(ctx);
   mergeAssumptions(ctx);
   runOps(ctx);
+  mergeDocs(ctx);
   raw.model.elements = sortParentsFirst(raw.model.elements);
   return ctx;
 }
@@ -614,6 +624,45 @@ function runOps(ctx) {
   });
 }
 
+/**
+ * The delta's documentation, after the ops, so a node they remove is refused. Filling an empty node needs no question;
+ * replacing a text does, and its key carries the hash of that text: an answer given for it does not hold for another.
+ * Neither does it vanish when the text was emptied since: the node then asks again, with the hash of the empty text.
+ * Apply refuses a text other than the one the plan's item was reviewed against.
+ */
+function mergeDocs(ctx) {
+  const seen = new Set();
+  (ctx.delta.docs || []).forEach((d, i) => {
+    const fail = message => { ctx.errors.push({ code: 'E_DELTA_DOC', path: `docs[${i}]`, message: `docs[${i}]: ${message}` }); };
+    const id = resolveRef(ctx, d.id);
+    if (!ctx.tree.has(id)) return fail(ctx.log.removed.includes(id) ? `"${id}" é removido por este delta` : `"${d.id}" não existe`);
+    if (seen.has(id)) return fail(`"${id}" aparece mais de uma vez`);
+    seen.add(id);
+    try { checkDocText(d.text, id); } catch (e) { return fail(e.message.slice(e.code.length + 2)); }
+    const base = ctx.docs.get(id) ?? '';
+    const seenBase = ctx.reviewed.get(id);
+    if (seenBase !== undefined && seenBase.trim() !== base.trim()) {
+      throw mergeError('E_PLAN_REPLAN', `a documentação de "${id}" mudou depois que o plano foi revisado; nada foi gravado. Gere o plano de novo reaproveitando as respostas: archlens plan <base> --answers <plano> --out <novo>`);
+    }
+    const item = { kind: 'doc', target: id, field: 'doc', base, delta: d.text };
+    const write = () => {
+      if (d.text.trim()) ctx.docs.set(id, d.text); else ctx.docs.delete(id);
+      ctx.log.docs.push(id);
+    };
+    if (d.text.trim() === base.trim()) return note(ctx, { key: `doc:${id}`, class: 'unchanged', ...item });
+    const prefix = `doc:${id}:`;
+    const answeredBefore = [...ctx.resolutions.keys()].some(k => k.startsWith(prefix) && k.length === prefix.length + 12);
+    if (!base.trim() && !answeredBefore) {
+      write();
+      return note(ctx, { key: `doc:${id}`, class: 'enrich', ...item });
+    }
+    if (decide(ctx, { key: `${prefix}${docHash(base).slice(7, 19)}`, class: 'conflict', ...item }, 'take') !== 'take') return undefined;
+    write();
+    ctx.log.decisions.push(`documentação de ${id}: take`); // never the text: the round only says who changed
+    return undefined;
+  });
+}
+
 /** Saved views that stop resolving when `id` (and what is nested in it) is retired: it is their scope, anchor, focus or a group in groups.only. */
 function viewsHiding(ctx, id) {
   const hidden = new Set([id, ...descendantsOf(ctx.tree, id)]);
@@ -693,11 +742,11 @@ function applyRemoval(ctx, cascade, rels) {
 
 function changelogEntry(ctx, date) {
   const seq = (ctx.raw.changelog || []).filter(e => e.date === date).length + 1;
-  const { added, changed, status, removed, decisions } = ctx.log;
+  const { added, changed, status, removed, decisions, docs } = ctx.log;
   return {
     id: `${date}-${String(seq).padStart(2, '0')}`, date,
     ...(ctx.delta.source ? { source: ctx.delta.source } : {}),
-    summary: ctx.delta.summary ?? `+${added.length} ~${changed.size} −${removed.length}`,
-    added, changed: [...changed].filter(id => !added.includes(id)), status, removed, decisions,
+    summary: ctx.delta.summary ?? `+${added.length} ~${changed.size} −${removed.length}${docs.length ? ` doc ${docs.length}` : ''}`,
+    added, changed: [...changed].filter(id => !added.includes(id)), status, removed, decisions, ...(docs.length ? { docs } : {}),
   };
 }

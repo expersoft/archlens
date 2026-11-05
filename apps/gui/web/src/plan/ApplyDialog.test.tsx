@@ -24,7 +24,7 @@ const preview = (extra: Partial<api.PlanPreviewResult> = {}): api.PlanPreviewRes
   skipped: [], summary: '+2 ~1 −0', changes: [], questions: [], report: 'r', opsHash: 'h1', ...extra,
 });
 const applied = (build: Partial<api.PlanApplyResult['build']> = {}): api.PlanApplyResult => ({
-  entry: { id: 'r1', summary: '+1 ~1 −0', added: ['pag'], changed: ['loja'], removed: [] }, doc: 'ARCHITECTURE.md', notesDraftNeeded: true,
+  entry: { id: 'r1', summary: '+1 ~1 −0', added: ['pag'], changed: ['loja'], removed: [] }, doc: 'ARCHITECTURE.md', preserved: [], notesDraftNeeded: true,
   build: { available: true, problems: 1, results: [{ key: 'ctx', viewport: '1280x720', fill: 0.5, minFontPx: 9, issues: ['largura 50%'] }], ...build },
 });
 const open = () => { localStorage.setItem('archlens-gui-draft:b', JSON.stringify(draft(1))); vi.mocked(api.planOpen).mockResolvedValue({ draft: draft(1), opsHash: 'h1' }); };
@@ -126,6 +126,18 @@ describe('Aplicar na PlanView', () => {
     expect(planTurn.mock.calls[0][1].draft).toBeUndefined();
     expect(await screen.findByLabelText('Visão geral (notes/overview.md)')).toBeTruthy();
     expect(localStorage.getItem('archlens-gui-draft:b')).toBeNull();
+  });
+
+  it('avisa para onde foi o texto do nó removido', async () => {
+    open();
+    const u = userEvent.setup();
+    planApply.mockResolvedValue({ ...applied(), preserved: ['notes/removidos/application-component/x.md'] });
+    ev(notesReply, { type: 'done', metrics: { total: 1 } });
+    render(<PlanView base="b" canBuild />);
+    await waitFor(() => expect(aplicar().disabled).toBe(false));
+    await u.click(aplicar());
+    await u.click(screen.getByRole('button', { name: 'Confirmar e aplicar' }));
+    expect(await screen.findByText('Texto do nó removido guardado em notes/removidos/application-component/x.md.')).toBeTruthy();
   });
 
   it('o pedido de notas leva o resumo da rodada aplicada', async () => {

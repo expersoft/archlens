@@ -7,20 +7,31 @@ import { validateModel } from './validate.mjs';
 import { resolveView } from './query.mjs';
 import { layoutView } from './layout.mjs';
 import { viewAlerts } from './view-build.mjs';
+import { emptyViewMessage } from './query-where.mjs';
 import { renderHtml } from './render.mjs';
 import { suggestViews } from './suggest.mjs';
 import { annotateView } from './preview.mjs';
 import { inspectHtml } from './deliver.mjs';
+import { docToHtml } from './node-doc.mjs';
 
 // The message is the sentence the CLI prints (no code prefix); `warnings` holds what came before the refusal.
 const buildError = (code, message, extra) => Object.assign(new Error(message), { code }, extra);
+
+/** The safe HTML of the texts in `docs` (id → text), only for nodes present in some of the laid out views. */
+function docsHtml(docs, laid) {
+  if (!docs) return undefined;
+  const ids = new Set(laid.flatMap(v => v.nodes.map(n => n.id)));
+  const out = {};
+  for (const [id, text] of Object.entries(docs)) if (ids.has(id) && text?.trim()) out[id] = docToHtml(text);
+  return out;
+}
 
 /**
  * The page of `specs` over `raw`. `warnings` are the lines the CLI prints while rendering, in order ("  layout …" and
  * "  aviso: …"). Throws E_BUILD_INVALID (with `errors`) on model errors, E_BUILD_VIEW when a view does not resolve (outside
  * a preview) and E_BUILD_EMPTY when no view has content.
  */
-export async function renderViews(raw, specs, { title, preview } = {}) {
+export async function renderViews(raw, specs, { title, preview, docs } = {}) {
   const { errors } = validateModel(raw);
   if (errors.length) throw buildError('E_BUILD_INVALID', `${errors.length} erro(s) no modelo; corrija antes de renderizar`, { errors, warnings: [] });
   const model = normalizeModel(raw);
@@ -33,7 +44,7 @@ export async function renderViews(raw, specs, { title, preview } = {}) {
       throw buildError('E_BUILD_VIEW', `visão "${spec.key}": ${e.message}`, { warnings });
     }
     if (preview) annotateView(view, preview);
-    if (!view.nodes.length) { warnings.push(`  aviso: visão "${spec.key}" ficou vazia — revise scope/anchor/filtros`); continue; }
+    if (!view.nodes.length) { warnings.push(`  aviso: ${emptyViewMessage(model, spec, view)}`); continue; }
     const l = await layoutView(view);
     if (l.layoutStyle) warnings.push(`  layout "${spec.key}": ${l.layoutStyle}${l.layoutAuto ? ` (auto; ${Object.entries(l.layoutScores).map(([k, q]) => `${k} ${q.score}`).join(', ')})` : ' (pedido na visão)'}`);
     for (const a of viewAlerts(view, l)) warnings.push(`  aviso: ${a}`);
@@ -41,7 +52,7 @@ export async function renderViews(raw, specs, { title, preview } = {}) {
   }
   if (!laid.length) throw buildError('E_BUILD_EMPTY', 'nenhuma visão com conteúdo', { warnings });
   const subtitle = `${laid.length} visão(ões) · archlens${preview ? ' · prévia' : ''}`;
-  return { html: renderHtml({ title: title ?? model.name, subtitle, views: laid, ...(preview ? { preview: { label: preview.label } } : {}) }), laid, warnings };
+  return { html: renderHtml({ title: title ?? model.name, subtitle, views: laid, docs: preview ? undefined : docsHtml(docs, laid), ...(preview ? { preview: { label: preview.label } } : {}) }), laid, warnings };
 }
 
 /**
@@ -49,8 +60,8 @@ export async function renderViews(raw, specs, { title, preview } = {}) {
  * none). With `strict` and quality problems, the page goes to "<out>.rejected.html" (`rejected`) and `out` is kept.
  * Without Chromium the page is written and `available` is false, with the `reason`.
  */
-export async function deliverHtml(raw, specs, out, { title, preview, shots = true, strict = false } = {}) {
-  const { html, warnings } = await renderViews(raw, specs, { title, preview });
+export async function deliverHtml(raw, specs, out, { title, preview, docs, shots = true, strict = false } = {}) {
+  const { html, warnings } = await renderViews(raw, specs, { title, preview, docs });
   const stem = out.replace(/\.html?$/i, '');
   const tmp = `${stem}.candidate-${process.pid}.html`;
   mkdirSync(dirname(resolve(out)), { recursive: true });
@@ -81,5 +92,5 @@ export async function buildDiagrams(store, raw, { dir = diagramsDir(store.locato
   const model = specs ? null : normalizeModel(raw);
   const views = specs ?? (model.views.length ? model.views : suggestViews(model));
   mkdirSync(dir, { recursive: true });
-  return deliverHtml(raw, views, join(dir, `${name ?? preview?.name ?? pageName(store.locator)}.html`), { title, preview, shots, strict });
+  return deliverHtml(raw, views, join(dir, `${name ?? preview?.name ?? pageName(store.locator)}.html`), { title, preview, docs: preview ? undefined : store.read()?.docs, shots, strict });
 }

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
-vi.mock('./api', async (orig) => ({ ...(await orig<typeof import('./api')>()), getBases: vi.fn(), getCatalog: vi.fn(), getView: vi.fn(), getElement: vi.fn(), getActions: vi.fn(), flip: vi.fn(), find: vi.fn() }));
+vi.mock('./api', async (orig) => ({ ...(await orig<typeof import('./api')>()), getBases: vi.fn(), getCatalog: vi.fn(), getView: vi.fn(), getElement: vi.fn(), getActions: vi.fn(), flip: vi.fn(), find: vi.fn(), getDoc: vi.fn() }));
 vi.mock('./bridge', async (orig) => ({ ...(await orig<typeof import('./bridge')>()), send: vi.fn() }));
 
 import * as api from './api';
@@ -416,6 +416,18 @@ describe('App: busca em texto', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Explorador' }));
     await userEvent.click(await screen.findByText('Elem B'));
     await waitFor(() => expect(trail()).toBe('Inicial › ctx'));
+  });
+
+  it('a aba Documentação segue o que a rota do cartão diz da base', async () => {
+    handler = () => nd({ type: 'result', result: { kind: 'element', id: 'A' } }, { type: 'done', metrics: { total: 1 } });
+    getElement.mockResolvedValue({ card: null, actions: [], docs: true });
+    vi.mocked(api.getDoc).mockResolvedValue({ text: 'Texto do nó A' });
+    render(<App />);
+    await screen.findByRole('navigation', { name: 'Trilha' });
+    await userEvent.type(await askBox(), 'onde fica o elemento A?{Enter}');
+    await userEvent.click(await screen.findByRole('tab', { name: 'Documentação' }));
+    expect(await screen.findByText('Texto do nó A')).toBeTruthy();
+    expect(api.getDoc).toHaveBeenCalledWith('b', 'A');
   });
 
   it('resultado element seleciona o elemento e abre os detalhes', async () => {

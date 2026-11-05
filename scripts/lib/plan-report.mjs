@@ -4,6 +4,7 @@ import { indexTree } from './raw-tree.mjs';
 import { relationshipIds, hashRaw } from './merge.mjs';
 import { describeItem } from './merge-report.mjs';
 import { short } from './store/contract.mjs';
+import { lineDiff } from './node-doc.mjs';
 
 const byKey = (a, b) => (a.id ?? a.key ?? '') < (b.id ?? b.key ?? '') ? -1 : (a.id ?? a.key ?? '') > (b.id ?? b.key ?? '') ? 1 : 0;
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
@@ -45,6 +46,11 @@ export function reportData(baseRaw, plan, preview, { currentVersion } = {}) {
     ...preview.droppedViews.map(key => ({ key, title: baseViews.get(key)?.title ?? null, kind: 'dropped' })),
   ].sort(byKey);
 
+  // What the plan writes, or may write while the question is open: a kept text is not there.
+  const docs = plan.items.filter(i => i.kind === 'doc' && i.class !== 'unchanged' && i.resolution !== 'keep')
+    .map(i => ({ id: i.target, name: nameOf(i.target), kind: !i.base ? 'new' : i.delta.trim() ? 'replace' : 'clear',
+      resolution: i.resolution ?? null, diff: lineDiff(i.base, i.delta) })).sort(byKey);
+
   const answered = plan.items.filter(i => i.resolution != null);
   const decisions = answered.map(i => ({ n: i.n, text: describeItem(i).split('  → ')[0], resolution: i.resolution }));
   const seen = new Map();
@@ -67,7 +73,7 @@ export function reportData(baseRaw, plan, preview, { currentVersion } = {}) {
       relAdded: relationships.filter(r => r.kind === 'added').length,
       relRemoved: relationships.filter(r => r.kind === 'removed').length,
     },
-    pending, decisions, added, changed, removed, relationships, views,
+    pending, decisions, added, changed, removed, relationships, docs, views,
     // same rule as api.preview: by store version, or (an old plan without one) by the base hash
     stale: plan.storeVersion != null ? currentVersion !== undefined && plan.storeVersion !== currentVersion
       : Boolean(plan.baseHash) && plan.baseHash !== hashRaw(baseRaw ?? null),
@@ -91,6 +97,15 @@ function fieldText({ field, before, after }) {
   return `${field} ${val(before)} → ${val(after)}`;
 }
 
+const DOC_TEXT = { new: 'texto novo', replace: 'troca do texto', clear: 'limpeza do texto' };
+
+/** One node's documentation with its diff, in a fence longer than any run of backticks in the text. */
+function docLines({ id, name, kind, diff }) {
+  const longest = Math.max(0, ...diff.flatMap(({ line }) => line.match(/`+/g) ?? []).map(run => run.length));
+  const fence = '`'.repeat(Math.max(3, longest + 1));
+  return [`- **${name}** (${code(id)}): ${DOC_TEXT[kind]}`, '', `${fence}diff`, ...diff.map(({ sign, line }) => `${sign} ${line}`.trimEnd()), fence];
+}
+
 export function formatReport(d) {
   const out = [];
   if (d.stale) out.push(`> Atenção: a base mudou depois deste plano (${short(d.header.version)} → ${short(d.currentVersion)}); os nomes e valores antigos vêm da base de agora.`, '');
@@ -112,6 +127,7 @@ export function formatReport(d) {
   const sign = { added: '+', removed: '−', changed: '~', retired: '~' };
   section('Relações', d.relationships.map(r => `- ${sign[r.kind]} ${r.fromName} → ${r.toName} (${r.type})${r.description ? `: ${r.description}` : ''}`
     + `${r.fields.length ? `; ${r.fields.map(fieldText).join('; ')}` : ''}${r.kind === 'retired' ? ' (aposentada)' : ''}`));
+  section('Documentação', d.docs.flatMap(docLines));
   const viewText = { added: '+ nova', changed: '~ definição alterada', dropped: '− some ou muda no apply' };
   section('Visões', d.views.map(v => `- ${code(v.key)}${v.title ? ` ${v.title}` : ''}: ${viewText[v.kind]}`));
   return out.join('\n') + '\n';

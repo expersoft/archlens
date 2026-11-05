@@ -221,6 +221,7 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
       if (!r.entry) { note({ text: 'O plano não muda nada na base; nada foi gravado.' }); return; }
       if (r.doc && typeof r.doc === 'object') note({ text: 'Plano aplicado: base gravada.', error: r.doc.error });
       else note({ text: `Plano aplicado: base gravada e ${r.doc ?? 'ARCHITECTURE.md'} regenerado.` });
+      for (const path of r.preserved) note({ text: `Texto do nó removido guardado em ${path}.` });
       note({ text: buildText(base, r.build) });
       commit(null, chatRef.current); // the draft goes; the conversation stays saved
       setPreviews([]);

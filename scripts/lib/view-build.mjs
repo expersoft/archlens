@@ -1,4 +1,5 @@
 import { resolveView } from './query.mjs';
+import { emptyViewMessage } from './query-where.mjs';
 import { layoutView, legibility } from './layout.mjs';
 import { renderHtml, viewData } from './render.mjs';
 
@@ -21,7 +22,7 @@ export async function buildView(model, spec, { embed = true, title, subtitle } =
   const view = resolveView(model, spec);
   const resolve = since(t);
   if (!view.nodes.length) {
-    throw Object.assign(new Error(`visão "${spec.key}" ficou vazia — revise scope/anchor/filtros`), { code: 'E_VIEW_EMPTY' });
+    throw Object.assign(new Error(emptyViewMessage(model, spec, view)), { code: 'E_VIEW_EMPTY' });
   }
   t = performance.now();
   const laid = await layoutView(view);

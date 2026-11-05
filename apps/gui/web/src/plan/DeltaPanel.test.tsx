@@ -39,4 +39,21 @@ describe('DeltaPanel', () => {
     render(<DeltaPanel result={null} />);
     expect(screen.getByText('Nada planejado ainda.')).toBeTruthy();
   });
+
+  it('mostra a documentação com as linhas removidas e acrescentadas', () => {
+    const doc: PlanPreviewResult = {
+      ...result,
+      changes: [{ sign: '~', kind: 'doc', id: 'b', name: 'Checkout', diff: [
+        { sign: ' ', line: 'Igual' }, { sign: '-', line: 'Linha velha' }, { sign: '+', line: 'Linha nova' },
+      ] }],
+    };
+    const { container } = render(<DeltaPanel result={doc} />);
+    expect(screen.getByText('Documentação (1)')).toBeTruthy();
+    const list = screen.getByRole('list', { name: 'Documentação alterada' });
+    expect(list.textContent).toContain('Checkout');
+    expect(container.querySelector('.doc-diff .ln.del')!.textContent).toContain('Linha velha');
+    expect(container.querySelector('.doc-diff .ln.add')!.textContent).toContain('Linha nova');
+    expect(container.querySelector('.doc-diff .ln.same')!.textContent).toContain('Igual');
+    expect(screen.queryByText(/Elementos \(/)).toBeNull();
+  });
 });

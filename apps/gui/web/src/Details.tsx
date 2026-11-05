@@ -1,4 +1,6 @@
+import { Fragment, useState } from 'react';
 import type { Card, RelRef, ViewEdge, ViewNode } from './api';
+import { DocTab } from './DocTab';
 import { layerLabel } from './labels';
 
 export interface DetailsProps {
@@ -11,13 +13,17 @@ export interface DetailsProps {
   /** Seleciona na visão (e no diagrama) o outro nó de uma relação. */
   onSelectInView: (id: string) => void;
   onGlossary: () => void;
+  base?: string | null;
+  /** A base guarda documentação dos nós: mostra as abas. */
+  docsEnabled?: boolean;
 }
 
 const ROLES: Record<string, string> = {
   supporter: 'Suporte', dependent: 'Dependente', both: 'Suporte e dependente', anchor: 'Âncora',
 };
 
-export function Details({ card, viewNode, viewEdges, nodeId, onPick, onSelectInView, onGlossary }: DetailsProps) {
+export function Details({ card, viewNode, viewEdges, nodeId, onPick, onSelectInView, onGlossary, base, docsEnabled }: DetailsProps) {
+  const [tab, setTab] = useState<'details' | 'doc'>('details');
   if (!nodeId) return <div className="dp muted">Selecione um elemento no diagrama ou no Explorador.</div>;
   const e = card?.element;
   const rels = viewNode ? viewEdges.filter((x) => x.from === nodeId || x.to === nodeId) : [];
@@ -27,12 +33,22 @@ export function Details({ card, viewNode, viewEdges, nodeId, onPick, onSelectInV
         {r.sentence ?? `${t}: ${r.name}`}{r.technology && <span className="chip">{r.technology}</span>}
       </li>
     )));
+  const props = Object.entries(card?.properties ?? {});
   const baseRels = card && !viewNode ? [...relList('out', card.outgoing), ...relList('in', card.incoming)] : [];
+  const tabs = !!docsEnabled && !!base;
+  const onDoc = tabs && tab === 'doc';
 
   return (
     <div className="dp">
       <h2>{viewNode?.name ?? e?.name ?? nodeId}</h2>
-      {viewNode && (
+      {tabs && (
+        <div role="tablist" className="dp-tabs">
+          <button type="button" role="tab" aria-selected={!onDoc} className={onDoc ? '' : 'on'} onClick={() => setTab('details')}>Detalhes</button>
+          <button type="button" role="tab" aria-selected={onDoc} className={onDoc ? 'on' : ''} onClick={() => setTab('doc')}>Documentação</button>
+        </div>
+      )}
+      {onDoc && <DocTab base={base!} id={nodeId} />}
+      {!onDoc && viewNode && (
         <section>
           <div className="tag">Nesta visão</div>
           <div className="kind">
@@ -61,7 +77,7 @@ export function Details({ card, viewNode, viewEdges, nodeId, onPick, onSelectInV
           <button type="button" className="linkish" onClick={onGlossary}>Como ler as relações?</button>
         </section>
       )}
-      {card && e && (
+      {!onDoc && card && e && (
         <section className={viewNode ? 'sec' : undefined}>
           {viewNode ? <div className="tag">Na base</div> : (
             <>
@@ -76,6 +92,11 @@ export function Details({ card, viewNode, viewEdges, nodeId, onPick, onSelectInV
             <dt>Id</dt><dd><code>{e.id}</code></dd>
             {e.status && <><dt>Status</dt><dd>{e.status}</dd></>}
           </dl>
+          {props.length > 0 && (
+            <><h3>Propriedades</h3><dl>{props.map(([k, v]) => (
+              <Fragment key={k}><dt>{k}</dt><dd>{Array.isArray(v) ? v.join(', ') : String(v)}</dd></Fragment>
+            ))}</dl></>
+          )}
           {baseRels.length > 0 && <><h3>Relações</h3><ul>{baseRels}</ul></>}
           {card.children.length > 0 && (
             <><h3>Filhos</h3><ul>{card.children.map((c) => <li key={c.id} className="go" onClick={() => onPick(c.id)}>{c.name}</li>)}</ul></>

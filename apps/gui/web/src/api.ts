@@ -39,7 +39,7 @@ export interface ViewResult {
 export interface Action { label: string; spec?: ViewSpec; sub?: Action[]; primary?: boolean; matrix?: boolean }
 export interface ViewNode {
   name: string; typeLabel?: string; c4Label?: string | null; layer?: string; technology?: string | null; description?: string | null;
-  role?: string | null; isAnchor?: boolean; distance?: number | null; status?: string;
+  role?: string | null; isAnchor?: boolean; distance?: number | null; status?: string; whereFrame?: boolean;
 }
 export interface ViewEdge {
   id: string; from: string; to: string; type: string; label?: string | null; technology?: string | null; derived?: boolean;
@@ -58,7 +58,7 @@ export interface Card {
   sources?: { kind?: string; ref?: string; excerpt?: string; date?: string }[];
   rounds?: { id?: string; date?: string; summary?: string; how?: string[] }[];
 }
-export interface ElementDetail { card: Card | null; actions: Action[] }
+export interface ElementDetail { card: Card | null; actions: Action[]; docs?: boolean }
 
 async function call<T>(path: string, body?: unknown): Promise<T> {
   const res = await fetch(path, body === undefined ? undefined : {
@@ -82,6 +82,7 @@ export const getCatalog = (base: string) => call<Catalog>(`${b(base)}/catalog`);
 export const find = (base: string, q: string) => call<FindHit[]>(`${b(base)}/find?q=${encodeURIComponent(q)}`);
 export const getView = (base: string, spec: ViewSpec) => call<ViewResult>(`${b(base)}/view`, { spec });
 export const getElement = (base: string, id: string) => call<ElementDetail>(`${b(base)}/elements/${encodeURIComponent(id)}`);
+export const getDoc = (base: string, id: string) => call<{ text: string | null }>(`${b(base)}/elements/${encodeURIComponent(id)}/doc`);
 /** Só as ações (menu de contexto, duplo clique, Explorador), sem o cartão. */
 export const getActions = (base: string, id: string) => call<{ actions: Action[] }>(`${b(base)}/elements/${encodeURIComponent(id)}/actions`);
 export const flip = (base: string, spec: ViewSpec) => call<{ spec: ViewSpec }>(`${b(base)}/flip`, { spec });
@@ -184,11 +185,13 @@ export const planOpen = (base: string, draft: Draft) => call<{ draft: Draft; war
 export interface PreviewView { key: string; title: string; html?: string; viewData?: unknown; kind: 'change' | 'saved' | 'asked'; error?: string; spec: ViewSpec }
 export interface PreviewField { field: string; before: string; after: string }
 export interface PreviewChange {
-  sign: '+' | '~' | '−'; kind: 'element' | 'relationship'; id: string; name: string;
+  sign: '+' | '~' | '−'; kind: 'element' | 'relationship' | 'doc'; id: string; name: string;
   /** Element type label, or the relationship type. */
   type?: string; description?: string; fields?: PreviewField[];
   /** A relationship's ends (ids). */
   ends?: string[];
+  /** A doc's line diff, whole: ' ' is a line kept. */
+  diff?: { sign: ' ' | '-' | '+'; line: string }[];
 }
 export interface PreviewQuestion { key: string; question: string; options: string[]; assumed: string | null }
 export interface PlanPreviewResult {
@@ -219,6 +222,8 @@ export interface PlanApplyResult {
   /** The regenerated document; `{ error }` when the base was written but the document was not regenerated. */
   doc: string | { error: string } | null;
   build: { available: boolean; problems: number; results: QualityResult[]; reason?: string; error?: string; code?: string } | null;
+  /** Where the text of removed nodes went, relative to the base. */
+  preserved: string[];
   notesDraftNeeded: boolean;
 }
 /** Writes the confirmed plan; `confirm` is the opsHash the user was shown. */

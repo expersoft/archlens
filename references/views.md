@@ -11,6 +11,7 @@ de visões novas sem remodelar. Campos comuns:
 | `include` | ids forçados na visão |
 | `exclude` | padrões: `"<id>"`, `"tag:<tag>"`, `"type:<tipo ArchiMate ou kind C4>"`, `"layer:<camada>"`, `"external"` |
 | `status` | status mostrados (padrão: todos menos `retired`). Esconder um elemento esconde o que está aninhado nele. As-is: `["active","deprecated"]`; to-be: `["draft","planned","active"]`. `draft` aparece em esboço. |
+| `where` | só os nós com estes valores de propriedade, ex.: `{ "squad": "Checkout", "canais": ["web", "app"] }` (veja "Filtro por propriedade") |
 | `layout` | `{ "direction": "RIGHT" \| "DOWN" \| "auto", "aspectRatio": 1.78, "style": "auto" \| "flow" \| "bands" \| "bands-flow" }` (`style` só vale para ArchiMate) |
 | `animation` | `trace` (padrão C4), `story` (dinâmica), `impact` (ArchiMate com âncora), `layers` |
 | `edgeLabels` | mostra rótulos das relações sempre (padrão: C4 sim, ArchiMate só ao destacar/tecla R) |
@@ -175,6 +176,38 @@ do grupo dele, e as setas ligam elementos, nunca a moldura. **ArchiMate:** uma m
 atravessa faixas). `bands` não agrupa: com molduras, `auto` escolhe entre `flow` e `bands-flow`, e `bands` pedido
 vira `bands-flow` com aviso no build. Com `nesting` aninhado, `bands` também vira `bands-flow`.
 
+## Filtro por propriedade
+
+`where` responde "quais sistemas têm squad Checkout?": a visão fica só com os nós que têm o valor em `properties`.
+
+```json
+{ "key": "squad-checkout", "notation": "c4", "level": "landscape",
+  "where": { "squad": "Checkout", "canais": ["web", "app"] } }
+```
+
+- **Valores:** cada chave recebe texto, número, booleano ou uma lista desses. Todas as chaves precisam casar (E); dentro
+  de uma chave, basta um dos valores (OU). A comparação ignora caixa e espaços nas pontas, e uma propriedade em lista
+  casa se algum item casar.
+- **Sem herança:** só vale a propriedade do próprio nó. O valor de um sistema não vale para seus containers e
+  componentes.
+- **Só o que a visão mostraria:** `where` recorta os nós da visão, sem mudar o nível. Para perguntar por sistemas, use
+  uma visão que mostre sistemas (`landscape`); por containers, `container`.
+- **Moldura:** os ancestrais de um nó que entrou ficam como contexto, mesmo sem o valor, e não contam como resultado.
+  No diagrama aparecem esmaecidos; na consulta em markdown, com `(moldura)` depois do nome.
+- **Escopo e âncora:** o filtro é estrito, ao contrário de `groups.only`. Sem o valor, seguem a regra dos ancestrais:
+  ficam como moldura se tiverem filhos no resultado e saem nos demais casos. A fronteira do `scope` só aparece se restar
+  nó interno. Uma âncora fora da visão continua medindo `role` e `distance`, e a matriz de impacto continua inteira.
+- **`depth` e `focus`:** `depth` não traz vizinhos sem o valor. Um `focus` sem o valor deixa a visão vazia.
+- **`include`:** vence o filtro, porque é pedido nominal, e conta como resultado.
+- **`granularity`:** age antes de `where`. Em `impact` e `product-support`, cujo padrão é `container`, um sistema com o
+  valor pode ficar de fora quando seus containers estão na visão; use `granularity: "system"` ou uma visão C4.
+- **Dinâmica** (`level: "dynamic"`): ignora `where`, porque os passos são autorais, e a resposta avisa.
+- **Resultado vazio:** não é erro. A consulta responde `Nenhum nó desta visão tem esse valor em "where".` e, se o modelo
+  tem o valor fora da visão, completa com quantos e em que nível C4 ou tipo: `Fora dela, 3 nós têm o valor: container 2,
+  business-process 1.` Uma visão salva vazia gera aviso com a mesma frase no build e é pulada.
+- `E_VIEW_WHERE`: `where` que não é um objeto não vazio de texto, número, booleano ou lista desses. Numa visão salva, o
+  `validate` e o `check` acusam e o plano sai bloqueado.
+
 ## Layout
 
 - **C4:** ELK *layered* com boundaries aninhados. O padrão é `RIGHT` (paisagem, 16:9). Se `RIGHT` sair alto e
@@ -210,11 +243,14 @@ bin/archlens query architecture/ --element loja.pedidos --depth 1               
 - elementos agrupados por camada (ArchiMate) ou por nível (C4): tabela `nome · tipo/kind · status · tecnologia`;
 - relações: uma linha por aresta, com a frase da ajuda sobre relações (abaixo);
 - viewpoint `impact`: a matriz de dependência como tabela markdown;
-- visões com mais de 40 nós: nota no fim sugerindo recortar.
+- visões com mais de 40 nós: nota no fim sugerindo recortar;
+- com `where`: ancestrais marcados com `(moldura)` e nota quando nenhum nó da visão tem o valor ou a visão dinâmica o
+  ignora.
 
 **Cartão de elemento** (`--element id [--depth N] [--via t1,t2]`): nome, tipo, perfil C4, status, tecnologia,
-descrição, pai e filhos, relações de saída e de entrada agrupadas por tipo, propriedades, fontes (proveniência) e as
-rodadas do histórico que citam o id. Lê só o subgrafo em volta do elemento (padrão `depth: 1`); `--depth N` inclui os
+descrição, pai e filhos, relações de saída e de entrada agrupadas por tipo, propriedades, fontes (proveniência), as
+rodadas do histórico que citam o id e a Documentação do nó, quando há texto (títulos rebaixados, wikilinks como nomes;
+`--doc` imprime só o texto, como está na página). Lê só o subgrafo em volta do elemento (padrão `depth: 1`); `--depth N` inclui os
 vizinhos a N saltos numa seção "Em volta", e `--via` limita a travessia a esses tipos de relação. Id inexistente:
 `E_UNKNOWN_REF` com sugestões por nome e alias.
 

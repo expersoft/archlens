@@ -89,6 +89,25 @@ test('applyAndDocument recusa documento alheio antes de gravar', () => {
   assert.throws(() => writeDocument(store, store.read().raw, {}), { code: 'E_STORE_DOC_FOREIGN' });
 });
 
+test('buildDiagrams de um vault com texto grava a página com o bloco da documentação', async () => {
+  const dir = lojaCopy();
+  assert.equal(run(['store', 'convert', 'architecture', '--to', 'markdown'], dir).status, 0);
+  const page = join(dir, 'architecture', 'application-component', 'loja.web.md');
+  writeFileSync(page, readFileSync(page, 'utf8').trimEnd() + '\n\nTexto **do vault** na API.\n');
+  const store = storeAt(dir);
+  // no Chromium: the page is still written (see the test below) and launching it here would be slow and shared state
+  const saved = process.env.PLAYWRIGHT_BROWSERS_PATH;
+  process.env.PLAYWRIGHT_BROWSERS_PATH = mkdtempSync(join(tmpdir(), 'archlens-nobrowser-'));
+  try {
+    const res = await buildDiagrams(store, store.read().raw, { dir: join(dir, 'out'), name: 'architecture' });
+    const html = readFileSync(res.out, 'utf8');
+    const docs = JSON.parse(html.match(/<script id="archlens-docs" type="application\/json">([\s\S]*?)<\/script>/)[1]);
+    assert.match(docs['loja.web'], /<strong>do vault<\/strong>/);
+  } finally {
+    if (saved === undefined) delete process.env.PLAYWRIGHT_BROWSERS_PATH; else process.env.PLAYWRIGHT_BROWSERS_PATH = saved;
+  }
+});
+
 test('buildDiagrams sem Chromium devolve available false com reason, sem lançar', async () => {
   const dir = lojaCopy();
   const empty = mkdtempSync(join(tmpdir(), 'archlens-nobrowser-'));
@@ -147,4 +166,18 @@ test('CLI e funções dão o mesmo resultado', () => {
   applyAndDocument(storeAt(viaCore), plan);
   assert.deepEqual(snapshot(viaCore), snapshot(viaCli));
   assert.equal(readFileSync(join(viaCore, 'ARCHITECTURE.md'), 'utf8'), readFileSync(join(viaCli, 'ARCHITECTURE.md'), 'utf8'));
+});
+
+test('apply de uma rodada só de documentação conta o texto na linha, no commit sugerido e no cartão', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'archlens-flow-'));
+  cpSync(fileURLToPath(new URL('../examples/loja-online-vault/architecture', import.meta.url)), join(dir, 'architecture'), { recursive: true });
+  cpSync(fileURLToPath(new URL('../examples/loja-online-vault/ARCHITECTURE.md', import.meta.url)), join(dir, 'ARCHITECTURE.md'));
+  const { summary, ...only } = { 'archlens-delta': '1.0', source: { kind: 'prompt', ref: 'rodada' }, summary: '', docs: [{ id: 'loja.web', text: 'Texto novo da loja.' }] };
+  writeFileSync(join(dir, 'd.json'), JSON.stringify(only));
+  assert.equal(run(['plan', 'architecture', 'd.json', '--out', 'p.json'], dir).status, 0);
+  const r = run(['apply', 'architecture', 'p.json'], dir);
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /: \+0 ~0 −0 doc 1\n/);
+  assert.match(r.stdout, /docs\(arquitetura\): \+0 ~0 −0 doc 1/);
+  assert.match(run(['query', 'architecture', '--element', 'loja.web'], dir).stdout, /: \+0 ~0 −0 doc 1 \[documentação\]/);
 });

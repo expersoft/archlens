@@ -1,10 +1,13 @@
-import test from 'node:test';
+import test, { mock } from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtempSync, cpSync, readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createBaseRegistry } from './bases.mjs';
 import { resolveView } from '../../../scripts/lib/query.mjs';
-import { ALL_TOOLS, QUERY_TOOLS, FINAL_TOOLS, runTool, finalize } from './ask/tools.mjs';
+import { ALL_TOOLS, QUERY_TOOLS, FINAL_TOOLS, DOC_LLM_MAX, runTool, finalize } from './ask/tools.mjs';
+import { runPlanTool } from './plan/tools.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const open = () => {
@@ -26,6 +29,60 @@ test('try_view summarises without JSON', async () => {
     assert.ok(r.content.includes('nós:') && r.content.includes('Aplicação'));
     assert.ok(!r.content.includes('{"'));
     assert.equal(r.best.nodes, resolveView(ctx.model, { key: 'ask', ...SUPORTE }).nodes.length);
+  } finally { registry.close(); }
+});
+
+test('try_view answers an empty where without failing', async () => {
+  const { registry, ctx } = open();
+  try {
+    const r = await runTool(ctx, 'try_view', { spec: { notation: 'c4', level: 'landscape', where: { owner: 'ninguém' } } });
+    assert.ok(r.ok, r.content);
+    assert.ok(r.content.includes('Nenhum nó desta visão tem esse valor'));
+    assert.equal(r.best, undefined);
+  } finally { registry.close(); }
+});
+
+test('where sem resultado na visão diz o que há fora dela', async () => {
+  const { registry, ctx } = vaultWith('');
+  try {
+    const spec = { notation: 'c4', level: 'landscape', where: { squad: 'Checkout' } };
+    const tried = await runTool(ctx, 'try_view', { spec });
+    assert.ok(tried.ok, tried.content);
+    assert.match(tried.content, /Fora dela, 3 nós têm o valor: /);
+    const out = finalize(ctx, 'show_view', { spec });
+    assert.equal(out.result.kind, 'none');
+    assert.match(out.result.warning, /^Nenhum nó desta visão tem esse valor em "where"\. Fora dela, 3 nós têm o valor: /);
+  } finally { registry.close(); }
+});
+
+test('try_view counts where results apart from their frames', async () => {
+  const { registry, ctx } = open();
+  try {
+    const spec = { notation: 'archimate', viewpoint: 'application', include: ['loja.pedidos'], where: { owner: 'ninguém' } };
+    const r = await runTool(ctx, 'try_view', { spec });
+    assert.ok(r.ok, r.content);
+    const lines = r.content.split('\n');
+    assert.ok(lines.includes('nós: 1'), r.content);
+    assert.ok(lines.includes('nomes: API de Pedidos'), r.content);
+    assert.ok(lines.includes('molduras: Plataforma de E-commerce'), r.content);
+  } finally { registry.close(); }
+});
+
+test('show_view ends an empty where with the answer', () => {
+  const { registry, ctx } = open();
+  try {
+    const out = finalize(ctx, 'show_view', { spec: { notation: 'c4', level: 'landscape', where: { owner: 'ninguém' } } });
+    assert.deepEqual(out, { ok: true, result: { kind: 'none', warning: 'Nenhum nó desta visão tem esse valor em "where".' } });
+  } finally { registry.close(); }
+});
+
+test('try_view warns that a dynamic view ignores where', async () => {
+  const { registry, ctx } = open();
+  try {
+    const steps = [{ from: 'loja.pedidos', to: 'loja.web', description: 'x' }];
+    const r = await runTool(ctx, 'try_view', { spec: { notation: 'c4', level: 'dynamic', scope: 'loja', steps, where: { owner: 'x' } } });
+    assert.ok(r.ok, r.content);
+    assert.ok(r.content.includes('ignora "where"'));
   } finally { registry.close(); }
 });
 
@@ -104,5 +161,90 @@ test('relations caps the list', async () => {
     assert.ok(r.content.split('\n').filter(l => l.includes('->')).length <= 80);
     const few = await runTool(ctx, 'relations', { ids: ['loja.web'] });
     assert.ok(few.content.includes('(') && few.content.includes('-serving->'));
+  } finally { registry.close(); }
+});
+
+// --- Documentation of a node, over a copy of the vault example. ---
+const vaultWith = text => {
+  const dir = join(mkdtempSync(join(tmpdir(), 'archlens-tools-')), 'arch');
+  cpSync(join(root, 'examples/loja-online-vault/architecture'), dir, { recursive: true });
+  const page = join(dir, 'application-component/loja.pedidos.md');
+  const t = readFileSync(page, 'utf8');
+  const end = '<!-- archlens:end -->';
+  writeFileSync(page, `${t.slice(0, t.indexOf(end) + end.length)}\n\n${text}\n`);
+  const registry = createBaseRegistry({ port: 0, bases: [{ id: 'v', path: dir }] }, { pollMs: 1e6 });
+  return { registry, ctx: registry.get('v') };
+};
+
+test('element_card traz a documentação do nó', async () => {
+  const { registry, ctx } = vaultWith('Texto da API de Pedidos.');
+  try {
+    const r = await runTool(ctx, 'element_card', { id: 'loja.pedidos' });
+    assert.ok(r.ok, r.content);
+    assert.ok(r.content.includes('## Documentação') && r.content.includes('Texto da API de Pedidos.'));
+    assert.ok(!(await runTool(ctx, 'element_card', { id: 'loja.web' })).content.includes('Texto da API de Pedidos.'));
+  } finally { registry.close(); }
+});
+
+test('element_card respeita DOC_LLM_MAX', async () => {
+  const { registry, ctx } = vaultWith('x'.repeat(DOC_LLM_MAX + 500));
+  try {
+    assert.equal(DOC_LLM_MAX, 8000);
+    const { content } = await runTool(ctx, 'element_card', { id: 'loja.pedidos' });
+    assert.ok(content.includes('x'.repeat(DOC_LLM_MAX)) && !content.includes('x'.repeat(DOC_LLM_MAX + 1)));
+    assert.ok(content.includes(`[documentação cortada em ${DOC_LLM_MAX} caracteres]`));
+  } finally { registry.close(); }
+});
+
+test('element_card de um id desconhecido segue dizendo o que há de parecido', async () => {
+  const { registry, ctx } = vaultWith('Texto.');
+  try {
+    const r = await runTool(ctx, 'element_card', { id: 'loja.pedido' });
+    assert.equal(r.ok, false);
+    assert.ok(r.content.includes('loja.pedidos'));
+  } finally { registry.close(); }
+});
+
+const CARD = { id: 'loja.pedidos' };
+const hung = () => new Promise(() => {});
+
+test('falha ao ler a documentação custa só o texto: o cartão vem com o aviso, sem credencial', async () => {
+  const { registry, ctx } = open();
+  try {
+    const broken = { ...ctx, readDoc: async () => { throw new Error('git falhou em https://eu:segredo@host/repo\nsegunda linha'); } };
+    const r = await runTool(broken, 'element_card', CARD);
+    assert.ok(r.ok, r.content);
+    assert.ok(r.content.startsWith('# API de Pedidos\n'));
+    assert.ok(r.content.endsWith('## Documentação\n\n[documentação indisponível: git falhou em https://host/repo]\n'), r.content);
+    const planned = await runPlanTool(broken, {}, 'element_card', CARD);
+    assert.ok(planned.ok && planned.content.includes('[documentação indisponível: '), planned.content);
+  } finally { registry.close(); }
+});
+
+test('leitura presa da documentação: o cartão não espera além do limite', async () => {
+  const { registry, ctx } = open();
+  mock.timers.enable({ apis: ['setTimeout'] });
+  try {
+    const pending = runTool({ ...ctx, readDoc: hung }, 'element_card', CARD);
+    await new Promise(setImmediate);
+    mock.timers.tick(5000);
+    const r = await pending;
+    assert.ok(r.ok, r.content);
+    assert.ok(r.content.includes('[documentação indisponível: a leitura passou de 5 s]'), r.content);
+  } finally { mock.timers.reset(); registry.close(); }
+});
+
+test('cancelar a busca solta o cartão que espera a documentação', async () => {
+  const { registry, ctx } = open();
+  try {
+    const stop = new AbortController();
+    for (const run of [
+      () => runTool({ ...ctx, readDoc: hung }, 'element_card', CARD, { signal: stop.signal }),
+      () => runPlanTool({ ...ctx, readDoc: hung }, {}, 'element_card', CARD, { signal: stop.signal }),
+    ]) {
+      const pending = run();
+      setImmediate(() => stop.abort());
+      assert.ok((await pending).content.includes('[documentação indisponível: leitura cancelada]'));
+    }
   } finally { registry.close(); }
 });

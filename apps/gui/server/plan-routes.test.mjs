@@ -244,7 +244,7 @@ test('base MCP → 409 E_GUI_PLAN_MCP', () => {
   const dir = join(mkdtempSync(join(tmpdir(), 'archlens-proutes-')), 'arch');
   cpSync(join(root, 'examples/loja-online/architecture'), dir, { recursive: true });
   const real = createBaseRegistry({ port: 0, bases: [{ id: 'loja', path: dir }] }, { pollMs: 100000 });
-  const registry = { list: () => real.list(), close: () => real.close(), get: id => ({ ...real.get(id), store: { ...real.get(id).store, remote: {} } }) };
+  const registry = { list: () => real.list(), close: () => real.close(), inTurn: (id, fn) => real.inTurn(id, fn), get: id => ({ ...real.get(id), store: { ...real.get(id).store, remote: {} } }) };
   return withPlan(async url => {
     for (const p of ['plan', 'plan/open', 'plan/preview', 'plan/actions', 'plan/flip', 'plan/apply', 'plan/notes']) {
       const r = await post(url, p, { draft: newDraft({ id: 'loja', version: '' }), message: 'x', history: [], confirm: 'x', notes: 'x', id: 'loja', spec: {} });

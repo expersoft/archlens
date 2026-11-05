@@ -7,6 +7,7 @@ import { layoutView, legibility, layoutQuality, AM_STYLES } from '../scripts/lib
 import { renderHtml, viewData } from '../scripts/lib/render.mjs';
 import { previewModel, annotateView } from '../scripts/lib/preview.mjs';
 import { asBase } from './helpers.mjs';
+import { renderViews } from '../scripts/lib/build.mjs';
 
 const raw = () => JSON.parse(readFileSync(new URL('./fixtures/shop.json', import.meta.url)));
 test('layout assigns absolute coordinates to every node and edge', async () => {
@@ -382,4 +383,68 @@ test('viewData is exported', async () => {
   const d = viewData(await containerView());
   assert.equal(d.nodes['loja.api'].name, 'API');
   assert.equal(typeof d.edges[0].help.sentence, 'string');
+});
+
+// ---- documentation tab
+const docSpecs = [
+  { key: 'a', notation: 'c4', level: 'container', scope: 'loja' },
+  { key: 'b', notation: 'c4', level: 'container', scope: 'loja', title: 'Outra' },
+];
+const dataOf = h => JSON.parse(h.match(/<script id="archlens-data" type="application\/json">([\s\S]*?)<\/script>/)[1]);
+/** The documentation block of a page, parsed; undefined when the page has none. */
+const docsOf = h => { const m = h.match(/<script id="archlens-docs" type="application\/json">([\s\S]*?)<\/script>/); return m ? JSON.parse(m[1]) : undefined; };
+const withDocs = async docs => (await renderViews(asBase(raw()), docSpecs, { docs })).html;
+
+test('a documentação vai uma vez por nó, mesmo em várias visões', async () => {
+  const html = await withDocs({ 'loja.api': 'Texto **marcador-unico**' });
+  assert.equal(html.split('marcador-unico').length - 1, 1);
+  assert.match(docsOf(html)['loja.api'], /<strong>marcador-unico<\/strong>/);
+  assert.equal(dataOf(html).views.length, 2);
+  assert.equal(dataOf(html).docs, undefined, 'the text stays out of the data parsed at load');
+  assert.ok(html.indexOf('<script id="archlens-docs"') > html.indexOf('<script>'), 'the browser reaches the text after the page script');
+});
+
+test('a documentação nunca entra em viewData nem em raw', async () => {
+  const html = await withDocs({ 'loja.api': 'segredo-de-doc' });
+  for (const v of dataOf(html).views) assert.ok(!JSON.stringify(v).includes('segredo-de-doc'));
+});
+
+test('embed e prévia não levam a documentação', async () => {
+  const views = [await containerView()];
+  const embed = renderHtml({ title: 't', views, embed: true, docs: { 'loja.api': '<p>x</p>' } });
+  assert.equal(docsOf(embed), undefined);
+  const p = previewModel(asBase(raw()), { delta: { 'archlens-delta': '1.0', source: { kind: 'prompt', ref: 'r' }, model: { relationships: [{ from: 'cliente', to: 'loja.web', type: 'uses', description: 'Compra online' }] } } });
+  const prev = (await renderViews(p.raw, docSpecs, { docs: { 'loja.api': 'x' }, preview: { ...p, label: 'p' } })).html;
+  assert.match(prev, /preview-banner/);
+  assert.equal(docsOf(prev), undefined);
+});
+
+test('</script> no texto não fecha o bloco de dados', async () => {
+  const html = await withDocs({ 'loja.api': 'antes </script><script>alert(1)</script> depois' });
+  assert.equal(html.split('<script id="archlens-docs"')[1].split('</script>')[0].includes('<script>'), false);
+  const doc = docsOf(html)['loja.api'];
+  assert.doesNotMatch(doc, /<script/i);
+  assert.match(doc, /&lt;\/script&gt;/);
+});
+
+test('</script> cru no HTML da documentação não fecha o bloco dela', async () => {
+  const html = renderHtml({ title: 't', views: [await containerView()], docs: { 'loja.api': '</script><script>alert(1)</script>' } });
+  assert.equal(docsOf(html)['loja.api'], '</script><script>alert(1)</script>');
+  assert.ok(!html.includes('alert(1)</script>'));
+});
+
+test('nó fora das visões não entra', async () => {
+  const html = await withDocs({ 'loja.api': 'a', 'nao.existe': 'b', cliente: 'c' });
+  const ids = new Set(dataOf(html).views.flatMap(v => Object.keys(v.nodes)));
+  for (const id of Object.keys(docsOf(html))) assert.ok(ids.has(id), id);
+  assert.equal(docsOf(html)['nao.existe'], undefined);
+});
+
+test('nó sem texto não ganha aba, e sem textos a página não tem o bloco da documentação', async () => {
+  assert.equal(docsOf(await withDocs({ 'loja.api': '   ' })), undefined);
+  assert.equal(docsOf(await withDocs({})), undefined);
+  assert.equal(docsOf(await withDocs(undefined)), undefined);
+  assert.ok(!(await withDocs({})).includes('<script id="archlens-docs"'));
+  const html = await withDocs({ 'loja.api': 'x' });
+  assert.match(html, /const docs = pageDocs\(\), doc = docs && docs\[id\]/, 'the script builds tabs only for nodes with docs');
 });

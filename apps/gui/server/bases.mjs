@@ -26,16 +26,22 @@ export function navHelpers(model) {
   return { kind, systemOf };
 }
 
-/** The context of one snapshot of the base: `raw`, its `version` and the model the views use. */
-function contextOf(entry, store, raw, version) {
+/**
+ * The context of one snapshot of the base: `raw`, its `version` and the model the views use. `readDoc(id)` resolves to the
+ * current documentation of a node, read with `readRemoteDoc` on a remote connector.
+ */
+function contextOf(entry, store, raw, version, readRemoteDoc) {
   if (!raw) throw guiError('a base está vazia ou não existe');
   const model = normalizeModel(raw);
   const fmt = (model.issues ?? []).find(i => i.code === 'E_STORE_FORMAT');
   if (fmt) throw Object.assign(new Error(fmt.message), { code: 'E_STORE_FORMAT' });
   const { kind, systemOf } = navHelpers(model);
   // The reads of `query --element` over this snapshot: the card matches the views and never goes back to the connector.
-  const snapshot = { read: () => ({ raw }), readSubgraph: q => subgraphOf(raw, q), history: () => raw.changelog ?? [] };
-  return { id: entry.id, name: entry.name ?? model.name ?? entry.id, store, raw, model, version, kind, systemOf, snapshot };
+  // The documentation is the exception: it is not in `raw`, so `readDoc` asks the connector for the current text, and on a
+  // remote one that runs git on this thread (`ctx.readDoc` does not).
+  const snapshot = { read: () => ({ raw }), readSubgraph: q => subgraphOf(raw, q), history: () => raw.changelog ?? [], readDoc: id => store.readDoc(id) };
+  const readDoc = async id => (isRemote(store) ? readRemoteDoc(id) : snapshot.readDoc(id));
+  return { id: entry.id, name: entry.name ?? model.name ?? entry.id, store, raw, model, version, kind, systemOf, snapshot, readDoc };
 }
 
 /** One read of the store: the version is that of the same snapshot. */
@@ -47,16 +53,23 @@ function readStore(store) {
   return { raw: snap?.raw ?? null, version: contentVersion(snap) };
 }
 
-/** `readStore` in a worker thread: `raw` only when the version is not `known`. */
-function readOffThread(path, known, workers) {
+/** A read in a worker thread (see bases-worker.mjs): `data` is { path, known } or { path, doc }. */
+function readOffThread(data, workers) {
   return new Promise((done, fail) => {
-    const w = new Worker(new URL('./bases-worker.mjs', import.meta.url), { workerData: { path, known } });
+    const w = new Worker(new URL('./bases-worker.mjs', import.meta.url), { workerData: data });
     workers.add(w);
     w.once('message', m => (m.error ? fail(Object.assign(new Error(m.error.message), { code: m.error.code })) : done(m)));
     w.once('error', fail);
     w.once('exit', code => { workers.delete(w); if (code) fail(guiError(`a leitura da base parou (código ${code})`)); });
   });
 }
+
+/**
+ * Runs `fn` once what is queued for this base is done, even if that failed. On gbrain git every read fetches, checks out
+ * and cleans the worktree of the tip, where a write puts its files before `git add`: a read in the middle would wipe them.
+ * `fn` must not wait on the queue itself (reload, ctx.readDoc), or it waits for its own end.
+ */
+const inTurn = (slot, fn) => (slot.turn = (slot.turn ?? Promise.resolve()).then(() => fn(), () => fn()));
 
 const describe = e => `${e.code ? `${e.code}: ` : ''}${e.message}`;
 
@@ -65,16 +78,18 @@ const describe = e => `${e.code ? `${e.code}: ` : ''}${e.message}`;
  * worker thread so its `git fetch` does not stall the requests.
  */
 export function createBaseRegistry(config, { pollMs = 5000, remotePollMs = 30000 } = {}) {
-  const slots = new Map(); // id → { entry, store?, remote, ctx?, error?, busy? }
+  const slots = new Map(); // id → { entry, store?, remote, ctx?, error?, busy?, turn? }
   const workers = new Set();
   for (const entry of config.bases) slots.set(entry.id, { entry, remote: false });
+
+  const remoteDoc = slot => id => inTurn(slot, () => readOffThread({ path: slot.entry.path, doc: id }, workers)).then(m => m.text);
 
   const load = slot => {
     try {
       slot.store ??= openStore(resolveBase(slot.entry.path));
       slot.remote = isRemote(slot.store);
       const { raw, version } = readStore(slot.store);
-      slot.ctx = contextOf(slot.entry, slot.store, raw, version);
+      slot.ctx = contextOf(slot.entry, slot.store, raw, version, remoteDoc(slot));
       slot.error = undefined;
     } catch (e) { slot.ctx = undefined; slot.error = describe(e); }
   };
@@ -85,9 +100,9 @@ export function createBaseRegistry(config, { pollMs = 5000, remotePollMs = 30000
   const check = async slot => {
     if (!slot.store) return load(slot);
     const known = slot.ctx?.version;
-    const { raw, version } = slot.remote ? await readOffThread(slot.entry.path, known, workers) : readStore(slot.store);
+    const { raw, version } = slot.remote ? await inTurn(slot, () => readOffThread({ path: slot.entry.path, known }, workers)) : readStore(slot.store);
     if (slot.ctx && version === known) return;
-    slot.ctx = contextOf(slot.entry, slot.store, raw, version);
+    slot.ctx = contextOf(slot.entry, slot.store, raw, version, remoteDoc(slot));
     slot.error = undefined;
   };
   const refreshSlot = slot => (slot.busy ??= check(slot)
@@ -103,6 +118,12 @@ export function createBaseRegistry(config, { pollMs = 5000, remotePollMs = 30000
 
   return {
     refresh: () => refresh(),
+    /** Runs `fn` in the turn of the base (see inTurn): the GUI's writes, and its reads on this thread that a plan depends on. */
+    async inTurn(id, fn) {
+      const slot = slots.get(id);
+      if (!slot) throw guiError(`base desconhecida: ${id}`);
+      return inTurn(slot, fn);
+    },
     /** Reads one base again now (after the GUI wrote it), after any read already under way. */
     async reload(id) {
       const slot = slots.get(id);

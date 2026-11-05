@@ -4,7 +4,8 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, exist
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openStore, resolveBase } from '../scripts/lib/store/index.mjs';
-import { checkConnector, CONNECTOR_METHODS } from '../scripts/lib/store/contract.mjs';
+import { checkConnector, CONNECTOR_METHODS, fileConnector } from '../scripts/lib/store/contract.mjs';
+import { readVault, vaultContents } from '../scripts/lib/store/markdown.mjs';
 import { writeFilesAtomically } from '../scripts/lib/store/atomic.mjs';
 import { diffRaw, contentVersion } from '../scripts/lib/store/ops.mjs';
 import { planMerge, applyPlan } from '../scripts/lib/merge.mjs';
@@ -124,7 +125,28 @@ test('checkConnector requires versioning and objectVersions', () => {
   assert.throws(() => checkConnector({ ...c, versioning: undefined }), /versioning/);
   assert.throws(() => checkConnector({ ...c, versioning: 'page' }), /versioning/);
   assert.throws(() => checkConnector({ ...c, objectVersions: undefined }), /objectVersions/);
+  assert.throws(() => checkConnector({ ...c, readDoc: undefined }), /readDoc/);
+  assert.throws(() => checkConnector({ ...c, supportsDocs: undefined }), /supportsDocs/);
   assert.doesNotThrow(() => checkConnector(c));
+});
+
+test('o conector json não guarda documentação: supportsDocs falso e putDoc recusa', () => {
+  const dir = fresh(dir => dir);
+  const c = create(dir);
+  assert.equal(c.supportsDocs, false);
+  assert.equal(c.read().docs, undefined);
+  assert.equal(c.readDoc('loja'), null);
+  const before = snapshot(dir);
+  assert.throws(() => c.apply([{ op: 'putDoc', id: 'loja', text: 'Texto' }], { baseVersion: c.version() }),
+    e => e.code === 'E_STORE_DOC' && e.message.includes('documentação do nó exige uma base markdown ou gbrain; converta com "archlens store convert"'));
+  assert.deepEqual(snapshot(dir), before, 'nada foi gravado');
+  assert.throws(() => c.apply('nao-lista', { baseVersion: c.version() }), e => e.code === 'E_STORE_OP');
+});
+
+test('o conector markdown declara supportsDocs', () => {
+  const c = connectorAt(fresh(KINDS.find(([k]) => k === 'markdown')[1]));
+  assert.equal(c.supportsDocs, true);
+  assert.equal(c.readDoc('x'), null);
 });
 
 test('a manifest with an unknown store kind is refused', () => {
@@ -139,4 +161,50 @@ test('a failed atomic write removes the folders it created for its temp files, a
   assert.throws(() => writeFilesAtomically(dir, new Map([['device/a.md', 'a'], ['x/y/z/b.md', 'b'], ['node/c.md', 'c']]), { check: fail }), /mudou/);
   assert.deepEqual(readdirSync(dir).sort(), ['node']);
   assert.deepEqual(readdirSync(join(dir, 'node')), [], 'the folder that was there stays, without temp files');
+});
+
+// recheck runs first after apply read the base and before it builds the pages: an edit there comes before the file list.
+const editedBeforePages = (dir, rel, text) => {
+  let done = false;
+  return () => {
+    if (!done) { done = true; writeFileSync(join(dir, rel), `${readFileSync(join(dir, rel), 'utf8')}\n${text}\n`); }
+    return [];
+  };
+};
+const docPlanVault = () => {
+  const dir = fresh(KINDS.find(([k]) => k === 'markdown')[1]);
+  const c = connectorAt(dir);
+  const raw = { archlens: '2.0', name: 'x', model: { elements: [{ id: 'a', type: 'node', name: 'A' }, { id: 'b', type: 'node', name: 'B' }], relationships: [] } };
+  c.apply(diffRaw(c.read(), { raw, notes: {} }), { baseVersion: c.version() });
+  const rename = name => ({ op: 'upsertElement', element: { id: 'a', type: 'node', name } });
+  return { dir, c: connectorAt(dir), rename };
+};
+
+test('edição direta entre a leitura e a troca recusa um plano só de campos e preserva o texto', () => {
+  const { dir, c, rename } = docPlanVault();
+  assert.throws(() => c.apply([rename('A2')], { expect: {}, recheck: editedBeforePages(dir, 'node/a.md', 'Escrito agora') }),
+    e => e.code === 'E_STORE_CONFLICT' && e.conflicts.some(x => x.ref === 'doc:a'));
+  assert.match(readFileSync(join(dir, 'node/a.md'), 'utf8'), /Escrito agora/);
+  assert.equal(c.read().raw.model.elements.find(e => e.id === 'a').name, 'A');
+});
+
+test('edição direta em outra página antes de montar os arquivos recusa, porque a página seria regravada com o texto velho', () => {
+  const { dir, c, rename } = docPlanVault();
+  assert.throws(() => c.apply([rename('A2')], { expect: {}, recheck: editedBeforePages(dir, 'node/b.md', 'Escrito agora') }),
+    e => e.code === 'E_STORE_CONFLICT' && e.conflicts.some(x => x.ref === 'doc:b'));
+  assert.equal(c.readDoc('b'), 'Escrito agora');
+});
+
+test('edição direta numa página que o plano não grava, com os arquivos já montados, não atrapalha', () => {
+  const { dir, c: real, rename } = docPlanVault();
+  // A generator: apply walks it to build the set of files, so what follows the yield runs after the set is closed and
+  // before the check right before the swap reads the base again.
+  const contents = function* (next, cur) {
+    yield* vaultContents(dir, next, cur);
+    writeFileSync(join(dir, 'node/b.md'), `${readFileSync(join(dir, 'node/b.md'), 'utf8')}\nEscrito agora\n`);
+  };
+  const c = fileConnector({ kind: 'markdown', dir, locator: real.locator, describe: 'x', versioning: 'object', docs: true, load: () => readVault(dir), contents });
+  c.apply([rename('A2')], { expect: {} });
+  assert.equal(real.read().raw.model.elements.find(e => e.id === 'a').name, 'A2');
+  assert.equal(real.readDoc('b'), 'Escrito agora');
 });

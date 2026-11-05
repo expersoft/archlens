@@ -146,6 +146,19 @@ _Nenhuma premissa registrada._
 | pagamentos → pedidos | usa | — | — |
 | pedidos → pagamentos | usa | — | — |
 
+## Propriedades
+
+| Elemento | Propriedade | Valor |
+| --- | --- | --- |
+| API de Pedidos | operations | 3 |
+| API de Pedidos | version | 1.4.0 |
+| infra | repo | https://example.com/acme/infra |
+| infra | repoRole | system |
+| pagamentos | repo | https://example.com/acme/pagamentos |
+| pagamentos | repoRole | service |
+| pedidos | repo | https://example.com/acme/pedidos |
+| pedidos | repoRole | service |
+
 ## Fontes
 
 | Tipo | Referência | Data | Itens |

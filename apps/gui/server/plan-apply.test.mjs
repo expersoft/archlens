@@ -44,6 +44,14 @@ const PATHS = /\/home|\/tmp|[A-Z]:\\|archlens plan/;
 const flat = els => els.flatMap(e => [e, ...flat(e.children ?? [])]);
 const elementOf = (dir, id) => flat(modelOf(dir).elements).find(e => e.id === id);
 
+/** Holds the turn of the base as a remote read under way does; `release` lets the queue go on. */
+function holdTurn(registry) {
+  let release;
+  const held = registry.inTurn('loja', () => new Promise(done => { release = done; }));
+  return { held, release: () => release() };
+}
+const settle = () => new Promise(done => setTimeout(done, 150));
+
 async function withoutChromium(fn) {
   const saved = process.env.PLAYWRIGHT_BROWSERS_PATH;
   process.env.PLAYWRIGHT_BROWSERS_PATH = mkdtempSync(join(tmpdir(), 'archlens-nobrowser-'));
@@ -89,6 +97,7 @@ test('apply grava, roda o build e devolve o relatório', () => withPlan(async (u
   assert.deepEqual(out.entry.added, ['sistema-novo']);
   assert.equal(out.doc, 'ARCHITECTURE.md');
   assert.equal(out.notesDraftNeeded, true);
+  assert.deepEqual(out.preserved, []);
   assert.equal(typeof out.build.available, 'boolean');
   assert.equal(typeof out.build.problems, 'number');
   assert.ok(Array.isArray(out.build.results));
@@ -175,7 +184,7 @@ const racing = dir => {
     store.apply = () => { throw storeError('E_STORE_CONFLICT', 'a base mudou'); };
     return { ...ctx, store };
   };
-  return { list: () => real.list(), close: () => real.close(), reload: id => real.reload(id), get: id => wrap(real.get(id)) };
+  return { list: () => real.list(), close: () => real.close(), reload: id => real.reload(id), inTurn: (id, fn) => real.inTurn(id, fn), get: id => wrap(real.get(id)) };
 };
 
 test('apply com conflito na gravação → 409 com mensagem da GUI, sem comando da CLI', () => withPlan(async (url, dir) => {
@@ -246,3 +255,141 @@ test('documento que falha depois da gravação: sucesso com doc.error sem caminh
   };
   return reg;
 } }));
+
+test('a gravação do plano espera a leitura na fila: nada do apply entra na worktree dela', () => withoutChromium(async () => {
+  let registry;
+  await withPlan(async (url, dir) => {
+    const { draft, opsHash } = await opened(url, NEW);
+    const { held, release } = holdTurn(registry);
+    const pending = post(url, 'plan/apply', { draft, confirm: opsHash });
+    await settle();
+    assert.equal(elementOf(dir, 'sistema-novo'), undefined);
+    release();
+    await held;
+    assert.equal((await pending).status, 200);
+    assert.ok(elementOf(dir, 'sistema-novo'));
+  }, { registry: dir => (registry = createBaseRegistry({ port: 0, bases: [{ id: 'loja', path: dir }] }, { pollMs: 1e6 })) });
+  registry.close();
+}));
+
+test('a gravação das notas espera a leitura na fila', async () => {
+  let registry;
+  await withPlan(async (url, dir) => {
+    const notes = () => openStore(resolveBase(dir)).read().notes.notes ?? '';
+    const { held, release } = holdTurn(registry);
+    const pending = post(url, 'plan/notes', { notes: 'Nota escrita na vez dela.\n' });
+    await settle();
+    assert.ok(!notes().includes('Nota escrita na vez dela.'));
+    release();
+    await held;
+    assert.equal((await pending).status, 200);
+    assert.ok(notes().includes('Nota escrita na vez dela.'));
+  }, { registry: dir => (registry = createBaseRegistry({ port: 0, bases: [{ id: 'loja', path: dir }] }, { pollMs: 1e6 })) });
+  registry.close();
+});
+
+test('uma leitura que falha não trava a fila, e o que vem depois roda na ordem', async () => {
+  const dir = lojaCopy().dir;
+  const registry = createBaseRegistry({ port: 0, bases: [{ id: 'loja', path: dir }] }, { pollMs: 1e6 });
+  try {
+    const order = [];
+    const failed = registry.inTurn('loja', async () => { order.push('leitura'); throw new Error('falhou'); });
+    const after = registry.inTurn('loja', () => { order.push('gravação'); return 'ok'; });
+    await assert.rejects(failed, /falhou/);
+    assert.equal(await after, 'ok');
+    assert.deepEqual(order, ['leitura', 'gravação']);
+    await assert.rejects(registry.inTurn('zzz', () => {}), /base desconhecida/);
+  } finally { registry.close(); }
+});
+
+// --- Documentation of a node, over a copy of the vault example. ---
+const END = '<!-- archlens:end -->';
+const DOC_ID = 'loja.pedidos';
+const docDelta = text => ({ 'archlens-delta': '1.0', source: { kind: 'prompt', ref: 'teste' }, model: { elements: [], relationships: [] }, docs: [{ id: DOC_ID, text }] });
+function vaultCopy() {
+  const top = mkdtempSync(join(tmpdir(), 'archlens-pdoc-'));
+  const dir = join(top, 'architecture');
+  cpSync(join(root, 'examples/loja-online-vault/architecture'), dir, { recursive: true });
+  cpSync(join(root, 'examples/loja-online-vault/ARCHITECTURE.md'), join(top, 'ARCHITECTURE.md'));
+  return { top, dir };
+}
+const pageOf = dir => join(dir, 'application-component', `${DOC_ID}.md`);
+const setDoc = (dir, text) => {
+  const t = readFileSync(pageOf(dir), 'utf8');
+  writeFileSync(pageOf(dir), `${t.slice(0, t.indexOf(END) + END.length)}\n\n${text}\n`);
+};
+const docOf = dir => readFileSync(pageOf(dir), 'utf8').split(END)[1].trim();
+const withVault = (fn, setup) => { const copy = vaultCopy(); setDoc(copy.dir, setup ?? ''); return withPlan(fn, { copy }); };
+const answered = (plan, resolution) => ({ ...plan, items: plan.items.map(i => (i.kind === 'doc' && i.class === 'conflict' ? { ...i, resolution } : i)) });
+
+test('remover um nó com texto: a resposta diz para onde o texto foi', () => withVault(async (url, dir) => {
+  const page = join(dir, 'application-component', 'loja.pedidos.repo.md');
+  writeFileSync(page, `${readFileSync(page, 'utf8').trimEnd()}\n\nTexto do repositório.\n`);
+  const { draft } = await opened(url, { 'archlens-delta': '1.0', source: { kind: 'prompt', ref: 'teste' }, ops: [{ op: 'remove', id: 'loja.pedidos.repo' }] });
+  const reviewed = { ...draft, plan: { ...draft.plan, items: draft.plan.items.map(i => (i.resolution === null ? { ...i, resolution: 'yes' } : i)) } };
+  const { opsHash } = await (await post(url, 'plan/preview', { draft: reviewed })).json();
+  assert.ok(opsHash, 'plano final com a resposta');
+  const out = await withoutChromium(async () => (await post(url, 'plan/apply', { draft: reviewed, confirm: opsHash })).json());
+  assert.deepEqual(out.preserved, ['notes/removidos/application-component/loja.pedidos.repo.md']);
+  assert.match(readFileSync(join(dir, out.preserved[0]), 'utf8'), /Texto do repositório\./);
+}));
+
+test('editar o markdown durante a revisão: 409 E_GUI_PLAN_CHANGED e texto preservado', () => withVault(async (url, dir) => {
+  const { draft } = await opened(url, docDelta('Texto novo da API.'));
+  const asked = draft.plan.items.find(i => i.kind === 'doc');
+  assert.equal(asked.class, 'conflict');
+  const reviewed = { ...draft, plan: answered(draft.plan, 'take') };
+  const { opsHash } = await (await post(url, 'plan/preview', { draft: reviewed })).json();
+  assert.ok(opsHash, 'plano final com a resposta');
+  setDoc(dir, 'Alguém escreveu isto no Obsidian.');
+  const r = await post(url, 'plan/apply', { draft: reviewed, confirm: opsHash });
+  assert.equal(r.status, 409);
+  assert.equal((await r.json()).code, 'E_GUI_PLAN_CHANGED');
+  assert.equal(docOf(dir), 'Alguém escreveu isto no Obsidian.');
+}, 'Texto original.'));
+
+test('nó vazio ao planejar e preenchido na revisão: 409 e texto preservado', () => withVault(async (url, dir) => {
+  const { draft, opsHash } = await opened(url, docDelta('Texto do agente.'));
+  assert.equal(draft.plan.state, 'final');
+  assert.equal(draft.plan.items.find(i => i.kind === 'doc').class, 'enrich');
+  setDoc(dir, 'Escrito à mão enquanto o plano era revisado.');
+  const r = await post(url, 'plan/apply', { draft, confirm: opsHash });
+  assert.equal(r.status, 409);
+  const e = await r.json();
+  assert.equal(e.code, 'E_GUI_PLAN_CHANGED');
+  assert.equal(e.opsHash, null);
+  assert.equal(docOf(dir), 'Escrito à mão enquanto o plano era revisado.');
+}));
+
+test('a prévia lista a documentação inteira, com a diferença por linha e sem o corte dos campos', () => withVault(async url => {
+  const long = Array.from({ length: 40 }, (_, i) => `Linha ${i} ${'x'.repeat(20)}`).join('\n');
+  const { draft } = await opened(url, docDelta(long));
+  const out = await (await post(url, 'plan/preview', { draft })).json();
+  const change = out.changes.find(c => c.kind === 'doc');
+  assert.equal(change.sign, '+');
+  assert.equal(change.id, DOC_ID);
+  assert.equal(change.name, 'API de Pedidos');
+  assert.equal(change.diff.length, 40);
+  assert.ok(change.diff.every(l => l.sign === '+'));
+  assert.ok(JSON.stringify(change.diff).length > 300);
+  assert.ok(!JSON.stringify(out.views).includes('Linha 0 xxx'), 'a documentação não entra nas visões');
+}));
+
+test('a prévia de uma troca de texto marca ~ e as linhas - e +', () => withVault(async url => {
+  const { draft } = await opened(url, docDelta('Texto novo.'));
+  const out = await (await post(url, 'plan/preview', { draft })).json();
+  const change = out.changes.find(c => c.kind === 'doc');
+  assert.equal(change.sign, '~');
+  assert.deepEqual(change.diff, [{ sign: '-', line: 'Texto antigo.' }, { sign: '+', line: 'Texto novo.' }]);
+}, 'Texto antigo.'));
+
+test('aplicar grava só o trecho liberado e regenera o documento',() => withVault(async (url, dir, top) => {
+  const before = readFileSync(pageOf(dir), 'utf8');
+  const { draft, opsHash } = await opened(url, docDelta('Texto do agente.'));
+  const r = await post(url, 'plan/apply', { draft, confirm: opsHash });
+  assert.equal(r.status, 200);
+  const after = readFileSync(pageOf(dir), 'utf8');
+  assert.equal(after.slice(0, after.indexOf(END)), before.slice(0, before.indexOf(END)), 'o bloco do archlens não muda');
+  assert.equal(docOf(dir), 'Texto do agente.');
+  assert.match(readFileSync(join(top, 'ARCHITECTURE.md'), 'utf8'), /Texto do agente\./);
+}));

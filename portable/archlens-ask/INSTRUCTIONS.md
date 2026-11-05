@@ -46,7 +46,7 @@ Use só as de leitura do gbrain: `get_page`, `list_pages`, `get_backlinks`, `tra
 ## Formatos de entrega
 
 - **Análise em markdown** (`RULES.md` §7): tabelas por camada ou nível, relações em frases, matriz de impacto, cartão
-  do elemento.
+  do elemento, com a documentação do nó (o texto depois de `<!-- archlens:end -->` na página) quando houver.
 - **Só diagrama(s)** Mermaid: ArchiMate em `flowchart` com caixas `«tipo»` nas cores do archlens (`RULES.md` §8); C4
   na sintaxe C4 nativa do Mermaid, `C4Context`, `C4Container`, `C4Component`, `C4Dynamic`, `C4Deployment`
   (`RULES.md` §9).

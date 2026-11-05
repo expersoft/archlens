@@ -24,7 +24,7 @@ export function buildSchemas() {
       id: str, date: str, source: { $ref: '#/$defs/source' }, summary: str,
       added: { type: 'array', items: str }, changed: { type: 'array', items: str },
       status: { type: 'object', additionalProperties: status }, removed: { type: 'array', items: str },
-      decisions: { type: 'array', items: str },
+      decisions: { type: 'array', items: str }, docs: { description: 'nodes whose documentation this round changed (never the text)', type: 'array', items: str },
     },
   };
   const element = {
@@ -48,6 +48,7 @@ export function buildSchemas() {
       status, statusReason: str, sources,
     },
   };
+  const propertyScalar = { type: ['string', 'number', 'boolean'] };
   const view = {
     $schema: 'https://json-schema.org/draft/2020-12/schema',
     $id: 'https://archlens.local/view.schema.json',
@@ -61,6 +62,8 @@ export function buildSchemas() {
       level: { enum: ['landscape', 'context', 'container', 'component', 'dynamic'] }, scope: str,
       groups: { description: 'groupings: cut the view to their members (only, crossOnly) and draw frames', type: 'object', additionalProperties: false,
         properties: { only: { type: 'array', items: str, minItems: 1 }, crossOnly: { type: 'boolean' }, frames: { type: 'boolean' } } },
+      where: { description: 'keep only the nodes with these property values: every key must match, any value of a key; ancestors stay as frames; dynamic views ignore it', type: 'object', minProperties: 1,
+        additionalProperties: { anyOf: [propertyScalar, { type: 'array', items: propertyScalar, minItems: 1 }] } },
       expand: { description: 'C4 container/dynamic: other software systems whose containers are also shown, each inside its own boundary', type: 'array', items: str },
       focus: { type: 'array', items: str }, depth: { type: 'integer', minimum: 0 },
       steps: { type: 'array', items: { type: 'object', properties: { from: str, to: str, rel: str, description: str, technology: str } } },
@@ -122,6 +125,8 @@ export function buildSchemas() {
         op('status', { status, reason: str }, ['status']),
         op('remove', {}, []),
       ] } },
+      docs: { description: 'documentation of nodes: the text replaces the whole of it, "" clears it', type: 'array', items: {
+        type: 'object', required: ['id', 'text'], additionalProperties: false, properties: { id: str, text: str } } },
     },
     $defs: { element: deltaElement, relationship: deltaRelationship, source },
   };
@@ -135,14 +140,14 @@ export function buildSchemas() {
       items: { type: 'array', items: { type: 'object', required: ['n', 'key', 'class'], properties: {
         n: { type: 'integer' }, key: str,
         class: { enum: ['new', 'unchanged', 'enrich', 'conflict', 'possible-duplicate', 'op'] },
-        kind: { enum: ['element', 'relationship', 'view', 'assumption'] },
+        kind: { enum: ['element', 'relationship', 'view', 'assumption', 'doc'] },
         field: str, when: str, resolution: { type: ['string', 'null'] } } } },
       summary: { type: 'object', additionalProperties: { type: 'integer' } },
       blocked: { type: 'boolean' }, errors: { type: 'array' },
       // Only a final plan carries the store operations that apply it (the last one is appendHistory).
       state: { enum: ['open', 'final'] }, entry: { type: ['object', 'null'] },
       ops: { type: 'array', items: { type: 'object', required: ['op'], properties: { op: { enum: OPS } } } },
-      // ref ("element:<id>", "relationship:<id>", "view:<key>", "note:<name>", "manifest") → version read (null: absent).
+      // ref ("element:<id>", "relationship:<id>", "view:<key>", "note:<name>", "doc:<id>", "manifest") → version read (null: absent).
       objects: { type: 'object', additionalProperties: { type: ['string', 'null'] } },
       // New element id → the possible duplicates found for it when the plan was made.
       knownCandidates: { type: 'object', additionalProperties: { type: 'array', items: str } },

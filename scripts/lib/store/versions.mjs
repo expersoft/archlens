@@ -1,10 +1,11 @@
 // Per-object versions: the objects a plan reads and writes, and their versions in a base. An object is an element, a
-// relationship, a view, a note or the manifest; the history never is. Pure.
+// relationship, a view, a note, the documentation of a node or the manifest; the history never is. Pure.
 import { createHash } from 'node:crypto';
 import { canonicalJson } from '../merge.mjs';
+import { docHash, docOf } from '../node-doc.mjs';
 import { manifestOf, relationshipsById } from './ops.mjs';
 
-/** "element:<id>", "relationship:<id>", "view:<key>", "note:<name>"; the manifest is just "manifest". */
+/** "element:<id>", "relationship:<id>", "view:<key>", "note:<name>", "doc:<id>"; the manifest is just "manifest". */
 export const refOf = (kind, id) => (kind === 'manifest' ? 'manifest' : `${kind}:${id}`);
 
 const parseRef = ref => {
@@ -41,6 +42,7 @@ export function writeSetOf(ops, snapshot) {
       case 'putView': out.add(refOf('view', op.view.key)); break;
       case 'removeView': out.add(refOf('view', op.key)); break;
       case 'putNote': out.add(refOf('note', op.name)); break;
+      case 'putDoc': out.add(refOf('doc', op.id)); break;
       default: break; // appendHistory: the history is never a conflict
     }
   }
@@ -50,9 +52,9 @@ export function writeSetOf(ops, snapshot) {
 const sha = text => `sha256:${createHash('sha256').update(text).digest('hex')}`;
 
 /**
- * ref → version in `snapshot` ({ raw, notes } or null), null when the object does not exist: the hash of the canonical
- * content of an element with the relationships that leave it (a relationship has its origin element's version), of a
- * view, of a note's text or of the manifest. For connectors without their own objectVersions.
+ * ref → version in `snapshot` ({ raw, notes, docs? } or null), null when the object does not exist: the hash of the
+ * canonical content of an element with the relationships that leave it (a relationship has its origin element's version),
+ * of a view, of a note's text, of a node's documentation or of the manifest. For connectors without their own objectVersions.
  */
 export function objectVersionsOf(snapshot, refs) {
   const raw = snapshot?.raw ?? null;
@@ -76,6 +78,10 @@ export function objectVersionsOf(snapshot, refs) {
         return view ? sha(canonicalJson(view)) : null;
       }
       case 'note': return snapshot?.notes?.[id] != null ? sha(snapshot.notes[id]) : null;
+      case 'doc': {
+        const text = docOf(snapshot?.docs, id);
+        return text ? docHash(text) : null;
+      }
       case 'manifest': return raw ? sha(canonicalJson(manifestOf(raw))) : null;
       default: return null;
     }

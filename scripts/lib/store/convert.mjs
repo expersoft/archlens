@@ -17,6 +17,9 @@ import { gbrainGitConnector, TIP } from './gbrain-git.mjs';
 import { gbrainMcpConnector, APPLIES, MIRROR, REMOTE, SESSION } from './gbrain-mcp.mjs';
 import { assertGbrainIds } from './gbrain-layout.mjs';
 
+/** The base without the documentation of its nodes: a conversion carries that text as it is written (see `carry`), or drops it. */
+const modelOf = ({ raw, notes }) => ({ raw, notes });
+
 /** The files of `kind` in `dir` that are the base itself (not notes, views or changelog, which every connector shares). */
 function ownFiles(dir, kind) {
   if (kind === 'markdown') return [...readVault(dir).ctx.pages.values()].map(p => p.rel).concat(existsSync(join(dir, PACK_FILE)) ? [PACK_FILE] : []);
@@ -58,7 +61,7 @@ export function convertFolder(locator, to, { force = false } = {}) {
     const { store, layout, ...top } = readJson(join(tmp, MANIFEST));
     writeFileSync(join(tmp, MANIFEST), JSON.stringify({ ...top, ...(to === 'markdown' ? { store: { kind: 'markdown' } } : {}) }, null, 2) + '\n');
     const target = to === 'markdown' ? markdownConnector({ ...locator, path: tmp }, tmp) : jsonConnector({ ...locator, path: tmp }, tmp);
-    target.apply(diffRaw(target.read(), cur), { baseVersion: target.version() });
+    target.apply(diffRaw(target.read(), modelOf(cur)), { baseVersion: target.version() });
     if (contentVersion(target.read()) !== before) throw storeError('E_STORE_CONVERT', 'a base gravada pelo conector novo não reproduz a original; nada foi trocado');
     renameSync(dir, old);
     renameSync(tmp, dir);
@@ -122,7 +125,7 @@ export function convertToGbrain(locator, store) {
   const target = gbrainGitConnector(locator, valid);
   // The text people wrote in the pages of a vault, and the text kept of removed elements, travel with the base.
   const carry = source.kind === 'markdown' ? { base: readVault(dir), removed: removedFiles(dir) } : undefined;
-  const ops = diffRaw(null, cur);
+  const ops = diffRaw(null, modelOf(cur));
   const expect = Object.fromEntries([...writeSetOf(ops)].map(ref => [ref, null]));
   try {
     target.apply(ops, { expect, carry, fresh: true });
@@ -295,7 +298,7 @@ export function convertFromGbrain(locator, to, { force = false } = {}) {
       }
     } else {
       target = jsonConnector({ ...locator, path: tmp }, tmp);
-      target.apply(diffRaw(target.read(), cur), { baseVersion: target.version() });
+      target.apply(diffRaw(target.read(), modelOf(cur)), { baseVersion: target.version() });
     }
     if (contentVersion(target.read()) !== before) throw storeError('E_STORE_CONVERT', 'a base gravada pelo conector novo não reproduz a original; nada foi trocado');
     const files = filesUnder(tmp).sort((a, b) => (a === MANIFEST ? 1 : b === MANIFEST ? -1 : 0));

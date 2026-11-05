@@ -62,7 +62,8 @@
               "element",
               "relationship",
               "view",
-              "assumption"
+              "assumption",
+              "doc"
             ]
           },
           "field": {
@@ -122,6 +123,7 @@
               "putView",
               "removeView",
               "putNote",
+              "putDoc",
               "appendHistory"
             ]
           }
