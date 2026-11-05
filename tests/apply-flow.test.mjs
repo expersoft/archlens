@@ -89,7 +89,7 @@ test('applyAndDocument recusa documento alheio antes de gravar', () => {
   assert.throws(() => writeDocument(store, store.read().raw, {}), { code: 'E_STORE_DOC_FOREIGN' });
 });
 
-test('buildDiagrams de um vault com texto grava a página com DATA.docs', async () => {
+test('buildDiagrams de um vault com texto grava a página com o bloco da documentação', async () => {
   const dir = lojaCopy();
   assert.equal(run(['store', 'convert', 'architecture', '--to', 'markdown'], dir).status, 0);
   const page = join(dir, 'architecture', 'application-component', 'loja.web.md');
@@ -101,8 +101,8 @@ test('buildDiagrams de um vault com texto grava a página com DATA.docs', async 
   try {
     const res = await buildDiagrams(store, store.read().raw, { dir: join(dir, 'out'), name: 'architecture' });
     const html = readFileSync(res.out, 'utf8');
-    const data = JSON.parse(html.match(/<script id="archlens-data" type="application\/json">([\s\S]*?)<\/script>/)[1]);
-    assert.match(data.docs['loja.web'], /<strong>do vault<\/strong>/);
+    const docs = JSON.parse(html.match(/<script id="archlens-docs" type="application\/json">([\s\S]*?)<\/script>/)[1]);
+    assert.match(docs['loja.web'], /<strong>do vault<\/strong>/);
   } finally {
     if (saved === undefined) delete process.env.PLAYWRIGHT_BROWSERS_PATH; else process.env.PLAYWRIGHT_BROWSERS_PATH = saved;
   }

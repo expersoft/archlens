@@ -363,13 +363,15 @@ export function viewData(v) {
   };
 }
 
-// `docs`: id -> safe HTML (node-doc.docToHtml). Kept once per node, outside viewData, and only for nodes in some view; the
+// `docs`: id -> safe HTML (node-doc.docToHtml). Kept once per node, in a block of its own after the page script (the browser
+// reaches it with the diagram already up) that is parsed only when a drawer opens, and only for nodes in some view; the
 // embed has no drawer, so it never carries them.
 export function renderHtml({ title, subtitle = '', views, preview, embed = false, docs }) {
   const data = views.map(viewData);
   const inViews = new Set(views.flatMap(v => v.nodes.map(n => n.id)));
   const pageDocs = embed ? {} : Object.fromEntries(Object.entries(docs ?? {}).filter(([id, h]) => inViews.has(id) && h));
-  const json = JSON.stringify({ title, minScreenPx: MIN_SCREEN_PX, views: data, ...(embed ? { embed: true } : {}), ...(Object.keys(pageDocs).length ? { docs: pageDocs } : {}) }).replace(/</g, '\\u003c');
+  const json = JSON.stringify({ title, minScreenPx: MIN_SCREEN_PX, views: data, ...(embed ? { embed: true } : {}) }).replace(/</g, '\\u003c');
+  const docsBlock = Object.keys(pageDocs).length ? `<script id="archlens-docs" type="application/json">${JSON.stringify(pageDocs).replace(/</g, '\\u003c')}</script>` : '';
   const sections = views.map((v, i) => `<section class="view" data-view="${esc(v.key)}" data-index="${i}"${i ? ' hidden' : ''}>${viewSvg(v, i)}<div class="legend" hidden>${legend(v)}</div></section>`).join('');
   const options = views.map((v, i) => `<option value="${esc(v.key)}"${i ? '' : ' selected'}>${i + 1}. ${esc(v.title)}</option>`).join('');
   // Embed: the bar is gone, so its height is zero. Keep the space in ":root {": scripts/gen-ask.mjs (themeColors)
@@ -418,7 +420,7 @@ ${embed ? '' : `<div class="legibility" hidden></div>
   ${glossaryHtml(new Set(views.flatMap(v => v.edges.map(e => e.type))))}
 </div>
 <script id="archlens-data" type="application/json">${json}</script>
-<script>${JS}</script>
+<script>${JS}</script>${docsBlock}
 </body>
 </html>
 `;
@@ -964,6 +966,12 @@ const JS = String.raw`
     $('.drawer-body').innerHTML = h;
     $('.drawer').classList.add('open');
   }
+  // the documentation block, parsed once, on the first drawer that needs it
+  let docsRead;
+  function pageDocs() {
+    if (!docsRead) { const block = document.getElementById('archlens-docs'); if (block) docsRead = JSON.parse(block.textContent); }
+    return docsRead;
+  }
   function openDrawer(id) {
     const v = view(), n = v.nodes[id]; if (!n) return;
     if (EMBED) { post({ type: 'select', id }); return; }
@@ -990,7 +998,7 @@ const JS = String.raw`
     if (n.tags && n.tags.length) h += n.tags.map(t => '<span class="chip">' + escH(t) + '</span>').join('');
     if (rels.length) h += '<h3>Relações</h3><ul>' + rels.map(e => '<li data-go="' + escH(e.from === id ? e.to : e.from) + '">' + rel(e) + '</li>').join('') + '</ul><button class="linkish" data-act="glossary">Como ler as relações?</button>';
     h += '<p style="color:var(--muted);font-size:13px;margin-top:18px">' + (v.notation === 'c4' ? 'Laranja: o que ele usa (downstream) · Azul: quem o usa (upstream).' : 'Laranja: o que o sustenta · Azul: o que depende dele.') + ' <kbd>F</kbd> foca, <kbd>Esc</kbd> limpa.</p>';
-    const doc = DATA.docs && DATA.docs[id];
+    const docs = pageDocs(), doc = docs && docs[id];
     $('.drawer-body').innerHTML = doc ? '<div class="dtabs" role="tablist"><button role="tab" class="on" data-tab="details" aria-selected="true">Detalhes</button><button role="tab" data-tab="doc" aria-selected="false">Documentação</button></div><div class="dpane" data-pane="details">' + h + '</div><div class="dpane doc" data-pane="doc" data-id="' + escH(id) + '" hidden></div>' : h;
     $('.drawer').classList.add('open');
   }
@@ -999,7 +1007,7 @@ const JS = String.raw`
     if (!t) return;
     const body = $('.drawer-body'), doc = $('[data-pane="doc"]', body);
     // the text of the documentation enters the DOM on the first click on its tab
-    if (t.dataset.tab === 'doc' && !doc.firstChild) doc.innerHTML = DATA.docs[doc.dataset.id];
+    if (t.dataset.tab === 'doc' && !doc.firstChild) doc.innerHTML = pageDocs()[doc.dataset.id];
     $$('[data-tab]', body).forEach(b => { const on = b === t; b.classList.toggle('on', on); b.setAttribute('aria-selected', on); });
     $$('[data-pane]', body).forEach(p => { p.hidden = p.dataset.pane !== t.dataset.tab; });
   });

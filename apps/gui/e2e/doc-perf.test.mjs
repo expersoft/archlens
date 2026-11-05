@@ -122,8 +122,18 @@ async function medir(urlCom, urlSem, diagrama) {
 test('HTML gerado: o texto entra na página só ao clicar na aba Documentação, sem virar HTML ativo', async (t) => {
   if (skip) return t.skip(skip);
   const p = await novaPagina();
+  // registers each JSON.parse that sees the documentation: none may happen while the page loads
+  await p.addInitScript((trecho) => {
+    const parse = JSON.parse;
+    window.__leituras = 0;
+    JSON.parse = (texto, ...resto) => {
+      if (String(texto).includes(trecho)) window.__leituras++;
+      return parse(texto, ...resto);
+    };
+  }, marca('s0'));
   await p.goto(pathToFileURL(arquivoCom).href);
   await noHtml(p).waitFor();
+  assert.equal(await p.evaluate(() => window.__leituras), 0, 'a documentação foi lida ao abrir a página');
   await p.locator('[data-node="s0"]').first().click();
   const painel = p.locator('.drawer-body');
   const aba = painel.locator('[data-tab="doc"]');
@@ -138,6 +148,14 @@ test('HTML gerado: o texto entra na página só ao clicar na aba Documentação,
   assert.ok((await pagina()).includes(marca('s0')), 'o texto não apareceu depois do clique');
   assert.equal(await aba.getAttribute('aria-selected'), 'true');
   assert.ok(await painel.locator('[data-pane="details"]').isHidden(), 'Detalhes segue visível');
+  await p.locator('.drawer [data-act="close"]').click();
+  await p.locator('[data-node="s1"]').first().click();
+  await painel.locator('[data-tab="doc"]').click();
+  await painel.getByText(marca('s1')).waitFor();
+  assert.equal(await p.evaluate(() => window.__leituras), 1, 'a documentação deve ser lida uma vez só');
+  await p.locator('.drawer [data-act="close"]').click();
+  await p.locator('[data-node="s0"]').first().click();
+  await aba.click();
 
   assert.ok((await pagina()).includes('<script>'), 'o script do texto deveria aparecer como texto');
   assert.equal(await painel.locator('[data-pane="doc"] script, [data-pane="doc"] img').count(), 0);
@@ -172,12 +190,12 @@ test('o HTML gerado abre com documentação como abre sem ela', async (t) => {
   if (skip) return t.skip(skip);
   const { comDoc, semDoc } = await medir(pathToFileURL(arquivoCom).href, pathToFileURL(arquivoSem).href, noHtml);
   console.log(`HTML, mediana de ${ABERTURAS} aberturas até o svg: ${semDoc.toFixed(0)} ms sem documentação, ${comDoc.toFixed(0)} ms com`);
-  assert.ok(comDoc <= semDoc * 1.10 + 50); // ms até o svg aparecer; 50 ms de folga para ruído
+  assert.ok(comDoc <= semDoc * 1.10 + 10); // ms até o svg aparecer; 10 ms de folga para o ruído do relógio
 });
 
 test('a GUI abre com documentação como abre sem ela', async (t) => {
   if (skip) return t.skip(skip);
   const { comDoc, semDoc } = await medir(srvCom.url, srvSem.url, naGui);
   console.log(`GUI, mediana de ${ABERTURAS} aberturas até o svg: ${semDoc.toFixed(0)} ms sem documentação, ${comDoc.toFixed(0)} ms com`);
-  assert.ok(comDoc <= semDoc * 1.10 + 50); // ms até o svg aparecer; 50 ms de folga para ruído
+  assert.ok(comDoc <= semDoc * 1.10 + 10); // ms até o svg aparecer; 10 ms de folga para o ruído do relógio
 });
