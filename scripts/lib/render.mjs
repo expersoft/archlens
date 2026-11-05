@@ -1048,7 +1048,8 @@ const JS = String.raw`
   function renderMatrix() {
     const v = view(); if (!v.matrix) return;
     const role = r => ({ dependent: 'depende', supporter: 'sustenta', both: 'ambos' }[r] || r);
-    let h = '<p style="color:var(--muted)">Âncora: <b>' + escH(v.nodes[v.anchor].name) + '</b>. "Depende": impactado se a âncora falhar. "Sustenta": a âncora precisa dele.</p><table><thead><tr><th>Elemento</th><th>Tipo</th><th>Camada</th><th>Relação</th><th>Dist.</th><th>Caminho</th></tr></thead><tbody>';
+    const anchor = v.nodes[v.anchor]; // a "where" filter may leave the anchor out of the drawing
+    let h = '<p style="color:var(--muted)">' + (anchor ? 'Âncora: <b>' + escH(anchor.name) + '</b>. ' : '') + '"Depende": impactado se a âncora falhar. "Sustenta": a âncora precisa dele.</p><table><thead><tr><th>Elemento</th><th>Tipo</th><th>Camada</th><th>Relação</th><th>Dist.</th><th>Caminho</th></tr></thead><tbody>';
     for (const r of v.matrix) h += '<tr data-id="' + escH(r.id) + '"><td><b>' + escH(r.name) + '</b>' + (r.shown ? '' : ' <span class="chip">oculto na visão</span>') + '</td><td>' + escH(r.typeLabel) + '</td><td>' + escH(r.layerLabel) + '</td><td class="tag-' + r.role + '">' + role(r.role) + '</td><td>' + r.distance + '</td><td>' + r.path.map(p => escH(p.via) + ' → ' + escH(p.name)).join(' · ') + '</td></tr>';
     $('.sheet-body').innerHTML = h + '</tbody></table>';
   }

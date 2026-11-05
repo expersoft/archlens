@@ -76,8 +76,10 @@ export async function tryViewTool(ctx, { spec }) {
   const full = withKey(spec);
   let view;
   try { view = resolveView(ctx.model, full); } catch (e) { return fail(e.message); }
+  if (!view.nodes.length && view.whereResults) return { ok: true, content: 'nenhum nó tem esse valor' };
   if (!view.nodes.length) return fail('a visão ficou vazia: nenhum elemento atende à spec; ajuste anchor, scope, layers ou status');
   const lines = [`nós: ${view.nodes.length}`];
+  if (view.whereIgnored) lines.push('aviso: a visão dinâmica ignora "where"');
   lines.push(`por ${full.notation === 'archimate' ? 'camada' : 'tipo'}: ` + countBy(view.nodes,
     n => full.notation === 'archimate' ? LAYER_LABELS[n.layer] ?? n.layer : n.c4Label ?? n.type));
   const names = view.nodes.slice(0, NAMES_LIMIT).map(n => n.name).join(', ');

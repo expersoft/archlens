@@ -1,6 +1,6 @@
 # archlens-ask — exemplos resolvidos
 
-Quatro perguntas sobre a base de exemplo `loja-online` (prefixo `archlens/`), com o caminho completo: recorte,
+Cinco perguntas sobre a base de exemplo `loja-online` (prefixo `archlens/`), com o caminho completo: recorte,
 chamadas, raciocínio e resposta. Os elementos e as relações de cada resposta são os mesmos que a `archlens-query`
 devolve para o mesmo recorte.
 
@@ -344,3 +344,30 @@ C4Container
 > - Redis (ElastiCache) serve API de Pedidos.
 > - Hospedagem de contêineres serve API de Pedidos.
 > - Mensageria serve API de Pedidos.
+
+---
+
+## Exemplo 5 — "Quais sistemas têm owner Squad Checkout?" (só markdown)
+
+**Recorte:** `{"notation":"c4","level":"landscape","where":{"owner":"Squad Checkout"}}` (`RULES.md` §6). A pergunta é
+por sistemas, então o recorte é o panorama.
+
+**Chamadas:** `list_pages` com a tag `archlens/c4/softwareSystem` e `get_page` de cada candidata, para ler `properties`
+no frontmatter.
+
+**Raciocínio:**
+- `loja` tem `owner: Squad Checkout` e entra. `erp` tem `owner: TI Corporativa` e sai, como todo sistema sem esse valor.
+- Sem herança: nada se conclui sobre os containers de `loja`. Para eles, o recorte seria `level:"container"`, e cada
+  container precisaria ter a propriedade.
+
+**Resposta:**
+
+> # System Landscape
+>
+> Recorte: `{"key":"view","notation":"c4","level":"landscape","where":{"owner":"Squad Checkout"}}`
+>
+> ## Sistemas de software
+>
+> | Nome | Tipo | Status | Tecnologia |
+> |---|---|---|---|
+> | Plataforma de E-commerce | application-component (softwareSystem) | active |  |

@@ -4,6 +4,7 @@ import { LAYER_ORDER, LAYER_LABELS, RELATIONSHIP_TYPES, ELEMENT_TYPES, supportDi
 import { c4KindOf } from './model.mjs';
 import { viewError, matchesPattern } from './query-util.mjs';
 import { groupSpec, groupOf, cutByGroups, cutEdges, frameGroups } from './query-groups.mjs';
+import { whereSpec, cutByWhere } from './query-where.mjs';
 
 const VIEWPOINT_LAYERS = {
   business: ['business'],
@@ -84,6 +85,10 @@ export function resolveArchimate(model, spec) {
     const cut = cutByGroups(model, gs, kept, model.relationships, { depth: spec.depth ?? 0, keepIds: anchor ? [anchor.id] : [] });
     for (const id of [...kept]) if (!cut.has(id)) kept.delete(id);
   }
+  // The anchor may leave here: roles and distances stay measured from it, without drawing it.
+  const where = whereSpec(spec);
+  const whereCut = where ? cutByWhere(model, where, kept, { include: spec.include ?? [] }) : null;
+  if (whereCut) for (const id of [...kept]) if (!whereCut.kept.has(id)) kept.delete(id);
 
   // Real + implicit (nesting) edges among kept elements.
   const edges = [];
@@ -193,6 +198,7 @@ export function resolveArchimate(model, spec) {
     layers: presentLayers, nodes, edges: outEdges, matrix,
     nesting,
     ...(groups ? { groups } : {}),
+    ...(whereCut ? { whereResults: nodes.filter(n => whereCut.results.has(n.id)).map(n => n.id) } : {}),
   };
 }
 

@@ -3,6 +3,7 @@ import { c4KindOf, c4Orientation, childrenOf, ancestors } from './model.mjs';
 import { C4_LABELS, STORE_TAGS } from './registry.mjs';
 import { viewError, matchesPattern } from './query-util.mjs';
 import { groupSpec, groupOf, cutByGroups, cutEdges, frameGroups } from './query-groups.mjs';
+import { whereSpec, cutByWhere } from './query-where.mjs';
 
 // Tags that draw a C4 element as a message queue/topic (horizontal cylinder, like C4-PlantUML ContainerQueue).
 const QUEUE_TAGS = ['queue', 'topic', 'messaging'];
@@ -47,6 +48,7 @@ export function resolveC4(model, spec) {
   }
 
   const gs = groupSpec(model, spec);
+  const where = whereSpec(spec);
 
   // Which elements may appear, and which of them sit inside the opened boundary.
   const visible = new Set();
@@ -178,6 +180,10 @@ export function resolveC4(model, spec) {
     nodes = cutByGroups(model, gs, nodes, edges, { depth: spec.focus?.length ? 0 : (spec.depth ?? 0), keepIds });
   }
 
+  // Stricter than the group cut: neither the scope nor the inside of the boundary is kept. Dynamic steps stay authored.
+  const whereCut = where && level !== 'dynamic' ? cutByWhere(model, where, nodes, { include: (spec.include || []).map(rep) }) : null;
+  if (whereCut) nodes = whereCut.kept;
+
   // Focus: keep the neighbourhood (undirected) of the focused elements up to `depth`.
   const focus = new Set();
   if (spec.focus?.length) {
@@ -245,5 +251,7 @@ export function resolveC4(model, spec) {
     layout: spec.layout ?? null,
     nodes: outNodes, edges, boundaries,
     ...(groups ? { groups } : {}),
+    ...(whereCut ? { whereResults: outNodes.filter(n => whereCut.results.has(n.id)).map(n => n.id) } : {}),
+    ...(where && !whereCut ? { whereIgnored: true } : {}),
   };
 }

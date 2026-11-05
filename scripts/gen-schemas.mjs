@@ -48,6 +48,7 @@ export function buildSchemas() {
       status, statusReason: str, sources,
     },
   };
+  const propertyScalar = { type: ['string', 'number', 'boolean'] };
   const view = {
     $schema: 'https://json-schema.org/draft/2020-12/schema',
     $id: 'https://archlens.local/view.schema.json',
@@ -61,6 +62,8 @@ export function buildSchemas() {
       level: { enum: ['landscape', 'context', 'container', 'component', 'dynamic'] }, scope: str,
       groups: { description: 'groupings: cut the view to their members (only, crossOnly) and draw frames', type: 'object', additionalProperties: false,
         properties: { only: { type: 'array', items: str, minItems: 1 }, crossOnly: { type: 'boolean' }, frames: { type: 'boolean' } } },
+      where: { description: 'keep only the nodes with these property values: every key must match, any value of a key; ancestors stay as frames; dynamic views ignore it', type: 'object', minProperties: 1,
+        additionalProperties: { anyOf: [propertyScalar, { type: 'array', items: propertyScalar, minItems: 1 }] } },
       expand: { description: 'C4 container/dynamic: other software systems whose containers are also shown, each inside its own boundary', type: 'array', items: str },
       focus: { type: 'array', items: str }, depth: { type: 'integer', minimum: 0 },
       steps: { type: 'array', items: { type: 'object', properties: { from: str, to: str, rel: str, description: str, technology: str } } },

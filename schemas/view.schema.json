@@ -106,6 +106,33 @@
         }
       }
     },
+    "where": {
+      "description": "keep only the nodes with these property values: every key must match, any value of a key; ancestors stay as frames; dynamic views ignore it",
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "anyOf": [
+          {
+            "type": [
+              "string",
+              "number",
+              "boolean"
+            ]
+          },
+          {
+            "type": "array",
+            "items": {
+              "type": [
+                "string",
+                "number",
+                "boolean"
+              ]
+            },
+            "minItems": 1
+          }
+        ]
+      }
+    },
     "expand": {
       "description": "C4 container/dynamic: other software systems whose containers are also shown, each inside its own boundary",
       "type": "array",

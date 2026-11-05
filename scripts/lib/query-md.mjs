@@ -15,7 +15,8 @@ function sectionsOf(view) {
   const groups = view.notation === 'c4'
     ? [...C4_SECTIONS, [null, 'Outros']].map(([k, label]) => [label, view.nodes.filter(n => (C4_SECTIONS.some(([c]) => c === n.c4Kind) ? n.c4Kind : null) === k)])
     : [...LAYER_ORDER].map(l => [LAYER_LABELS[l], view.nodes.filter(n => n.layer === l)]);
-  return groups.filter(([, nodes]) => nodes.length).map(([label, nodes]) => ({ label, rows: nodes.map(rowOf) }));
+  const frame = n => view.whereResults && !view.whereResults.includes(n.id);
+  return groups.filter(([, nodes]) => nodes.length).map(([label, nodes]) => ({ label, rows: nodes.map(n => ({ ...rowOf(n), ...(frame(n) ? { frame: true } : {}) })) }));
 }
 
 /** The structured answer for one view spec against a normalized model. */
@@ -26,6 +27,8 @@ export function viewAnswer(model, spec, opts) {
   if (view.nodes.length > MAX_NODES) {
     notes.push(`A visão tem mais de ${MAX_NODES} nós (${view.nodes.length}); considere recortar com focus/depth, collapse ou layers.`);
   }
+  if (view.whereResults?.length === 0) notes.push('Nenhum nó tem esse valor em "where".');
+  if (view.whereIgnored) notes.push('A visão dinâmica ignora "where".');
   return {
     title: view.title,
     spec: { key: view.key, ...spec },
@@ -43,7 +46,7 @@ export function formatViewAnswer(a) {
   const out = [`# ${a.title}`, '', `Visão: \`${JSON.stringify(a.spec)}\``, ''];
   for (const s of a.sections) {
     out.push(`## ${s.label}`, '', ...table(['Nome', 'Tipo', 'Status', 'Tecnologia'],
-      s.rows.map(r => [r.name, r.kind && r.kind !== r.type ? `${r.type} (${r.kind})` : r.type, r.status, r.technology])), '');
+      s.rows.map(r => [r.name + (r.frame ? ' (moldura)' : ''), r.kind && r.kind !== r.type ? `${r.type} (${r.kind})` : r.type, r.status, r.technology])), '');
   }
   if (a.edges.length) out.push('## Relações', '', ...a.edges.map(e => `- ${e.sentence} (${e.type})`), '');
   if (a.matrix) {

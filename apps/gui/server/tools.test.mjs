@@ -29,6 +29,26 @@ test('try_view summarises without JSON', async () => {
   } finally { registry.close(); }
 });
 
+test('try_view answers an empty where without failing', async () => {
+  const { registry, ctx } = open();
+  try {
+    const r = await runTool(ctx, 'try_view', { spec: { notation: 'c4', level: 'landscape', where: { owner: 'ninguém' } } });
+    assert.ok(r.ok, r.content);
+    assert.ok(r.content.includes('nenhum nó tem esse valor'));
+    assert.equal(r.best, undefined);
+  } finally { registry.close(); }
+});
+
+test('try_view warns that a dynamic view ignores where', async () => {
+  const { registry, ctx } = open();
+  try {
+    const steps = [{ from: 'loja.pedidos', to: 'loja.web', description: 'x' }];
+    const r = await runTool(ctx, 'try_view', { spec: { notation: 'c4', level: 'dynamic', scope: 'loja', steps, where: { owner: 'x' } } });
+    assert.ok(r.ok, r.content);
+    assert.ok(r.content.includes('ignora "where"'));
+  } finally { registry.close(); }
+});
+
 test('try_view reports core errors', async () => {
   const { registry, ctx } = open();
   try {
