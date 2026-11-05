@@ -198,8 +198,8 @@ async function rendered(promise) {
   }
 }
 
-async function buildHtml(raw, specs, title, preview) {
-  const res = await rendered(renderViews(raw, specs, { title, preview }));
+async function buildHtml(raw, specs, title, preview, docs) {
+  const res = await rendered(renderViews(raw, specs, { title, preview, docs }));
   printWarnings(res.warnings);
   return res;
 }
@@ -211,7 +211,7 @@ function openFile(path) {
 }
 
 /** The options of deliverHtml / buildDiagrams from the command line (--title, --shots, --strict). */
-const deliverOpts = (args, preview) => ({ title: args.title, preview, shots: args.shots && args.shots !== true ? args.shots : true, strict: !!args.strict });
+const deliverOpts = (args, preview, docs) => ({ title: args.title, preview, docs: preview ? undefined : docs, shots: args.shots && args.shots !== true ? args.shots : true, strict: !!args.strict });
 
 /** Prints a delivery (rendering lines, quality table, result) and returns its problem count; exits 3 when --strict refused it. */
 async function deliver(delivery, args) {
@@ -518,7 +518,7 @@ async function main() {
       const raw = load();
       const model = normalizeModel(raw);
       if (!args.out || args.out === true) fail('informe --out arquivo.html');
-      const { html } = await buildHtml(raw, specsOf(model), args.title, preview);
+      const { html } = await buildHtml(raw, specsOf(model), args.title, preview, preview ? undefined : base.docs);
       atomicWrite(args.out, html);
       console.log(`✓ ${args.out}`);
       if (args.open) openFile(args.out);
@@ -528,7 +528,7 @@ async function main() {
       const raw = load();
       const model = normalizeModel(raw);
       if (!args.out || args.out === true) fail('informe --out arquivo.html');
-      const problems = await deliver(deliverHtml(raw, specsOf(model), args.out, deliverOpts(args, preview)), args);
+      const problems = await deliver(deliverHtml(raw, specsOf(model), args.out, deliverOpts(args, preview, base?.docs)), args);
       process.exitCode = problems ? 3 : 0;
       break;
     }

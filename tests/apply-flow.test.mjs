@@ -89,6 +89,25 @@ test('applyAndDocument recusa documento alheio antes de gravar', () => {
   assert.throws(() => writeDocument(store, store.read().raw, {}), { code: 'E_STORE_DOC_FOREIGN' });
 });
 
+test('buildDiagrams de um vault com texto grava a página com DATA.docs', async () => {
+  const dir = lojaCopy();
+  assert.equal(run(['store', 'convert', 'architecture', '--to', 'markdown'], dir).status, 0);
+  const page = join(dir, 'architecture', 'application-component', 'loja.web.md');
+  writeFileSync(page, readFileSync(page, 'utf8').trimEnd() + '\n\nTexto **do vault** na API.\n');
+  const store = storeAt(dir);
+  // no Chromium: the page is still written (see the test below) and launching it here would be slow and shared state
+  const saved = process.env.PLAYWRIGHT_BROWSERS_PATH;
+  process.env.PLAYWRIGHT_BROWSERS_PATH = mkdtempSync(join(tmpdir(), 'archlens-nobrowser-'));
+  try {
+    const res = await buildDiagrams(store, store.read().raw, { dir: join(dir, 'out'), name: 'architecture' });
+    const html = readFileSync(res.out, 'utf8');
+    const data = JSON.parse(html.match(/<script id="archlens-data" type="application\/json">([\s\S]*?)<\/script>/)[1]);
+    assert.match(data.docs['loja.web'], /<strong>do vault<\/strong>/);
+  } finally {
+    if (saved === undefined) delete process.env.PLAYWRIGHT_BROWSERS_PATH; else process.env.PLAYWRIGHT_BROWSERS_PATH = saved;
+  }
+});
+
 test('buildDiagrams sem Chromium devolve available false com reason, sem lançar', async () => {
   const dir = lojaCopy();
   const empty = mkdtempSync(join(tmpdir(), 'archlens-nobrowser-'));

@@ -1101,3 +1101,19 @@ test('check de um vault: editar o texto de uma página pede archlens build; buil
   assert.match(readFileSync(join(dir, 'ARCHITECTURE.md'), 'utf8'), /Texto escrito à mão\./);
   assert.equal(run(['check', 'architecture'], dir).status, 0);
 });
+
+test('render e deliver de um vault com texto levam a documentação (DATA.docs); base JSON não', () => {
+  const dir = setup();
+  const page = join(dir, 'architecture', 'application-component', 'loja.api.md');
+  const dataOf = f => JSON.parse(readFileSync(f, 'utf8').match(/<script id="archlens-data" type="application\/json">([\s\S]*?)<\/script>/)[1]);
+  assert.equal(run(['render', 'architecture', '--out', 'json.html'], dir).status, 0);
+  assert.equal(dataOf(join(dir, 'json.html')).docs, undefined);
+  assert.equal(run(['store', 'convert', 'architecture', '--to', 'markdown'], dir).status, 0);
+  writeFileSync(page, readFileSync(page, 'utf8').trimEnd() + '\n\nTexto **da API** escrito à mão.\n');
+  const r = run(['render', 'architecture', '--out', 'vault.html'], dir);
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(dataOf(join(dir, 'vault.html')).docs['loja.api'], /<strong>da API<\/strong>/);
+  const d = run(['deliver', 'architecture', '--out', 'deliver.html', '--shots', 'false'], dir);
+  assert.ok([0, 3].includes(d.status), d.stderr);
+  assert.match(dataOf(join(dir, 'deliver.html')).docs['loja.api'], /<strong>da API<\/strong>/);
+});
