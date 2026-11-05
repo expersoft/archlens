@@ -22,8 +22,22 @@ versões seguem [SemVer](https://semver.org/lang/pt-BR/).
   arquitetura, com frase fixa de recusa. Avaliação dos limites com `npm --prefix apps/gui run eval -- --plan-limits`
   (`--dry` sem chave), mais testes de servidor e ponta a ponta (`apps/gui/e2e/plan.test.mjs`).
 
+- **Documentação do nó** (base `markdown` ou `gbrain`): `docs` no delta escreve o texto livre da página, com a diferença
+  linha a linha no plano e pergunta `keep`/`take` ao trocar texto existente; a operação de store `putDoc` grava o texto e
+  a rodada registra quais nós mudaram (`doc N` no resumo), sem copiar o texto. Base `json` recusa com `E_STORE_DOC`.
+- **Abas Documentação:** no painel do nó, na GUI e no HTML gerado, ao lado de Detalhes. O modo Planejar lê e edita o
+  texto, com a diferença no painel Delta. A documentação também aparece no cartão de `query --element`, na busca com LLM
+  e na seção `Documentação dos nós` do `ARCHITECTURE.md`.
+- **`archlens query <base> --element <id> --doc`:** imprime o texto como está na página, títulos e wikilinks intactos,
+  para editar sem perda.
+- **`where` nas visões:** filtro por valor de propriedade, com os ancestrais como moldura (`references/views.md`). Sem
+  resultado, a resposta diz que nenhum nó da visão tem o valor e quantos o têm fora dela. Um `where` malformado numa
+  visão salva é erro em `validate`, `check` e `plan` (`E_VIEW_WHERE`).
+
 ### Mudado
 
+- **`archlens check`:** a mensagem de documento desatualizado agora manda rodar `archlens build` e cita a documentação de
+  um nó entre as causas.
 - **Núcleo:** aplicar, documentar e construir os diagramas viraram funções do núcleo (`scripts/lib/apply-flow.mjs` e
   `scripts/lib/build.mjs`), usadas pela CLI e pela GUI; o comportamento da CLI não muda.
 
