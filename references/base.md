@@ -173,7 +173,7 @@ elemento, então só existe em base `markdown` ou `gbrain`.
   mudam no `build`, e até lá o `archlens check` falha indicando-o.
 - **Conflito:** um plano que escreve a documentação de um nó cujo texto mudou depois da revisão é recusado com
   `E_STORE_CONFLICT`, sem gravar nada. Planos que só mexem em campos ou relações preservam o texto.
-- **Leitura:** aba Documentação na GUI e no HTML gerado, seção Documentação em `archlens query <base> --element <id>`
+- **Leitura:** cartão Documentação no painel do nó da GUI e aba Documentação no HTML gerado, seção Documentação em `archlens query <base> --element <id>`
   (`--doc` imprime só o texto, como está na página) e seção `Documentação dos nós` no `ARCHITECTURE.md`. A busca por nome não olha dentro do texto. Detalhes em
   `references/knowledge-doc.md`.
 

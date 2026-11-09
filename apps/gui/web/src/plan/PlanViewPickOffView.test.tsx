@@ -6,16 +6,11 @@ const shown = {
   views: [], skipped: [], summary: '~1', report: null, opsHash: 'h', questions: [], screenConflicts: [],
   changes: [{ sign: '~', kind: 'element', id: 'a', name: 'Cashback', origin: 'chat', fields: [] }],
 };
-// Like the real diagram frame: asked to focus a node it does not draw, it answers with select(null).
+// The preview does not draw the node, so (as the real one) it neither posts nor answers anything on a focus.
 vi.mock('./PlanPreview', () => ({
-  PlanPreview: ({ onLoaded, onSelect, focus }: { onLoaded?: (r: unknown) => void; onSelect?: (id: string | null) => void; focus?: { id: string; n: number } | null }) => {
-    const seen = useRef<number | undefined>(undefined);
-    useEffect(() => { if (focus && focus.n !== seen.current) { seen.current = focus.n; onSelect?.(null); } }, [focus, onSelect]);
-    return <button type="button" onClick={() => onLoaded?.(shown)}>carregar prévia</button>;
-  },
+  PlanPreview: ({ onLoaded }: { onLoaded?: (r: unknown) => void }) => <button type="button" onClick={() => onLoaded?.(shown)}>carregar prévia</button>,
 }));
 
-import { useEffect, useRef } from 'react';
 import * as api from '../api';
 import { save } from './draftStore';
 import { PlanView } from './PlanView';

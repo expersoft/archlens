@@ -293,15 +293,7 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
   const changed = hasChanges(draft);
   const editDirty = useRef(false);
   const leaveEdit = () => !editDirty.current || window.confirm(DISCARD_EDIT);
-  // The frame answers a focus on a node the view does not draw with select(null); that answer must not clear a pick.
-  const pickedAt = useRef(0);
-  const onDiagramSelect = (id: string | null) => {
-    if (id === null && Date.now() - pickedAt.current < 1500) { pickedAt.current = 0; return; }
-    if (!leaveEdit()) return;
-    setSelected(id);
-    if (id) { setTab('node'); setPanel(true); }
-  };
-  const pick = (id: string) => { if (!leaveEdit()) return; pickedAt.current = Date.now(); setSelected(id); setTab('node'); setPanel(true); setFocus((f) => ({ id, n: (f?.n ?? 0) + 1 })); };
+  const pick = (id: string) => { if (!leaveEdit()) return; setSelected(id); setTab('node'); setPanel(true); setFocus((f) => ({ id, n: (f?.n ?? 0) + 1 })); };
   // The rail button shows its tab; on the tab already shown it hides the panel.
   const railTo = (t: 'delta' | 'node') => {
     if (panel && tab === t) { if (leaveEdit()) setPanel(false); }
@@ -371,7 +363,7 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
             {editError && <p className="err" role="alert">{editError}</p>}
             {applyOpen && shown && <ApplyDialog summary={shown.summary} views={savedViews} busy={applying} error={applyError} onConfirm={() => void apply()} onCancel={() => setApplyOpen(false)} onReplan={replannable ? () => void replan() : undefined} />}
             <PlanPreview base={base} draft={draft} previews={previews} onLoaded={(r, failed) => { setShown(r); if (r) { setListed(r); setConflicts(r.screenConflicts ?? []); } setPreviewFailed(!!failed); }}
-              onNavigate={navigated} onNav={onNav} onSelect={onDiagramSelect} focus={focus} />
+              onNavigate={navigated} onNav={onNav} onSelect={(id) => { if (!leaveEdit()) return; setSelected(id); if (id) { setTab('node'); setPanel(true); } }} focus={focus} />
           </div>
         )}
       />

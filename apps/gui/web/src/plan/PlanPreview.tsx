@@ -108,29 +108,44 @@ export function PlanPreview({ base, draft, previews, onLoaded, onNavigate, onNav
   }, [base, navigate]);
   useEffect(() => { onNav?.({ notation, flip: flipTo }); }, [notation, flipTo, onNav]);
 
+  // A node the view does not draw cannot be selected in the frame (it would answer select(null)); the panel still shows it.
+  const inView = (id: string) => !!(current?.viewData as { nodes?: Record<string, unknown> } | undefined)?.nodes?.[id];
+  const lastSel = useRef<string | null>(null);
+  const echo = useRef<string | null>(null);
+  const reloading = useRef(false);
   useEffect(() => {
-    if (focus) { lastSel.current = focus.id; send(frame.current, { type: 'select', id: focus.id, focus: true }); }
+    if (!focus) return;
+    lastSel.current = focus.id;
+    if (inView(focus.id)) send(frame.current, { type: 'select', id: focus.id, focus: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focus]);
+  // A new document in the frame (or the frame mounted again) loads, says select(null) and then ready.
+  useEffect(() => { reloading.current = true; echo.current = null; }, [current?.html, tab]);
   useEffect(() => { matrixSent.current = null; }, [current?.id, current?.html]);
 
   const nameIn = (id: string) => (current?.viewData as { nodes?: Record<string, { name?: string }> } | undefined)?.nodes?.[id]?.name ?? id;
-  const lastSel = useRef<string | null>(null);
-  const echo = useRef<string | null>(null);
-  const nullTimer = useRef<ReturnType<typeof setTimeout>>();
   const onEvent = (e: BridgeEvent) => {
     if (!draft) return;
     if (e.type === 'theme') setTheme(e.theme);
     else if (e.type === 'select') {
       menuTicket.current++; setMenu(null);
-      if (e.id !== null && e.id === echo.current) { echo.current = null; return; } // the echo of the selection restored after a load
-      if (e.id !== null) { lastSel.current = e.id; onSelect?.(e.id); return; }
-      // A freshly loaded frame says select(null) and, in the same tick, ready: that is not the user deselecting.
-      clearTimeout(nullTimer.current);
-      nullTimer.current = setTimeout(() => { lastSel.current = null; onSelect?.(null); }, 60);
+      if (e.id !== null) {
+        reloading.current = false; // the frame is alive and answering
+        if (e.id === echo.current) { echo.current = null; return; } // the answer to the selection restored after a load
+        echo.current = null;
+        lastSel.current = e.id;
+        onSelect?.(e.id);
+        return;
+      }
+      // A frame that is loading says select(null) on its own; that is not the user deselecting.
+      if (reloading.current) return;
+      lastSel.current = null;
+      onSelect?.(null);
     } else if (e.type === 'ready') {
-      if (nullTimer.current) {
-        clearTimeout(nullTimer.current); nullTimer.current = undefined;
-        if (lastSel.current) { echo.current = lastSel.current; send(frame.current, { type: 'select', id: lastSel.current }); }
+      if (reloading.current) {
+        reloading.current = false;
+        echo.current = null;
+        if (lastSel.current && inView(lastSel.current)) { echo.current = lastSel.current; send(frame.current, { type: 'select', id: lastSel.current }); }
       }
       if (current?.key && matrixKeys.current.has(current.key) && matrixSent.current !== current.id) {
         matrixSent.current = current.id;
