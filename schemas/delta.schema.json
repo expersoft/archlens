@@ -373,6 +373,9 @@
                 "items": {
                   "type": "string"
                 }
+              },
+              {
+                "type": "null"
               }
             ]
           }

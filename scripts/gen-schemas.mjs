@@ -99,6 +99,8 @@ export function buildSchemas() {
   const deltaElement = {
     ...element, required: ['id'],
     properties: { ...element.properties, type: { enum: freeElementTypes },
+      // null removes the property (the merge asks, like any other change)
+      properties: { type: 'object', additionalProperties: { anyOf: [...propertyValue.anyOf, { type: 'null' }] } },
       archimate: { enum: Object.keys(ELEMENT_TYPES).flatMap(t => [t, `archimate:${t}`]) },
       children: { type: 'array', items: { $ref: '#/$defs/element' } } },
   };

@@ -295,7 +295,11 @@ function fieldsOf(target, incoming, names) {
   return [
     // "group": null takes the element out of its group: the key is removed, not set to null.
     ...names.map(f => [f, target[f] ?? (f === 'status' ? 'active' : undefined), incoming[f], v => { if (f === 'group' && v === null) delete target[f]; else target[f] = v; }]),
-    ...Object.entries(incoming.properties || {}).map(([k, v]) => [`properties.${k}`, target.properties?.[k], v, x => { (target.properties ??= {})[k] = x; }]),
+    ...Object.entries(incoming.properties || {}).map(([k, v]) => [`properties.${k}`, target.properties?.[k], v, x => {
+      // "properties": { k: null } removes the property (and the empty object it leaves).
+      if (x === null) { if (target.properties) { delete target.properties[k]; if (!Object.keys(target.properties).length) delete target.properties; } return; }
+      (target.properties ??= {})[k] = x;
+    }]),
   ];
 }
 
@@ -305,6 +309,7 @@ function reconcile(ctx, { fields, keyPrefix, kind, target, dry = false, when }) 
   let changed = false;
   for (const [field, bv, dv, apply] of fields) {
     if (dv === undefined || sameValue(field, bv, dv)) continue;
+    if (dv === null && bv === undefined && field.startsWith('properties.')) continue; // nothing to remove
     if (bv === undefined || bv === '') {
       if (field === 'group' && dv === null) continue; // no group already
       if (!dry) { apply(dv); filled = true; }

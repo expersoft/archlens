@@ -917,3 +917,45 @@ test('docs: o relatório do plano mostra a pergunta com as linhas trocadas', () 
   assert.match(out, /^ {6}\+ novo$/m);
   assert.match(out, /^ {8}igual$/m);
 });
+
+const lojaComProps = () => {
+  const b = shop();
+  find(b.raw ?? b, 'loja').properties = { owner: 'Squad Checkout', criticidade: 'alta' };
+  return b;
+};
+const removeDelta = () => delta({ elements: [{ id: 'loja', properties: { criticidade: null } }] });
+
+test('properties com null remove a chave quando a resposta é take', () => {
+  const plan = planMerge(lojaComProps(), removeDelta(), TODAY);
+  const it = plan.items.find(i => i.key === 'el:loja:properties.criticidade');
+  assert.equal(it.class, 'conflict');
+  assert.equal(it.delta, null);
+  const { raw } = applyPlan(lojaComProps(), answer(structuredClone(plan), { 'el:loja:properties.criticidade': 'take' }), TODAY);
+  assert.deepEqual(find(raw, 'loja').properties, { owner: 'Squad Checkout' });
+});
+
+test('take na última propriedade apaga também o objeto properties', () => {
+  const b = shop();
+  find(b.raw ?? b, 'loja').properties = { criticidade: 'alta' };
+  const plan = planMerge(b, removeDelta(), TODAY);
+  const { raw } = applyPlan(b, answer(structuredClone(plan), { 'el:loja:properties.criticidade': 'take' }), TODAY);
+  assert.equal('properties' in find(raw, 'loja'), false);
+});
+
+test('null numa chave que a base não tem não gera item nem mudança', () => {
+  const plan = planMerge(shop(), removeDelta(), TODAY);
+  assert.equal(plan.items.some(i => i.key === 'el:loja:properties.criticidade'), false);
+  assert.equal(plan.items.some(i => i.class === 'conflict'), false);
+  assert.equal(find(applyPlan(shop(), plan, TODAY).raw, 'loja').properties, undefined);
+});
+
+test('keep mantém a propriedade', () => {
+  const plan = planMerge(lojaComProps(), removeDelta(), TODAY);
+  const { raw } = applyPlan(lojaComProps(), answer(structuredClone(plan), { 'el:loja:properties.criticidade': 'keep' }), TODAY);
+  assert.deepEqual(find(raw, 'loja').properties, { owner: 'Squad Checkout', criticidade: 'alta' });
+});
+
+test('o relatório descreve a remoção da propriedade', () => {
+  const out = formatPlanReport(planMerge(lojaComProps(), removeDelta(), TODAY));
+  assert.match(out, /remover a propriedade "criticidade" \(base "alta"\)  → keep \| take/);
+});

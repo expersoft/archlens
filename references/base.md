@@ -151,7 +151,8 @@ gravada; por isso você pode escrever o delta como sempre (`references/merge.md`
 ## Propriedades
 
 `properties` guarda o que o usuário quer anotar (squad, unidade de negócio, canais): valores texto, número, booleano
-ou **lista de textos**. Um catálogo opcional em `properties` do `archlens.json` (`label`, `type`, `values`,
+ou **lista de textos**. No delta, `properties: { "chave": null }` remove a propriedade do elemento: passa pela pergunta
+de conflito (`keep` mantém, `take` remove) e, se a base não tem a chave, não faz nada. Um catálogo opcional em `properties` do `archlens.json` (`label`, `type`, `values`,
 `appliesTo`) faz o `validate` avisar `W_PROPERTY` (chave desconhecida, tipo errado, valor fora da lista).
 Regra: **propriedade serve para filtrar (`where`, veja `views.md`), elemento serve para atravessar.** Se o usuário
 pedir uma visão que atravesse por um valor ("o que sustenta tudo da squad Checkout"), sugira promovê-lo a
