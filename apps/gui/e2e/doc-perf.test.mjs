@@ -163,17 +163,18 @@ test('HTML gerado: o texto entra na página só ao clicar na aba Documentação,
   await p.close();
 });
 
-test('GUI: a aba Documentação traz o texto do nó só ao ser aberta', async (t) => {
+test('GUI: o cartão Documentação traz o texto do nó só com o cartão aberto', async (t) => {
   if (skip) return t.skip(skip);
   const p = await novaPagina();
+  await p.addInitScript(() => localStorage.setItem('archlens-node-card:doc', 'false')); // cartão recolhido
   await p.goto(srvCom.url);
   await naGui(p).waitFor();
   await p.frameLocator('iframe[title="Diagrama"]').locator('[data-node="s1"]').click();
-  const aba = p.getByRole('tab', { name: 'Documentação' });
-  await aba.waitFor();
+  const toggle = p.locator('[data-card="doc"] .np-toggle');
+  await toggle.waitFor();
   const texto = p.getByText(marca('s1'));
-  assert.equal(await texto.count(), 0, 'o texto apareceu antes do clique');
-  await aba.click();
+  assert.equal(await texto.count(), 0, 'o texto apareceu com o cartão recolhido');
+  await toggle.click();
   await texto.waitFor();
   await p.locator('[data-testid="side-right"] h2', { hasText: 'Visão geral' }).waitFor();
   await p.close();

@@ -303,6 +303,26 @@ avaliação desses limites roda sem chave no `gui:test` e, com um LLM real:
 npm --prefix apps/gui run eval -- --plan-limits [--config archlens-gui.json] [--provider P] [--model M] [--dry]
 ```
 
+### Editar o nó pela tela (Planejar)
+
+No Planejar, a lateral direita tem duas abas, **Delta** e **Nó** (botões no trilho; clicar num nó da prévia ou no nome
+de um item do Delta abre o Nó). O painel mostra o nó **como ficará** (base + rascunho), em cartões recolhíveis, com o
+cabeçalho na cor da camada; o Navegar usa o mesmo painel, só leitura.
+
+- **Propriedades:** `Editar` no cartão abre uma linha por propriedade, onde você altera valores, adiciona outras e
+  remove. O tipo original (número, booleano, lista) é preservado; uma lista se edita como texto separado por vírgula.
+  `Confirmar` põe a edição no rascunho, `Cancelar` descarta.
+- **Documentação** (base `markdown` ou `gbrain`; em base `json` o cartão não aparece): `Editar` abre uma caixa de
+  markdown redimensionável, com `Tela cheia`. Trocar o texto pela tela não abre a pergunta com a diferença do chat.
+- **Origem no Delta:** cada mudança leva o selo **chat** ou **tela**; nas da tela há **Desfazer**, que apaga as edições
+  da tela daquele nó e deixa o nó como o chat o deixa (ou como está na base).
+- **O que não se perde:** as edições da tela ficam numa camada própria do rascunho, que sobrevive a recarregar a
+  página, a `Salvar`/`Abrir` e a um `set_delta` do agente que não cita o nó.
+- **Conflito com o chat:** se o chat quiser mudar uma propriedade ou documentação que você editou, abre um aviso:
+  **Manter o seu** ou **Usar o do chat**; o **Aplicar** fica bloqueado até a resposta.
+- **Enquanto o chat roda**, as edições da tela ficam travadas.
+- Editar a estrutura (nós e relações) pela tela fica para uma fase seguinte.
+
 ## Documentação do nó
 
 Cada nó da base (sistema, processo de negócio ou qualquer outro) carrega duas coisas: `properties`, fatos curtos para

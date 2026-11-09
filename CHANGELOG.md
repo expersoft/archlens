@@ -33,6 +33,13 @@ versões seguem [SemVer](https://semver.org/lang/pt-BR/).
 - **`where` nas visões:** filtro por valor de propriedade, com os ancestrais como moldura (`references/views.md`). Sem
   resultado, a resposta diz que nenhum nó da visão tem o valor e quantos o têm fora dela. Um `where` malformado numa
   visão salva é erro em `validate`, `check` e `plan` (`E_VIEW_WHERE`).
+- **GUI, painel do nó e edição no Planejar:** o painel do nó (Navegar e Planejar) vira cartões recolhíveis, com o
+  cabeçalho na cor da camada, tetos e "Mostrar mais". No Planejar, a lateral direita ganha as abas **Delta** e **Nó**;
+  propriedades (alterar, adicionar, remover) e documentação se editam pela tela, com `Confirmar`/`Cancelar` e tela cheia.
+  As edições entram no Delta com o selo **tela** (ou **chat**) e **Desfazer**, ficam numa camada própria do rascunho
+  (sobrevivem a recarregar, `Salvar`/`Abrir` e `set_delta`) e, se o chat quiser mudar o mesmo valor, um aviso pede
+  **Manter o seu** ou **Usar o do chat**. Rotas `/plan/edit` e `/plan/element`.
+- **Delta:** `null` em `properties` remove a propriedade (com pergunta de conflito no merge).
 
 ### Mudado
 
