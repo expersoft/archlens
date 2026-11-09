@@ -36,11 +36,11 @@ export interface PropsEditorProps {
 /** Editor das propriedades de um nó: linhas chave/valor, × remove (riscada até confirmar), "+ Adicionar propriedade". */
 export function PropsEditor({ base, value, onConfirm, onCancel, busy, onDirty }: PropsEditorProps) {
   const nextId = useRef(0);
-  const initial = Object.entries(value).map(([key, v]): Row => ({ rid: nextId.current++, key, text: show(v), fresh: false, removed: false }));
+  const [initial] = useState<Row[]>(() => Object.entries(value).map(([key, v]): Row => ({ rid: nextId.current++, key, text: show(v), fresh: false, removed: false })));
   const [rows, setRows] = useState<Row[]>(initial);
   const patch = (rid: number, p: Partial<Row>) => setRows((rs) => rs.map((r) => (r.rid === rid ? { ...r, ...p } : r)));
 
-  const changes: Record<string, PropValue | null> = {};
+  const changes: Record<string, PropValue | null> = Object.create(null);
   const status = new Map<number, 'mod' | 'add' | 'del' | ''>();
   for (const r of rows) {
     const k = r.key.trim();

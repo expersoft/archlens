@@ -3,7 +3,7 @@ import { ApiError, planApply, planNotes, planOpen, planTurn, type AppliedRound, 
 import { ApplyDialog } from './ApplyDialog';
 import { PlanPreview, type PreviewNav } from './PlanPreview';
 import { DeltaPanel } from './DeltaPanel';
-import { DISCARD_EDIT, NodePanel } from './NodePanel';
+import { NodePanel } from './NodePanel';
 import { useStoredState } from '../store';
 import { PlanChat } from './PlanChat';
 import { Split } from './Split';
@@ -12,6 +12,7 @@ import { clear, hasChanges, load, save, type ChatMsg } from './draftStore';
 const HISTORY_MAX = 40; // the server's limit
 const TOO_BIG = 'o rascunho não cabe no navegador; baixe-o para não perder o trabalho';
 const REPLACE = 'Substituir o rascunho atual pelo do arquivo? O atual se perde se não foi baixado.';
+const DISCARD_EDIT = 'Descartar a edição não confirmada?';
 const DISCARD = 'Descartar o rascunho atual? Ele se perde se não foi baixado.';
 const CLEAR_PENDING = 'Há decisão ou notas esperando resposta nesta conversa. Limpar mesmo assim? O rascunho do delta continua.';
 const BROKEN = 'o rascunho salvo não abre; descarte-o ("Descartar rascunho") ou suba outro';

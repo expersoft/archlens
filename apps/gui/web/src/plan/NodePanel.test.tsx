@@ -119,24 +119,14 @@ describe('NodePanel', () => {
       expect(screen.getByLabelText('Documentação')).toBeTruthy();
     });
 
-    it('trocar de nó com texto não confirmado pede confirmação', async () => {
-      const c = card('a', 'Cashback');
-      c.parent = { id: 'p', name: 'Pai' } as api.Card['parent'];
-      planElement.mockResolvedValue({ ...el('a', 'Cashback', { docs: true, doc: 'x', docRaw: 'x' }), card: c });
-      const onPick = vi.fn();
-      const ask = vi.spyOn(window, 'confirm').mockReturnValue(false);
-      render(<NodePanel base="b" draft={draft()} id="a" onDraft={() => {}} onPick={onPick} />);
+    it('o editor continua aberto, com o texto, quando o pai renderiza com outro onDirty', async () => {
+      planElement.mockResolvedValue(el('a', 'Cashback', { docs: true, doc: 'x', docRaw: 'x' }));
+      const { rerender } = render(<NodePanel base="b" draft={draft()} id="a" onDraft={() => {}} onDirty={() => {}} />);
       await screen.findByRole('heading', { name: 'Cashback' });
       fireEvent.click(screen.getByRole('button', { name: /Editar documentação/ }));
       fireEvent.change(screen.getByLabelText('Documentação'), { target: { value: 'novo' } });
-      fireEvent.click(screen.getByRole('button', { name: /Na base/ }));
-      fireEvent.click(screen.getByText('Pai', { selector: 'dd' }));
-      expect(ask).toHaveBeenCalledWith('Descartar a edição não confirmada?');
-      expect(onPick).not.toHaveBeenCalled();
-      ask.mockReturnValue(true);
-      fireEvent.click(screen.getByText('Pai', { selector: 'dd' }));
-      expect(onPick).toHaveBeenCalledWith('p');
-      ask.mockRestore();
+      rerender(<NodePanel base="b" draft={draft()} id="a" onDraft={() => {}} onDirty={() => {}} />);
+      expect((screen.getByLabelText('Documentação') as HTMLTextAreaElement).value).toBe('novo');
     });
   });
 });

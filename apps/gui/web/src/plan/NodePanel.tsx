@@ -18,7 +18,6 @@ export interface NodePanelProps {
   onDirty?: (dirty: boolean) => void;
 }
 
-export const DISCARD_EDIT = 'Descartar a edição não confirmada?';
 
 type Loaded = { draft: Draft; id: string; el: PlanElement } | { draft: Draft; id: string; error: string };
 
@@ -28,10 +27,12 @@ export function NodePanel({ base, draft, id, onPick, onDraft, onDirty }: NodePan
   const [editing, setEditing] = useState<{ id: string; kind: 'properties' | 'doc' } | null>(null);
   const [busy, setBusy] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
-  const dirty = useRef(false);
-  const setDirty = useCallback((d: boolean) => { dirty.current = d; onDirty?.(d); }, [onDirty]);
-  useEffect(() => () => { onDirty?.(false); }, [onDirty]);
-  // Another node never inherits the editor of the previous one.
+  // The host's callback may change identity on every render: it is read through a ref, never a dependency.
+  const onDirtyRef = useRef(onDirty);
+  onDirtyRef.current = onDirty;
+  const setDirty = useCallback((d: boolean) => { onDirtyRef.current?.(d); }, []);
+  useEffect(() => () => { onDirtyRef.current?.(false); }, []);
+  // Another node never inherits the editor of the previous one (the host already asked before leaving a dirty one).
   useEffect(() => { setEditing(null); setEditError(null); setDirty(false); }, [id, setDirty]);
 
   useEffect(() => {
@@ -51,7 +52,6 @@ export function NodePanel({ base, draft, id, onPick, onDraft, onDirty }: NodePan
   if ('error' in cur) return <p className="warn" role="alert">{cur.error}</p>;
   const { el } = cur;
   const mine = editing?.id === id ? editing.kind : null;
-  const leave = () => !dirty.current || window.confirm(DISCARD_EDIT);
   const close = () => { setEditing(null); setEditError(null); setDirty(false); };
   const open = (kind: 'properties' | 'doc') => { setEditError(null); setEditing({ id, kind }); };
   const save = async (edit: ScreenEdit) => {
@@ -105,8 +105,8 @@ export function NodePanel({ base, draft, id, onPick, onDraft, onDirty }: NodePan
         viewNode={null}
         viewEdges={[]}
         nodeId={id}
-        onPick={(x) => { if (leave()) onPick?.(x); }}
-        onSelectInView={(x) => { if (leave()) onPick?.(x); }}
+        onPick={(x) => onPick?.(x)}
+        onSelectInView={(x) => onPick?.(x)}
         onGlossary={() => {}}
         base={base}
         docsEnabled={el.docs}
