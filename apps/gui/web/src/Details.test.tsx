@@ -126,6 +126,17 @@ describe('Details', () => {
     expect(screen.getByRole('button', { name: /Relações na visão/ }).getAttribute('aria-expanded')).toBe('false');
   });
 
+  it('dois cartões recolhidos continuam recolhidos ao trocar de nó', async () => {
+    const withProps: Card = { ...card, properties: { squad: 'Checkout' } };
+    const view = { card: withProps, viewNode: node, viewEdges: edges };
+    const { rerender } = render(<Details {...props} {...view} />);
+    await userEvent.click(screen.getByRole('button', { name: /Propriedades/ }));
+    await userEvent.click(screen.getByRole('button', { name: /Nesta visão/ }));
+    rerender(<Details {...props} {...view} nodeId="outro" />);
+    expect(screen.getByRole('button', { name: /Propriedades/ }).getAttribute('aria-expanded')).toBe('false');
+    expect(screen.getByRole('button', { name: /Nesta visão/ }).getAttribute('aria-expanded')).toBe('false');
+  });
+
   it('base JSON: sem cartão Documentação', () => {
     render(<Details {...props} card={card} viewNode={null} viewEdges={edges} base="b" docsEnabled={false} />);
     expect(screen.queryByText('Documentação')).toBeNull();
@@ -133,7 +144,7 @@ describe('Details', () => {
   });
 
   it('documentação só é buscada com o cartão aberto', async () => {
-    localStorage.setItem('archlens-node-cards', JSON.stringify({ doc: false }));
+    localStorage.setItem('archlens-node-card:doc', 'false');
     render(<Details {...props} card={card} viewNode={null} viewEdges={edges} base="b" docsEnabled />);
     expect(getDoc).not.toHaveBeenCalled();
     await userEvent.click(screen.getByRole('button', { name: /Documentação/ }));

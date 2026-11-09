@@ -81,7 +81,12 @@ describe('DocTab', () => {
     expect(container.querySelector('.doc-box.open')).toBeTruthy();
     await userEvent.click(screen.getByRole('button', { name: 'Tela cheia' }));
     expect(screen.getByRole('dialog', { name: 'Documentação em tela cheia' })).toBeTruthy();
+    expect(screen.getByRole('dialog').getAttribute('aria-modal')).toBe('true');
+    expect(document.activeElement).toBe(screen.getByRole('dialog'));
     await userEvent.click(screen.getByRole('button', { name: 'Fechar' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'Tela cheia' }));
+    await userEvent.keyboard('{Escape}');
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 });

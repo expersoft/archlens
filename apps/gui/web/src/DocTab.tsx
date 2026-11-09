@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { getDoc } from './api';
 import { Markdown } from './plan/Markdown';
 
@@ -21,6 +21,15 @@ export function DocTab({ base, id, text, max }: DocTabProps) {
   const [expanded, setExpanded] = useState(false);
   const [full, setFull] = useState(false);
   const given = text !== undefined;
+  const fullRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!full) return undefined;
+    fullRef.current?.focus();
+    const onKey = (ev: KeyboardEvent) => { if (ev.key === 'Escape') setFull(false); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [full]);
 
   useEffect(() => {
     if (given) return undefined;
@@ -51,7 +60,7 @@ export function DocTab({ base, id, text, max }: DocTabProps) {
         <button type="button" className="linkish" onClick={() => setFull(true)}>Tela cheia</button>
       </div>
       {full && (
-        <div className="doc-full" role="dialog" aria-label="Documentação em tela cheia">
+        <div className="doc-full" role="dialog" aria-modal="true" aria-label="Documentação em tela cheia" tabIndex={-1} ref={fullRef}>
           <div className="doc-full-bar"><button type="button" onClick={() => setFull(false)}>Fechar</button></div>
           <Markdown text={body} className="doc-text" />
         </div>

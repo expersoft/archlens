@@ -15,12 +15,13 @@ export interface NodeCardProps {
 
 /** Cartão recolhível do painel do nó. O conteúdo só é montado com o cartão aberto. */
 export function NodeCard({ id, title, count, actions, badge, defaultOpen = true, children }: NodeCardProps) {
-  const [states, setStates] = useStoredState<Record<string, boolean>>('archlens-node-cards', {});
-  const open = states[id] ?? defaultOpen;
+  // Uma chave por cartão: cada um lê e grava só a sua, sem sobrescrever o estado dos outros.
+  const [saved, setSaved] = useStoredState<boolean | null>(`archlens-node-card:${id}`, null);
+  const open = saved ?? defaultOpen;
   return (
     <section className="np-card" data-card={id}>
       <div className="np-card-h">
-        <button type="button" className="np-toggle" aria-expanded={open} onClick={() => setStates((s) => ({ ...s, [id]: !open }))}>
+        <button type="button" className="np-toggle" aria-expanded={open} onClick={() => setSaved(!open)}>
           <span className="np-tw" aria-hidden="true">{open ? '▾' : '▸'}</span>
           <span className="np-title">{title}</span>
           {count != null && <span className="np-count">{count}</span>}
