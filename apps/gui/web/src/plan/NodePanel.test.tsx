@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 
-vi.mock('../api', async (orig) => ({ ...(await orig<typeof import('../api')>()), planElement: vi.fn() }));
+vi.mock('../api', async (orig) => ({ ...(await orig<typeof import('../api')>()), planElement: vi.fn(), planEdit: vi.fn() }));
 
 import * as api from '../api';
 import { NodePanel } from './NodePanel';
@@ -13,6 +13,7 @@ const card = (id: string, name: string): api.Card => ({
 });
 const el = (id: string, name: string, over: Partial<api.PlanElement> = {}): api.PlanElement => ({ card: card(id, name), doc: null, docRaw: null, docs: false, removed: false, ...over });
 const planElement = vi.mocked(api.planElement);
+const planEdit = vi.mocked(api.planEdit);
 
 beforeEach(() => { vi.resetAllMocks(); });
 
@@ -56,5 +57,86 @@ describe('NodePanel', () => {
     planElement.mockRejectedValue(new Error('nó não existe'));
     render(<NodePanel base="b" draft={draft()} id="zzz" onDraft={() => {}} />);
     expect(await screen.findByText('nó não existe')).toBeTruthy();
+  });
+
+  describe('edição', () => {
+    const newDraft = { ...draft(9), edits: { a: { properties: { dono: 'outro' } } } };
+    it('editar propriedades chama planEdit com { op: "properties" } e devolve o rascunho por onDraft', async () => {
+      planElement.mockResolvedValue(el('a', 'Cashback', { docs: true, docRaw: 'x', doc: 'x' }));
+      planEdit.mockResolvedValue({ draft: newDraft, opsHash: 'h', screenConflicts: [] });
+      const onDraft = vi.fn();
+      render(<NodePanel base="b" draft={draft()} id="a" onDraft={onDraft} />);
+      await screen.findByRole('heading', { name: 'Cashback' });
+      fireEvent.click(screen.getByRole('button', { name: /Editar propriedades/ }));
+      fireEvent.change(screen.getByLabelText('Valor de dono'), { target: { value: 'outro' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Confirmar' }));
+      await waitFor(() => expect(onDraft).toHaveBeenCalledWith(newDraft, 'h', []));
+      expect(planEdit).toHaveBeenCalledWith('b', draft(), { op: 'properties', id: 'a', properties: { dono: 'outro' } });
+    });
+
+    it('mantém as edições de tela anteriores do nó ao enviar as propriedades', async () => {
+      const d = { ...draft(), edits: { a: { properties: { velho: 'v' } } } };
+      planElement.mockResolvedValue(el('a', 'Cashback'));
+      planEdit.mockResolvedValue({ draft: d, opsHash: null, screenConflicts: [] });
+      render(<NodePanel base="b" draft={d} id="a" onDraft={() => {}} />);
+      await screen.findByRole('heading', { name: 'Cashback' });
+      fireEvent.click(screen.getByRole('button', { name: /Editar propriedades/ }));
+      fireEvent.change(screen.getByLabelText('Valor de dono'), { target: { value: 'outro' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Confirmar' }));
+      await waitFor(() => expect(planEdit).toHaveBeenCalled());
+      expect(planEdit.mock.calls[0][2]).toEqual({ op: 'properties', id: 'a', properties: { velho: 'v', dono: 'outro' } });
+    });
+
+    it('editar a documentação carrega o texto bruto e chama planEdit com { op: "doc" }', async () => {
+      planElement.mockResolvedValue(el('a', 'Cashback', { docs: true, doc: 'Veja Pix', docRaw: 'Veja [[pix]]' }));
+      planEdit.mockResolvedValue({ draft: newDraft, opsHash: null, screenConflicts: [] });
+      render(<NodePanel base="b" draft={draft()} id="a" onDraft={() => {}} />);
+      await screen.findByRole('heading', { name: 'Cashback' });
+      fireEvent.click(screen.getByRole('button', { name: /Editar documentação/ }));
+      const ta = screen.getByLabelText('Documentação') as HTMLTextAreaElement;
+      expect(ta.value).toBe('Veja [[pix]]');
+      fireEvent.change(ta, { target: { value: 'Veja [[pix]] já' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Confirmar' }));
+      await waitFor(() => expect(planEdit).toHaveBeenCalledWith('b', draft(), { op: 'doc', id: 'a', text: 'Veja [[pix]] já' }));
+    });
+
+    it('sem documentação o cartão oferece Escrever', async () => {
+      planElement.mockResolvedValue(el('a', 'Cashback', { docs: true }));
+      render(<NodePanel base="b" draft={draft()} id="a" onDraft={() => {}} />);
+      fireEvent.click(await screen.findByRole('button', { name: 'Escrever' }));
+      expect(screen.getByLabelText('Documentação')).toBeTruthy();
+    });
+
+    it('erro 400 do planEdit aparece no cartão e o editor continua aberto', async () => {
+      planElement.mockResolvedValue(el('a', 'Cashback', { docs: true, doc: 'x', docRaw: 'x' }));
+      planEdit.mockRejectedValue(new api.ApiError('marcador do archlens na documentação', undefined, 400));
+      render(<NodePanel base="b" draft={draft()} id="a" onDraft={() => {}} />);
+      await screen.findByRole('heading', { name: 'Cashback' });
+      fireEvent.click(screen.getByRole('button', { name: /Editar documentação/ }));
+      fireEvent.change(screen.getByLabelText('Documentação'), { target: { value: 'y' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Confirmar' }));
+      expect((await screen.findByRole('alert')).textContent).toContain('marcador do archlens');
+      expect(screen.getByLabelText('Documentação')).toBeTruthy();
+    });
+
+    it('trocar de nó com texto não confirmado pede confirmação', async () => {
+      const c = card('a', 'Cashback');
+      c.parent = { id: 'p', name: 'Pai' } as api.Card['parent'];
+      planElement.mockResolvedValue({ ...el('a', 'Cashback', { docs: true, doc: 'x', docRaw: 'x' }), card: c });
+      const onPick = vi.fn();
+      const ask = vi.spyOn(window, 'confirm').mockReturnValue(false);
+      render(<NodePanel base="b" draft={draft()} id="a" onDraft={() => {}} onPick={onPick} />);
+      await screen.findByRole('heading', { name: 'Cashback' });
+      fireEvent.click(screen.getByRole('button', { name: /Editar documentação/ }));
+      fireEvent.change(screen.getByLabelText('Documentação'), { target: { value: 'novo' } });
+      fireEvent.click(screen.getByRole('button', { name: /Na base/ }));
+      fireEvent.click(screen.getByText('Pai', { selector: 'dd' }));
+      expect(ask).toHaveBeenCalledWith('Descartar a edição não confirmada?');
+      expect(onPick).not.toHaveBeenCalled();
+      ask.mockReturnValue(true);
+      fireEvent.click(screen.getByText('Pai', { selector: 'dd' }));
+      expect(onPick).toHaveBeenCalledWith('p');
+      ask.mockRestore();
+    });
   });
 });

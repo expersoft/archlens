@@ -3,7 +3,7 @@ import { ApiError, planApply, planNotes, planOpen, planTurn, type AppliedRound, 
 import { ApplyDialog } from './ApplyDialog';
 import { PlanPreview, type PreviewNav } from './PlanPreview';
 import { DeltaPanel } from './DeltaPanel';
-import { NodePanel } from './NodePanel';
+import { DISCARD_EDIT, NodePanel } from './NodePanel';
 import { useStoredState } from '../store';
 import { PlanChat } from './PlanChat';
 import { Split } from './Split';
@@ -280,11 +280,13 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
   }, [active, setPanel]);
 
   const changed = hasChanges(draft);
-  const pick = (id: string) => { setSelected(id); setTab('node'); setPanel(true); setFocus((f) => ({ id, n: (f?.n ?? 0) + 1 })); };
+  const editDirty = useRef(false);
+  const leaveEdit = () => !editDirty.current || window.confirm(DISCARD_EDIT);
+  const pick = (id: string) => { if (!leaveEdit()) return; setSelected(id); setTab('node'); setPanel(true); setFocus((f) => ({ id, n: (f?.n ?? 0) + 1 })); };
   // The rail button shows its tab; on the tab already shown it hides the panel.
   const railTo = (t: 'delta' | 'node') => {
-    if (panel && tab === t) setPanel(false);
-    else { setTab(t); setPanel(true); }
+    if (panel && tab === t) { if (leaveEdit()) setPanel(false); }
+    else if (leaveEdit()) { setTab(t); setPanel(true); }
   };
 
   const saveBtn = <button type="button" aria-label="Salvar rascunho" title="Salvar o rascunho num arquivo .json" disabled={!draft} onClick={() => draft && download(base, draft)}>Salvar</button>;
@@ -324,20 +326,20 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
             </div>
             {applyOpen && shown && <ApplyDialog summary={shown.summary} views={savedViews} busy={applying} error={applyError} onConfirm={() => void apply()} onCancel={() => setApplyOpen(false)} onReplan={replannable ? () => void replan() : undefined} />}
             <PlanPreview base={base} draft={draft} previews={previews} onLoaded={(r, failed) => { setShown(r); if (r) setListed(r); setPreviewFailed(!!failed); }}
-              onNavigate={navigated} onNav={onNav} onSelect={(id) => { setSelected(id); if (id) { setTab('node'); setPanel(true); } }} focus={focus} />
+              onNavigate={navigated} onNav={onNav} onSelect={(id) => { if (!leaveEdit()) return; setSelected(id); if (id) { setTab('node'); setPanel(true); } }} focus={focus} />
           </div>
         )}
       />
       {panel && (
         <aside className="side r" data-testid="delta-panel" aria-label="Painel do nó e do delta">
           <div role="tablist" className="side-tabs">
-            <button type="button" role="tab" aria-selected={tab === 'delta'} className={tab === 'delta' ? 'on' : ''} onClick={() => setTab('delta')}>Delta ({changed ? listed?.changes.length ?? 0 : 0})</button>
-            <button type="button" role="tab" aria-selected={tab === 'node'} className={tab === 'node' ? 'on' : ''} onClick={() => setTab('node')}>Nó</button>
+            <button type="button" role="tab" aria-selected={tab === 'delta'} className={tab === 'delta' ? 'on' : ''} onClick={() => { if (leaveEdit()) setTab('delta'); }}>Delta ({changed ? listed?.changes.length ?? 0 : 0})</button>
+            <button type="button" role="tab" aria-selected={tab === 'node'} className={tab === 'node' ? 'on' : ''} onClick={() => { if (leaveEdit()) setTab('node'); }}>Nó</button>
           </div>
           {tab === 'delta' ? (
             <DeltaPanel result={changed ? listed : null} selected={selected} onPick={pick} />
           ) : (
-            <NodePanel base={base} draft={draft} id={selected} onPick={pick} onDraft={(d) => commit(d, chatRef.current)} />
+            <NodePanel base={base} draft={draft} id={selected} onPick={pick} onDraft={(d) => commit(d, chatRef.current)} onDirty={(d) => { editDirty.current = d; }} />
           )}
         </aside>
       )}

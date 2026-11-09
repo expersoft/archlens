@@ -238,3 +238,18 @@ body{font:14px/1.4 system-ui,sans-serif;background:var(--bg);color:var(--ink)}
 .side-tabs button.on{color:var(--ink);border-bottom-color:var(--accent)}
 .node-panel{flex:1 1 auto;min-height:0;overflow:auto}
 .node-removed{margin:8px 12px 0}
+.np-edit{display:flex;flex-direction:column;gap:8px}
+.np-row{display:flex;align-items:center;gap:6px;padding:2px 4px;border-radius:4px}
+.np-row .np-k{flex:0 0 38%;min-width:0;font-weight:600;color:var(--muted)}
+.np-row .np-v{flex:1;min-width:0}
+.np-row.np-mod{background:var(--warn-bg)}
+.np-row.np-add{background:color-mix(in srgb,#2a8a3e 18%,var(--panel))}
+.np-row.np-del{text-decoration:line-through;color:var(--muted)}
+.np-x{border:0;background:none;color:var(--muted);cursor:pointer;font-size:16px;line-height:1}
+.np-edit-actions{display:flex;justify-content:flex-end;gap:6px}
+.np-doc-tabs{display:flex;align-items:center;gap:4px}
+.np-doc-tabs button.on{font-weight:600}
+.np-doc-ta{width:100%;min-height:140px;resize:vertical;box-sizing:border-box;font:12px ui-monospace,monospace;background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:4px}
+.np-doc-split{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.np-doc-split .np-doc-ta{min-height:60vh}
+.np-edit-err{margin:0 0 6px}
