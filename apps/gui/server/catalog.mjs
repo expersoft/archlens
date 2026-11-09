@@ -9,7 +9,7 @@ import { ELEMENT_TYPES, C4_LABELS } from '../../../scripts/lib/registry.mjs';
  */
 export function labelsOf(ctx, e) {
   const k = ctx.kind(e);
-  return { typeLabel: ELEMENT_TYPES[e.type]?.label ?? e.type, c4Label: k ? C4_LABELS[k] ?? k : null };
+  return { layer: ELEMENT_TYPES[e.type]?.layer, typeLabel: ELEMENT_TYPES[e.type]?.label ?? e.type, c4Label: k ? C4_LABELS[k] ?? k : null };
 }
 
 export function catalog(ctx) {

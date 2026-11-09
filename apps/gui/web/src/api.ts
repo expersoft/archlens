@@ -49,7 +49,7 @@ export interface ViewData { nodes: Record<string, ViewNode>; edges: ViewEdge[] }
 export interface Ref { id: string; name: string; type?: string }
 export interface RelRef extends Ref { label?: string | null; technology?: string | null; sentence?: string }
 export interface Card {
-  element: { id: string; name: string; type: string; kind?: string | null; typeLabel?: string; c4Label?: string | null; status?: string; technology?: string | null; description?: string | null; aliases?: string[] };
+  element: { id: string; name: string; type: string; kind?: string | null; layer?: string; typeLabel?: string; c4Label?: string | null; status?: string; technology?: string | null; description?: string | null; aliases?: string[] };
   parent: Ref | null;
   children: Ref[];
   outgoing: Record<string, RelRef[]>;

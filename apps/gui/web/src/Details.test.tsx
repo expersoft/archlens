@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 vi.mock('./api', async (orig) => ({ ...(await orig<typeof import('./api')>()), getDoc: vi.fn() }));
@@ -25,13 +25,14 @@ const props = { nodeId: 'tele.api', onPick: () => {}, onSelectInView: () => {}, 
 describe('Details', () => {
   beforeEach(() => { vi.mocked(getDoc).mockReset(); vi.mocked(getDoc).mockResolvedValue({ text: 'Texto do nó' }); });
 
-  it('mostra Nesta visão e Na base, a frase da relação e o chip de tecnologia', () => {
+  it('mostra Nesta visão e Na base, a frase da relação e o chip de tecnologia', async () => {
     render(<Details {...props} card={card} viewNode={node} viewEdges={edges} />);
     expect(screen.getByText('Nesta visão')).toBeTruthy();
     expect(screen.getByText('Na base')).toBeTruthy();
     expect(screen.getByText(edges[0].help!.sentence!)).toBeTruthy();
     expect(screen.queryByText('Alheia ao nó.')).toBeNull();
     expect(screen.getAllByText('REST').length).toBeGreaterThan(0);
+    await userEvent.click(screen.getByRole('button', { name: /Fontes e rodadas/ }));
     expect(screen.getByText(/“trecho citado”/)).toBeTruthy();
     expect(screen.getByText('scan')).toBeTruthy();
   });
@@ -39,6 +40,7 @@ describe('Details', () => {
   it('clicar no pai chama onPick; clicar na relação seleciona o outro nó; glossário', async () => {
     const onPick = vi.fn(); const onSel = vi.fn(); const onGl = vi.fn();
     render(<Details {...props} card={card} viewNode={node} viewEdges={edges} onPick={onPick} onSelectInView={onSel} onGlossary={onGl} />);
+    await userEvent.click(screen.getByRole('button', { name: /Na base/ }));
     await userEvent.click(screen.getByText('Plataforma de Teleconsulta'));
     expect(onPick).toHaveBeenCalledWith('tele');
     await userEvent.click(screen.getByText(edges[0].help!.sentence!));
@@ -52,13 +54,15 @@ describe('Details', () => {
     expect(screen.queryByText('Nesta visão')).toBeNull();
     expect(screen.getByText('API de Agendamento')).toBeTruthy();
   });
-  it('Camada em pt-BR e a linha de tipo da base com rótulos, não identificadores', () => {
+
+  it('Camada em pt-BR e a linha de tipo com rótulos, não identificadores', () => {
     const { unmount } = render(<Details {...props} card={card} viewNode={node} viewEdges={edges} />);
     expect(screen.getByText('Aplicação')).toBeTruthy();
     expect(screen.queryByText('application')).toBeNull();
     unmount();
     render(<Details {...props} card={card} viewNode={null} viewEdges={edges} />);
-    expect(screen.getByText('Container · ArchiMate Application Component')).toBeTruthy();
+    expect(screen.getByText('Container')).toBeTruthy();
+    expect(screen.getByText('ArchiMate Application Component')).toBeTruthy();
     expect(screen.queryByText(/application-component/)).toBeNull();
   });
 
@@ -71,7 +75,7 @@ describe('Details', () => {
     err.mockRestore();
   });
 
-  it('mostra as propriedades do cartão; sem propriedades não há rótulo', () => {
+  it('mostra as propriedades do cartão; sem propriedades não há cartão', () => {
     const withProps: Card = { ...card, properties: { squad: 'Checkout', canais: ['web', 'app'] } };
     const { unmount } = render(<Details {...props} card={withProps} viewNode={null} viewEdges={edges} />);
     expect(screen.getByText('Propriedades')).toBeTruthy();
@@ -83,41 +87,76 @@ describe('Details', () => {
     expect(screen.queryByText('Propriedades')).toBeNull();
   });
 
-  it('sem docsEnabled não há aba Documentação', () => {
-    render(<Details {...props} card={card} viewNode={null} viewEdges={edges} base="b" docsEnabled={false} />);
-    expect(screen.queryByRole('tab')).toBeNull();
-    expect(screen.queryByText('Documentação')).toBeNull();
-    expect(screen.getByText('Filho X')).toBeTruthy();
+  it('cabeçalho usa a cor da camada', () => {
+    const { container, unmount } = render(<Details {...props} card={card} viewNode={node} viewEdges={edges} />);
+    const head = container.querySelector('.np-head') as HTMLElement;
+    expect(head.style.background).toContain('var(--app)');
+    expect(head.style.borderBottom).toContain('var(--app-s)');
+    unmount();
+    const c2 = render(<Details {...props} card={card} viewNode={null} viewEdges={edges} layer="strategy" />);
+    expect((c2.container.querySelector('.np-head') as HTMLElement).style.background).toContain('var(--str)');
   });
 
-  it('a aba só busca a documentação ao ser aberta; Detalhes volta ao cartão', async () => {
+  it('cartões na ordem da spec', () => {
+    const full: Card = { ...card, properties: { a: '1' }, outgoing: { serving: [{ id: 'x', name: 'X', sentence: 's' }] } };
+    const { container } = render(<Details {...props} card={full} viewNode={node} viewEdges={edges} base="b" docsEnabled />);
+    const titles = [...container.querySelectorAll('.np-title')].map((t) => t.textContent);
+    expect(titles).toEqual(['Propriedades', 'Documentação', 'Nesta visão', 'Relações na visão', 'Na base', 'Filhos', 'Fontes e rodadas']);
+    const c2 = render(<Details {...props} card={full} viewNode={null} viewEdges={edges} base="b" docsEnabled />);
+    expect([...c2.container.querySelectorAll('.np-title')].map((t) => t.textContent))
+      .toEqual(['Propriedades', 'Documentação', 'Relações', 'Na base', 'Filhos', 'Fontes e rodadas']);
+  });
+
+  it('lista com 14 relações mostra 5 e "Mostrar mais 9"', async () => {
+    const many: ViewEdge[] = Array.from({ length: 14 }, (_, i) => ({ id: `m${i}`, from: 'tele.api', to: `o${i}`, type: 'serving', help: { sentence: `rel ${i}` } }));
+    render(<Details {...props} card={card} viewNode={node} viewEdges={many} />);
+    expect(screen.getAllByText(/^rel \d+$/)).toHaveLength(5);
+    await userEvent.click(screen.getByRole('button', { name: 'Mostrar mais 9' }));
+    expect(screen.getAllByText(/^rel \d+$/)).toHaveLength(14);
+  });
+
+  it('cartão recolhido continua recolhido ao trocar de nó', async () => {
+    const view = { card, viewNode: node, viewEdges: edges };
+    const { rerender } = render(<Details {...props} {...view} />);
+    expect(screen.getByText(edges[0].help!.sentence!)).toBeTruthy();
+    await userEvent.click(screen.getByRole('button', { name: /Relações na visão/ }));
+    expect(screen.queryByText(edges[0].help!.sentence!)).toBeNull();
+    rerender(<Details {...props} {...view} nodeId="outro" />);
+    expect(screen.queryByText(edges[0].help!.sentence!)).toBeNull();
+    expect(screen.getByRole('button', { name: /Relações na visão/ }).getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('base JSON: sem cartão Documentação', () => {
+    render(<Details {...props} card={card} viewNode={null} viewEdges={edges} base="b" docsEnabled={false} />);
+    expect(screen.queryByText('Documentação')).toBeNull();
+    expect(screen.queryByRole('tab')).toBeNull();
+  });
+
+  it('documentação só é buscada com o cartão aberto', async () => {
+    localStorage.setItem('archlens-node-cards', JSON.stringify({ doc: false }));
     render(<Details {...props} card={card} viewNode={null} viewEdges={edges} base="b" docsEnabled />);
-    expect(screen.getByRole('tab', { name: 'Detalhes' }).getAttribute('aria-selected')).toBe('true');
-    expect(screen.getByText('Filho X')).toBeTruthy();
     expect(getDoc).not.toHaveBeenCalled();
-    await userEvent.click(screen.getByRole('tab', { name: 'Documentação' }));
+    await userEvent.click(screen.getByRole('button', { name: /Documentação/ }));
     expect(await screen.findByText('Texto do nó')).toBeTruthy();
     expect(getDoc).toHaveBeenCalledWith('b', 'tele.api');
-    expect(screen.queryByText('Filho X')).toBeNull();
-    await userEvent.click(screen.getByRole('tab', { name: 'Detalhes' }));
-    expect(screen.getByText('Filho X')).toBeTruthy();
-    expect(screen.queryByText('Texto do nó')).toBeNull();
   });
 
-  it('a aba aberta acompanha a troca de nó', async () => {
+  it('o cartão da documentação acompanha a troca de nó', async () => {
     const view = { card, viewNode: null, viewEdges: edges, base: 'b', docsEnabled: true };
     const { rerender } = render(<Details {...props} {...view} />);
-    await userEvent.click(screen.getByRole('tab', { name: 'Documentação' }));
     await screen.findByText('Texto do nó');
     rerender(<Details {...props} {...view} nodeId="outro" card={null} />);
     expect(getDoc).toHaveBeenLastCalledWith('b', 'outro');
   });
 
-  it('numa base sem documentação a aba aberta cede lugar aos detalhes', async () => {
-    const view = { card, viewNode: null, viewEdges: edges, base: 'b' };
-    const { rerender } = render(<Details {...props} {...view} docsEnabled />);
-    await userEvent.click(screen.getByRole('tab', { name: 'Documentação' }));
-    rerender(<Details {...props} {...view} docsEnabled={false} />);
-    expect(screen.getByText('Filho X')).toBeTruthy();
+  it('slots trocam o conteúdo de Propriedades e Documentação; actions vão ao título', () => {
+    render(<Details {...props} card={card} viewNode={null} viewEdges={edges} base="b" docsEnabled
+      slots={{ properties: <div>editor de props</div>, doc: <div>editor de doc</div> }}
+      actions={{ doc: <button type="button">✎ Editar</button> }} />);
+    expect(screen.getByText('editor de props')).toBeTruthy();
+    expect(screen.getByText('editor de doc')).toBeTruthy();
+    expect(getDoc).not.toHaveBeenCalled();
+    const docCard = screen.getByText('editor de doc').closest('.np-card') as HTMLElement;
+    expect(within(docCard).getByRole('button', { name: '✎ Editar' })).toBeTruthy();
   });
 });

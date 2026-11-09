@@ -418,14 +418,13 @@ describe('App: busca em texto', () => {
     await waitFor(() => expect(trail()).toBe('Inicial › ctx'));
   });
 
-  it('a aba Documentação segue o que a rota do cartão diz da base', async () => {
+  it('o cartão Documentação segue o que a rota do cartão diz da base', async () => {
     handler = () => nd({ type: 'result', result: { kind: 'element', id: 'A' } }, { type: 'done', metrics: { total: 1 } });
     getElement.mockResolvedValue({ card: null, actions: [], docs: true });
     vi.mocked(api.getDoc).mockResolvedValue({ text: 'Texto do nó A' });
     render(<App />);
     await screen.findByRole('navigation', { name: 'Trilha' });
     await userEvent.type(await askBox(), 'onde fica o elemento A?{Enter}');
-    await userEvent.click(await screen.findByRole('tab', { name: 'Documentação' }));
     expect(await screen.findByText('Texto do nó A')).toBeTruthy();
     expect(api.getDoc).toHaveBeenCalledWith('b', 'A');
   });
