@@ -403,6 +403,11 @@ function mergeElementInto(ctx, baseId, el, parentId, { dry = false, when, aliase
 function insertElement(ctx, el, parentId) {
   const { source, sources, parent, ...rest } = el;
   const node = structuredClone(rest);
+  // A null property removes a key; on a new element there is none to remove.
+  if (node.properties && typeof node.properties === 'object') {
+    for (const [k, v] of Object.entries(node.properties)) if (v === null) delete node.properties[k];
+    if (!Object.keys(node.properties).length) delete node.properties;
+  }
   const srcs = deltaSources(el, ctx.delta.source);
   if (srcs.length) node.sources = srcs;
   attach(ctx.raw, ctx.tree, node, parentId);

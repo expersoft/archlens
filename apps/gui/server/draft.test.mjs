@@ -5,7 +5,9 @@ import { tmpdir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createBaseRegistry } from './bases.mjs';
-import { newDraft, checkDraft, replanDraft, cleanRepoUrl, DRAFT_VERSION, DRAFT_MAX_BYTES } from './plan/draft.mjs';
+import { newDraft, checkDraft, replanDraft, draftOpsHash, cleanRepoUrl, DRAFT_VERSION, DRAFT_MAX_BYTES } from './plan/draft.mjs';
+import { applyEdit } from './plan/edits.mjs';
+import { openQuestions } from '../../../scripts/lib/merge.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 
@@ -119,4 +121,84 @@ test('checkDraft valida o consumo (usage.tokens)', () => withBase(ctx => {
   for (const bad of [{ tokens: -1 }, { tokens: 1.5 }, { tokens: '3' }, {}, 5, null]) {
     rejects(() => checkDraft({ ...newDraft(ctx), usage: bad }, ctx), /consumo/);
   }
+}));
+
+const chatDelta = (elements, extra = {}) => ({ 'archlens-delta': '1.0', source: { kind: 'prompt', ref: 'chat' }, model: { elements, relationships: [] }, ...extra });
+
+test('newDraft traz edits e kept vazios', () => withBase(ctx => {
+  const d = newDraft(ctx);
+  assert.deepEqual(d.edits, {});
+  assert.deepEqual(d.kept, []);
+}));
+
+test('rascunho sem edits e kept abre normalmente', () => withBase(ctx => {
+  const { edits, kept, ...legacy } = { ...newDraft(ctx), delta: dupDelta };
+  const checked = checkDraft(JSON.parse(JSON.stringify(legacy)), ctx);
+  assert.deepEqual(checked.edits, {});
+  assert.deepEqual(checked.kept, []);
+  const { draft } = replanDraft(ctx, checked);
+  assert.equal(draft.plan.state, 'open');
+}));
+
+test('checkDraft valida as edições da tela', () => withBase(ctx => {
+  rejects(() => checkDraft({ ...newDraft(ctx), edits: { loja: { properties: { '  ': 'x' } } } }, ctx), /chave/);
+  rejects(() => checkDraft({ ...newDraft(ctx), kept: 'x' }, ctx), /conflito/);
+  const ok = { ...newDraft(ctx), edits: { loja: { properties: { 'a.b': 'x' } } } };
+  assert.deepEqual(checkDraft(ok, ctx).edits, ok.edits);
+}));
+
+test('edição da tela em propriedade com valor na base não abre pergunta', () => withBase(ctx => {
+  const d = { ...newDraft(ctx), edits: { loja: { properties: { criticidade: 'média' } } } };
+  const { draft } = replanDraft(ctx, d);
+  assert.equal(openQuestions(draft.plan).length, 0);
+  assert.equal(draft.plan.state, 'final');
+  assert.equal(draft.delta, null, 'o delta do agente não muda');
+  assert.ok(draftOpsHash(draft));
+  // O plano salvo com edições e sem delta do agente volta a abrir.
+  assert.doesNotThrow(() => checkDraft(JSON.parse(JSON.stringify(draft)), ctx));
+}));
+
+test('remover propriedade pela tela vira take', () => withBase(ctx => {
+  const d = { ...newDraft(ctx), edits: { loja: { properties: { criticidade: null } } } };
+  const { draft } = replanDraft(ctx, d);
+  const it = draft.plan.items.find(i => i.key === 'el:loja:properties.criticidade');
+  assert.equal(it.resolution, 'take');
+  assert.equal(it.delta, null);
+  assert.equal(draft.plan.state, 'final');
+  assert.ok(draftOpsHash(draft));
+}));
+
+test('a pergunta do chat continua aberta sem edição da tela', () => withBase(ctx => {
+  const { draft } = replanDraft(ctx, { ...newDraft(ctx), delta: chatDelta([{ id: 'loja', properties: { criticidade: 'baixa' } }]) });
+  assert.equal(openQuestions(draft.plan).length, 1);
+  assert.equal(draftOpsHash(draft), null);
+}));
+
+test('conflito chat × tela deixa draftOpsHash nulo até resolver', () => withBase(ctx => {
+  const d = { ...newDraft(ctx), delta: chatDelta([{ id: 'loja', properties: { criticidade: 'baixa' } }]),
+    edits: { loja: { properties: { criticidade: 'média' } } } };
+  const { draft } = replanDraft(ctx, d);
+  assert.equal(draft.plan.state, 'final');
+  assert.equal(draft.plan.items.find(i => i.key === 'el:loja:properties.criticidade').delta, 'média');
+  assert.equal(draftOpsHash(draft), null);
+  const mine = replanDraft(ctx, applyEdit(draft, { op: 'resolve', id: 'loja', field: 'properties.criticidade', choice: 'mine' })).draft;
+  assert.ok(draftOpsHash(mine));
+  const theirs = replanDraft(ctx, applyEdit(draft, { op: 'resolve', id: 'loja', field: 'properties.criticidade', choice: 'theirs' })).draft;
+  const it = theirs.plan.items.find(i => i.key === 'el:loja:properties.criticidade');
+  assert.equal(it.delta, 'baixa');
+  assert.equal(it.resolution, null, 'a proposta do chat volta a pedir resposta');
+  assert.equal(draftOpsHash(theirs), null);
+}));
+
+test('edição em nó que o chat remove é descartada ao compor', () => withBase(ctx => {
+  const d = { ...newDraft(ctx), delta: chatDelta([], { ops: [{ op: 'remove', id: 'loja' }] }),
+    edits: { loja: { properties: { criticidade: 'média' } } } };
+  const { draft } = replanDraft(ctx, d);
+  assert.ok(draft.plan.items.some(i => i.op === 'remove' && i.target === 'loja'));
+  assert.ok(!draft.plan.items.some(i => i.key.startsWith('el:loja:properties')));
+}));
+
+test('edição em nó novo que o chat deixou de propor é descartada', () => withBase(ctx => {
+  const d = { ...newDraft(ctx), delta: chatDelta([]), edits: { 'svc-sumiu': { properties: { a: '1' } } } };
+  assert.doesNotThrow(() => replanDraft(ctx, d));
 }));

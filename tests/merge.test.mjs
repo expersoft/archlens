@@ -959,3 +959,11 @@ test('o relatório descreve a remoção da propriedade', () => {
   const out = formatPlanReport(planMerge(lojaComProps(), removeDelta(), TODAY));
   assert.match(out, /remover a propriedade "criticidade" \(base "alta"\)  → keep \| take/);
 });
+
+test('elemento novo descarta propriedades null (e o objeto properties vazio)', () => {
+  const novo = props => delta({ elements: [{ id: 'novo-svc', name: 'Novo', type: 'c4:softwareSystem', properties: props }] });
+  const { raw } = applyPlan(shop(), planMerge(shop(), novo({ a: '1', b: null }), TODAY), TODAY);
+  assert.deepEqual(find(raw, 'novo-svc').properties, { a: '1' });
+  const { raw: raw2 } = applyPlan(shop(), planMerge(shop(), novo({ b: null }), TODAY), TODAY);
+  assert.equal('properties' in find(raw2, 'novo-svc'), false);
+});
