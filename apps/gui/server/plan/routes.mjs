@@ -260,13 +260,12 @@ export function planRoutes({ registry, provider, config, telemetry, h }) {
     const ctx = registry.get(b);
     const { draft: replanned } = await replan(b, ctx, draft);
     const { card, removed, doc: drafted } = previewElement(ctx, replanned, id);
-    // the draft's text as written; the base's read now (not the snapshot in memory), with its wikilinks as names
-    let doc = drafted ?? null;
-    if (drafted === undefined && ctx.store.supportsDocs && ctx.model.elements.has(id)) {
-      const text = await ctx.readDoc(id);
-      doc = text ? plainWikilinks(text) : null;
-    }
-    return { card, doc: doc || null, docs: !!ctx.store.supportsDocs, removed };
+    // the draft's text, else the base's read now (not the snapshot in memory); `docRaw` as written (what the editor
+    // loads), `doc` with its wikilinks as names (what is shown)
+    let raw = drafted ?? null;
+    if (drafted === undefined && ctx.store.supportsDocs && ctx.model.elements.has(id)) raw = await ctx.readDoc(id);
+    const docRaw = raw || null;
+    return { card, doc: docRaw ? plainWikilinks(docRaw) : null, docRaw, docs: !!ctx.store.supportsDocs, removed };
   }
 
   async function notes(req, b) {

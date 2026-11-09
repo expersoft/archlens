@@ -203,8 +203,10 @@ export const planEdit = (base: string, draft: Draft, edit: ScreenEdit) =>
 /** Um nó como o rascunho o deixa: o cartão sobre a prévia e a documentação (a do rascunho, senão a da base). */
 export interface PlanElement {
   card: Card;
-  /** Null sem documentação. */
+  /** Documentação para mostrar (wikilinks como nomes); null sem documentação. */
   doc: string | null;
+  /** A mesma documentação como escrita, com os wikilinks: o texto que o editor carrega. */
+  docRaw: string | null;
   /** A base guarda documentação (markdown ou gbrain). */
   docs: boolean;
   /** O rascunho remove o nó. */

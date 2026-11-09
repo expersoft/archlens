@@ -458,3 +458,16 @@ test('a prévia marca a documentação do chat com a origem e a contagem de linh
   assert.equal(change.origin, 'chat');
   assert.deepEqual(change.lines, { added: 3, removed: 0 });
 }));
+
+test('/plan/element devolve docRaw como escrito e doc com os wikilinks como nomes', () => withVault(async url => {
+  const base = await (await post(url, 'plan/element', { draft: newDraft({ id: 'loja', version: '' }), id: DOC_ID })).json();
+  assert.equal(base.docRaw, 'Veja [[algo]] e [[a/b|Nome]].');
+  assert.equal(base.doc, 'Veja algo e Nome.');
+  const { draft } = await edited(url, newDraft({ id: 'loja', version: '' }), { op: 'doc', id: DOC_ID, text: 'Da tela, com [[outro]].' });
+  const node = await (await post(url, 'plan/element', { draft, id: DOC_ID })).json();
+  assert.equal(node.docRaw, 'Da tela, com [[outro]].');
+  assert.equal(node.doc, 'Da tela, com outro.');
+  const none = await (await post(url, 'plan/element', { draft: newDraft({ id: 'loja', version: '' }), id: 'loja' })).json();
+  assert.equal(none.doc, null);
+  assert.equal(none.docRaw, null);
+}, 'Veja [[algo]] e [[a/b|Nome]].'));
