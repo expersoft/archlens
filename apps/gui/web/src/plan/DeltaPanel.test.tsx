@@ -7,9 +7,9 @@ import { DeltaPanel } from './DeltaPanel';
 const result: PlanPreviewResult = {
   views: [], skipped: [], summary: '+1 ~1 −1', report: null,
   changes: [
-    { sign: '+', kind: 'element', id: 'a', name: 'Cashback', type: 'Application Component', description: 'Saldo de cashback', fields: [] },
-    { sign: '~', kind: 'element', id: 'b', name: 'Checkout', type: 'Application Component', fields: [{ field: 'description', before: 'velha', after: 'nova' }] },
-    { sign: '−', kind: 'relationship', id: 'r', name: 'Checkout → Gateway', type: 'serving', ends: ['b', 'g'], fields: [] },
+    { sign: '+', kind: 'element', id: 'a', name: 'Cashback', type: 'Application Component', description: 'Saldo de cashback', fields: [], origin: 'chat' },
+    { sign: '~', kind: 'element', id: 'b', name: 'Checkout', type: 'Application Component', fields: [{ field: 'description', before: 'velha', after: 'nova', origin: 'chat' }], origin: 'chat' },
+    { sign: '−', kind: 'relationship', id: 'r', name: 'Checkout → Gateway', type: 'serving', ends: ['b', 'g'], fields: [], origin: 'chat' },
   ],
   questions: [{ key: 'q1', question: 'Cashback é o mesmo que Fidelidade?', options: ['merge', 'new'], assumed: null }],
 };
@@ -43,7 +43,7 @@ describe('DeltaPanel', () => {
   it('mostra a documentação com as linhas removidas e acrescentadas', () => {
     const doc: PlanPreviewResult = {
       ...result,
-      changes: [{ sign: '~', kind: 'doc', id: 'b', name: 'Checkout', diff: [
+      changes: [{ sign: '~', kind: 'doc', id: 'b', name: 'Checkout', origin: 'chat', diff: [
         { sign: ' ', line: 'Igual' }, { sign: '-', line: 'Linha velha' }, { sign: '+', line: 'Linha nova' },
       ] }],
     };

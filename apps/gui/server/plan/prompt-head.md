@@ -33,6 +33,10 @@ a migração de base 1.x e o `init` não estão disponíveis na GUI.
 - Cada rodada termina com uma destas ferramentas: `ask_decision`, `ask_user`, `reply` ou `draft_notes`.
 - Antes de escrever a documentação de um nó, leia o texto atual com `read_doc` e edite-o em vez de reescrever às cegas:
   `docs` no delta substitui o texto inteiro. Trocar texto existente vira decisão do usuário, com a diferença no painel Delta.
+- O estado do rascunho lista as "edições feitas na tela": propriedades e documentação que o próprio usuário editou no
+  painel do nó. Elas são decisões dele, ficam fora do seu delta e o `set_delta` não as apaga. Não as repita no delta nem
+  as contradiga sem perguntar: propor outro valor para o mesmo campo abre um aviso para o usuário escolher entre o dele e
+  o seu, e o Aplicar fica bloqueado até a resposta.
 - Depois que o usuário aplica, a GUI pede "rascunhe as notas de interpretação desta rodada": escreva `overview`
   (propósito, decisões, riscos) e `notes` (o que a rodada mudou e por quê) e entregue com `draft_notes`. Leia antes as
   notas atuais com `read_notes` e atualize-as em vez de reescrever. Quem grava as notas é o usuário, depois de revisar.

@@ -1,7 +1,7 @@
 // The preview of a planning draft: the base as the plan would leave it, drawn with what changes marked.
 import { createHash } from 'node:crypto';
 import { relationshipIds } from '../../../../scripts/lib/merge.mjs';
-import { preview as previewOf, show } from '../../../../scripts/lib/api.mjs';
+import { preview as previewOf, show, query } from '../../../../scripts/lib/api.mjs';
 import { previewSummary, annotateView } from '../../../../scripts/lib/preview.mjs';
 import { normalizeModel } from '../../../../scripts/lib/model.mjs';
 import { resolveView } from '../../../../scripts/lib/query.mjs';
@@ -10,14 +10,19 @@ import { layoutView } from '../../../../scripts/lib/layout.mjs';
 import { renderHtml, viewData } from '../../../../scripts/lib/render.mjs';
 import { lineDiff } from '../../../../scripts/lib/node-doc.mjs';
 import { ELEMENT_TYPES } from '../../../../scripts/lib/registry.mjs';
+import { subgraphOf } from '../../../../scripts/lib/store/contract.mjs';
 import { navHelpers } from '../bases.mjs';
+import { labelsOf } from '../catalog.mjs';
+import { originOf } from './edits.mjs';
 import { actionsFor, flipSpec, titleFor } from '../navigation.mjs';
 
 const TOUCHED = new Set(['added', 'changed', 'removed', 'retired']);
 const planError = (message, code) => Object.assign(new Error(message), { code });
 
+// The draft's plan is made from the agent's delta with the screen edits on top: a draft with only screen edits has a
+// plan and no delta.
 function open(ctx, draft) {
-  if (!draft.delta) throw planError('o rascunho ainda não tem delta para pré-visualizar', 'E_GUI_PREVIEW');
+  if (!draft.plan && !draft.delta) throw planError('o rascunho ainda não tem delta para pré-visualizar', 'E_GUI_PREVIEW');
   const { preview: p, warning } = previewOf(ctx.store, draft.plan ? { plan: draft.plan } : { delta: draft.delta });
   return { p, warning, model: normalizeModel(p.raw) };
 }
@@ -92,6 +97,25 @@ export function previewFlip(ctx, draft, spec) {
   return keyed(nav, flipSpec(nav, spec));
 }
 
+/**
+ * A node as the draft leaves it: its card over the preview model (with the type labels), whether the draft removes it,
+ * and `doc`, the text the draft writes for it (undefined when the draft does not touch its documentation).
+ */
+export function previewElement(ctx, draft, id) {
+  // An empty draft (nothing proposed, nothing edited) leaves the base as it is.
+  const { p, model } = draft.plan || draft.delta ? open(ctx, draft) : { p: { raw: ctx.raw, changes: new Map() }, model: ctx.model };
+  const el = model.elements.get(id);
+  if (!el) throw planError(`"${id}" não existe na base nem no rascunho`, 'E_UNKNOWN_REF');
+  const { raw } = p;
+  const snapshot = { read: () => ({ raw }), readSubgraph: q => subgraphOf(raw, q), history: () => raw.changelog ?? [], readDoc: () => null };
+  const card = query(snapshot, { element: id, format: 'json' });
+  if (card?.element) Object.assign(card.element, labelsOf(navHelpers(model), el));
+  const plan = draft.plan;
+  const written = plan?.delta?.docs?.find(d => d?.id === id);
+  const kept = plan?.items?.some(i => i.kind === 'doc' && i.target === id && i.resolution === 'keep');
+  return { card, removed: p.changes.get(id)?.kind === 'removed', doc: written && !kept ? written.text : undefined };
+}
+
 const SIGN = { added: '+', changed: '~', removed: '−', retired: '−' };
 const VALUE_MAX = 300;
 const text = v => {
@@ -99,18 +123,55 @@ const text = v => {
   const t = typeof v === 'string' ? v : JSON.stringify(v);
   return t.length > VALUE_MAX ? `${t.slice(0, VALUE_MAX)}…` : t;
 };
-const fieldsOf = c => (c.fields ?? []).map(f => ({ field: f.field, before: text(f.before), after: text(f.after) }));
+const PROPS = 'properties';
+const ownKey = (o, k) => o !== null && typeof o === 'object' && Object.hasOwn(o, k);
+
+/** The fields that change, `properties` one field per key (`properties.<k>`, '—' when absent), with their origin. */
+function fieldsOf(c, origin) {
+  const out = [];
+  for (const f of c.fields ?? []) {
+    if (f.field !== PROPS) { out.push({ field: f.field, before: text(f.before), after: text(f.after), origin: origin(f.field) }); continue; }
+    const before = f.before ?? {}, after = f.after ?? {};
+    for (const k of new Set([...Object.keys(before), ...Object.keys(after)])) {
+      const b = ownKey(before, k) ? before[k] : undefined, a = ownKey(after, k) ? after[k] : undefined;
+      if (JSON.stringify(b) === JSON.stringify(a)) continue;
+      const field = `${PROPS}.${k}`;
+      out.push({ field, before: text(b), after: text(a), origin: origin(field) });
+    }
+  }
+  return out;
+}
+
+/** 'tela', 'chat' or 'ambos' (both touched it). */
+const originAll = origins => (origins.has('tela') && origins.has('chat') ? 'ambos' : origins.has('tela') ? 'tela' : 'chat');
 
 /**
  * What the draft adds (+), changes (~) and removes (−), elements then relationships, with the type, the description of
  * what is added and the fields that change, the documentation written (with its line diff), and the questions still open.
  */
-function deltaList(model, p) {
+function deltaList(model, p, edits) {
+  // The documentation travels apart from the model: its changes come from the plan's items, in full (no VALUE_MAX cut).
+  const docs = [];
+  for (const it of p.plan?.items ?? []) {
+    if (it.kind !== 'doc' || it.class === 'unchanged' || it.resolution === 'keep') continue;
+    const before = it.base ?? '', after = it.delta ?? '';
+    const sign = !before.trim() ? '+' : !after.trim() ? '−' : '~';
+    const diff = lineDiff(before, after);
+    const lines = { added: diff.filter(l => l.sign === '+').length, removed: diff.filter(l => l.sign === '-').length };
+    docs.push({ sign, kind: 'doc', id: it.target, name: model.elements.get(it.target)?.name ?? it.target, origin: originOf(edits, it.target, 'doc'), lines, diff });
+  }
   const changes = [...p.changes].map(([id, c]) => {
     const el = model.elements.get(id);
+    const fields = fieldsOf(c, field => originOf(edits, id, field));
+    // Only the chat adds, removes or retires a node; the screen edits a node it adds. A screen documentation counts too.
+    const origins = new Set(fields.map(f => f.origin));
+    if (c.kind !== 'changed') origins.add('chat');
+    if (c.kind === 'added' && originOf(edits, id) === 'tela') origins.add('tela');
+    const doc = docs.find(d => d.id === id);
+    if (doc) origins.add(doc.origin);
     return {
       sign: SIGN[c.kind], kind: 'element', id, name: el?.name ?? id, type: ELEMENT_TYPES[el?.type]?.label ?? el?.type ?? '',
-      ...(c.kind === 'added' && el?.description ? { description: text(el.description) } : {}), fields: fieldsOf(c),
+      ...(c.kind === 'added' && el?.description ? { description: text(el.description) } : {}), fields, origin: originAll(origins),
     };
   });
   const ends = new Map([...relationshipIds(p.raw)].map(([r, id]) => [id, r]));
@@ -119,16 +180,10 @@ function deltaList(model, p) {
     const name = r ? `${model.elements.get(r.from)?.name ?? r.from} → ${model.elements.get(r.to)?.name ?? r.to}` : id;
     changes.push({
       sign: SIGN[c.kind], kind: 'relationship', id, name, type: r?.type ?? '', ends: r ? [r.from, r.to] : [],
-      ...(c.kind === 'added' && r?.description ? { description: text(r.description) } : {}), fields: fieldsOf(c),
+      ...(c.kind === 'added' && r?.description ? { description: text(r.description) } : {}), fields: fieldsOf(c, () => 'chat'), origin: 'chat',
     });
   }
-  // The documentation travels apart from the model: its changes come from the plan's items, in full (no VALUE_MAX cut).
-  for (const it of p.plan?.items ?? []) {
-    if (it.kind !== 'doc' || it.class === 'unchanged' || it.resolution === 'keep') continue;
-    const before = it.base ?? '', after = it.delta ?? '';
-    const sign = !before.trim() ? '+' : !after.trim() ? '−' : '~';
-    changes.push({ sign, kind: 'doc', id: it.target, name: model.elements.get(it.target)?.name ?? it.target, diff: lineDiff(before, after) });
-  }
+  changes.push(...docs);
   const seen = new Set();
   const questions = [];
   for (const q of [...p.pending.values()].flat()) {
@@ -165,5 +220,5 @@ export async function buildPreview(ctx, draft, specs, { notation } = {}) {
     }
   }
   const report = draft.plan ? show(ctx.store, draft.plan) : null;
-  return { views, skipped, summary: previewSummary(p), ...deltaList(model, p), report, ...(warning ? { warning } : {}) };
+  return { views, skipped, summary: previewSummary(p), ...deltaList(model, p, draft.edits ?? {}), report, ...(warning ? { warning } : {}) };
 }

@@ -33,6 +33,19 @@ function deltaSummary(delta) {
   return lines.join('\n');
 }
 
+const editValue = v => (v === null ? '(removida)' : typeof v === 'string' ? v : JSON.stringify(v));
+const lineCount = text => (text.trim() ? text.trim().split(/\r?\n/).length : 0);
+
+/** The user's screen edits, one per field: `<id>: properties.<k> = <v>`, `<id>: documentação (<n> linhas)`. */
+function screenEdits(edits) {
+  const out = [];
+  for (const [id, e] of Object.entries(edits ?? {})) {
+    for (const [k, v] of Object.entries(e.properties ?? {})) out.push(`${id}: properties.${k} = ${editValue(v)}`);
+    if (typeof e.doc === 'string') out.push(`${id}: documentação (${lineCount(e.doc)} linhas)`);
+  }
+  return out;
+}
+
 // What the model gets to know about the draft; all of it is external content.
 function draftState(draft) {
   const lines = [];
@@ -48,6 +61,8 @@ function draftState(draft) {
     const given = draft.plan.items.filter(i => i.resolution !== undefined && i.resolution !== null).map(i => `${i.key} = ${i.resolution}`);
     if (given.length) lines.push(`respostas já dadas: ${given.join('; ')}`);
   } else lines.push('plano: nenhum');
+  const edited = screenEdits(draft.edits);
+  if (edited.length) lines.push(`edições feitas na tela (não refaça nem contradiga sem perguntar): ${edited.join('; ')}`);
   if (draft.note) lines.push(`nota: ${draft.note}`);
   if (draft.repo) lines.push(`repositório: ${draft.repo.url}${draft.repo.ref ? ` @ ${draft.repo.ref}` : ''} (${draft.repo.commit})`);
   return lines.join('\n');

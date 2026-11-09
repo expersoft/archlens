@@ -150,6 +150,21 @@ export const ask = (base: string, body: AskRequest, onEvent: (e: AskEvent) => vo
 
 /** O rascunho é opaco para a web (só `base.id`, `plan` e `repo` são lidos). */
 export type Draft = Record<string, unknown>;
+/** Valor de uma propriedade de nó. */
+export type PropValue = string | number | boolean | string[];
+/**
+ * Uma edição feita na tela, no Planejar: as propriedades do nó (todas as editadas; `null` remove a chave da base), a
+ * documentação, desfazer as edições do nó, ou responder um aviso de conflito com o chat.
+ */
+export type ScreenEdit =
+  | { op: 'properties'; id: string; properties: Record<string, PropValue | null> }
+  | { op: 'doc'; id: string; text: string }
+  | { op: 'undo'; id: string }
+  | { op: 'resolve'; id: string; field: string; choice: 'mine' | 'theirs' };
+/** O chat propõe, para um campo editado na tela (`properties.<k>` ou `doc`), outro valor; espera a resposta do usuário. */
+export interface ScreenConflict { id: string; field: string; mine: PropValue | null; theirs: PropValue | null }
+/** Origem de uma mudança no Delta. */
+export type ChangeOrigin = 'tela' | 'chat';
 export interface PlanItem { n: number; key: string; question: string; options: string[]; recommendation: string; reason?: string }
 export type PlanReply =
   | { kind: 'text'; text: string; warning?: string }
@@ -173,17 +188,33 @@ export interface PlanRequest {
 export type PlanEvent =
   | { type: 'stage'; stage: string }
   | { type: 'tool'; name: string; ok: boolean; ms: number }
-  | { type: 'result'; draft: Draft; reply: PlanReply; previews: ViewSpec[]; opsHash?: string | null }
+  | { type: 'result'; draft: Draft; reply: PlanReply; previews: ViewSpec[]; opsHash?: string | null; screenConflicts?: ScreenConflict[] }
   | { type: 'error'; error: string; code?: string; draft: Draft; previews: ViewSpec[]; warning?: string }
   | { type: 'done'; metrics: { total: number; [k: string]: unknown } };
 
 export const planTurn = (base: string, body: PlanRequest, onEvent: (e: PlanEvent) => void, signal: AbortSignal) =>
   stream<PlanEvent>(`${b(base)}/plan`, body, onEvent, signal);
 /** Valida o rascunho no servidor e o replaneja contra a base atual. */
-export const planOpen = (base: string, draft: Draft) => call<{ draft: Draft; warning?: string; opsHash?: string | null }>(`${b(base)}/plan/open`, { draft });
+export const planOpen = (base: string, draft: Draft) =>
+  call<{ draft: Draft; warning?: string; opsHash?: string | null; screenConflicts?: ScreenConflict[] }>(`${b(base)}/plan/open`, { draft });
+/** Põe uma edição da tela no rascunho e o replaneja; 400 com a mensagem do servidor quando a edição é recusada. */
+export const planEdit = (base: string, draft: Draft, edit: ScreenEdit) =>
+  call<{ draft: Draft; warning?: string; opsHash: string | null; screenConflicts: ScreenConflict[] }>(`${b(base)}/plan/edit`, { draft, edit });
+/** Um nó como o rascunho o deixa: o cartão sobre a prévia e a documentação (a do rascunho, senão a da base). */
+export interface PlanElement {
+  card: Card;
+  /** Null sem documentação. */
+  doc: string | null;
+  /** A base guarda documentação (markdown ou gbrain). */
+  docs: boolean;
+  /** O rascunho remove o nó. */
+  removed: boolean;
+}
+export const planElement = (base: string, draft: Draft, id: string) => call<PlanElement>(`${b(base)}/plan/element`, { draft, id });
 
 export interface PreviewView { key: string; title: string; html?: string; viewData?: unknown; kind: 'change' | 'saved' | 'asked'; error?: string; spec: ViewSpec }
-export interface PreviewField { field: string; before: string; after: string }
+/** `field` é `properties.<k>` para cada chave de propriedade que muda ('—' quando ausente). */
+export interface PreviewField { field: string; before: string; after: string; origin: ChangeOrigin }
 export interface PreviewChange {
   sign: '+' | '~' | '−'; kind: 'element' | 'relationship' | 'doc'; id: string; name: string;
   /** Element type label, or the relationship type. */
@@ -192,6 +223,10 @@ export interface PreviewChange {
   ends?: string[];
   /** A doc's line diff, whole: ' ' is a line kept. */
   diff?: { sign: ' ' | '-' | '+'; line: string }[];
+  /** A doc's lines added and removed. */
+  lines?: { added: number; removed: number };
+  /** Who made it: the screen, the chat, or both (a doc is only 'tela' or 'chat'). */
+  origin: ChangeOrigin | 'ambos';
 }
 export interface PreviewQuestion { key: string; question: string; options: string[]; assumed: string | null }
 export interface PlanPreviewResult {
@@ -204,6 +239,8 @@ export interface PlanPreviewResult {
   report: string | null;
   /** Hash of the final plan's ops (what apply must be confirmed with); null while the plan is not final. */
   opsHash?: string | null;
+  /** Chat × screen conflicts still to answer (they block the apply like an open question). */
+  screenConflicts?: ScreenConflict[];
   warning?: string;
 }
 /** Draws the draft: the default views, or exactly `specs` (drawn with the delta applied). */

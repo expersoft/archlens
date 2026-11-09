@@ -26,9 +26,9 @@ const result = (extra: Partial<api.PlanPreviewResult> = {}): api.PlanPreviewResu
   skipped: [],
   summary: '+1 ~1 −1',
   changes: [
-    { sign: '+', kind: 'element', id: 'a', name: 'Novo' },
-    { sign: '~', kind: 'element', id: 'b', name: 'Mudou' },
-    { sign: '−', kind: 'relationship', id: 'c', name: 'X → Y' },
+    { sign: '+', kind: 'element', id: 'a', name: 'Novo', origin: 'chat' },
+    { sign: '~', kind: 'element', id: 'b', name: 'Mudou', origin: 'chat' },
+    { sign: '−', kind: 'relationship', id: 'c', name: 'X → Y', origin: 'chat' },
   ],
   questions: [{ key: 'q1', question: 'conflito b.description', options: ['keep', 'take'], assumed: 'take' }],
   report: '# Plano: teste\n\nrelatório do plano',
