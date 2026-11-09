@@ -129,4 +129,27 @@ describe('NodePanel', () => {
       expect((screen.getByLabelText('Documentação') as HTMLTextAreaElement).value).toBe('novo');
     });
   });
+
+  it('com o chat rodando (locked) Editar, Escrever e Confirmar ficam desabilitados, com a dica', async () => {
+    planElement.mockResolvedValue(el('a', 'Cashback', { docs: true, doc: 'x', docRaw: 'x' }));
+    const { rerender } = render(<NodePanel base="b" draft={draft()} id="a" onDraft={() => {}} />);
+    await screen.findByRole('heading', { name: 'Cashback' });
+    fireEvent.click(screen.getByRole('button', { name: /Editar documentação/ }));
+    fireEvent.change(screen.getByLabelText('Documentação'), { target: { value: 'novo' } });
+    rerender(<NodePanel base="b" draft={draft()} id="a" onDraft={() => {}} locked />);
+    expect((screen.getByRole('button', { name: 'Confirmar' }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+    for (const n of [/Editar propriedades/, /Editar documentação/]) {
+      const b = screen.getByRole('button', { name: n }) as HTMLButtonElement;
+      expect(b.disabled).toBe(true);
+      expect(b.title).toBe('Aguarde o chat terminar para editar');
+    }
+  });
+
+  it('com o chat rodando o Escrever de um nó sem documentação fica desabilitado', async () => {
+    planElement.mockResolvedValue(el('a', 'Cashback', { docs: true }));
+    render(<NodePanel base="b" draft={draft()} id="a" onDraft={() => {}} locked />);
+    await screen.findByRole('heading', { name: 'Cashback' });
+    expect((screen.getByRole('button', { name: 'Escrever' }) as HTMLButtonElement).disabled).toBe(true);
+  });
 });

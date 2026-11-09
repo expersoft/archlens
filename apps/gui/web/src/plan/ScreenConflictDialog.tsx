@@ -13,10 +13,12 @@ export interface ScreenConflictDialogProps {
   conflict: ScreenConflict;
   nodeName: string;
   onChoose: (choice: 'mine' | 'theirs') => void;
+  /** Um turno do chat está rodando: responder agora seria sobrescrito por ele. */
+  locked?: boolean;
 }
 
 /** The chat wants another value for a field edited on screen: keep yours (default) or take the chat's. */
-export function ScreenConflictDialog({ conflict, nodeName, onChoose }: ScreenConflictDialogProps) {
+export function ScreenConflictDialog({ conflict, nodeName, onChoose, locked }: ScreenConflictDialogProps) {
   const [choice, setChoice] = useState<'mine' | 'theirs'>('mine');
   return (
     <div className="screen-conflict" role="dialog" aria-label="O chat quer mudar algo que você editou">
@@ -32,7 +34,7 @@ export function ScreenConflictDialog({ conflict, nodeName, onChoose }: ScreenCon
           <span className="val">{brief(conflict.theirs)}</span>
         </div>
       </fieldset>
-      <div className="acts"><button type="button" className="on" onClick={() => onChoose(choice)}>Confirmar</button></div>
+      <div className="acts"><button type="button" className="on" disabled={locked} title={locked ? 'Aguarde o chat terminar para editar' : undefined} onClick={() => onChoose(choice)}>Confirmar</button></div>
     </div>
   );
 }

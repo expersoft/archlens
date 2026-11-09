@@ -13,12 +13,12 @@ function Origin({ o }: { o: ChangeOrigin | 'ambos' | undefined }) {
 }
 
 /** ↶ desfazer: only for what the screen touched. */
-function Undo({ c, onUndo }: { c: PreviewChange; onUndo?: (id: string) => void }) {
+function Undo({ c, onUndo, locked }: { c: PreviewChange; onUndo?: (id: string) => void; locked?: boolean }) {
   if (!onUndo || c.kind === 'relationship' || (c.origin !== 'tela' && c.origin !== 'ambos')) return null;
-  return <button type="button" className="undo" title="Desfazer as edições da tela neste nó" onClick={() => onUndo(c.id)}>↶ desfazer</button>;
+  return <button type="button" className="undo" disabled={locked} title={locked ? 'Aguarde o chat terminar para editar' : 'Desfazer as edições da tela neste nó'} onClick={() => onUndo(c.id)}>↶ desfazer</button>;
 }
 
-function Change({ c, selected, onPick, onUndo }: { c: PreviewChange; selected: boolean; onPick?: (id: string) => void; onUndo?: (id: string) => void }) {
+function Change({ c, selected, onPick, onUndo, locked }: { c: PreviewChange; selected: boolean; onPick?: (id: string) => void; onUndo?: (id: string) => void; locked?: boolean }) {
   const target = c.kind === 'element' ? c.id : null;
   return (
     <li className={`chg ${SIGN_CLASS[c.sign]}${selected ? ' sel' : ''}`}>
@@ -28,7 +28,7 @@ function Change({ c, selected, onPick, onUndo }: { c: PreviewChange; selected: b
           ? <button type="button" className="chg-name" title="Mostrar no diagrama" onClick={() => onPick(target)}>{c.name}</button>
           : <span className="chg-name">{c.name}</span>}
         <Origin o={c.origin} />
-        <Undo c={c} onUndo={onUndo} />
+        <Undo c={c} onUndo={onUndo} locked={locked} />
       </div>
       {c.type && <div className="t">{c.type}</div>}
       {c.description && <p className="chg-desc">{c.description}</p>}
@@ -48,7 +48,7 @@ function Change({ c, selected, onPick, onUndo }: { c: PreviewChange; selected: b
 
 const LINE_CLASS = { ' ': 'same', '-': 'del', '+': 'add' } as const;
 
-function DocChange({ c, selected, onPick, onUndo }: { c: PreviewChange; selected: boolean; onPick?: (id: string) => void; onUndo?: (id: string) => void }) {
+function DocChange({ c, selected, onPick, onUndo, locked }: { c: PreviewChange; selected: boolean; onPick?: (id: string) => void; onUndo?: (id: string) => void; locked?: boolean }) {
   const [open, setOpen] = useState(false);
   const added = c.lines?.added ?? (c.diff ?? []).filter((l) => l.sign === '+').length;
   const removed = c.lines?.removed ?? (c.diff ?? []).filter((l) => l.sign === '-').length;
@@ -60,7 +60,7 @@ function DocChange({ c, selected, onPick, onUndo }: { c: PreviewChange; selected
           ? <button type="button" className="chg-name" title="Mostrar no diagrama" onClick={() => onPick(c.id)}>{c.name}</button>
           : <span className="chg-name">{c.name}</span>}
         <Origin o={c.origin} />
-        <Undo c={c} onUndo={onUndo} />
+        <Undo c={c} onUndo={onUndo} locked={locked} />
       </div>
       <button type="button" className="doc-sum" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
         {`+${added} −${removed} linhas · ${open ? 'ocultar' : 'ver'} diferença`}
@@ -75,7 +75,7 @@ function DocChange({ c, selected, onPick, onUndo }: { c: PreviewChange; selected
 }
 
 /** The right panel of Planejar: what the draft changes, as text, and the questions still open. */
-export function DeltaPanel({ result, selected, onPick, onUndo }: { result: PlanPreviewResult | null; selected?: string | null; onPick?: (id: string) => void; onUndo?: (id: string) => void }) {
+export function DeltaPanel({ result, selected, onPick, onUndo, locked }: { result: PlanPreviewResult | null; selected?: string | null; onPick?: (id: string) => void; onUndo?: (id: string) => void; locked?: boolean }) {
   if (!result) return <p className="meta delta-empty">Nada planejado ainda.</p>;
   const elements = result.changes.filter((c) => c.kind === 'element');
   const relations = result.changes.filter((c) => c.kind === 'relationship');
@@ -87,7 +87,7 @@ export function DeltaPanel({ result, selected, onPick, onUndo }: { result: PlanP
       {elements.length > 0 && (
         <section>
           <h3>Elementos ({elements.length})</h3>
-          <ul aria-label="Elementos alterados">{elements.map((c) => <Change key={c.id} c={c} selected={c.id === selected} onPick={onPick} onUndo={onUndo} />)}</ul>
+          <ul aria-label="Elementos alterados">{elements.map((c) => <Change key={c.id} c={c} selected={c.id === selected} onPick={onPick} onUndo={onUndo} locked={locked} />)}</ul>
         </section>
       )}
       {relations.length > 0 && (
@@ -99,7 +99,7 @@ export function DeltaPanel({ result, selected, onPick, onUndo }: { result: PlanP
       {docs.length > 0 && (
         <section>
           <h3>Documentação ({docs.length})</h3>
-          <ul aria-label="Documentação alterada">{docs.map((c) => <DocChange key={c.id} c={c} selected={c.id === selected} onPick={onPick} onUndo={onUndo} />)}</ul>
+          <ul aria-label="Documentação alterada">{docs.map((c) => <DocChange key={c.id} c={c} selected={c.id === selected} onPick={onPick} onUndo={onUndo} locked={locked} />)}</ul>
         </section>
       )}
       {result.questions.length > 0 && (

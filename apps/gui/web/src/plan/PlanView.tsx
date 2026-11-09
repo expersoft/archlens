@@ -300,18 +300,23 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
     else if (leaveEdit()) { setTab(t); setPanel(true); }
   };
 
-  const [edit, setEdit] = useState<{ busy: boolean; error?: string }>({ busy: false });
+  const [editError, setEditError] = useState<string | undefined>();
+  const editing = useRef(false);
+  const [epoch, setEpoch] = useState(0);
   /** A screen edit (undo, or the answer to a conflict) goes through the server, which plans again. */
   const screenEdit = async (op: Parameters<typeof planEdit>[2]) => {
     const current = draftRef.current;
-    if (!current || edit.busy) return;
-    setEdit({ busy: true });
+    if (!current || editing.current || roundRunning) return;
+    if (!leaveEdit()) return;
+    editing.current = true;
+    setEditError(undefined);
     try {
       const r = await planEdit(base, current, op);
       commit(r.draft, chatRef.current);
       setConflicts(r.screenConflicts ?? []);
-      setEdit({ busy: false });
-    } catch (e) { setEdit({ busy: false, error: errMsg(e) }); }
+      editDirty.current = false;
+      setEpoch((n) => n + 1); // the node editor, whose text was just discarded, starts closed
+    } catch (e) { setEditError(errMsg(e)); } finally { editing.current = false; }
   };
   const firstConflict = conflicts[0];
   const nameOf = (id: string) => listed?.changes.find((c) => c.id === id)?.name ?? id;
@@ -352,10 +357,10 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
               <button type="button" disabled={!!reason || applying} title={reason} onClick={() => { setApplyError(null); setReplannable(false); setApplyOpen(true); }}>Aplicar</button>
             </div>
             {firstConflict && (
-              <ScreenConflictDialog key={`${firstConflict.id}:${firstConflict.field}`} conflict={firstConflict} nodeName={nameOf(firstConflict.id)}
+              <ScreenConflictDialog key={`${firstConflict.id}:${firstConflict.field}`} conflict={firstConflict} nodeName={nameOf(firstConflict.id)} locked={roundRunning}
                 onChoose={(choice) => void screenEdit({ op: 'resolve', id: firstConflict.id, field: firstConflict.field, choice })} />
             )}
-            {edit.error && <p className="err" role="alert">{edit.error}</p>}
+            {editError && <p className="err" role="alert">{editError}</p>}
             {applyOpen && shown && <ApplyDialog summary={shown.summary} views={savedViews} busy={applying} error={applyError} onConfirm={() => void apply()} onCancel={() => setApplyOpen(false)} onReplan={replannable ? () => void replan() : undefined} />}
             <PlanPreview base={base} draft={draft} previews={previews} onLoaded={(r, failed) => { setShown(r); if (r) { setListed(r); setConflicts(r.screenConflicts ?? []); } setPreviewFailed(!!failed); }}
               onNavigate={navigated} onNav={onNav} onSelect={(id) => { if (!leaveEdit()) return; setSelected(id); if (id) { setTab('node'); setPanel(true); } }} focus={focus} />
@@ -369,9 +374,9 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
             <button type="button" role="tab" aria-selected={tab === 'node'} className={tab === 'node' ? 'on' : ''} onClick={() => { if (leaveEdit()) setTab('node'); }}>Nó</button>
           </div>
           {tab === 'delta' ? (
-            <DeltaPanel result={changed ? listed : null} selected={selected} onPick={pick} onUndo={(id) => void screenEdit({ op: 'undo', id })} />
+            <DeltaPanel result={changed ? listed : null} selected={selected} onPick={pick} onUndo={(id) => void screenEdit({ op: 'undo', id })} locked={roundRunning} />
           ) : (
-            <NodePanel base={base} draft={draft} id={selected} onPick={pick} onDraft={(d, _h, c) => { commit(d, chatRef.current); setConflicts(c ?? []); }} onDirty={(d) => { editDirty.current = d; }} />
+            <NodePanel key={epoch} locked={roundRunning} base={base} draft={draft} id={selected} onPick={pick} onDraft={(d, _h, c) => { commit(d, chatRef.current); setConflicts(c ?? []); }} onDirty={(d) => { editDirty.current = d; }} />
           )}
         </aside>
       )}

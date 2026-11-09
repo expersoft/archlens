@@ -30,4 +30,11 @@ describe('ScreenConflictDialog', () => {
     render(<ScreenConflictDialog conflict={{ id: 'a', field: 'doc', mine: big, theirs: 'y' }} nodeName="N" onChoose={vi.fn()} />);
     expect(screen.getByRole('dialog').textContent!.length).toBeLessThan(2000);
   });
+
+  it('travado, Confirmar fica desabilitado', () => {
+    render(<ScreenConflictDialog conflict={conflict} nodeName="N" onChoose={vi.fn()} locked />);
+    const b = screen.getByRole('button', { name: 'Confirmar' }) as HTMLButtonElement;
+    expect(b.disabled).toBe(true);
+    expect(b.title).toBe('Aguarde o chat terminar para editar');
+  });
 });

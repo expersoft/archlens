@@ -16,13 +16,16 @@ export interface NodePanelProps {
   onPick?: (id: string) => void;
   /** Há texto de edição não confirmado (o PlanView pergunta antes de trocar de nó ou de aba). */
   onDirty?: (dirty: boolean) => void;
+  /** Um turno do chat está rodando: editar agora seria sobrescrito por ele. */
+  locked?: boolean;
 }
+const LOCKED = 'Aguarde o chat terminar para editar';
 
 
 type Loaded = { draft: Draft; id: string; el: PlanElement } | { draft: Draft; id: string; error: string };
 
 /** A aba Nó do Planejar: o nó como o rascunho o deixa, com os mesmos cartões da tela Navegar. */
-export function NodePanel({ base, draft, id, onPick, onDraft, onDirty }: NodePanelProps) {
+export function NodePanel({ base, draft, id, onPick, onDraft, onDirty, locked }: NodePanelProps) {
   const [loaded, setLoaded] = useState<Loaded | null>(null);
   const [editing, setEditing] = useState<{ id: string; kind: 'properties' | 'doc' } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -70,12 +73,12 @@ export function NodePanel({ base, draft, id, onPick, onDraft, onDirty }: NodePan
   const err = editError && <p className="warn np-edit-err" role="alert">{editError}</p>;
   const props = (el.card.properties ?? {}) as Record<string, PropValue>;
   const editBtn = (kind: 'properties' | 'doc', label: string) => (!el.removed && !mine
-    ? <button type="button" className="linkish" aria-label={`Editar ${label}`} onClick={() => open(kind)}>✎ Editar</button> : undefined);
+    ? <button type="button" className="linkish" aria-label={`Editar ${label}`} disabled={locked} title={locked ? LOCKED : undefined} onClick={() => open(kind)}>✎ Editar</button> : undefined);
   const screenProps = ((draft.edits as Record<string, { properties?: Record<string, PropValue | null> }> | undefined)?.[id]?.properties) ?? {};
   const propsSlot = mine === 'properties' ? (
     <>
       {err}
-      <PropsEditor base={props} value={props} busy={busy} onDirty={setDirty} onCancel={close}
+      <PropsEditor base={props} value={props} busy={busy || !!locked} onDirty={setDirty} onCancel={close}
         onConfirm={(changes) => void save({ op: 'properties', id, properties: { ...screenProps, ...changes } })} />
     </>
   ) : Object.keys(props).length ? (
@@ -86,7 +89,7 @@ export function NodePanel({ base, draft, id, onPick, onDraft, onDirty }: NodePan
   const docSlot = mine === 'doc' ? (
     <>
       {err}
-      <DocEditor text={el.docRaw ?? ''} busy={busy} onDirty={setDirty} onCancel={close}
+      <DocEditor text={el.docRaw ?? ''} busy={busy || !!locked} onDirty={setDirty} onCancel={close}
         onConfirm={(text) => void save({ op: 'doc', id, text })} />
     </>
   ) : el.doc || el.removed
@@ -94,7 +97,7 @@ export function NodePanel({ base, draft, id, onPick, onDraft, onDirty }: NodePan
     : (
       <>
         <p className="muted">Este nó ainda não tem documentação.</p>
-        <button type="button" className="linkish" onClick={() => open('doc')}>Escrever</button>
+        <button type="button" className="linkish" disabled={locked} title={locked ? LOCKED : undefined} onClick={() => open('doc')}>Escrever</button>
       </>
     );
   return (

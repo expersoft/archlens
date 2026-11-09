@@ -108,4 +108,11 @@ describe('DeltaPanel', () => {
     expect(container.querySelector('.chg-fields .after.removed')!.textContent).toBe('—');
     expect(container.querySelector('.chg-fields .before')!.textContent).toBe('time');
   });
+
+  it('com o chat rodando o desfazer fica desabilitado, com a dica', () => {
+    render(<DeltaPanel result={withOrigin([{ sign: '~', kind: 'element', id: 'b', name: 'B', origin: 'tela', fields: [] }])} onUndo={vi.fn()} locked />);
+    const b = screen.getByRole('button', { name: /desfazer/ }) as HTMLButtonElement;
+    expect(b.disabled).toBe(true);
+    expect(b.title).toBe('Aguarde o chat terminar para editar');
+  });
 });
