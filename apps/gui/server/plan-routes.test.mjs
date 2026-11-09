@@ -340,7 +340,7 @@ test('/plan/element mostra nó proposto pelo chat e removed para nó removido', 
   const card = (await (await post(url, 'plan/element', { draft: props.draft, id: 'loja' })).json()).card;
   assert.equal(card.properties.criticidade, 'média', 'o cartão é o da prévia');
   const empty = await (await post(url, 'plan/element', { draft: newDraft({ id: 'loja', version: '' }), id: 'loja' })).json();
-  assert.equal(empty.card.element.properties ?? empty.card.properties.criticidade, 'alta', 'rascunho vazio: o nó como na base');
+  assert.equal(empty.card.properties.criticidade, 'alta', 'rascunho vazio: o nó como na base');
   assert.equal(empty.removed, false);
   assert.equal((await post(url, 'plan/element', { draft, id: 'nao-existe' })).status, 400);
   assert.equal((await post(url, 'plan/element', { draft })).status, 400);

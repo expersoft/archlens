@@ -206,6 +206,9 @@ test('draftState lista as edições da tela', () => withBase(async ctx => {
   const none = scripted([turn([call('reply', { text: 'ok' })])]);
   await runPlan(ctx, req(ctx), opts(none));
   assert.doesNotMatch(none.seen[0].input.text, /edições feitas na tela/);
+  const cleared = scripted([turn([call('reply', { text: 'ok' })])]);
+  await runPlan(ctx, req(ctx, { draft: { ...newDraft(ctx), edits: { loja: { doc: '  \n' } } } }), opts(cleared));
+  assert.ok(cleared.seen[0].input.text.includes('edições feitas na tela (não refaça nem contradiga sem perguntar): loja: documentação (apagada)'));
 }));
 
 test('set_delta do agente que não cita o nó editado mantém draft.edits', () => withBase(async ctx => {

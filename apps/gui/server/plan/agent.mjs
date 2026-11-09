@@ -36,12 +36,12 @@ function deltaSummary(delta) {
 const editValue = v => (v === null ? '(removida)' : typeof v === 'string' ? v : JSON.stringify(v));
 const lineCount = text => (text.trim() ? text.trim().split(/\r?\n/).length : 0);
 
-/** The user's screen edits, one per field: `<id>: properties.<k> = <v>`, `<id>: documentação (<n> linhas)`. */
+/** The user's screen edits, one per field: `<id>: properties.<k> = <v>`, `<id>: documentação (<n> linhas | apagada)`. */
 function screenEdits(edits) {
   const out = [];
   for (const [id, e] of Object.entries(edits ?? {})) {
     for (const [k, v] of Object.entries(e.properties ?? {})) out.push(`${id}: properties.${k} = ${editValue(v)}`);
-    if (typeof e.doc === 'string') out.push(`${id}: documentação (${lineCount(e.doc)} linhas)`);
+    if (typeof e.doc === 'string') out.push(`${id}: documentação (${e.doc.trim() ? `${lineCount(e.doc)} linhas` : 'apagada'})`);
   }
   return out;
 }

@@ -314,8 +314,6 @@ export function planRoutes({ registry, provider, config, telemetry, h }) {
     }],
     ['POST', /^\/api\/bases\/([^/]+)\/plan\/edit$/, async (req, [b]) => edit(req, b)],
     ['POST', /^\/api\/bases\/([^/]+)\/plan\/element$/, async (req, [b]) => element(req, b)],
-    ['POST', /^\/api\/bases\/([^/]+)\/plan\/edit$/, async (req, [b]) => edit(req, b)],
-    ['POST', /^\/api\/bases\/([^/]+)\/plan\/element$/, async (req, [b]) => element(req, b)],
     ['POST', /^\/api\/bases\/([^/]+)\/plan\/apply$/, async (req, [b]) => apply(req, b)],
     ['POST', /^\/api\/bases\/([^/]+)\/plan\/notes$/, async (req, [b]) => notes(req, b)],
   ];
