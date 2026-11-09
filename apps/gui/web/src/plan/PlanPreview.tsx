@@ -109,16 +109,29 @@ export function PlanPreview({ base, draft, previews, onLoaded, onNavigate, onNav
   useEffect(() => { onNav?.({ notation, flip: flipTo }); }, [notation, flipTo, onNav]);
 
   useEffect(() => {
-    if (focus) send(frame.current, { type: 'select', id: focus.id, focus: true });
+    if (focus) { lastSel.current = focus.id; send(frame.current, { type: 'select', id: focus.id, focus: true }); }
   }, [focus]);
   useEffect(() => { matrixSent.current = null; }, [current?.id, current?.html]);
 
   const nameIn = (id: string) => (current?.viewData as { nodes?: Record<string, { name?: string }> } | undefined)?.nodes?.[id]?.name ?? id;
+  const lastSel = useRef<string | null>(null);
+  const echo = useRef<string | null>(null);
+  const nullTimer = useRef<ReturnType<typeof setTimeout>>();
   const onEvent = (e: BridgeEvent) => {
     if (!draft) return;
     if (e.type === 'theme') setTheme(e.theme);
-    else if (e.type === 'select') { menuTicket.current++; setMenu(null); onSelect?.(e.id); }
-    else if (e.type === 'ready') {
+    else if (e.type === 'select') {
+      menuTicket.current++; setMenu(null);
+      if (e.id !== null && e.id === echo.current) { echo.current = null; return; } // the echo of the selection restored after a load
+      if (e.id !== null) { lastSel.current = e.id; onSelect?.(e.id); return; }
+      // A freshly loaded frame says select(null) and, in the same tick, ready: that is not the user deselecting.
+      clearTimeout(nullTimer.current);
+      nullTimer.current = setTimeout(() => { lastSel.current = null; onSelect?.(null); }, 60);
+    } else if (e.type === 'ready') {
+      if (nullTimer.current) {
+        clearTimeout(nullTimer.current); nullTimer.current = undefined;
+        if (lastSel.current) { echo.current = lastSel.current; send(frame.current, { type: 'select', id: lastSel.current }); }
+      }
       if (current?.key && matrixKeys.current.has(current.key) && matrixSent.current !== current.id) {
         matrixSent.current = current.id;
         send(frame.current, { type: 'act', act: 'matrix' });

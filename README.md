@@ -152,7 +152,7 @@ O que faz:
   ArchiMate e C4; o tema da interface (botão da barra do topo) e o do diagrama (o mesmo botão ☀/☾ na barra do diagrama, ou `T`
   no diagrama) são escolhidos em separado; o painel esquerdo (`Ctrl+B`) e o direito (`Ctrl+Alt+B` ou `Ctrl+Shift+B`) seguem o seu gosto.
 - **Detalhes** do elemento: "Nesta visão" (tipo C4 e ArchiMate, papel, distância, relações como frases) e "Na base"
-  (apelidos, pai, filhos, propriedades, fontes e rodadas). Em base `markdown` ou `gbrain`, a aba Documentação traz o
+  (apelidos, pai, filhos, propriedades, fontes e rodadas). Em base `markdown` ou `gbrain`, o cartão Documentação do painel do nó traz o
   texto do nó.
 - **Busca por nome** (`Ctrl+K`), seletor de base, e a troca de base reinicia o histórico.
 
@@ -314,7 +314,7 @@ cabeçalho na cor da camada; o Navegar usa o mesmo painel, só leitura.
   `Confirmar` põe a edição no rascunho, `Cancelar` descarta.
 - **Documentação** (base `markdown` ou `gbrain`; em base `json` o cartão não aparece): `Editar` abre uma caixa de
   markdown redimensionável, com `Tela cheia`. Trocar o texto pela tela não abre a pergunta com a diferença do chat.
-- **Origem no Delta:** cada mudança leva o selo **chat** ou **tela**; nas da tela há **Desfazer**, que apaga as edições
+- **Origem no Delta:** cada mudança leva o selo **chat** ou **tela**; nas da tela há **desfazer**, que apaga as edições
   da tela daquele nó e deixa o nó como o chat o deixa (ou como está na base).
 - **O que não se perde:** as edições da tela ficam numa camada própria do rascunho, que sobrevive a recarregar a
   página, a `Salvar`/`Abrir` e a um `set_delta` do agente que não cita o nó.
@@ -341,7 +341,7 @@ pedido recusa com `E_STORE_DOC` (`archlens store convert` troca o conector).
 
 **Para ler:**
 
-- aba **Documentação** no painel do nó, na GUI e no HTML gerado, ao lado de Detalhes e com o diagrama visível;
+- cartão **Documentação** no painel do nó da GUI e aba **Documentação** no HTML gerado (ao lado de Detalhes), com o diagrama visível;
 - seção Documentação em `archlens query <base> --element <id>`; com `--doc`, só o texto, como está na página;
 - seção `Documentação dos nós` no `ARCHITECTURE.md`;
 - busca com LLM, quando o agente abre o nó.

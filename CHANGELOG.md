@@ -25,7 +25,7 @@ versões seguem [SemVer](https://semver.org/lang/pt-BR/).
 - **Documentação do nó** (base `markdown` ou `gbrain`): `docs` no delta escreve o texto livre da página, com a diferença
   linha a linha no plano e pergunta `keep`/`take` ao trocar texto existente; a operação de store `putDoc` grava o texto e
   a rodada registra quais nós mudaram (`doc N` no resumo), sem copiar o texto. Base `json` recusa com `E_STORE_DOC`.
-- **Abas Documentação:** no painel do nó, na GUI e no HTML gerado, ao lado de Detalhes. O modo Planejar lê e edita o
+- **Documentação no painel do nó:** aba Documentação ao lado de Detalhes no HTML gerado e cartão Documentação no painel da GUI. O modo Planejar lê e edita o
   texto, com a diferença no painel Delta. A documentação também aparece no cartão de `query --element`, na busca com LLM
   e na seção `Documentação dos nós` do `ARCHITECTURE.md`.
 - **`archlens query <base> --element <id> --doc`:** imprime o texto como está na página, títulos e wikilinks intactos,
@@ -36,7 +36,7 @@ versões seguem [SemVer](https://semver.org/lang/pt-BR/).
 - **GUI, painel do nó e edição no Planejar:** o painel do nó (Navegar e Planejar) vira cartões recolhíveis, com o
   cabeçalho na cor da camada, tetos e "Mostrar mais". No Planejar, a lateral direita ganha as abas **Delta** e **Nó**;
   propriedades (alterar, adicionar, remover) e documentação se editam pela tela, com `Confirmar`/`Cancelar` e tela cheia.
-  As edições entram no Delta com o selo **tela** (ou **chat**) e **Desfazer**, ficam numa camada própria do rascunho
+  As edições entram no Delta com o selo **tela** (ou **chat**) e **desfazer**, ficam numa camada própria do rascunho
   (sobrevivem a recarregar, `Salvar`/`Abrir` e `set_delta`) e, se o chat quiser mudar o mesmo valor, um aviso pede
   **Manter o seu** ou **Usar o do chat**. Rotas `/plan/edit` e `/plan/element`.
 - **Delta:** `null` em `properties` remove a propriedade (com pergunta de conflito no merge).

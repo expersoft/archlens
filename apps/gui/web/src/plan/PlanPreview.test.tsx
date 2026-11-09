@@ -204,4 +204,17 @@ describe('PlanPreview', () => {
     await u.click(screen.getByRole('button', { name: 'Preview' }));
     expect(screen.getByRole('heading', { name: 'Plano: teste' })).toBeTruthy();
   });
+
+  it('o select(null) que o quadro manda ao carregar não limpa a seleção do painel', async () => {
+    const onSelect = vi.fn();
+    const { container } = render(<PlanPreview base="b" draft={withDelta} previews={[]} onSelect={onSelect} />);
+    await waitFor(() => expect(frames(container)).toHaveLength(1));
+    await fromFrame(container, { type: 'select', id: 'b' }, () => expect(onSelect).toHaveBeenCalledWith('b'));
+    onSelect.mockClear();
+    // A new load of the frame: it says select(null) and, a moment later, ready.
+    window.dispatchEvent(new MessageEvent('message', { data: { source: 'archlens', type: 'select', id: null }, source: container.querySelector('iframe')!.contentWindow }));
+    window.dispatchEvent(new MessageEvent('message', { data: { source: 'archlens', type: 'ready' }, source: container.querySelector('iframe')!.contentWindow }));
+    await new Promise((r) => setTimeout(r, 150));
+    expect(onSelect).not.toHaveBeenCalledWith(null);
+  });
 });

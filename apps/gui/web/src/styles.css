@@ -241,6 +241,7 @@ body{font:14px/1.4 system-ui,sans-serif;background:var(--bg);color:var(--ink)}
 .np-sp{flex:1}
 .np-card-b{padding:0 10px 10px;font-size:13px}
 .np-card-b h3{margin-top:8px}
+.np-card-b .linkish{display:block}
 .doc-box{max-height:84px;overflow:hidden;position:relative}
 .doc-box.open{max-height:none}
 .doc-more{display:flex;gap:12px}
