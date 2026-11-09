@@ -115,4 +115,35 @@ describe('App, aba Nó do Planejar', () => {
     expect(await screen.findByText(/removido pelo rascunho/i)).toBeTruthy();
     expect(screen.queryByRole('button', { name: /Editar/ })).toBeNull();
   });
+
+  it('Descartar zera a contagem da aba Delta', async () => {
+    const u = await open();
+    await screen.findByRole('tab', { name: 'Delta (2)' });
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    await u.click(screen.getByRole('button', { name: 'Descartar rascunho' }));
+    expect(await screen.findByRole('tab', { name: 'Delta (0)' })).toBeTruthy();
+    expect(screen.getByText('Nada planejado ainda.')).toBeTruthy();
+  });
+
+  it('rascunho só com edições da tela mostra as mudanças no Delta', async () => {
+    const edited = { ...delta, delta: null, edits: { loja: { properties: { criticidade: 'média' } } } };
+    vi.mocked(api.getInfo).mockResolvedValue({ ask, plan: { enabled: true, maxRounds: 8, timeoutMs: 1000 } });
+    localStorage.setItem('archlens-gui-draft:b', JSON.stringify(edited));
+    vi.spyOn(api, 'planOpen').mockResolvedValue({ draft: edited } as never);
+    const u = userEvent.setup();
+    render(<App />);
+    await screen.findByRole('navigation', { name: 'Trilha' });
+    await u.click(await screen.findByRole('button', { name: 'Planejar' }));
+    expect(await screen.findByRole('button', { name: 'Cashback' })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'Delta (2)' })).toBeTruthy();
+  });
+
+  it('escolher um nó com o painel fechado abre o painel na aba Nó', async () => {
+    localStorage.setItem('archlens-plan-delta', 'false');
+    const u = await open();
+    expect(screen.queryByTestId('delta-panel')).toBeNull();
+    await u.click(await screen.findByRole('button', { name: 'prévia a' }));
+    expect(await screen.findByRole('heading', { name: 'Cashback' })).toBeTruthy();
+    expect(screen.getByTestId('delta-panel')).toBeTruthy();
+  });
 });

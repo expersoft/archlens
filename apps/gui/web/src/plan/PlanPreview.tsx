@@ -6,6 +6,7 @@ import { send, type BridgeEvent } from '../bridge';
 import { useDiagramTheme } from '../theme';
 import { useStoredState } from '../store';
 import { Markdown } from './Markdown';
+import { hasChanges } from './draftStore';
 
 type Tab = 'diagram' | 'plan';
 type Mode = 'base' | 'delta' | 'both';
@@ -57,7 +58,7 @@ export function PlanPreview({ base, draft, previews, onLoaded, onNavigate, onNav
   const matrixSent = useRef<string | null>(null);
   const menuTicket = useRef(0);
   const frame = useRef<HTMLIFrameElement>(null);
-  const planned = !!draft && !!draft.delta;
+  const planned = hasChanges(draft);
   const askedKey = JSON.stringify(previews);
 
   // The default views come with the draft; the ones asked in the conversation are drawn with the same delta.

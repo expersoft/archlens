@@ -77,3 +77,7 @@ export function save(base: string, draft: Draft | null, chat: ChatMsg[]): 'ok' |
 export function clear(base: string) {
   try { localStorage.removeItem(draftKey(base)); localStorage.removeItem(chatKey(base)); } catch { /* sem storage */ }
 }
+
+/** The draft changes something: a delta from the conversation or edits made on screen. */
+export const hasChanges = (d: Draft | null): boolean =>
+  !!d && (!!d.delta || Object.keys((d.edits as object | undefined) ?? {}).length > 0);
