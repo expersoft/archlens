@@ -3,6 +3,7 @@ import { ApiError, planApply, planNotes, planOpen, planTurn, type AppliedRound, 
 import { ApplyDialog } from './ApplyDialog';
 import { PlanPreview, type PreviewNav } from './PlanPreview';
 import { DeltaPanel } from './DeltaPanel';
+import { NodePanel } from './NodePanel';
 import { useStoredState } from '../store';
 import { PlanChat } from './PlanChat';
 import { Split } from './Split';
@@ -91,6 +92,7 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
   const [panel, setPanel] = useStoredState<boolean>('archlens-plan-delta', true);
   // The panel keeps the last preview while the next one is drawn (`shown` goes null then, which only gates Aplicar).
   const [listed, setListed] = useState<PlanPreviewResult | null>(null);
+  const [tab, setTab] = useStoredState<'delta' | 'node'>('archlens-plan-tab', 'delta');
   const [selected, setSelected] = useState<string | null>(null);
   const [focus, setFocus] = useState<{ id: string; n: number } | null>(null);
   const navigated = useCallback((spec: ViewSpec) => setPreviews((p) => addNew(p, [spec])), []);
@@ -277,6 +279,13 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
     return () => window.removeEventListener('keydown', onKey);
   }, [active, setPanel]);
 
+  const pick = (id: string) => { setSelected(id); setTab('node'); setFocus((f) => ({ id, n: (f?.n ?? 0) + 1 })); };
+  // The rail button shows its tab; on the tab already shown it hides the panel.
+  const railTo = (t: 'delta' | 'node') => {
+    if (panel && tab === t) setPanel(false);
+    else { setTab(t); setPanel(true); }
+  };
+
   const saveBtn = <button type="button" aria-label="Salvar rascunho" title="Salvar o rascunho num arquivo .json" disabled={!draft} onClick={() => draft && download(base, draft)}>Salvar</button>;
 
   return (
@@ -314,18 +323,26 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
             </div>
             {applyOpen && shown && <ApplyDialog summary={shown.summary} views={savedViews} busy={applying} error={applyError} onConfirm={() => void apply()} onCancel={() => setApplyOpen(false)} onReplan={replannable ? () => void replan() : undefined} />}
             <PlanPreview base={base} draft={draft} previews={previews} onLoaded={(r, failed) => { setShown(r); if (r) setListed(r); setPreviewFailed(!!failed); }}
-              onNavigate={navigated} onNav={onNav} onSelect={setSelected} focus={focus} />
+              onNavigate={navigated} onNav={onNav} onSelect={(id) => { setSelected(id); if (id) setTab('node'); }} focus={focus} />
           </div>
         )}
       />
       {panel && (
-        <aside className="side r" data-testid="delta-panel" aria-label="Delta">
-          <div className="ph">Delta</div>
-          <DeltaPanel result={draft?.delta ? listed : null} selected={selected} onPick={(id) => { setSelected(id); setFocus((f) => ({ id, n: (f?.n ?? 0) + 1 })); }} />
+        <aside className="side r" data-testid="delta-panel" aria-label="Painel do nó e do delta">
+          <div role="tablist" className="side-tabs">
+            <button type="button" role="tab" aria-selected={tab === 'delta'} className={tab === 'delta' ? 'on' : ''} onClick={() => setTab('delta')}>Delta ({listed?.changes.length ?? 0})</button>
+            <button type="button" role="tab" aria-selected={tab === 'node'} className={tab === 'node' ? 'on' : ''} onClick={() => setTab('node')}>Nó</button>
+          </div>
+          {tab === 'delta' ? (
+            <DeltaPanel result={draft?.delta ? listed : null} selected={selected} onPick={pick} />
+          ) : (
+            <NodePanel base={base} draft={draft} id={selected} onPick={pick} onDraft={(d) => commit(d, chatRef.current)} />
+          )}
         </aside>
       )}
       <nav className="rail r" aria-label="Painel direito">
-        <button type="button" aria-label="Delta" title="Delta (Ctrl+Alt+B ou Ctrl+Shift+B)" className={panel ? 'on' : ''} onClick={() => setPanel((v) => !v)}>Δ</button>
+        <button type="button" aria-label="Delta" title="Delta (Ctrl+Alt+B ou Ctrl+Shift+B)" className={panel && tab === 'delta' ? 'on' : ''} onClick={() => railTo('delta')}>Δ</button>
+        <button type="button" aria-label="Nó" title="Nó selecionado" className={panel && tab === 'node' ? 'on' : ''} onClick={() => railTo('node')}>Nó</button>
       </nav>
     </div>
   );
