@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ApiError, planApply, planNotes, planOpen, planTurn, type AppliedRound, type Draft, type PlanApplyResult, type PlanEvent, type PlanPreviewResult, type PlanRequest, type RepoAttach, type ViewSpec } from '../api';
+import { ApiError, planApply, planEdit, planNotes, planOpen, planTurn, type AppliedRound, type Draft, type PlanApplyResult, type PlanEvent, type PlanPreviewResult, type PlanRequest, type RepoAttach, type ScreenConflict, type ViewSpec } from '../api';
 import { ApplyDialog } from './ApplyDialog';
 import { PlanPreview, type PreviewNav } from './PlanPreview';
 import { DeltaPanel } from './DeltaPanel';
 import { NodePanel } from './NodePanel';
+import { ScreenConflictDialog } from './ScreenConflictDialog';
 import { useStoredState } from '../store';
 import { PlanChat } from './PlanChat';
 import { Split } from './Split';
@@ -21,6 +22,7 @@ const NOTES_ASK = 'rascunhe as notas de interpretação desta rodada';
 const ROUND_RUNNING = 'aguarde a rodada em andamento terminar antes de aplicar';
 const PREVIEW_FAILED = 'a prévia falhou; tente de novo';
 const REPLANNABLE = new Set(['E_STORE_CONFLICT', 'E_PLAN_STALE']);
+const CONFLICT = 'O chat quer mudar algo que você editou; responda o aviso antes de aplicar';
 const OPEN_QUESTIONS = 'responda as perguntas abertas antes de aplicar';
 const NO_CHROMIUM = 'Chromium indisponível no servidor; rode "npx playwright install chromium" na máquina do servidor';
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -85,6 +87,7 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
   const [stored, setStored] = useState<'ok' | 'chat-trimmed' | 'too-big'>('ok');
   const [previews, setPreviews] = useState<ViewSpec[]>([]);
   const [shown, setShown] = useState<PlanPreviewResult | null>(null);
+  const [conflicts, setConflicts] = useState<ScreenConflict[]>([]);
   const [previewFailed, setPreviewFailed] = useState(false);
   const [replannable, setReplannable] = useState(false);
   const [applyOpen, setApplyOpen] = useState(false);
@@ -132,6 +135,7 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
       planOpen(base, saved.draft).then((r) => {
         if (!alive.current || run.current) return;
         commit(r.draft, chatRef.current);
+        setConflicts(r.screenConflicts ?? []);
         if (r.warning) { note({ text: '', warning: r.warning }); }
       }).catch((e) => { if (alive.current) note({ text: '', error: `${errMsg(e)}; ${BROKEN}` }); });
     }
@@ -156,6 +160,7 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
       else if (e.type === 'result') {
         finished = true; if (run.current?.id === id) run.current = null;
         const { reply } = e;
+        setConflicts(e.screenConflicts ?? []);
         if (e.previews?.length) setPreviews((p) => addNew(p, e.previews));
         const msg: Partial<ChatMsg> = { status: undefined, stage: undefined, warning: reply.warning };
         if (reply.kind === 'text') msg.text = reply.text;
@@ -197,7 +202,7 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
   };
 
   const roundRunning = chat.some((m) => m.status === 'running');
-  const reason = !canBuild ? NO_CHROMIUM : roundRunning ? ROUND_RUNNING : !shown ? (previewFailed ? PREVIEW_FAILED : 'nada planejado para aplicar') : shown.questions.length ? OPEN_QUESTIONS : shown.opsHash ? undefined : 'o plano ainda não está final';
+  const reason = !canBuild ? NO_CHROMIUM : roundRunning ? ROUND_RUNNING : conflicts.length ? CONFLICT : !shown ? (previewFailed ? PREVIEW_FAILED : 'nada planejado para aplicar') : shown.questions.length ? OPEN_QUESTIONS : shown.opsHash ? undefined : 'o plano ainda não está final';
   const savedViews = (shown?.views ?? []).filter((v) => v.kind === 'saved' && !v.error).map((v) => v.title);
 
   const replan = async () => {
@@ -208,6 +213,7 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
       const r = await planOpen(base, current);
       setApplyOpen(false);
       commit(r.draft, chatRef.current);
+      setConflicts(r.screenConflicts ?? []);
       note({ text: '', warning: r.warning ?? 'o plano foi refeito sobre a base atual; revise e aplique de novo' });
     } catch (e) { setApplyError(errMsg(e)); } finally { setApplying(false); }
   };
@@ -226,6 +232,7 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
       else note({ text: `Plano aplicado: base gravada e ${r.doc ?? 'ARCHITECTURE.md'} regenerado.` });
       for (const path of r.preserved) note({ text: `Texto do nó removido guardado em ${path}.` });
       note({ text: buildText(base, r.build) });
+      setConflicts([]);
       commit(null, chatRef.current); // the draft goes; the conversation stays saved
       setPreviews([]);
       onApplied?.();
@@ -234,6 +241,7 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
       if (e instanceof ApiError && e.code === 'E_GUI_PLAN_CHANGED' && e.extra.draft) {
         setApplyOpen(false);
         commit(e.extra.draft as Draft, chatRef.current);
+        setConflicts((e.extra.screenConflicts as ScreenConflict[] | undefined) ?? []);
         note({ text: '', warning: e.message });
       } else { setApplyError(errMsg(e)); setReplannable(e instanceof ApiError && REPLANNABLE.has(e.code ?? '')); }
     } finally { setApplying(false); }
@@ -245,6 +253,7 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
       if (draftRef.current && !window.confirm(REPLACE)) return;
       cancel();
       setPreviews([]);
+      setConflicts(r.screenConflicts ?? []);
       commit(r.draft, r.warning ? [{ id: ++seq.current, role: 'assistant', text: '', warning: r.warning }] : []);
     } catch (e) {
       note({ text: '', error: e instanceof SyntaxError ? 'o arquivo não é um rascunho do archlens' : errMsg(e) });
@@ -256,6 +265,7 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
     cancel();
     clear(base);
     commit(null, []);
+    setConflicts([]);
     setPreviews([]);
     setApplyOpen(false);
   };
@@ -289,6 +299,22 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
     if (panel && tab === t) { if (leaveEdit()) setPanel(false); }
     else if (leaveEdit()) { setTab(t); setPanel(true); }
   };
+
+  const [edit, setEdit] = useState<{ busy: boolean; error?: string }>({ busy: false });
+  /** A screen edit (undo, or the answer to a conflict) goes through the server, which plans again. */
+  const screenEdit = async (op: Parameters<typeof planEdit>[2]) => {
+    const current = draftRef.current;
+    if (!current || edit.busy) return;
+    setEdit({ busy: true });
+    try {
+      const r = await planEdit(base, current, op);
+      commit(r.draft, chatRef.current);
+      setConflicts(r.screenConflicts ?? []);
+      setEdit({ busy: false });
+    } catch (e) { setEdit({ busy: false, error: errMsg(e) }); }
+  };
+  const firstConflict = conflicts[0];
+  const nameOf = (id: string) => listed?.changes.find((c) => c.id === id)?.name ?? id;
 
   const saveBtn = <button type="button" aria-label="Salvar rascunho" title="Salvar o rascunho num arquivo .json" disabled={!draft} onClick={() => draft && download(base, draft)}>Salvar</button>;
 
@@ -325,8 +351,13 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
               <button type="button" aria-label="Descartar rascunho" disabled={!draft} onClick={discard}>Descartar</button>
               <button type="button" disabled={!!reason || applying} title={reason} onClick={() => { setApplyError(null); setReplannable(false); setApplyOpen(true); }}>Aplicar</button>
             </div>
+            {firstConflict && (
+              <ScreenConflictDialog key={`${firstConflict.id}:${firstConflict.field}`} conflict={firstConflict} nodeName={nameOf(firstConflict.id)}
+                onChoose={(choice) => void screenEdit({ op: 'resolve', id: firstConflict.id, field: firstConflict.field, choice })} />
+            )}
+            {edit.error && <p className="err" role="alert">{edit.error}</p>}
             {applyOpen && shown && <ApplyDialog summary={shown.summary} views={savedViews} busy={applying} error={applyError} onConfirm={() => void apply()} onCancel={() => setApplyOpen(false)} onReplan={replannable ? () => void replan() : undefined} />}
-            <PlanPreview base={base} draft={draft} previews={previews} onLoaded={(r, failed) => { setShown(r); if (r) setListed(r); setPreviewFailed(!!failed); }}
+            <PlanPreview base={base} draft={draft} previews={previews} onLoaded={(r, failed) => { setShown(r); if (r) { setListed(r); setConflicts(r.screenConflicts ?? []); } setPreviewFailed(!!failed); }}
               onNavigate={navigated} onNav={onNav} onSelect={(id) => { if (!leaveEdit()) return; setSelected(id); if (id) { setTab('node'); setPanel(true); } }} focus={focus} />
           </div>
         )}
@@ -338,9 +369,9 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
             <button type="button" role="tab" aria-selected={tab === 'node'} className={tab === 'node' ? 'on' : ''} onClick={() => { if (leaveEdit()) setTab('node'); }}>Nó</button>
           </div>
           {tab === 'delta' ? (
-            <DeltaPanel result={changed ? listed : null} selected={selected} onPick={pick} />
+            <DeltaPanel result={changed ? listed : null} selected={selected} onPick={pick} onUndo={(id) => void screenEdit({ op: 'undo', id })} />
           ) : (
-            <NodePanel base={base} draft={draft} id={selected} onPick={pick} onDraft={(d) => commit(d, chatRef.current)} onDirty={(d) => { editDirty.current = d; }} />
+            <NodePanel base={base} draft={draft} id={selected} onPick={pick} onDraft={(d, _h, c) => { commit(d, chatRef.current); setConflicts(c ?? []); }} onDirty={(d) => { editDirty.current = d; }} />
           )}
         </aside>
       )}

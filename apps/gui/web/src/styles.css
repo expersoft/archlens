@@ -183,6 +183,19 @@ body{font:14px/1.4 system-ui,sans-serif;background:var(--bg);color:var(--ink)}
 .delta-panel .chg-fields dt{font-size:11px;color:var(--muted)}
 .delta-panel .chg-fields dd{margin:0;overflow-wrap:anywhere}
 .delta-panel .chg-fields .before{color:var(--muted);text-decoration:line-through}
+.delta-panel .origin{font-size:10px;line-height:1;padding:2px 5px;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:var(--muted);white-space:nowrap}
+.delta-panel .origin.tela,.delta-panel .origin.ambos{border-color:var(--accent);color:var(--accent)}
+.delta-panel .undo{margin-left:auto;font-size:11px;background:none;border:0;color:var(--accent);cursor:pointer;padding:0 2px;white-space:nowrap}
+.delta-panel .undo:hover{text-decoration:underline}
+.delta-panel .after.removed{text-decoration:line-through;color:var(--muted)}
+.delta-panel .doc-sum{margin:4px 0 0 1.4em;font:inherit;font-size:12px;background:none;border:0;padding:0;color:var(--accent);cursor:pointer;text-align:left}
+.delta-panel .doc-sum:hover{text-decoration:underline}
+.screen-conflict{margin:8px;padding:8px 12px;border:1px solid var(--accent);border-radius:6px;background:var(--panel);font-size:13px}
+.screen-conflict h3{margin:0 0 6px;font-size:13px}
+.screen-conflict fieldset{border:0;margin:6px 0;padding:0;display:flex;flex-direction:column;gap:4px}
+.screen-conflict label{display:flex;gap:6px;align-items:baseline}
+.screen-conflict .val{display:block;color:var(--muted);overflow-wrap:anywhere;margin-left:20px}
+.screen-conflict .acts{display:flex;justify-content:flex-end}
 .delta-panel .doc-diff{margin:4px 0 0 1.4em;font:12px/1.4 ui-monospace,monospace;white-space:pre-wrap;overflow-wrap:anywhere}
 .delta-panel .doc-diff .ln{display:block}
 .delta-panel .doc-diff .ln.add{background:rgba(42,138,62,.15)}
