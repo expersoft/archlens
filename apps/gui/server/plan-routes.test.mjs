@@ -364,3 +364,23 @@ test('deltaList separa properties por chave e marca a origem', () => withPlan(as
   assert.equal(fields(of('erp'))['properties.sla'].origin, 'chat');
   assert.equal(of('loja.cache').origin, 'tela');
 }));
+
+test('/plan/edit em nó novo aninhado em children do delta grava a edição', () => withPlan(async url => {
+  const draft = await draftWith(url, delta({ elements: [{ id: 'sis-novo', name: 'Sis Novo', type: 'application-component',
+    children: [{ id: 'sis-novo.api', name: 'API Nova', type: 'application-component' }] }] }));
+  const out = await edited(url, draft, { op: 'properties', id: 'sis-novo.api', properties: { owner: 'Time X' } });
+  assert.deepEqual(out.draft.edits, { 'sis-novo.api': { properties: { owner: 'Time X' } } });
+}));
+
+test('/plan/edit na propriedade que o chat propôs não abre aviso e deixa aplicar', () => withPlan(async url => {
+  const draft = await draftWith(url, delta({ elements: [{ id: 'loja', properties: { criticidade: 'baixa' } }] }));
+  const out = await edited(url, draft, { op: 'properties', id: 'loja', properties: { criticidade: 'média' } });
+  assert.deepEqual(out.screenConflicts, []);
+  assert.match(out.opsHash, /^[0-9a-f]{64}$/);
+}));
+
+test('/plan/edit que deixa o rascunho grande demais é 400 com a mensagem do teto', () => withPlan(async url => {
+  const r = await edit(url, newDraft({ id: 'loja', version: '' }), { op: 'properties', id: 'loja', properties: { grande: 'x'.repeat(2_100_000) } });
+  assert.equal(r.status, 400);
+  assert.match((await r.json()).error, /grande demais/);
+}));

@@ -2,8 +2,8 @@
 // /plan/edit (an edit made on screen), /plan/element (a node as the draft leaves it), /plan/apply (write the confirmed
 // plan, then the document and the diagrams) and /plan/notes (the interpretation notes).
 import { dirname, relative, sep } from 'node:path';
-import { newDraft, checkDraft, replanDraft, draftOpsHash, DRAFT_MAX_BYTES } from './draft.mjs';
-import { applyEdit, screenConflicts } from './edits.mjs';
+import { newDraft, checkDraft, replanDraft, draftOpsHash, draftBytes, DRAFT_MAX_BYTES, TOO_BIG } from './draft.mjs';
+import { applyEdit, screenConflicts, findDeltaElement } from './edits.mjs';
 import { runPlan } from './agent.mjs';
 import { checkRepo, scrubCredentials } from './repo.mjs';
 import { ONE_REPO } from './tools.mjs';
@@ -239,7 +239,7 @@ export function planRoutes({ registry, provider, config, telemetry, h }) {
     }
     const out = await registry.inTurn(b, () => {
       const checked = checkDraft(draft, ctx);
-      if ((e.op === 'properties' || e.op === 'doc') && !inBase && !checked.delta?.model?.elements?.some(x => x?.id === id)) {
+      if ((e.op === 'properties' || e.op === 'doc') && !inBase && !findDeltaElement(checked.delta, id)) {
         throw httpError(400, `"${id}" não existe na base nem no rascunho`, 'E_UNKNOWN_REF');
       }
       let next = applyEdit(checked, e, ctx.model.elements.get(id)?.properties ?? {});
@@ -247,6 +247,8 @@ export function planRoutes({ registry, provider, config, telemetry, h }) {
         const chat = checked.delta?.docs?.find(d => d?.id === id);
         if (!chat || chat.text.trim() === e.text.trim()) next = dropDoc(next, id);
       }
+      // the cap the draft is opened with: an edit never leaves a draft that would not open again
+      if (draftBytes(next) > DRAFT_MAX_BYTES) throw httpError(400, TOO_BIG, 'E_GUI_DRAFT');
       // applyEdit leaves the plan's state and ops behind: always plan again
       return replanDraft(ctx, next);
     });

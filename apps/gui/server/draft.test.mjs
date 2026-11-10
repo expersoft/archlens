@@ -202,3 +202,21 @@ test('edição em nó novo que o chat deixou de propor é descartada', () => wit
   const d = { ...newDraft(ctx), delta: chatDelta([]), edits: { 'svc-sumiu': { properties: { a: '1' } } } };
   assert.doesNotThrow(() => replanDraft(ctx, d));
 }));
+
+test('edição em nó novo aninhado em children entra no plano', () => withBase(ctx => {
+  const d = { ...newDraft(ctx), delta: chatDelta([{ id: 'sis-novo', name: 'Sis Novo', type: 'application-component',
+    children: [{ id: 'sis-novo.api', name: 'API Nova', type: 'application-component' }] }]),
+    edits: { 'sis-novo.api': { properties: { owner: 'Time X' } } } };
+  const { draft } = replanDraft(ctx, d);
+  const ops = JSON.stringify(draft.plan.ops);
+  assert.match(ops, /Time X/, 'a edição não é descartada como órfã');
+}));
+
+test('nó existente tocado via children: a edição vai na mesma entrada, sem chave repetida no plano', () => withBase(ctx => {
+  const d = { ...newDraft(ctx), delta: chatDelta([{ id: 'loja', children: [{ id: 'loja.pedidos', properties: { criticidade: 'baixa' } }] }]),
+    edits: { 'loja.pedidos': { properties: { criticidade: 'média' } } } };
+  const { draft } = replanDraft(ctx, d);
+  const keys = draft.plan.items.map(i => i.key);
+  assert.equal(new Set(keys).size, keys.length, `chaves repetidas: ${keys.join(', ')}`);
+  assert.equal(draftOpsHash(draft), null, 'o chat propõe outro valor: conflito com a tela');
+}));

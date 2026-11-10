@@ -3,7 +3,7 @@
 import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { plan as planDelta, answersOf, isFinal } from '../../../../scripts/lib/api.mjs';
-import { checkEdits, composeDelta, screenAnswers, screenConflicts } from './edits.mjs';
+import { checkEdits, composeDelta, screenAnswers, screenConflicts, findDeltaElement } from './edits.mjs';
 
 export const DRAFT_VERSION = '1.0';
 export const DRAFT_MAX_BYTES = 2_000_000;
@@ -83,7 +83,7 @@ function removedIds(ctx, delta, edits, answers) {
     }
   }
   for (const id of ids) {
-    if (!ctx.model?.elements?.has?.(id) && !delta?.model?.elements?.some(e => e?.id === id)) out.add(id);
+    if (!ctx.model?.elements?.has?.(id) && !findDeltaElement(delta, id)) out.add(id);
   }
   return out;
 }

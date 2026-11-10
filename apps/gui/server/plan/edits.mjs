@@ -15,11 +15,14 @@ const PROP = 'properties.';
 const isValue = v => v === null || typeof v === 'string' || typeof v === 'boolean' || (typeof v === 'number' && Number.isFinite(v))
   || (Array.isArray(v) && v.every(x => typeof x === 'string'));
 const isField = f => typeof f === 'string' && (f === 'doc' || (f.startsWith(PROP) && f.slice(PROP.length).trim() !== ''));
+/** Keys a plain object reads from its prototype: refused, the core would drop them or answer the inherited value. */
+export const RESERVED_KEYS = ['__proto__', 'constructor', 'prototype'];
 
 function checkProperties(id, props) {
   if (!isObject(props)) throw editError(`as propriedades editadas de "${id}" são inválidas`);
   for (const [k, v] of Object.entries(props)) {
     if (!k.trim()) throw editError(`chave de propriedade vazia nas edições de "${id}"`);
+    if (RESERVED_KEYS.includes(k.trim())) throw editError(`a chave "${k}" é reservada; use outro nome de propriedade em "${id}"`);
     if (!isValue(v)) throw editError(`valor inválido na propriedade "${k}" de "${id}"`);
   }
 }
@@ -42,6 +45,20 @@ export function checkEdits(edits, kept) {
   return { edits: e, kept: k };
 }
 
+/** The element `id` of a delta, at the top of `model.elements` or nested in `children` (the delta allows both). */
+export function findDeltaElement(delta, id) {
+  const walk = list => {
+    if (!Array.isArray(list)) return undefined;
+    for (const e of list) {
+      if (e?.id === id) return e;
+      const found = walk(e?.children);
+      if (found) return found;
+    }
+    return undefined;
+  };
+  return walk(delta?.model?.elements);
+}
+
 /** The agent's delta with the screen edits on top; edits for `removedIds` are dropped. No edits → `delta` itself. */
 export function composeDelta(delta, edits, removedIds = new Set()) {
   const live = Object.entries(edits ?? {}).filter(([id]) => !removedIds.has(id));
@@ -52,7 +69,7 @@ export function composeDelta(delta, edits, removedIds = new Set()) {
     if (e.properties && Object.keys(e.properties).length) {
       out.model ??= {};
       out.model.elements ??= [];
-      const el = out.model.elements.find(x => x?.id === id);
+      const el = findDeltaElement(out, id);
       if (el) el.properties = { ...(el.properties ?? {}), ...e.properties };
       else out.model.elements.push({ id, properties: { ...e.properties } });
     }
@@ -65,7 +82,8 @@ export function composeDelta(delta, edits, removedIds = new Set()) {
   return out;
 }
 
-const agentElement = (delta, id) => delta?.model?.elements?.find(e => e?.id === id);
+const agentElement = findDeltaElement;
+const agentDoc = (delta, id) => delta?.docs?.find(x => x?.id === id);
 const isKept = (kept, id, field, value) => kept.some(k => k.id === id && k.field === field && same(k.value, value));
 
 /** Where the agent proposes, for an edited node and field, a value other than the edited one and not kept yet. */
@@ -81,7 +99,7 @@ export function screenConflicts(delta, edits, kept = []) {
       if (!same(theirs, mine) && !isKept(kept, id, field, theirs)) out.push({ id, field, mine, theirs });
     }
     if (typeof e.doc === 'string') {
-      const d = delta.docs?.find(x => x?.id === id);
+      const d = agentDoc(delta, id);
       if (d && d.text !== e.doc && !isKept(kept, id, 'doc', d.text)) out.push({ id, field: 'doc', mine: e.doc, theirs: d.text });
     }
   }
@@ -136,6 +154,9 @@ export function applyEdit(draft, edit, baseProperties = {}) {
   if (!isObject(edit) || typeof edit.id !== 'string' || !edit.id.trim()) throw editError('edição inválida');
   const { id } = edit;
   const entry = edits[id] ?? {};
+  // What the chat proposes now for a field the user edits: the edit is the answer to it (only a later, different
+  // proposal opens a conflict).
+  const seen = [];
   let next;
   switch (edit.op) {
     case 'properties': {
@@ -145,14 +166,18 @@ export function applyEdit(draft, edit, baseProperties = {}) {
       const isBase = (k, v) => (v === null ? !hasOwn(base, k) : hasOwn(base, k) && same(base[k], v));
       const props = Object.fromEntries(Object.entries(edit.properties)
         .filter(([k, v]) => !(isBase(k, v) && (!hasOwn(agent, k) || isBase(k, agent[k])))));
+      for (const [k, v] of Object.entries(props)) if (hasOwn(agent, k) && !same(agent[k], v)) seen.push({ id, field: PROP + k, value: agent[k] });
       const left = Object.keys(entry.properties ?? {}).filter(k => !hasOwn(props, k)).map(k => PROP + k);
       next = { edits: withEntry(edits, id, { ...entry, properties: props }), left };
       break;
     }
-    case 'doc':
+    case 'doc': {
       if (typeof edit.text !== 'string') throw editError(`a documentação editada de "${id}" precisa ser texto`);
+      const chat = agentDoc(draft.delta, id);
+      if (typeof chat?.text === 'string' && chat.text !== edit.text) seen.push({ id, field: 'doc', value: chat.text });
       next = { edits: withEntry(edits, id, { ...entry, doc: edit.text }), left: [] };
       break;
+    }
     case 'undo':
       next = { edits: withEntry(edits, id, {}), left: fieldsOf(entry), kept: kept.filter(k => k.id !== id) };
       break;
@@ -170,7 +195,10 @@ export function applyEdit(draft, edit, baseProperties = {}) {
     default:
       throw editError(`edição desconhecida: ${edit.op}`);
   }
-  const nextKept = (next.kept ?? kept).filter(k => !(k.id === id && next.left.includes(k.field)));
+  const nextKept = [
+    ...(next.kept ?? kept).filter(k => !(k.id === id && (next.left.includes(k.field) || seen.some(x => x.field === k.field)))),
+    ...seen,
+  ];
   return { ...draft, edits: next.edits, kept: nextKept, plan: reopen(draft.plan, id, next.left) };
 }
 

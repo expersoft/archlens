@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { checkEdits, composeDelta, screenConflicts, screenAnswers, applyEdit, originOf } from './plan/edits.mjs';
+import { checkEdits, composeDelta, screenConflicts, screenAnswers, applyEdit, originOf, findDeltaElement } from './plan/edits.mjs';
 
 const rejects = (fn, re) => assert.throws(fn, e => e.code === 'E_GUI_DRAFT' && re.test(e.message));
 const agent = (elements = [], extra = {}) => ({ 'archlens-delta': '1.0', source: { kind: 'prompt', ref: 'chat' }, model: { elements, relationships: [] }, ...extra });
@@ -137,4 +137,38 @@ test('screenAnswers responde take às perguntas que a tela já responde', () => 
   assert.deepEqual(screenAnswers(plan, { loja: { properties: { criticidade: 'média' }, doc: 'x' } }),
     { 'el:loja:properties.criticidade': 'take', 'doc:loja:0123456789ab': 'take' });
   assert.deepEqual(screenAnswers(null, { loja: { doc: 'x' } }), {});
+});
+
+test('applyEdit: editar o valor que o chat já propôs não abre aviso; um valor novo do chat depois abre', () => {
+  const delta = agent([{ id: 'loja', properties: { criticidade: 'baixa', owner: 'Y' } }], { docs: [{ id: 'loja', text: 'do chat' }] });
+  let d = applyEdit(draftOf(delta), { op: 'properties', id: 'loja', properties: { criticidade: 'média', owner: 'Y' } }, { criticidade: 'alta' });
+  d = applyEdit(d, { op: 'doc', id: 'loja', text: 'do chat\nmais uma linha' });
+  assert.deepEqual(screenConflicts(d.delta, d.edits, d.kept), []);
+  assert.deepEqual(d.kept, [{ id: 'loja', field: 'properties.criticidade', value: 'baixa' }, { id: 'loja', field: 'doc', value: 'do chat' }]);
+  const later = agent([{ id: 'loja', properties: { criticidade: 'nenhuma', owner: 'Y' } }], { docs: [{ id: 'loja', text: 'outro texto' }] });
+  assert.deepEqual(screenConflicts(later, d.edits, d.kept).map(c => c.field), ['properties.criticidade', 'doc']);
+});
+
+test('findDeltaElement acha o nó aninhado em children', () => {
+  const delta = agent([{ id: 'sis', name: 'Sis', children: [{ id: 'sis.api', name: 'API', children: [{ id: 'sis.api.x', name: 'X' }] }] }]);
+  assert.equal(findDeltaElement(delta, 'sis.api.x').name, 'X');
+  assert.equal(findDeltaElement(delta, 'sis').name, 'Sis');
+  assert.equal(findDeltaElement(delta, 'nada'), undefined);
+  assert.equal(findDeltaElement(null, 'sis'), undefined);
+});
+
+test('composeDelta e screenConflicts usam o nó aninhado em children, sem entrada duplicada', () => {
+  const delta = agent([{ id: 'sis', name: 'Sis', children: [{ id: 'loja', properties: { criticidade: 'baixa', x: '1' } }] }]);
+  const edits = { loja: { properties: { criticidade: 'média' } } };
+  const out = composeDelta(delta, edits, new Set());
+  assert.equal(out.model.elements.length, 1, 'nenhuma entrada solta para "loja"');
+  assert.deepEqual(out.model.elements[0].children[0].properties, { criticidade: 'média', x: '1' });
+  assert.deepEqual(screenConflicts(delta, edits, []), [{ id: 'loja', field: 'properties.criticidade', mine: 'média', theirs: 'baixa' }]);
+});
+
+test('checkEdits recusa as chaves __proto__, constructor e prototype', () => {
+  for (const k of ['__proto__', 'constructor', 'prototype']) {
+    rejects(() => checkEdits(JSON.parse(`{"loja":{"properties":{"${k}":"x"}}}`), []), new RegExp(`"${k}"`));
+    rejects(() => applyEdit(draftOf(null), { op: 'properties', id: 'loja', properties: JSON.parse(`{"${k}":"x"}`) }), /reservad/);
+  }
 });

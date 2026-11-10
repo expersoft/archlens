@@ -471,3 +471,10 @@ test('/plan/element devolve docRaw como escrito e doc com os wikilinks como nome
   assert.equal(none.doc, null);
   assert.equal(none.docRaw, null);
 }, 'Veja [[algo]] e [[a/b|Nome]].'));
+
+test('/plan/edit na documentação que o chat escreveu não abre aviso e deixa aplicar', () => withVault(async url => {
+  const { draft } = await opened(url, docDelta('Texto do chat.'));
+  const out = await edited(url, draft, { op: 'doc', id: DOC_ID, text: 'Texto do chat.\nCom uma linha minha.' });
+  assert.deepEqual(out.screenConflicts, []);
+  assert.match(out.opsHash, /^[0-9a-f]{64}$/);
+}, 'Texto original.'));
