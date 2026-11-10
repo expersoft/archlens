@@ -15,6 +15,7 @@ import { DEFAULT_MAX_HISTORY } from './ask/context.mjs';
 import { runAsk } from './ask/agent.mjs';
 import { createTelemetry, summarize } from './ask/telemetry.mjs';
 import { planRoutes } from './plan/routes.mjs';
+import { configError, LOGO_MAX } from './config.mjs';
 
 const BODY_LIMIT = 1024 * 1024;
 const QUESTION_MAX = 2000;
@@ -141,8 +142,15 @@ export async function startServer({ config, staticDir, registry, provider } = {}
   // The logos are read once (size and place were checked at config load): later changes to the files do not matter.
   const logos = {};
   if (config?.brand) {
-    logos.logo = await readFile(config.brand.logo);
-    if (config.brand.logoDark) logos['logo-dark'] = await readFile(config.brand.logoDark);
+    const readLogo = async (key) => {
+      const file = config.brand[key];
+      let data;
+      try { data = await readFile(file); } catch (e) { throw configError(`brand.${key}: não foi possível ler ${file} (${e.code ?? e.message})`); }
+      if (data.length > LOGO_MAX) throw configError(`brand.${key} passa de 1 MB`); // it may have grown since the config was loaded
+      return data;
+    };
+    logos.logo = await readLogo('logo');
+    if (config.brand.logoDark) logos['logo-dark'] = await readLogo('logoDark');
   }
   const logoType = { logo: config?.brand?.logo, 'logo-dark': config?.brand?.logoDark };
   const telemetry = createTelemetry(config?.telemetry ?? {});
@@ -211,7 +219,7 @@ export async function startServer({ config, staticDir, registry, provider } = {}
       if (!data) throw httpError(404, 'sem logo configurado');
       send(res, 200, data, {
         'content-type': TYPES[extname(logoType[which]).toLowerCase()], 'x-content-type-options': 'nosniff',
-        'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'", 'cache-control': 'no-cache',
+        'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'", 'cache-control': 'no-cache',
       });
       return STREAMED;
     }],

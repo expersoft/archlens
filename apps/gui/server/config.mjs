@@ -5,7 +5,7 @@ import { loadEnv } from './envfile.mjs';
 
 export const DEFAULT_PORT = 5180;
 
-const configError = message => Object.assign(new Error(message), { code: 'E_GUI_CONFIG' });
+export const configError = message => Object.assign(new Error(message), { code: 'E_GUI_CONFIG' });
 
 /** Each base needs a non-empty string id and path; ids are unique. */
 function checkBases(list, file) {
@@ -92,7 +92,7 @@ function checkTelemetry(t, dir) {
 }
 
 const LOGO_EXT = new Set(['.svg', '.png', '.webp']);
-const LOGO_MAX = 1024 * 1024;
+export const LOGO_MAX = 1024 * 1024;
 
 /** The `brand` block: company logo (and an optional dark-theme one) inside the config file's folder; absolute paths out. */
 function checkBrand(brand, dir) {
@@ -112,6 +112,8 @@ function checkBrand(brand, dir) {
     if (!st.isFile()) throw configError(`brand.${key}: arquivo não encontrado: ${abs}`);
     // A link inside the folder must not lead out of it.
     if (!inside(real, realpathSync(dir))) throw configError(`brand.${key} precisa ficar dentro da pasta do archlens-gui.json`);
+    // The route's content type comes from the real file: a link named .svg to a .txt or .html is refused too.
+    if (!LOGO_EXT.has(extname(real).toLowerCase())) throw configError(`brand.${key}: use .svg, .png ou .webp`);
     if (st.size > LOGO_MAX) throw configError(`brand.${key} passa de 1 MB`);
     return real;
   };

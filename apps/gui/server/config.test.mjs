@@ -153,6 +153,15 @@ test('brand.logo que é link simbólico para fora da pasta é recusado', () => {
   badBrand({ logo: 'link.svg' }, /brand\.logo precisa ficar dentro da pasta do archlens-gui\.json/);
 });
 
+test('brand.logo que é link para arquivo de outra extensão é recusado (o tipo vem do arquivo real)', () => {
+  writeFileSync(join(brandDir, 'x.txt'), 'x');
+  writeFileSync(join(brandDir, 'page.html'), '<script>alert(1)</script>');
+  symlinkSync(join(brandDir, 'x.txt'), join(brandDir, 'txt-link.svg'));
+  symlinkSync(join(brandDir, 'page.html'), join(brandDir, 'html-link.svg'));
+  badBrand({ logo: 'txt-link.svg' }, /brand\.logo: use \.svg, \.png ou \.webp/);
+  badBrand({ logo: 'logo.svg', logoDark: 'html-link.svg' }, /brand\.logoDark: use \.svg, \.png ou \.webp/);
+});
+
 test('brand.logoDark vazio pede um caminho', () => {
   writeFileSync(join(brandDir, 'logo.svg'), '<svg/>');
   badBrand({ logo: 'logo.svg', logoDark: '' }, /brand\.logoDark, se informado, precisa ser um caminho/);

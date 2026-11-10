@@ -357,12 +357,22 @@ test('/api/info traz brand e /api/brand/logo serve o arquivo com CSP', async () 
     const r = await fetch(`${srv.url}/api/brand/logo`);
     assert.equal(r.status, 200);
     assert.equal(r.headers.get('content-type'), 'image/svg+xml');
-    assert.equal(r.headers.get('content-security-policy'), "default-src 'none'; style-src 'unsafe-inline'");
+    assert.equal(r.headers.get('content-security-policy'), "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'");
     assert.equal(r.headers.get('x-content-type-options'), 'nosniff');
     assert.match(await r.text(), /<svg/);
     const dk = await fetch(`${srv.url}/api/brand/logo-dark`);
     assert.equal(dk.headers.get('content-type'), 'image/png');
   } finally { await srv.close(); }
+});
+
+test('logo que sumiu ou cresceu depois da configuração: o servidor não sobe e diz por quê', async () => {
+  const d = tmp();
+  await assert.rejects(startServer({ config: { ...config(), brand: { logo: join(d, 'sumiu.svg') } } }),
+    e => e.code === 'E_GUI_CONFIG' && /brand\.logo: não foi possível ler .*sumiu\.svg/.test(e.message));
+  writeFileSync(join(d, 'l.svg'), '<svg/>');
+  writeFileSync(join(d, 'grande.png'), Buffer.alloc(1024 * 1024 + 1));
+  await assert.rejects(startServer({ config: { ...config(), brand: { logo: join(d, 'l.svg'), logoDark: join(d, 'grande.png') } } }),
+    e => e.code === 'E_GUI_CONFIG' && /brand\.logoDark passa de 1 MB/.test(e.message));
 });
 
 test('/api/brand/logo-dark sem logoDark responde 404; sem brand também', async () => {
