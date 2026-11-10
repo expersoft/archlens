@@ -120,6 +120,11 @@ test('C4: Focar num ator presente na visão foca nela', () => {
   assert.deepEqual(focar(actionsFor(loja, 'cliente', C4)).spec, { ...C4.spec, focus: ['cliente'], depth: 1 });
 });
 
+test('C4: Focar num ator de uma visão salva não leva a chave nem o título dela', () => {
+  const salva = { ...C4, spec: { key: 'contexto-loja', title: 'Contexto da loja', ...C4.spec } };
+  assert.deepEqual(focar(actionsFor(loja, 'cliente', salva)).spec, { ...C4.spec, focus: ['cliente'], depth: 1 });
+});
+
 test('C4: Focar num nó fora da visão e sem C4 cai em ArchiMate', () => {
   assert.equal(focar(actionsFor(loja, 'bp-checkout', C4)).spec.notation, 'archimate');
 });

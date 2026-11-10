@@ -91,7 +91,11 @@ export function actionsFor(ctx, id, current) {
   if (am) focus = archFocus;
   else if (sys) focus = { notation: 'c4', level: k, scope: k === 'component' ? e.parent : sys, focus: [id], depth: 1 };
   else if (current?.spec?.notation === 'c4' && k === 'softwareSystem') focus = { notation: 'c4', level: 'context', scope: id };
-  else if (current?.spec?.notation === 'c4' && current.nodes?.includes(id)) focus = { ...current.spec, focus: [id], depth: 1 };
+  else if (current?.spec?.notation === 'c4' && current.nodes?.includes(id)) {
+    // the view's own key and title (a saved view, the change view) do not belong to the focused one
+    const { key: _key, title: _title, ...view } = current.spec;
+    focus = { ...view, focus: [id], depth: 1 };
+  }
   else focus = archFocus;
   out.push({ label: 'Focar (só vizinhos)', spec: focus });
   return out;
