@@ -324,7 +324,12 @@ cabeçalho na cor da camada; o Navegar usa o mesmo painel, só leitura.
   remove. O tipo original (número, booleano, lista) é preservado; uma lista se edita como texto separado por vírgula.
   `Confirmar` põe a edição no rascunho, `Cancelar` descarta.
 - **Documentação** (base `markdown` ou `gbrain`; em base `json` o cartão não aparece): `Editar` abre uma caixa de
-  markdown redimensionável, com `Tela cheia`. Trocar o texto pela tela não abre a pergunta com a diferença do chat.
+  markdown redimensionável, com `Tela cheia`, que abre o **editor ampliado**: sumário dos títulos (clicar leva à seção e
+  a destaca), **Lado a lado** (texto e prévia) como padrão, ou só Escrever ou só Prévia, barra de formatação que insere
+  markdown (título, negrito, itálico, listas, citação, código, link, tabela), `Esc` fecha devolvendo o texto à caixa,
+  `Ctrl+Enter` confirma, **Cancelar** pergunta antes de descartar e o foco fica preso na janela. Na leitura (Navegar sem
+  Planejar, ou o cartão sem edição) a mesma janela abre só para ler. Trocar o texto pela tela não abre a pergunta com a
+  diferença do chat.
 - **Origem no Delta:** cada mudança leva o selo **chat** ou **tela**; nas da tela há **desfazer**, que apaga as edições
   da tela daquele nó e deixa o nó como o chat o deixa (ou como está na base).
 - **O que não se perde:** as edições da tela ficam numa camada própria do rascunho, que sobrevive a recarregar a
@@ -333,6 +338,18 @@ cabeçalho na cor da camada; o Navegar usa o mesmo painel, só leitura.
   **Manter o seu** ou **Usar o do chat**; o **Aplicar** fica bloqueado até a resposta.
 - **Enquanto o chat roda**, as edições da tela ficam travadas.
 - Editar a estrutura (nós e relações) pela tela fica para uma fase seguinte.
+
+**Editar no Navegar.** Com o Planejar ligado, o painel do nó do Navegar também tem `Editar` (propriedades e
+documentação). `Confirmar` leva ao Planejar, na aba **Nó** daquele nó, com a mudança no Delta (selo **tela**); se já
+existe rascunho, a edição se soma a ele. Com o Planejar desligado o Navegar segue só de leitura. Durante uma rodada do
+chat ou uma gravação o `Editar` fica desabilitado (`Aguarde o chat terminar para editar`, `Aguarde a gravação
+terminar`), e um rascunho salvo ilegível não é sobrescrito: o erro aparece e o modo não muda. O nó que o rascunho remove
+mostra "removido pelo rascunho" e não oferece `Editar`; nós que só existem no rascunho se editam no Planejar.
+
+**Avisos da visão.** Uma visão grande demais para a tela, ou com nota de layout, mostra um selo **⚠ n** ao lado das
+ferramentas do diagrama (no Navegar e na prévia do Planejar) em vez de uma faixa sobre o diagrama. O painel do selo
+explica cada aviso e oferece só as ações que se aplicam: agrupar, focar no selecionado, mostrar só uma camada e
+apresentar com zoom. A CLI e o `embed` continuam imprimindo os mesmos textos de `alerts`.
 
 ## Documentação do nó
 
