@@ -5,7 +5,7 @@ import { PlanPreview, type PreviewNav } from './PlanPreview';
 import { DeltaPanel } from './DeltaPanel';
 import { NodePanel } from './NodePanel';
 import { ScreenConflictDialog } from './ScreenConflictDialog';
-import type { Lock } from './lock';
+import { LOCKED_SAVE, type Lock } from './lock';
 import { useStoredState } from '../store';
 import { PlanChat } from './PlanChat';
 import { Split } from './Split';
@@ -95,9 +95,14 @@ export interface PlanViewProps {
    * keeps it and does not adopt what is saved, so Navegar should not write a draft meanwhile.
    */
   onUnsaved?: (unsaved: boolean) => void;
+  /**
+   * Navegar is writing an edit into the saved draft: like a write of its own, no chat round, Aplicar, Replanejar,
+   * Abrir, Descartar or node write starts meanwhile (it is not reported back through `onBusy`).
+   */
+  externalLock?: boolean;
 }
 
-export function PlanView({ base, canBuild = true, onApplied, active = true, onNav, onBusy, reload, focusNode, onUnsaved }: PlanViewProps) {
+export function PlanView({ base, canBuild = true, onApplied, active = true, onNav, onBusy, reload, focusNode, onUnsaved, externalLock = false }: PlanViewProps) {
   const [saved] = useState(() => load(base));
   const [draft, setDraft] = useState<Draft | null>(saved?.draft ?? null);
   const [chat, setChat] = useState<ChatMsg[]>(saved?.chat ?? []);
@@ -133,6 +138,11 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
   const [writing, setWritingState] = useState(false);
   const writingRef = useRef(false);
   const setWriting = useCallback((w: boolean) => { writingRef.current = w; setWritingState(w); }, []);
+  // Navegar's write counts as one of ours for what may start here; `held` is the one check every writer goes through.
+  const externalRef = useRef(externalLock);
+  externalRef.current = externalLock;
+  const held = useCallback(() => writingRef.current || externalRef.current, []);
+  const writingAny = writing || externalLock;
 
   const commit = useCallback((nextDraft: Draft | null, nextChat: ChatMsg[]) => {
     draftRef.current = nextDraft;
@@ -184,7 +194,8 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
     if (!s || storedRef.current === 'too-big') return;
     const n = ++opening.current;
     const savedIds = new Set(s.chat.map((m) => m.id));
-    const nextChat = [...s.chat, ...chatRef.current.filter((m) => !savedIds.has(m.id) && m.status !== 'running')];
+    // by id: a saved conversation trimmed to fit (only its newest messages) plus the older ones in memory keeps its order
+    const nextChat = [...s.chat, ...chatRef.current.filter((m) => !savedIds.has(m.id) && m.status !== 'running')].sort((a, b) => a.id - b.id);
     seq.current = nextChat.reduce((m, x) => Math.max(m, x.id), seq.current);
     draftRef.current = s.draft;
     chatRef.current = nextChat;
@@ -203,7 +214,7 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
   }, [base, commit, note, setWriting]);
 
   const turn = (req: { message?: string; answer?: { key: string; resolution: string }; attach?: RepoAttach; applied?: AppliedRound }, userText: string, opts: { keepDraft?: boolean } = {}) => {
-    if (writingRef.current) return;
+    if (held()) return;
     cancel();
     const history: PlanRequest['history'] = chatRef.current
       .filter((m) => m.status !== 'running' && m.status !== 'canceled' && m.text)
@@ -243,7 +254,7 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
   };
 
   const onAnswer = (msg: ChatMsg, resolution: string) => {
-    if (!msg.item || writingRef.current) return;
+    if (!msg.item || held()) return;
     patch(msg.id, { answered: resolution });
     turn({ answer: { key: msg.item.key, resolution } }, `Resposta: ${resolution}`);
   };
@@ -263,9 +274,11 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
 
   const roundRunning = chat.some((m) => m.status === 'running');
   // The screen controls' lock says why they wait: the chat round, or a screen edit being written.
-  const lock: Lock = roundRunning ? 'chat' : writing ? 'save' : false;
-  // What the App is told: the lock, or 'save' while Aplicar (or its Replanejar) runs, since it writes the draft too.
-  const busy: Lock = lock || (applying ? 'save' : false);
+  const ownLock: Lock = roundRunning ? 'chat' : writing ? 'save' : false;
+  const lock: Lock = ownLock || (externalLock ? 'save' : false);
+  // What the App is told: our lock (never Navegar's own write), or 'save' while Aplicar (or its Replanejar) runs,
+  // since it writes the draft too.
+  const busy: Lock = ownLock || (applying ? 'save' : false);
   // A reload that arrives while busy waits for it to end. What was saved is read when it arrives (the round or the
   // apply in flight writes the storage when it ends), and adopted then.
   const reloadSeen = useRef(reload);
@@ -291,12 +304,12 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
   const unsaved = stored === 'too-big';
   useEffect(() => { onUnsavedRef.current?.(unsaved); }, [unsaved]);
   useEffect(() => () => { onUnsavedRef.current?.(false); }, []);
-  const reason = !canBuild ? NO_CHROMIUM : roundRunning ? ROUND_RUNNING : writing ? WRITING : conflicts.length ? CONFLICT : !shown ? (previewFailed ? PREVIEW_FAILED : 'nada planejado para aplicar') : shown.questions.length ? OPEN_QUESTIONS : shown.opsHash ? undefined : 'o plano ainda não está final';
+  const reason = !canBuild ? NO_CHROMIUM : roundRunning ? ROUND_RUNNING : writing ? WRITING : externalLock ? LOCKED_SAVE : conflicts.length ? CONFLICT : !shown ? (previewFailed ? PREVIEW_FAILED : 'nada planejado para aplicar') : shown.questions.length ? OPEN_QUESTIONS : shown.opsHash ? undefined : 'o plano ainda não está final';
   const savedViews = (shown?.views ?? []).filter((v) => v.kind === 'saved' && !v.error).map((v) => v.title);
 
   const replan = async () => {
     const current = draftRef.current;
-    if (!current || writingRef.current) return;
+    if (!current || held()) return;
     setApplying(true);
     try {
       const r = await planOpen(base, current);
@@ -309,7 +322,7 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
 
   const apply = async () => {
     const current = draftRef.current;
-    if (!current || !shown?.opsHash || writingRef.current) return;
+    if (!current || !shown?.opsHash || held()) return;
     setApplying(true);
     setApplyError(null);
     setReplannable(false);
@@ -337,7 +350,7 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
   };
 
   const upload = async (file: File) => {
-    if (writingRef.current) return;
+    if (held()) return;
     setWriting(true);
     try {
       const r = await planOpen(base, JSON.parse(await readText(file)) as Draft);
@@ -352,7 +365,7 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
   };
 
   const discard = () => {
-    if (writingRef.current || !window.confirm(DISCARD)) return;
+    if (held() || !window.confirm(DISCARD)) return;
     cancel();
     clear(base);
     commit(null, []);
@@ -401,7 +414,7 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
   /** A screen edit (undo, or the answer to a conflict) goes through the server, which plans again. */
   const screenEdit = async (op: Parameters<typeof planEdit>[2]) => {
     const current = draftRef.current;
-    if (!current || writingRef.current || roundRunning) return;
+    if (!current || held() || roundRunning) return;
     if (!leaveEdit()) return;
     setWriting(true);
     setEditError(undefined);
@@ -427,7 +440,8 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
             onSend={(t, attach) => turn({ message: t, ...(attach ? { attach } : {}) }, attach ? `${t}\n(anexo: ${attach.url}${attach.ref ? `@${attach.ref}` : ''})` : t)}
             repo={(draft?.repo as { url: string; ref?: string; commit?: string } | null | undefined) ?? null}
             onAnswer={onAnswer}
-            locked={writing}
+            locked={writingAny}
+            lockedText={externalLock ? LOCKED_SAVE : undefined}
             onNotes={onNotes}
             onClear={clearChat}
             notice={stored === 'too-big' ? (
@@ -442,14 +456,14 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
             <div className="toolbar">
               <label className="filebtn" title="Abrir um rascunho salvo (.json)">
                 Abrir
-                <input type="file" accept="application/json,.json" aria-label="Abrir rascunho" disabled={writing} onChange={(e) => {
+                <input type="file" accept="application/json,.json" aria-label="Abrir rascunho" disabled={writingAny} onChange={(e) => {
                   const f = e.target.files?.[0];
                   e.target.value = '';
                   if (f) void upload(f);
                 }} />
               </label>
               {saveBtn}
-              <button type="button" aria-label="Descartar rascunho" disabled={!draft || writing} title={writing ? WRITING : undefined} onClick={discard}>Descartar</button>
+              <button type="button" aria-label="Descartar rascunho" disabled={!draft || writingAny} title={writing ? WRITING : externalLock ? LOCKED_SAVE : undefined} onClick={discard}>Descartar</button>
               <button type="button" disabled={!!reason || applying} title={reason} onClick={() => { setApplyError(null); setReplannable(false); setApplyOpen(true); }}>Aplicar</button>
             </div>
             {firstConflict && (
@@ -457,7 +471,7 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
                 onChoose={(choice) => void screenEdit({ op: 'resolve', id: firstConflict.id, field: firstConflict.field, choice })} />
             )}
             {editError && <p className="err" role="alert">{editError}</p>}
-            {applyOpen && shown && <ApplyDialog summary={shown.summary} views={savedViews} busy={applying || writing} error={applyError} onConfirm={() => void apply()} onCancel={() => setApplyOpen(false)} onReplan={replannable ? () => void replan() : undefined} />}
+            {applyOpen && shown && <ApplyDialog summary={shown.summary} views={savedViews} busy={applying || writingAny} error={applyError} onConfirm={() => void apply()} onCancel={() => setApplyOpen(false)} onReplan={replannable ? () => void replan() : undefined} />}
             <PlanPreview base={base} draft={draft} previews={previews} onLoaded={(r, failed) => { setShown(r); if (r) { setListed(r); setConflicts(r.screenConflicts ?? []); } setPreviewFailed(!!failed); }}
               onNavigate={navigated} onNav={onNav} onSelect={(id) => { if (!leaveEdit()) return; setSelected(id); if (id) { setTab('node'); setPanel(true); } }} focus={focus} />
           </div>

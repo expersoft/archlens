@@ -1,0 +1,276 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+
+vi.mock('./api', async (orig) => ({
+  ...(await orig<typeof import('./api')>()),
+  getBases: vi.fn(), getCatalog: vi.fn(), getView: vi.fn(), getElement: vi.fn(), getInfo: vi.fn(), getDoc: vi.fn(),
+  planElement: vi.fn(), planEdit: vi.fn(), planOpen: vi.fn(), planTurn: vi.fn(),
+}));
+
+vi.mock('./plan/PlanPreview', async () => {
+  const { useEffect } = await import('react');
+  const change = { sign: '~', kind: 'element', id: 'A', name: 'Elem A', type: 'Application Component', fields: [{ field: 'properties.dono', before: 'time', after: 'novo', origin: 'screen' }], origin: 'screen' };
+  const result = { views: [], skipped: [], summary: '~1', report: null, changes: [change], questions: [] };
+  return {
+    PlanPreview: ({ draft, onLoaded }: { draft: unknown; onLoaded?: (r: unknown) => void }) => {
+      useEffect(() => { onLoaded?.(draft ? result : null); }, [draft]); // eslint-disable-line react-hooks/exhaustive-deps
+      return <div data-testid="preview-mock" />;
+    },
+  };
+});
+
+import * as api from './api';
+import { load, save } from './plan/draftStore';
+import { App } from './App';
+
+const draft = { 'archlens-draft': 1, base: { id: 'b', version: 'v' }, delta: null, plan: null, note: 'n' };
+const edited = { ...draft, edits: { A: { properties: { dono: 'novo' } } } };
+const card = (props: Record<string, unknown> = { dono: 'time' }): api.Card => ({
+  element: { id: 'A', name: 'Elem A', type: 'application-component', layer: 'application' }, parent: null, children: [], outgoing: {}, incoming: {}, properties: props,
+});
+const el = (over: Partial<api.PlanElement> = {}): api.PlanElement => ({ card: card(), doc: null, docRaw: null, docs: true, removed: false, ...over });
+const view = (title: string): api.ViewResult => ({ html: `<p>${title}</p>`, data: null, alerts: [], nodes: [], ms: { resolve: 1, layout: 1, render: 1 }, spec: { level: 'landscape' }, title, cached: false });
+const planInfo = { ask: { enabled: false }, plan: { enabled: true, maxRounds: 8, timeoutMs: 1000 } } as const;
+const UNSAVED = 'O rascunho atual é grande demais para salvar; continue no Planejar';
+const CHANGED = 'O rascunho mudou enquanto a edição era gravada; tente de novo';
+
+beforeEach(() => {
+  vi.resetAllMocks();
+  localStorage.clear();
+  Object.defineProperty(window, 'innerWidth', { value: 1600, configurable: true, writable: true });
+  vi.mocked(api.getBases).mockResolvedValue([{ id: 'b', name: 'B', ok: true }, { id: 'c', name: 'C', ok: true }]);
+  vi.mocked(api.getCatalog).mockImplementation(async (id) => ({ id, name: id === 'b' ? 'Base' : 'Outra', views: [{ key: 'v', title: 'Inicial', spec: { level: 'landscape' }, saved: true }], elements: [{ id: 'A', name: 'Elem A', type: 't', layer: 'application' }] }));
+  vi.mocked(api.getView).mockImplementation(async (b) => view(b === 'b' ? 'Inicial' : 'Nova'));
+  vi.mocked(api.getElement).mockResolvedValue({ card: card(), actions: [], docs: true });
+  vi.mocked(api.getDoc).mockResolvedValue({ text: null });
+  vi.mocked(api.getInfo).mockResolvedValue(planInfo);
+  vi.mocked(api.planElement).mockResolvedValue(el());
+  vi.mocked(api.planOpen).mockImplementation(async (_b, d) => ({ draft: d }));
+});
+afterEach(() => vi.restoreAllMocks());
+
+async function boot() {
+  const r = render(<App />);
+  await screen.findByRole('navigation', { name: 'Trilha' });
+  await new Promise((res) => setTimeout(res, 50)); // deixa o srcDoc do jsdom terminar de carregar
+  const frame = r.container.querySelector('iframe')!;
+  const post = (data: Record<string, unknown>) => act(() => {
+    window.dispatchEvent(new MessageEvent('message', { data: { source: 'archlens', ...data }, source: frame.contentWindow }));
+  });
+  return { post };
+}
+async function selectA() {
+  const { post } = await boot();
+  post({ type: 'select', id: 'A' });
+  await screen.findByRole('heading', { name: 'Elem A' });
+  return { post };
+}
+const editBtn = (what: 'propriedades' | 'documentação') => screen.findByRole('button', { name: `Editar ${what}` }) as Promise<HTMLButtonElement>;
+async function editDono(value: string) {
+  fireEvent.click(await editBtn('propriedades'));
+  fireEvent.change(screen.getByLabelText('Valor de dono'), { target: { value } });
+}
+const confirmBtn = () => screen.getByRole('button', { name: 'Confirmar' });
+const toPlan = () => fireEvent.click(screen.getByRole('button', { name: 'Planejar' }));
+const toBrowse = () => fireEvent.click(screen.getByRole('button', { name: 'Navegar' }));
+
+describe('App, editar o nó no Navegar', () => {
+  it('com Planejar desligado o Navegar não mostra Editar', async () => {
+    vi.mocked(api.getInfo).mockResolvedValue({ ask: { enabled: false } });
+    await selectA();
+    await screen.findByText('dono');
+    expect(screen.queryByRole('button', { name: /Editar/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Escrever' })).toBeNull();
+    expect(api.planElement).not.toHaveBeenCalled();
+  });
+
+  it('editar propriedade no Navegar e Confirmar leva ao Planejar na aba Nó com a mudança', async () => {
+    vi.mocked(api.planEdit).mockResolvedValue({ draft: edited, opsHash: 'h', screenConflicts: [] });
+    await selectA();
+    await editDono('novo');
+    fireEvent.click(confirmBtn());
+    await screen.findByTestId('plan-view');
+    expect(api.planEdit).toHaveBeenCalledWith('b', null, { op: 'properties', id: 'A', properties: { dono: 'novo' } });
+    expect(load('b')?.draft).toEqual(edited);
+    await waitFor(() => expect(screen.getByRole('tab', { name: /Nó/ }).getAttribute('aria-selected')).toBe('true'));
+    expect(screen.queryByRole('navigation', { name: 'Trilha' })).toBeNull();
+    expect(await screen.findByRole('tab', { name: 'Delta (1)' })).toBeTruthy();
+    await waitFor(() => expect(vi.mocked(api.planElement).mock.calls.at(-1)?.slice(1)).toEqual([edited, 'A']));
+  });
+
+  it('com rascunho existente a edição se soma a ele', async () => {
+    const withEdits = { ...draft, edits: { A: { properties: { canal: 'app' } } } };
+    save('b', withEdits, [{ id: 1, role: 'user', text: 'oi' }]);
+    vi.mocked(api.planElement).mockResolvedValue(el({ card: card({ dono: 'rascunho', canal: 'app' }) }));
+    const merged = { ...draft, edits: { A: { properties: { canal: 'app', dono: 'novo' } } } };
+    vi.mocked(api.planEdit).mockResolvedValue({ draft: merged, opsHash: 'h', screenConflicts: [] });
+    await boot();
+    toPlan(); // o PlanView já montado relê o salvo
+    await screen.findByTestId('plan-view');
+    await waitFor(() => expect(api.planOpen).toHaveBeenCalledTimes(1));
+    toBrowse();
+    await screen.findByRole('navigation', { name: 'Trilha' });
+    await new Promise((res) => setTimeout(res, 50));
+    const frame = document.querySelector('iframe')!;
+    act(() => { window.dispatchEvent(new MessageEvent('message', { data: { source: 'archlens', type: 'select', id: 'A' }, source: frame.contentWindow })); });
+    fireEvent.click(await editBtn('propriedades'));
+    expect((screen.getByLabelText('Valor de dono') as HTMLInputElement).value).toBe('rascunho');
+    fireEvent.change(screen.getByLabelText('Valor de dono'), { target: { value: 'novo' } });
+    fireEvent.click(confirmBtn());
+    await waitFor(() => expect(api.planOpen).toHaveBeenCalledTimes(2));
+    expect(api.planEdit).toHaveBeenCalledWith('b', withEdits, { op: 'properties', id: 'A', properties: { canal: 'app', dono: 'novo' } });
+    expect(vi.mocked(api.planOpen).mock.calls[1][1]).toEqual(merged);
+    expect(await screen.findByText('oi')).toBeTruthy();
+    expect(load('b')?.chat.map((m) => m.text)).toEqual(['oi']);
+  });
+
+  it('documentação editada no Navegar pelo editor ampliado vai para o rascunho', async () => {
+    vi.mocked(api.planElement).mockResolvedValue(el({ doc: 'antigo', docRaw: 'antigo [[B]]' }));
+    vi.mocked(api.planEdit).mockResolvedValue({ draft: { ...draft, edits: { A: { doc: 'novo' } } }, opsHash: 'h', screenConflicts: [] });
+    await selectA();
+    fireEvent.click(await editBtn('documentação'));
+    fireEvent.click(screen.getByRole('button', { name: 'Tela cheia' }));
+    const dlg = screen.getByRole('dialog');
+    const ta = dlg.querySelector('textarea') as HTMLTextAreaElement;
+    expect(ta.value).toBe('antigo [[B]]');
+    fireEvent.change(ta, { target: { value: 'novo' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar' }));
+    await screen.findByTestId('plan-view');
+    expect(api.planEdit).toHaveBeenCalledWith('b', null, { op: 'doc', id: 'A', text: 'novo' });
+  });
+
+  it('documentação vazia oferece Escrever', async () => {
+    await selectA();
+    fireEvent.click(await screen.findByRole('button', { name: 'Escrever' }));
+    expect(screen.getByLabelText('Documentação')).toBeTruthy();
+  });
+
+  it('durante rodada do chat ou gravação o Editar do Navegar fica desabilitado com a dica', async () => {
+    vi.mocked(api.planTurn).mockImplementation(() => new Promise(() => {}));
+    await boot();
+    toPlan();
+    fireEvent.change(await screen.findByLabelText('Mensagem'), { target: { value: 'oi' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar' }));
+    await waitFor(() => expect(api.planTurn).toHaveBeenCalled());
+    toBrowse();
+    await screen.findByRole('navigation', { name: 'Trilha' });
+    await new Promise((res) => setTimeout(res, 50));
+    const frame = document.querySelector('iframe')!;
+    act(() => { window.dispatchEvent(new MessageEvent('message', { data: { source: 'archlens', type: 'select', id: 'A' }, source: frame.contentWindow })); });
+    const b = await editBtn('propriedades');
+    expect(b.disabled).toBe(true);
+    expect(b.title).toBe('Aguarde o chat terminar para editar');
+  });
+
+  it('com o rascunho só em memória (grande demais) o Editar do Navegar fica desabilitado', async () => {
+    save('b', draft, []);
+    await boot();
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('cheio'); });
+    toPlan();
+    await screen.findByText('o rascunho não cabe no navegador; baixe-o para não perder o trabalho');
+    toBrowse();
+    await screen.findByRole('navigation', { name: 'Trilha' });
+    await new Promise((res) => setTimeout(res, 50));
+    const frame = document.querySelector('iframe')!;
+    act(() => { window.dispatchEvent(new MessageEvent('message', { data: { source: 'archlens', type: 'select', id: 'A' }, source: frame.contentWindow })); });
+    const b = await editBtn('propriedades');
+    expect(b.disabled).toBe(true);
+    expect(b.title).toBe(UNSAVED);
+  });
+
+  it('nó removido pelo rascunho mostra o aviso e não edita', async () => {
+    save('b', draft, []);
+    vi.mocked(api.planElement).mockResolvedValue(el({ removed: true, doc: 'x', docRaw: 'x' }));
+    await selectA();
+    expect(await screen.findByText(/removido pelo rascunho/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Editar/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Escrever' })).toBeNull();
+  });
+
+  it('rascunho salvo inválido: erro no cartão, sem trocar de modo', async () => {
+    const bad = { 'archlens-draft': 99, outro: true };
+    localStorage.setItem('archlens-gui-draft:b', JSON.stringify(bad));
+    vi.mocked(api.planElement).mockRejectedValue(new api.ApiError('rascunho de outra versão', 'E_DRAFT', 400));
+    vi.mocked(api.planEdit).mockRejectedValue(new api.ApiError('rascunho de outra versão', 'E_DRAFT', 400));
+    await selectA();
+    await editDono('novo');
+    fireEvent.click(confirmBtn());
+    await waitFor(() => expect(api.planEdit).toHaveBeenCalled());
+    expect(vi.mocked(api.planEdit).mock.calls[0][1]).toEqual(bad);
+    expect((await screen.findAllByText('rascunho de outra versão')).length).toBeGreaterThan(0);
+    expect(screen.getByRole('navigation', { name: 'Trilha' })).toBeTruthy();
+    expect(screen.queryByTestId('plan-view')).toBeNull();
+    expect(screen.getByLabelText('Valor de dono')).toBeTruthy(); // o editor continua com o texto
+    expect(JSON.parse(localStorage.getItem('archlens-gui-draft:b')!)).toEqual(bad);
+  });
+
+  it('trocar de base com editor sujo pergunta e não grava na outra base', async () => {
+    const ask = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    await selectA();
+    await editDono('novo');
+    const sel = screen.getByLabelText('Base') as HTMLSelectElement;
+    fireEvent.change(sel, { target: { value: 'c' } });
+    expect(ask).toHaveBeenCalledWith('Descartar a edição não confirmada?');
+    expect((screen.getByLabelText('Valor de dono') as HTMLInputElement).value).toBe('novo');
+    ask.mockReturnValue(true);
+    fireEvent.change(screen.getByLabelText('Base'), { target: { value: 'c' } });
+    await waitFor(() => expect(screen.getByRole('navigation', { name: 'Trilha' }).textContent).toBe('Nova'));
+    expect(screen.queryByLabelText('Valor de dono')).toBeNull();
+    expect(api.planEdit).not.toHaveBeenCalled();
+    expect(load('b')).toBeNull();
+    expect(load('c')).toBeNull();
+  });
+
+  it('trocar de nó com editor sujo pergunta antes', async () => {
+    const ask = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    const { post } = await selectA();
+    await editDono('novo');
+    post({ type: 'select', id: 'B' });
+    expect(ask).toHaveBeenCalledWith('Descartar a edição não confirmada?');
+    expect((screen.getByLabelText('Valor de dono') as HTMLInputElement).value).toBe('novo');
+  });
+
+  it('enquanto a edição do Navegar é gravada, o Planejar não começa rodada nem outra gravação', async () => {
+    let finish!: (r: Awaited<ReturnType<typeof api.planEdit>>) => void;
+    vi.mocked(api.planEdit).mockImplementation(() => new Promise((r) => { finish = r; }));
+    save('b', draft, []);
+    vi.mocked(api.planElement).mockResolvedValue(el({ doc: 'x', docRaw: 'x' }));
+    await boot();
+    toPlan(); // o PlanView monta
+    await waitFor(() => expect(api.planOpen).toHaveBeenCalledTimes(1));
+    toBrowse();
+    await screen.findByRole('navigation', { name: 'Trilha' });
+    await new Promise((res) => setTimeout(res, 50));
+    const frame = document.querySelector('iframe')!;
+    act(() => { window.dispatchEvent(new MessageEvent('message', { data: { source: 'archlens', type: 'select', id: 'A' }, source: frame.contentWindow })); });
+    await editDono('novo');
+    fireEvent.click(confirmBtn());
+    await waitFor(() => expect(api.planEdit).toHaveBeenCalled());
+    toPlan();
+    fireEvent.change(screen.getByLabelText('Mensagem'), { target: { value: 'adicione X' } });
+    expect((screen.getByRole('button', { name: 'Enviar' }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.keyDown(screen.getByLabelText('Mensagem'), { key: 'Enter', ctrlKey: true });
+    expect(api.planTurn).not.toHaveBeenCalled();
+    expect((screen.getByLabelText('Abrir rascunho') as HTMLInputElement).disabled).toBe(true);
+    expect((screen.getByRole('button', { name: 'Descartar rascunho' }) as HTMLButtonElement).disabled).toBe(true);
+    await act(async () => { finish({ draft: edited, opsHash: 'h', screenConflicts: [] }); });
+    await waitFor(() => expect(load('b')?.draft).toEqual(edited));
+    await waitFor(() => expect((screen.getByRole('button', { name: 'Enviar' }) as HTMLButtonElement).disabled).toBe(false));
+  });
+
+  it('o rascunho mudou enquanto a edição do Navegar era gravada: erro e nada gravado', async () => {
+    let finish!: (r: Awaited<ReturnType<typeof api.planEdit>>) => void;
+    vi.mocked(api.planEdit).mockImplementation(() => new Promise((r) => { finish = r; }));
+    save('b', draft, []);
+    await selectA();
+    await editDono('novo');
+    fireEvent.click(confirmBtn());
+    await waitFor(() => expect(api.planEdit).toHaveBeenCalled());
+    const other = { ...draft, note: 'de outra aba' };
+    save('b', other, []);
+    await act(async () => { finish({ draft: edited, opsHash: 'h', screenConflicts: [] }); });
+    expect(await screen.findByText(CHANGED)).toBeTruthy();
+    expect(load('b')?.draft).toEqual(other);
+    expect(screen.getByRole('navigation', { name: 'Trilha' })).toBeTruthy();
+  });
+});

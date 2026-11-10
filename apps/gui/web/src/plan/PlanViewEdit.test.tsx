@@ -267,7 +267,8 @@ describe('PlanView falando com o App: aplicar, conversa e rascunho só em memór
     await screen.findByText('conversa salva');
     await waitFor(() => expect(api.planOpen).toHaveBeenCalledTimes(2));
     expect(screen.getByText('aviso só em memória')).toBeTruthy();
-    await waitFor(() => expect(load('b')?.chat.map((m) => m.warning ?? m.text)).toEqual(['conversa salva', 'aviso só em memória']));
+    // em ordem de id: o aviso (id 1) nasceu antes da mensagem salva por fora (id 7)
+    await waitFor(() => expect(load('b')?.chat.map((m) => m.warning ?? m.text)).toEqual(['aviso só em memória', 'conversa salva']));
   });
 
   it('desmontar ocupado avisa que não está mais ocupado', async () => {
@@ -303,5 +304,52 @@ describe('PlanView falando com o App: aplicar, conversa e rascunho só em memór
     fireEvent.click(screen.getByRole('button', { name: 'Enviar' }));
     await waitFor(() => expect(api.planTurn).toHaveBeenCalledTimes(1));
     expect(vi.mocked(api.planTurn).mock.calls[0][1].draft).toEqual(kept);
+  });
+});
+
+describe('PlanView com uma gravação do Navegar em andamento', () => {
+  it('externalLock: nenhuma rodada, Aplicar, Abrir, Descartar ou edição do nó começa', async () => {
+    const onBusy = vi.fn();
+    vi.mocked(api.planTurn).mockResolvedValue(undefined as never);
+    const item = { n: 1, key: 'k1', question: 'Mesmo elemento?', options: ['merge', 'new'], recommendation: 'merge', reason: '' };
+    save('b', draft, [{ id: 1, role: 'assistant', text: 'Mesmo elemento?', item }]);
+    const { rerender } = render(<PlanView base="b" externalLock onBusy={onBusy} />);
+    await waitFor(() => expect(api.planOpen).toHaveBeenCalled());
+    fireEvent.click(screen.getByText('prévia final'));
+    fireEvent.change(screen.getByLabelText('Mensagem'), { target: { value: 'adicione X' } });
+    expect((screen.getByRole('button', { name: 'Enviar' }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.keyDown(screen.getByLabelText('Mensagem'), { key: 'Enter', ctrlKey: true });
+    fireEvent.click(screen.getByRole('button', { name: 'new' }));
+    expect(api.planTurn).not.toHaveBeenCalled();
+    expect((screen.getByLabelText('Abrir rascunho') as HTMLInputElement).disabled).toBe(true);
+    const discard = screen.getByRole('button', { name: 'Descartar rascunho' }) as HTMLButtonElement;
+    expect(discard.disabled).toBe(true);
+    const applyBtn = screen.getByRole('button', { name: 'Aplicar' }) as HTMLButtonElement;
+    expect(applyBtn.disabled).toBe(true);
+    expect(applyBtn.title).toBe('Aguarde a gravação terminar');
+    fireEvent.click(screen.getByText('selecionar a'));
+    await screen.findByRole('heading', { name: 'Cashback' });
+    const edit = screen.getByRole('button', { name: /Editar documentação/ }) as HTMLButtonElement;
+    expect(edit.disabled).toBe(true);
+    expect(edit.title).toBe('Aguarde a gravação terminar');
+    // o App não vê o próprio Navegar como ocupação do Planejar
+    expect(onBusy).not.toHaveBeenCalledWith('save');
+    rerender(<PlanView base="b" externalLock={false} onBusy={onBusy} />);
+    await waitFor(() => expect((screen.getByRole('button', { name: 'Enviar' }) as HTMLButtonElement).disabled).toBe(false));
+    expect((screen.getByRole('button', { name: /Editar documentação/ }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('reload com a conversa salva cortada mantém a ordem das mensagens', async () => {
+    save('b', draft, [{ id: 1, role: 'user', text: 'um' }, { id: 2, role: 'assistant', text: 'dois' }, { id: 3, role: 'user', text: 'três' }]);
+    const { rerender } = render(<PlanView base="b" reload={0} />);
+    await waitFor(() => expect(api.planOpen).toHaveBeenCalledTimes(1));
+    // o Navegar gravou com a conversa cortada para caber: só a mais nova ficou
+    save('b', { ...draft, note: 'de fora' }, [{ id: 3, role: 'user', text: 'três' }]);
+    rerender(<PlanView base="b" reload={1} />);
+    await waitFor(() => expect(api.planOpen).toHaveBeenCalledTimes(2));
+    const texts = ['um', 'dois', 'três'].map((t) => screen.getByText(t));
+    expect(texts[0].compareDocumentPosition(texts[1]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(texts[1].compareDocumentPosition(texts[2]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    await waitFor(() => expect(load('b')?.chat.map((m) => m.text)).toEqual(['um', 'dois', 'três']));
   });
 });

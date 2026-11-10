@@ -28,13 +28,15 @@ export interface PlanChatProps {
   onClear?: () => void;
   /** A screen edit is being written into the draft: sending or answering waits for it. */
   locked?: boolean;
+  /** Why it is locked, when not this screen's own edit (Navegar writing one). */
+  lockedText?: string;
 }
 const LOCKED = 'Aguarde a edição da tela ser gravada';
 
 /** Typed in the composer, clears the conversation like the button. */
 const CLEAR_CMD = /^\/(clear|limpar)$/i;
 
-export function PlanChat({ chat, onSend, onAnswer, onNotes, notice, repo, onClear, locked }: PlanChatProps) {
+export function PlanChat({ chat, onSend, onAnswer, onNotes, notice, repo, onClear, locked, lockedText }: PlanChatProps) {
   const [text, setText] = useState('');
   const [form, setForm] = useState<{ url: string; ref: string; error?: string } | null>(null);
   const [attach, setAttach] = useState<RepoAttach | null>(null);
@@ -81,7 +83,7 @@ export function PlanChat({ chat, onSend, onAnswer, onNotes, notice, repo, onClea
                 <p className="note">Recomendo <b>{m.item.recommendation}</b>{m.item.reason ? `: ${m.item.reason}` : ''}</p>
                 <div className="acts">
                   {m.item.options.map((o) => (
-                    <button key={o} type="button" className={o === m.item!.recommendation ? 'on' : undefined} disabled={m.answered !== undefined || locked} title={locked && m.answered === undefined ? LOCKED : undefined} onClick={() => onAnswer(m, o)}>{o}</button>
+                    <button key={o} type="button" className={o === m.item!.recommendation ? 'on' : undefined} disabled={m.answered !== undefined || locked} title={locked && m.answered === undefined ? lockedText ?? LOCKED : undefined} onClick={() => onAnswer(m, o)}>{o}</button>
                   ))}
                 </div>
                 {m.answered !== undefined && <p className="meta">respondida: {m.answered}</p>}
@@ -135,7 +137,7 @@ export function PlanChat({ chat, onSend, onAnswer, onNotes, notice, repo, onClea
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); submit(); } }}
           />
-          <button type="button" className="send" aria-label="Enviar" title={locked ? LOCKED : 'Enviar (Ctrl+Enter)'} disabled={locked || (!text.trim() && !attach)} onClick={submit}>
+          <button type="button" className="send" aria-label="Enviar" title={locked ? lockedText ?? LOCKED : 'Enviar (Ctrl+Enter)'} disabled={locked || (!text.trim() && !attach)} onClick={submit}>
             <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M2 2.5 14 8 2 13.5l1.6-5.5L2 2.5Z M3.6 8H9" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" strokeLinecap="round" /></svg>
           </button>
         </div>

@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
-import { ask as askApi, find, flip, getActions, getBases, getCatalog, getElement, getInfo, getView, type Action, type AskEvent, type Info, type BaseInfo, type Card, type Catalog, type FindHit, type ViewData, type ViewResult, type ViewSpec } from './api';
+import { Fragment, useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import { ask as askApi, find, flip, getActions, getBases, getCatalog, getElement, getInfo, getView, type Action, type AskEvent, type Info, type BaseInfo, type Card, type Catalog, type Draft, type FindHit, type PropValue, type ScreenEdit, type ViewData, type ViewResult, type ViewSpec } from './api';
 import { pickInitialView } from './pick';
 import { Diagram } from './Diagram';
 import type { AlertAction } from './AlertBadge';
@@ -17,12 +17,20 @@ import { send, type BridgeEvent } from './bridge';
 import { typeHint } from './labels';
 import { PlanView } from './plan/PlanView';
 import type { PreviewNav } from './plan/PlanPreview';
-import type { Lock } from './plan/lock';
+import { LOCKED_SAVE, lockText, type Lock } from './plan/lock';
+import { PropsEditor } from './plan/PropsEditor';
+import { DocEditor } from './plan/DocEditor';
+import { DocTab } from './DocTab';
+import { confirmBrowseEdit, UNSAVED, useBrowseNode } from './browseEdit';
 import { allLabel, oneLabel, toggleAll, toggleOne } from './nesting';
 
 const totalMs = (v: ViewResult) => v.ms.resolve + v.ms.layout + v.ms.render;
 /** `items` null: as ações ainda estão chegando (o menu já abre com "Carregando…"). */
 type Menu = { id: string; at: { x: number; y: number }; title: string; items: Action[] | null };
+const DISCARD_EDIT = 'Descartar a edição não confirmada?';
+/** The properties the screen layer of the draft already sets on the node: a new edit keeps them. */
+const screenProps = (d: Draft | null, id: string) =>
+  ((d?.edits as Record<string, { properties?: Record<string, PropValue | null> }> | undefined)?.[id]?.properties) ?? {};
 
 export function App() {
   const [theme, setTheme] = useTheme();
@@ -53,6 +61,26 @@ export function App() {
   const [planUnsaved, setPlanUnsaved] = useState(false);
   // a focus is for the base it was asked on: another base (or coming back, A→B→A) never re-selects it
   useEffect(() => { setPlanFocus(undefined); }, [base]);
+  // Read again at the moment Navegar writes (compare-and-swap): the state of the last render could be stale.
+  const planLockRef = useRef<Lock>(false);
+  const planUnsavedRef = useRef(false);
+  const onPlanBusy = useCallback((l: Lock) => { planLockRef.current = l; setPlanLock(l); }, []);
+  const onPlanUnsaved = useCallback((u: boolean) => { planUnsavedRef.current = u; setPlanUnsaved(u); }, []);
+  // Editing the node in Navegar: the editor open (for one node of one base), Navegar's write in flight, its error.
+  const [browseEdit, setBrowseEdit] = useState<{ base: string; id: string; kind: 'properties' | 'doc' } | null>(null);
+  const [browseWriting, setBrowseWritingState] = useState(false);
+  const browseWritingRef = useRef(false);
+  const setBrowseWriting = (w: boolean) => { browseWritingRef.current = w; setBrowseWritingState(w); };
+  const [browseError, setBrowseError] = useState<{ base: string; id: string; text: string } | null>(null);
+  const browseDirty = useRef(false);
+  const closeBrowseEdit = () => { setBrowseEdit(null); setBrowseError(null); browseDirty.current = false; };
+  /** Before leaving the node, the base or the mode: a dirty editor asks first; a confirmed edit being written goes on. */
+  const leaveBrowseEdit = () => {
+    if (browseWritingRef.current) return true;
+    if (browseDirty.current && !window.confirm(DISCARD_EDIT)) return false;
+    closeBrowseEdit();
+    return true;
+  };
   const [selected, setSelected] = useState<string | null>(null);
   const [menu, setMenu] = useState<Menu | null>(null);
   const frame = useRef<HTMLIFrameElement>(null);
@@ -152,6 +180,7 @@ export function App() {
 
   const onBase = (id: string) => {
     if (id === stateRef.current.base) return;
+    if (!leaveBrowseEdit()) return;
     menuTicket.current++;
     setMenu(null);
     cancelAsk();
@@ -195,13 +224,14 @@ export function App() {
   };
 
   const inView = (id: string) => !!(stateRef.current.step?.view.data as ViewData | null)?.nodes?.[id];
-  const selectInView = (id: string) => { setSelected(id); send(frame.current, { type: 'select', id }); };
+  const selectInView = (id: string) => { if (!leaveBrowseEdit()) return; setSelected(id); send(frame.current, { type: 'select', id }); };
   const expandTicket = useRef(0);
 
   /** Escolha no Explorador/busca: seleciona se está na visão; senão abre a primeira ação de contexto. */
   const pickElement = (id: string) => {
     const b = stateRef.current.base;
     if (!b) return;
+    if (id !== stateRef.current.selected && !leaveBrowseEdit()) return;
     setHits([]);
     setSelected(id);
     if (inView(id)) { send(frame.current, { type: 'select', id, focus: true }); return; }
@@ -301,7 +331,11 @@ export function App() {
     else if (e.type === 'select') {
       menuTicket.current++;
       setMenu(null);
-      if (e.id !== stateRef.current.selected) setSelected(e.id);
+      const prev = stateRef.current.selected;
+      if (e.id === prev) return;
+      // the diagram already highlighted the other node: kept on the edited one, it goes back
+      if (!leaveBrowseEdit()) { send(frame.current, { type: 'select', id: prev }); return; }
+      setSelected(e.id);
     } else if (e.type === 'ready') {
       const sel = stateRef.current.selected;
       if (sel && (cur?.view.data as ViewData | null)?.nodes?.[sel]) send(frame.current, { type: 'select', id: sel });
@@ -366,9 +400,93 @@ export function App() {
   const brandName = info?.brand?.name;
   useEffect(() => { document.title = brandName ? `${brandName} · archlens` : 'archlens'; }, [brandName]);
   const planning = planEnabled && mode === 'plan';
+
+  // Editing the node in Navegar (Planejar on): the node as the saved draft leaves it, read again when Planejar gets
+  // free, re-reads the draft or the mode changes; the edit goes into the draft and the GUI moves to Planejar.
+  const bn = useBrowseNode(base, selected, planEnabled, `${String(planLock)}|${planReload}|${mode}|${planUnsaved}`);
+  const saveBrowse = async (edit: (d: Draft | null) => ScreenEdit) => {
+    const b = base, id = selected;
+    if (!b || !id || browseWritingRef.current) return;
+    setBrowseWriting(true);
+    setBrowseError(null);
+    const r = await confirmBrowseEdit(b, edit, {
+      blocked: () => (stateRef.current.base !== b ? 'a base mudou'
+        : planLockRef.current ? lockText(planLockRef.current) : planUnsavedRef.current ? UNSAVED : null),
+    });
+    setBrowseWriting(false);
+    if (stateRef.current.base !== b) return; // another base now: nothing was saved, nothing to show
+    if (!r.ok) { setBrowseError({ base: b, id, text: r.error }); return; }
+    closeBrowseEdit();
+    menuTicket.current++;
+    setMenu(null);
+    cancelAsk();
+    setPlanOpened(true);
+    setPlanReload((n) => n + 1);
+    setPlanFocus((f) => ({ base: b, id, n: (f?.n ?? 0) + 1 }));
+    setMode('plan');
+  };
+  const browseEditable = planEnabled && !planning && !!base && !!selected;
+  const mine = browseEditable && browseEdit?.base === base && browseEdit.id === selected ? browseEdit.kind : null;
+  const removed = !!bn.el?.removed;
+  const shownCard = bn.el ? bn.el.card : card;
+  const shownDocs = bn.node ? bn.node.docs : docsEnabled;
+  const editLock = browseWriting ? LOCKED_SAVE : planLock ? lockText(planLock) : planUnsaved ? UNSAVED : null;
+  const browseErr = mine && browseError?.base === base && browseError.id === selected
+    ? <p className="warn np-edit-err" role="alert">{browseError.text}</p> : null;
+  const openBrowse = (kind: 'properties' | 'doc') => {
+    if (!base || !selected) return;
+    setBrowseError(null);
+    setBrowseEdit({ base, id: selected, kind });
+  };
+  const browseProps = (shownCard?.properties ?? {}) as Record<string, PropValue>;
+  const nodeName = shownCard?.element.name ?? selected ?? '';
+  const docWin = {
+    title: `Documentação · ${nodeName}`,
+    layer: shownCard?.element.layer,
+    labels: [shownCard?.element.c4Label, shownCard?.element.typeLabel ? `ArchiMate ${shownCard.element.typeLabel}` : undefined].filter((x): x is string => !!x),
+  };
+  // Doc editing starts from the raw text (wikilinks kept) the server answered; props from the card shown.
+  const canProps = !removed && !bn.loading && !!shownCard;
+  const canDoc = !removed && !bn.loading && !!bn.node;
+  const editBtn = (kind: 'properties' | 'doc', label: string, ok: boolean) => (ok && !mine
+    ? <button type="button" className="linkish" aria-label={`Editar ${label}`} disabled={!!editLock} title={editLock ?? undefined} onClick={() => openBrowse(kind)}>✎ Editar</button>
+    : undefined);
+  const setBrowseDirty = useCallback((d: boolean) => { browseDirty.current = d; }, []);
+  const browseSlots = !browseEditable ? undefined : {
+    properties: mine === 'properties' ? (
+      <>
+        {browseErr}
+        <PropsEditor base={browseProps} value={browseProps} busy={!!editLock} onDirty={setBrowseDirty} onCancel={closeBrowseEdit}
+          onConfirm={(changes) => void saveBrowse((d) => ({ op: 'properties', id: selected!, properties: { ...screenProps(d, selected!), ...changes } }))} />
+      </>
+    ) : Object.keys(browseProps).length ? (
+      <dl>{Object.entries(browseProps).map(([k, v]) => (
+        <Fragment key={k}><dt>{k}</dt><dd>{Array.isArray(v) ? v.join(', ') : String(v)}</dd></Fragment>
+      ))}</dl>
+    ) : shownCard ? <p className="muted">Este nó não tem propriedades.</p> : undefined,
+    doc: mine === 'doc' && bn.node ? (
+      <>
+        {browseErr}
+        <DocEditor {...docWin} text={bn.node.docRaw ?? ''} busy={!!editLock} onDirty={setBrowseDirty} onCancel={closeBrowseEdit}
+          onConfirm={(text) => void saveBrowse(() => ({ op: 'doc', id: selected!, text }))} />
+      </>
+    ) : !bn.node ? undefined : bn.node.doc || removed
+      ? <DocTab {...docWin} base={base!} id={selected!} text={bn.node.doc} max />
+      : (
+        <>
+          <p className="muted">Este nó ainda não tem documentação.</p>
+          <button type="button" className="linkish" disabled={!!editLock} title={editLock ?? undefined} onClick={() => openBrowse('doc')}>Escrever</button>
+        </>
+      ),
+  };
+  const browseActions = !browseEditable ? undefined : {
+    properties: editBtn('properties', 'propriedades', canProps),
+    doc: editBtn('doc', 'documentação', canDoc),
+  };
   const onMode = (m: 'browse' | 'plan') => {
     menuTicket.current++;
     setMenu(null);
+    if (m === 'plan' && !leaveBrowseEdit()) return;
     cancelAsk();
     if (m === 'plan') setPlanOpened(true);
     setMode(m);
@@ -433,10 +551,15 @@ export function App() {
       rightContent={(
         <>
           <div className="ph">Detalhes</div>
+          {browseEditable && removed && <p className="warn node-removed" role="status">Este nó é removido pelo rascunho.</p>}
+          {browseEditable && bn.error && <p className="warn" role="status">Rascunho do Planejar: {bn.error}</p>}
           <Details
-            card={card}
+            card={browseEditable ? shownCard : card}
             base={base}
-            docsEnabled={docsEnabled}
+            docsEnabled={browseEditable ? shownDocs : docsEnabled}
+            slots={browseSlots}
+            actions={browseActions}
+            editing={mine}
             viewNode={selected ? viewData?.nodes?.[selected] ?? null : null}
             viewEdges={viewData?.edges ?? []}
             nodeId={selected}
@@ -447,7 +570,7 @@ export function App() {
         </>
       )}
     >
-      {planEnabled && base && planOpened && <div className="plan-host" hidden={!planning}><PlanView key={base} base={base} active={planning} onNav={setPlanNav} onBusy={setPlanLock} reload={planReload} focusNode={planFocus?.base === base ? planFocus : undefined} onUnsaved={setPlanUnsaved} canBuild={info?.plan?.enabled ? info.plan.build !== false : true} onApplied={() => { void loadBase(base); }} /></div>}
+      {planEnabled && base && planOpened && <div className="plan-host" hidden={!planning}><PlanView key={base} base={base} active={planning} onNav={setPlanNav} onBusy={onPlanBusy} reload={planReload} focusNode={planFocus?.base === base ? planFocus : undefined} onUnsaved={onPlanUnsaved} externalLock={browseWriting} canBuild={info?.plan?.enabled ? info.plan.build !== false : true} onApplied={() => { void loadBase(base); }} /></div>}
       {planning ? null : view ? (
         <>
           <nav className="trail" aria-label="Trilha">
