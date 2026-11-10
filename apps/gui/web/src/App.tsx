@@ -536,8 +536,6 @@ export function App() {
       status={shownStatus}
       notation={planning ? planNav?.notation ?? undefined : notation}
       onNotation={planning ? (planNav?.notation ? planNav.flip : undefined) : base && view ? onNotation : undefined}
-      nestLabel={nest && !planning ? allLabel(nest) : undefined}
-      onNestAll={onNestAll}
       bases={bases}
       base={base}
       onBase={onBase}
@@ -616,7 +614,7 @@ export function App() {
               </span>
             ))}
           </nav>
-          <Diagram ref={frame} view={view} theme={diagramTheme} onThemeChange={setDiagramTheme} onEvent={onEvent} busy={loading} alertActions={alertActs} canPresent={leaveBrowseEdit} />
+          <Diagram ref={frame} view={view} theme={diagramTheme} onThemeChange={setDiagramTheme} onEvent={onEvent} busy={loading} alertActions={alertActs} canPresent={leaveBrowseEdit} nest={nest && !planning ? { label: allLabel(nest), onToggle: onNestAll } : undefined} />
         </>
       ) : <div className="empty">{shownStatus}</div>}
       {menu && <ContextMenu at={menu.at} title={menu.title} items={menu.items} onPick={(a) => openAction(a, menu.id, 'Menu')} onClose={closeMenu} nest={nest} nodeId={menu.id} onNest={onNestOne} />}

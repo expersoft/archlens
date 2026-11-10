@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 vi.mock('./api', async (orig) => ({ ...(await orig<typeof import('./api')>()), getBases: vi.fn(), getCatalog: vi.fn(), getView: vi.fn(), getElement: vi.fn(), getActions: vi.fn(), flip: vi.fn(), find: vi.fn(), getDoc: vi.fn() }));
@@ -273,7 +273,8 @@ describe('App: aninhamento', () => {
     getView.mockImplementation(async (_b, s) => ({ ...mkView('Inicial', s), nest: s.nesting ? { ...nestOf(['A']), mode: 'nested' } : nestOf([]) }));
     vi.mocked(api.getCatalog).mockResolvedValue({ id: 'b', name: 'Base', views: [{ key: 'v', title: 'Inicial', spec, saved: true }], elements: [] });
     await boot();
-    await userEvent.click(screen.getByRole('button', { name: 'Agrupar tudo' }));
+    const bar = () => screen.getByRole('toolbar', { name: 'Ferramentas do diagrama' });
+    await userEvent.click(within(bar()).getByRole('button', { name: 'Agrupar tudo' }));
     await waitFor(() => expect(getView).toHaveBeenLastCalledWith('b', { ...spec, nesting: 'nested' }));
     await screen.findByRole('button', { name: 'Desagrupar tudo' });
     expect(trail()).toBe('Inicial › Inicial');

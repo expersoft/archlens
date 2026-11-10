@@ -63,6 +63,12 @@ describe('Shell', () => {
     expect(screen.getByText('centro')).toBeTruthy();
   });
 
+  it('a barra de cima não tem Agrupar tudo', () => {
+    setWidth(1600);
+    render(<Wrapped />);
+    expect(screen.queryByRole('button', { name: /grupar tudo/ })).toBeNull();
+  });
+
   it('botão de tema troca data-theme e grava archlens-gui-theme (não o tema do diagrama)', async () => {
     setWidth(1600);
     const u = userEvent.setup();

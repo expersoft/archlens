@@ -1,5 +1,5 @@
 import { expect, it, vi } from 'vitest';
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Diagram } from './Diagram';
 import type { ViewResult } from './api';
@@ -83,4 +83,22 @@ it('com avisos, a barra do diagrama mostra o selo e Apresentar com zoom pede ful
   await userEvent.click(screen.getByRole('button', { name: 'Avisos da visão (1)' }));
   await userEvent.click(screen.getByRole('button', { name: 'Apresentar com zoom' }));
   expect(rf).toHaveBeenCalledTimes(1);
+});
+
+it('mostra Agrupar tudo na barra do diagrama e chama onToggle', async () => {
+  const onToggle = vi.fn();
+  render(<Diagram view={view} theme="light" onEvent={() => {}} nest={{ label: 'Agrupar tudo', onToggle }} />);
+  const bar = screen.getByRole('toolbar', { name: 'Ferramentas do diagrama' });
+  await userEvent.click(within(bar).getByRole('button', { name: 'Agrupar tudo' }));
+  expect(onToggle).toHaveBeenCalledTimes(1);
+});
+
+it('sem nest, sem botão de agrupar', () => {
+  render(<Diagram view={view} theme="light" onEvent={() => {}} />);
+  expect(screen.queryByRole('button', { name: /grupar tudo/ })).toBeNull();
+});
+
+it('nest.disabled desabilita o botão', () => {
+  render(<Diagram view={view} theme="light" onEvent={() => {}} nest={{ label: 'Agrupar tudo', onToggle: () => {}, disabled: true }} />);
+  expect((screen.getByRole('button', { name: 'Agrupar tudo' }) as HTMLButtonElement).disabled).toBe(true);
 });
