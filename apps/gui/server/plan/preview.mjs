@@ -15,7 +15,7 @@ import { subgraphOf } from '../../../../scripts/lib/store/contract.mjs';
 import { navHelpers } from '../bases.mjs';
 import { labelsOf } from '../catalog.mjs';
 import { originOf } from './edits.mjs';
-import { actionsFor, flipSpec, titleFor } from '../navigation.mjs';
+import { actionsFor, currentOf, flipSpec, titleFor } from '../navigation.mjs';
 
 const TOUCHED = new Set(['added', 'changed', 'removed', 'retired']);
 const planError = (message, code) => Object.assign(new Error(message), { code });
@@ -86,9 +86,9 @@ const keyed = (nav, spec) => ({ key: `nav-${createHash('sha1').update(JSON.strin
 const keyActions = (nav, actions) => actions.map(a => ({ ...a, ...(a.spec ? { spec: keyed(nav, a.spec) } : {}), ...(a.sub ? { sub: keyActions(nav, a.sub) } : {}) }));
 
 /** The context-menu actions of an element, over the preview model (it may be one the draft adds). */
-export function previewActions(ctx, draft, id) {
+export function previewActions(ctx, draft, id, spec) {
   const { nav } = navOf(ctx, draft);
-  return keyActions(nav, actionsFor(nav, id));
+  return keyActions(nav, actionsFor(nav, id, spec ? currentOf(nav.model, spec) : undefined));
 }
 
 /** The same subject in the other notation, over the preview model; the change view gives the change view. */

@@ -87,7 +87,8 @@ export const getView = (base: string, spec: ViewSpec) => call<ViewResult>(`${b(b
 export const getElement = (base: string, id: string) => call<ElementDetail>(`${b(base)}/elements/${encodeURIComponent(id)}`);
 export const getDoc = (base: string, id: string) => call<{ text: string | null }>(`${b(base)}/elements/${encodeURIComponent(id)}/doc`);
 /** Só as ações (menu de contexto, duplo clique, Explorador), sem o cartão. */
-export const getActions = (base: string, id: string) => call<{ actions: Action[] }>(`${b(base)}/elements/${encodeURIComponent(id)}/actions`);
+export const getActions = (base: string, id: string, spec?: ViewSpec) =>
+  call<{ actions: Action[] }>(`${b(base)}/elements/${encodeURIComponent(id)}/actions`, spec ? { spec } : undefined);
 export const flip = (base: string, spec: ViewSpec) => call<{ spec: ViewSpec }>(`${b(base)}/flip`, { spec });
 
 export interface Info { brand?: { name?: string; logo: string; logoDark?: string }
@@ -262,7 +263,8 @@ export type Notation = 'archimate' | 'c4';
 export const planPreview = (base: string, draft: Draft, specs?: ViewSpec[], notation?: Notation) =>
   call<PlanPreviewResult>(`${b(base)}/plan/preview`, { draft, ...(specs ? { specs } : {}), ...(notation ? { notation } : {}) });
 /** Context-menu actions and notation flip over the preview (the base as the draft leaves it). */
-export const planActions = (base: string, draft: Draft, id: string) => call<{ actions: Action[] }>(`${b(base)}/plan/actions`, { draft, id });
+export const planActions = (base: string, draft: Draft, id: string, spec?: ViewSpec) =>
+  call<{ actions: Action[] }>(`${b(base)}/plan/actions`, { draft, id, ...(spec ? { spec } : {}) });
 export const planFlip = (base: string, draft: Draft, spec: ViewSpec) => call<{ spec: ViewSpec }>(`${b(base)}/plan/flip`, { draft, spec });
 
 export interface QualityResult { key: string; viewport: string; fill: number | null; minFontPx: number | null; issues: string[] }

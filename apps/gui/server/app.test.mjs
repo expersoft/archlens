@@ -107,6 +107,23 @@ test('GET elements/:id/actions: só as ações; id desconhecido dá 400', () => 
   assert.equal((await bad.json()).code, 'E_UNKNOWN_REF');
 }));
 
+test('ações com a visão atual ArchiMate: clique duplo em camadas', () => withServer(async url => {
+  const spec = { notation: 'archimate', viewpoint: 'layered', anchor: 'loja' };
+  const r = await post(`${url}/api/bases/loja-online/elements/${encodeURIComponent('loja')}/actions`, { spec });
+  assert.equal(r.status, 200);
+  const { actions } = await r.json();
+  const primary = actions.find(a => a.primary && a.spec);
+  assert.equal(primary.spec.notation, 'archimate');
+  // sem spec no corpo, a primária segue a de hoje (C4)
+  const plain = (await (await post(`${url}/api/bases/loja-online/elements/${encodeURIComponent('loja')}/actions`, {})).json()).actions;
+  assert.equal(plain.find(a => a.primary && a.spec).spec.notation, 'c4');
+}));
+
+test('spec que não é objeto: 400', () => withServer(async url => {
+  const r = await post(`${url}/api/bases/loja-online/elements/${encodeURIComponent('loja')}/actions`, { spec: 'x' });
+  assert.equal(r.status, 400);
+}));
+
 test('o cartão sai do snapshot em memória, sem reler o conector', async () => {
   const dir = join(tmp(), 'arch');
   cpSync(ex('loja-online'), dir, { recursive: true });

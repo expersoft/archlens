@@ -303,10 +303,11 @@ export function planRoutes({ registry, provider, config, telemetry, h }) {
     }],
     // Navigation over the preview: the context menu and the notation flip see what the draft adds.
     ['POST', /^\/api\/bases\/([^/]+)\/plan\/actions$/, async (req, [b]) => {
-      const { draft, id } = await read(req);
+      const { draft, id, spec } = await read(req);
       if (typeof id !== 'string' || !id) throw httpError(400, 'informe o id do elemento');
+      if (spec !== undefined && !isObject(spec)) throw httpError(400, 'spec deve ser uma visão');
       const ctx = registry.get(b);
-      return { actions: previewActions(ctx, (await replan(b, ctx, draft)).draft, id) };
+      return { actions: previewActions(ctx, (await replan(b, ctx, draft)).draft, id, spec) };
     }],
     ['POST', /^\/api\/bases\/([^/]+)\/plan\/flip$/, async (req, [b]) => {
       const { draft, spec } = await read(req);

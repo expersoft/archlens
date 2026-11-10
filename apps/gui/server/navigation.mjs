@@ -29,6 +29,11 @@ function traversalCounts(ctx, id, mode) {
   return counts;
 }
 
+/** The view on screen as `actionsFor` wants it: its spec and the ids it shows (left out when the spec does not resolve). */
+export function currentOf(model, spec) {
+  try { return { spec, nodes: resolveView(model, { key: 'cur', ...spec }).nodes.map(n => n.id) }; } catch { return { spec }; }
+}
+
 /** Actions of the context menu. `current` ({ spec, nodes? }) is the view on screen: its notation is kept by the actions. */
 export function actionsFor(ctx, id, current) {
   const e = ctx.model.elements.get(id);

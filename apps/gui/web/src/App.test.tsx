@@ -82,6 +82,7 @@ describe('App', () => {
     const { post } = await boot();
     getActions.mockRejectedValue(new Error('falhou geral'));
     post({ type: 'expand', id: 'A' });
+    expect(getActions).toHaveBeenCalledWith('b', 'A', { level: 'landscape' }); // o clique duplo manda a visão mostrada
     await waitFor(() => expect(document.querySelector('.status')!.textContent).toBe('falhou geral'));
     expect(screen.getByRole('navigation', { name: 'Trilha' }).textContent).toBe('Inicial');
   });
@@ -91,6 +92,7 @@ describe('App', () => {
     getActions.mockResolvedValue({ actions: [{ label: 'Ver', spec: { k: 'x' } }] });
     post({ type: 'context', id: 'A', x: 5, y: 5 });
     await screen.findByText('Ver');
+    expect(getActions).toHaveBeenCalledWith('b', 'A', { level: 'landscape' }); // o menu manda a visão mostrada
     post({ type: 'select', id: 'B' });
     expect(screen.queryByText('Ver')).toBeNull();
   });
@@ -121,6 +123,7 @@ describe('App', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Explorador' }));
     await userEvent.click(await screen.findByText('Elem A'));
     await waitFor(() => expect(trail()).toBe('Inicial › ctx'));
+    expect(getActions).toHaveBeenCalledWith('b', 'A', { level: 'landscape' }); // no pickElement a visão atual é a mostrada
   });
 
   it('(g) elemento que está na visão só manda select pela ponte', async () => {

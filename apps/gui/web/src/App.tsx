@@ -251,7 +251,7 @@ export function App() {
     setSelected(id);
     if (inView(id)) { send(frame.current, { type: 'select', id, focus: true }); return; }
     const t = reserve();
-    getActions(b, id).then((d) => {
+    getActions(b, id, stateRef.current.step?.view.spec).then((d) => {
       if (t !== ticket.current) return;
       const withSpec = d.actions.filter((a) => a.spec);
       const a = withSpec.find((x) => /^(Contexto|Containers do sistema|Componentes do container)/.test(x.label)) ?? withSpec[0];
@@ -365,7 +365,7 @@ export function App() {
       const rect = frame.current?.getBoundingClientRect();
       const at = { x: (rect?.left ?? 0) + e.x, y: (rect?.top ?? 0) + e.y };
       setMenu({ id: e.id, at, title: nameOf(e.id), items: null });
-      getActions(b, e.id).then((d) => {
+      getActions(b, e.id, stateRef.current.step?.view.spec).then((d) => {
         if (mt === menuTicket.current) setMenu({ id: e.id, at, title: nameOf(e.id), items: d.actions });
       }).catch((err) => {
         if (mt !== menuTicket.current) return;
@@ -379,7 +379,7 @@ export function App() {
       const xt = ++expandTicket.current;
       const live = () => xt === expandTicket.current && b === stateRef.current.base;
       const t0 = ticket.current;
-      getActions(b, e.id).then((d) => {
+      getActions(b, e.id, stateRef.current.step?.view.spec).then((d) => {
         if (!live() || ticket.current !== t0) return; // superado por outro duplo clique ou por outra navegação
         const p = d.actions.find((a) => a.primary && a.spec);
         if (p) void run(reserve(), b, p.spec!, 'Clique duplo', `${p.label}: ${nameOf(e.id)}`, p.matrix);

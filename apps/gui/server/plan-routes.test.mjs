@@ -153,6 +153,14 @@ test('plan/actions: o menu de contexto vale para o que o rascunho adiciona, com 
   assert.equal((await post(url, 'plan/actions', { draft })).status, 400);
 }));
 
+test('plan/actions com spec ArchiMate: a primária segue em ArchiMate', () => withPlan(async url => {
+  const draft = await draftWith(url, NEW);
+  const spec = { notation: 'archimate', viewpoint: 'layered', anchor: 'loja' };
+  const { actions } = await (await post(url, 'plan/actions', { draft, id: 'loja', spec })).json();
+  assert.equal(actions.find(a => a.primary && a.spec).spec.notation, 'archimate');
+  assert.equal((await post(url, 'plan/actions', { draft, id: 'loja', spec: 'x' })).status, 400);
+}));
+
 test('plan/flip: a visão do que muda vira a outra notação dela; as demais vão para a outra notação', () => withPlan(async url => {
   const draft = await draftWith(url, ALTER);
   const [change] = (await (await post(url, 'plan/preview', { draft, notation: 'c4' })).json()).views;

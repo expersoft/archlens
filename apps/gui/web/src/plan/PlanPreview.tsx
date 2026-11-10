@@ -156,13 +156,13 @@ export function PlanPreview({ base, draft, previews, onLoaded, onNavigate, onNav
       const rect = frame.current?.getBoundingClientRect();
       const at = { x: (rect?.left ?? 0) + e.x, y: (rect?.top ?? 0) + e.y };
       setMenu({ id: e.id, at, title: nameIn(e.id), items: null });
-      planActions(base, draft, e.id).then((r) => {
+      planActions(base, draft, e.id, current?.spec).then((r) => {
         if (mt === menuTicket.current) setMenu({ id: e.id, at, title: nameIn(e.id), items: r.actions });
       }, (err) => { if (mt === menuTicket.current) { setMenu(null); setNavError(errMsg(err)); } });
     } else if (e.type === 'expand') {
       menuTicket.current++;
       setMenu(null);
-      planActions(base, draft, e.id).then((r) => {
+      planActions(base, draft, e.id, current?.spec).then((r) => {
         const a = r.actions.find((x) => x.primary && x.spec);
         if (a?.spec) navigate(a.spec, a.matrix);
       }, (err) => setNavError(errMsg(err)));

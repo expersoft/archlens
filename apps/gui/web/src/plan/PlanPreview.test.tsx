@@ -156,12 +156,13 @@ describe('PlanPreview', () => {
     const { container } = render(<PlanPreview base="b" draft={withDelta} previews={[]} onNavigate={onNavigate} />);
     await waitFor(() => expect(frames(container)).toHaveLength(1));
     await fromFrame(container, { type: 'context', id: 'a', x: 10, y: 10 }, () => expect(screen.getByRole('menu')).toBeTruthy());
-    expect(planActions).toHaveBeenCalledWith('b', withDelta, 'a');
+    expect(planActions).toHaveBeenCalledWith('b', withDelta, 'a', spec); // manda a visão mostrada
     await u.click(await screen.findByRole('menuitem', { name: 'Abrir containers' }));
     expect(onNavigate).toHaveBeenCalledWith(go);
     // double click opens the primary action
     onNavigate.mockClear();
     await fromFrame(container, { type: 'expand', id: 'a' }, () => expect(onNavigate).toHaveBeenCalledWith(go));
+    expect(planActions).toHaveBeenLastCalledWith('b', withDelta, 'a', spec);
   });
 
   it('seleção no diagrama vai para o host', async () => {
