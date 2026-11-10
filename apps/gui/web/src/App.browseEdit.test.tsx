@@ -191,9 +191,8 @@ describe('App, editar o nó no Navegar', () => {
     await act(async () => { finish({ ...view('B'), data: { nodes: { A: { name: 'Elem A' } }, edges: [] } }); });
     await waitFor(() => expect(screen.getByRole('navigation', { name: 'Trilha' }).textContent).toBe('Inicial › B'));
     post({ type: 'ready' }); // a página nova só avisa ready ao carregar (server/embed.test.mjs)
-    await new Promise((res) => setTimeout(res, 30));
+    await waitFor(() => expect(ta().readOnly).toBe(false));
     expect(ta().value).toBe('rascunho');
-    expect(ta().readOnly).toBe(false);
     expect(confirmBtn().hasAttribute('disabled')).toBe(false);
   });
 
@@ -214,9 +213,8 @@ describe('App, editar o nó no Navegar', () => {
     await act(async () => { finish({ ...view('B'), data: { nodes: { A: { name: 'Elem A' } }, edges: [] } }); });
     await waitFor(() => expect(screen.getByRole('navigation', { name: 'Trilha' }).textContent).toBe('Inicial › B'));
     post({ type: 'ready' }); // a página nova só avisa ready ao carregar (server/embed.test.mjs)
-    await new Promise((res) => setTimeout(res, 30));
+    await waitFor(() => expect(inp().readOnly).toBe(false));
     expect(inp().value).toBe('rascunho');
-    expect(inp().readOnly).toBe(false);
     expect(confirmBtn().hasAttribute('disabled')).toBe(false);
   });
 
@@ -233,9 +231,42 @@ describe('App, editar o nó no Navegar', () => {
     await act(async () => { finish({ ...view('B'), data: { nodes: { B: { name: 'Elem B' } }, edges: [] } }); });
     await waitFor(() => expect(screen.getByRole('navigation', { name: 'Trilha' }).textContent).toBe('Inicial › B'));
     post({ type: 'ready' }); // a página nova só avisa ready ao carregar (server/embed.test.mjs)
-    await new Promise((res) => setTimeout(res, 30));
+    await act(async () => {}); // o ready não dispara nada assíncrono que tire o painel do nó
     expect(screen.getByRole('heading', { name: 'Elem A' })).toBeTruthy();
     expect((screen.getByLabelText('Documentação') as HTMLTextAreaElement).value).toBe('rascunho');
+  });
+
+  it('Explorador num nó fora da visão: select:null durante a espera não reenvia a seleção nem fecha o editor', async () => {
+    vi.mocked(api.planElement).mockResolvedValue(el({ doc: 'antigo', docRaw: 'antigo' }));
+    await selectA(); // a visão inicial não desenha A
+    fireEvent.click(await editBtn('documentação'));
+    fireEvent.change(screen.getByLabelText('Documentação'), { target: { value: 'rascunho' } });
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    let finish!: (v: api.ViewResult) => void;
+    vi.mocked(api.getActions).mockResolvedValue({ actions: [{ label: 'Contexto (C4)', spec: { level: 'context', k: 'A' } }] });
+    vi.mocked(api.getView).mockImplementation(() => new Promise((r) => { finish = r; }));
+    fireEvent.click(screen.getByRole('button', { name: 'Explorador' }));
+    await waitFor(() => expect(document.querySelector('[data-id="A"]')).toBeTruthy());
+    fireEvent.click(document.querySelector('[data-id="A"]')!);
+    await waitFor(() => expect(vi.mocked(api.getView)).toHaveBeenCalled());
+    const frame = document.querySelector('iframe')!;
+    const sent = vi.spyOn(frame.contentWindow!, 'postMessage');
+    const page = (data: Record<string, unknown>) => act(() => {
+      window.dispatchEvent(new MessageEvent('message', { data: { source: 'archlens', ...data }, source: frame.contentWindow }));
+    });
+    page({ type: 'select', id: null }); // Esc no diagrama durante a espera
+    page({ type: 'select', id: null });
+    const selects = () => sent.mock.calls.map(([m]) => m as { type?: string; id?: string | null }).filter((m) => m.type === 'select');
+    expect(selects()).toEqual([]);
+    page({ type: 'select', id: 'B' }); // a página destacou outro nó: só o destaque é limpo
+    expect(selects().map((m) => m.id)).toEqual([null]);
+    page({ type: 'select', id: null }); // a resposta da página ao select(null)
+    expect(selects().map((m) => m.id)).toEqual([null]);
+    await act(async () => { finish({ ...view('Ctx A'), data: { nodes: { A: { name: 'Elem A' } }, edges: [] } }); });
+    await waitFor(() => expect(screen.getByRole('navigation', { name: 'Trilha' }).textContent).toBe('Inicial › Ctx A'));
+    expect(screen.getByRole('heading', { name: 'Elem A' })).toBeTruthy();
+    expect((screen.getByLabelText('Documentação') as HTMLTextAreaElement).value).toBe('rascunho');
+    expect(confirm).not.toHaveBeenCalled();
   });
 
   it('Cancelar mantém a visão atual e a resposta tardia não entra', async () => {

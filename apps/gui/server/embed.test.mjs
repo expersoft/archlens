@@ -28,8 +28,11 @@ async function load() {
       Object.defineProperty(w, 'parent', { value: { postMessage: (d) => sent.push(JSON.parse(JSON.stringify(d))) } });
     },
   });
-  await new Promise((r) => setTimeout(r, 50));
-  return { w: dom.window, sent, close: () => dom.window.close() };
+  const w = dom.window;
+  // the page has loaded and drawn a frame: what it says on loading is in `sent`
+  if (w.document.readyState !== 'complete') await new Promise((r) => w.addEventListener('load', r, { once: true }));
+  await new Promise((r) => w.requestAnimationFrame(() => r()));
+  return { w, sent, close: () => w.close() };
 }
 
 test('a página embutida, ao carregar, só avisa ready: não desfaz a seleção do host', async () => {

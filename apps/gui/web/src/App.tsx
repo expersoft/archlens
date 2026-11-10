@@ -244,6 +244,7 @@ export function App() {
   const inView = (id: string) => !!(stateRef.current.step?.view.data as ViewData | null)?.nodes?.[id];
   const selectInView = (id: string) => { if (!leaveBrowseEdit()) return; setSelected(id); send(frame.current, { type: 'select', id }); };
   const expandTicket = useRef(0);
+  const nullEcho = useRef(false); // a select(null) sent to the page, whose answer is still to come
 
   /** Escolha no Explorador/busca: seleciona se está na visão; senão abre a primeira ação de contexto. */
   const pickElement = (id: string) => {
@@ -366,10 +367,16 @@ export function App() {
       setMenu(null);
       const prev = stateRef.current.selected;
       if (e.id === prev) return;
+      // the page answers a select it does not draw with select(null): that answer is not the user deselecting
+      if (e.id === null && nullEcho.current) { nullEcho.current = false; return; }
+      nullEcho.current = false;
+      const drawn = prev !== null && inView(prev);
+      // Puts the previous selection back on the page; a node the view does not draw only clears the highlight.
+      const restore = () => { nullEcho.current = !drawn; send(frame.current, { type: 'select', id: drawn ? prev : null }); };
       // durante a espera o clique no diagrama não muda nada: a seleção anterior volta a ser destacada
-      if (stateRef.current.loading) { send(frame.current, { type: 'select', id: prev }); return; }
+      if (stateRef.current.loading) { if (e.id !== null || drawn) restore(); return; }
       // the diagram already highlighted the other node: kept on the edited one, it goes back
-      if (!leaveBrowseEdit()) { send(frame.current, { type: 'select', id: prev }); return; }
+      if (!leaveBrowseEdit()) { if (e.id !== null || drawn) restore(); return; }
       setSelected(e.id);
     } else if (e.type === 'ready') {
       const sel = stateRef.current.selected;

@@ -223,9 +223,16 @@ describe('App', () => {
     getView.mockReturnValueOnce(v.promise);
     getActions.mockResolvedValue({ actions: [{ label: 'Ver', spec: { k: 'lenta' } }] });
     post({ type: 'context', id: 'A', x: 5, y: 5 });
-    await userEvent.click(await screen.findByText('Ver'));
-    await waitFor(() => expect(status()).toBe('Carregando “Ver: Elem A”…'));
-    expect(busy()).toBe('true');
+    const ver = await screen.findByText('Ver');
+    vi.useFakeTimers(); // o aviso na barra espera os 300 ms de useDelayed: o relógio é do teste
+    try {
+      fireEvent.click(ver);
+      expect(busy()).toBe('true'); // o bloqueio vem na hora
+      act(() => { vi.advanceTimersByTime(300); });
+      expect(status()).toBe('Carregando “Ver: Elem A”…');
+    } finally {
+      vi.useRealTimers();
+    }
     await act(async () => { v.resolve(mkView('lenta')); });
     await waitFor(() => expect(trail()).toContain('lenta'));
     expect(status()).not.toContain('Carregando');
@@ -338,6 +345,7 @@ describe('App: espera por visão', () => {
     expect(screen.queryByText('Carregando…')).toBeNull();
   });
   it('durante a espera, um clique no diagrama devolve a seleção anterior', async () => {
+    getView.mockImplementation(async (_b, spec) => ({ ...mkView('Inicial', spec), data: { nodes: { A: { name: 'Elem A' }, B: { name: 'Elem B' } }, edges: [] } }));
     const { post } = await boot();
     post({ type: 'select', id: 'A' });
     flip.mockReturnValue(new Promise(() => {}));
