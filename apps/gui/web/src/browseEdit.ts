@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
 import { planEdit, planElement, type Draft, type PlanElement, type ScreenEdit } from './api';
-import { load, save } from './plan/draftStore';
+import { load, save, unreadable } from './plan/draftStore';
 
 /** The stored draft changed (Planejar, another tab) or Planejar got busy while Navegar's edit was on the server. */
 export const CHANGED = 'O rascunho mudou enquanto a edição era gravada; tente de novo';
 /** Planejar holds a draft only in memory (too big to store): Navegar does not write one beside it. */
 export const UNSAVED = 'O rascunho atual é grande demais para salvar; continue no Planejar';
+/** The saved draft cannot be read: Navegar never writes over it. */
+export const UNREADABLE = 'O rascunho salvo está ilegível; abra o Planejar para resolver';
 const TOO_BIG = 'o rascunho não cabe no navegador; continue no Planejar';
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -62,6 +64,7 @@ export async function confirmBrowseEdit(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const busy = opts.blocked?.();
   if (busy) return { ok: false, error: busy };
+  if (unreadable(base)) return { ok: false, error: UNREADABLE };
   const before = load(base);
   const draft = before?.draft ?? null;
   let next: Draft;
@@ -69,7 +72,7 @@ export async function confirmBrowseEdit(
     next = (await planEdit(base, draft, typeof edit === 'function' ? edit(draft) : edit)).draft;
   } catch (e) { return { ok: false, error: errMsg(e) }; }
   const now = load(base);
-  if (!same(now?.draft ?? null, draft) || opts.blocked?.()) return { ok: false, error: CHANGED };
+  if (unreadable(base) || !same(now?.draft ?? null, draft) || opts.blocked?.()) return { ok: false, error: CHANGED };
   const chat = now?.chat ?? [];
   if (save(base, next, chat) === 'too-big') {
     save(base, draft, chat); // what was there before goes back

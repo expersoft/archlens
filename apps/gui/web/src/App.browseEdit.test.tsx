@@ -273,4 +273,72 @@ describe('App, editar o nó no Navegar', () => {
     expect(load('b')?.draft).toEqual(other);
     expect(screen.getByRole('navigation', { name: 'Trilha' })).toBeTruthy();
   });
+
+  it('base trocada durante a gravação: a edição vai para o rascunho da base de origem e a nova base avisa', async () => {
+    let finish!: (r: Awaited<ReturnType<typeof api.planEdit>>) => void;
+    vi.mocked(api.planEdit).mockImplementation(() => new Promise((r) => { finish = r; }));
+    await selectA();
+    await editDono('novo');
+    fireEvent.click(confirmBtn());
+    await waitFor(() => expect(api.planEdit).toHaveBeenCalled());
+    fireEvent.change(screen.getByLabelText('Base'), { target: { value: 'c' } });
+    await waitFor(() => expect(screen.getByRole('navigation', { name: 'Trilha' }).textContent).toBe('Nova'));
+    await act(async () => { finish({ draft: edited, opsHash: 'h', screenConflicts: [] }); });
+    expect(await screen.findByText('A edição foi guardada no rascunho de B')).toBeTruthy();
+    expect(load('b')?.draft).toEqual(edited);
+    expect(load('c')).toBeNull();
+    expect(screen.queryByTestId('plan-view')).toBeNull();
+    expect(screen.getByRole('navigation', { name: 'Trilha' })).toBeTruthy();
+  });
+
+  it('base trocada durante a gravação e o servidor recusa: o erro aparece na nova base', async () => {
+    let fail!: (e: unknown) => void;
+    vi.mocked(api.planEdit).mockImplementation(() => new Promise((_r, j) => { fail = j; }));
+    await selectA();
+    await editDono('novo');
+    fireEvent.click(confirmBtn());
+    await waitFor(() => expect(api.planEdit).toHaveBeenCalled());
+    fireEvent.change(screen.getByLabelText('Base'), { target: { value: 'c' } });
+    await waitFor(() => expect(screen.getByRole('navigation', { name: 'Trilha' }).textContent).toBe('Nova'));
+    await act(async () => { fail(new Error('recusada')); });
+    expect(await screen.findByText(/recusada/)).toBeTruthy();
+    expect(load('b')).toBeNull();
+  });
+
+  it('com o Planejar na tela, o Navegar não relê o nó', async () => {
+    vi.mocked(api.planTurn).mockImplementation(() => new Promise(() => {}));
+    await selectA();
+    await waitFor(() => expect(api.planElement).toHaveBeenCalled());
+    const before = vi.mocked(api.planElement).mock.calls.length;
+    toPlan();
+    fireEvent.change(await screen.findByLabelText('Mensagem'), { target: { value: 'oi' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar' }));
+    await waitFor(() => expect(api.planTurn).toHaveBeenCalled());
+    await new Promise((res) => setTimeout(res, 30));
+    expect(vi.mocked(api.planElement).mock.calls.length).toBe(before);
+  });
+
+  it('releitura que falha com o editor de documentação aberto não fecha o editor', async () => {
+    vi.mocked(api.planTurn).mockImplementation(() => new Promise(() => {}));
+    save('b', draft, []);
+    vi.mocked(api.planElement).mockResolvedValue(el({ doc: 'antigo', docRaw: 'antigo' }));
+    await boot();
+    toPlan(); // o PlanView monta e fica escondido no Navegar
+    await waitFor(() => expect(api.planOpen).toHaveBeenCalledTimes(1));
+    toBrowse();
+    await screen.findByRole('navigation', { name: 'Trilha' });
+    await new Promise((res) => setTimeout(res, 50));
+    const frame = document.querySelector('iframe')!;
+    act(() => { window.dispatchEvent(new MessageEvent('message', { data: { source: 'archlens', type: 'select', id: 'A' }, source: frame.contentWindow })); });
+    fireEvent.click(await editBtn('documentação'));
+    fireEvent.change(screen.getByLabelText('Documentação'), { target: { value: 'meu texto' } });
+    vi.mocked(api.planElement).mockRejectedValue(new Error('falhou'));
+    const calls = vi.mocked(api.planElement).mock.calls.length;
+    // uma rodada começa no Planejar escondido: o lock muda e o Navegar relê
+    fireEvent.change(screen.getByLabelText('Mensagem'), { target: { value: 'oi' } });
+    fireEvent.keyDown(screen.getByLabelText('Mensagem'), { key: 'Enter', ctrlKey: true });
+    await waitFor(() => expect(vi.mocked(api.planElement).mock.calls.length).toBeGreaterThan(calls));
+    await new Promise((res) => setTimeout(res, 30));
+    expect((screen.getAllByLabelText('Documentação').find((x) => x.tagName === 'TEXTAREA' && !x.closest('[hidden]')) as HTMLTextAreaElement).value).toBe('meu texto');
+  });
 });

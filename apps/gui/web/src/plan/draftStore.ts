@@ -74,6 +74,14 @@ export function save(base: string, draft: Draft | null, chat: ChatMsg[]): 'ok' |
   return 'chat-trimmed';
 }
 
+/** A draft is saved but cannot be read (broken JSON, not an object): writing over it would lose it. */
+export function unreadable(base: string): boolean {
+  let raw: string | null;
+  try { raw = localStorage.getItem(draftKey(base)); } catch { return false; }
+  if (raw == null) return false;
+  try { const d: unknown = JSON.parse(raw); return d === null || typeof d !== 'object'; } catch { return true; }
+}
+
 export function clear(base: string) {
   try { localStorage.removeItem(draftKey(base)); localStorage.removeItem(chatKey(base)); } catch { /* sem storage */ }
 }

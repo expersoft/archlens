@@ -67,11 +67,15 @@ export function App() {
   const onPlanBusy = useCallback((l: Lock) => { planLockRef.current = l; setPlanLock(l); }, []);
   const onPlanUnsaved = useCallback((u: boolean) => { planUnsavedRef.current = u; setPlanUnsaved(u); }, []);
   // Editing the node in Navegar: the editor open (for one node of one base), Navegar's write in flight, its error.
-  const [browseEdit, setBrowseEdit] = useState<{ base: string; id: string; kind: 'properties' | 'doc' } | null>(null);
-  const [browseWriting, setBrowseWritingState] = useState(false);
-  const browseWritingRef = useRef(false);
-  const setBrowseWriting = (w: boolean) => { browseWritingRef.current = w; setBrowseWritingState(w); };
+  // The editor keeps what it started from (props, raw doc): a later re-read, failed or not, never swaps or closes it.
+  const [browseEdit, setBrowseEdit] = useState<{ base: string; id: string; kind: 'properties' | 'doc'; props: Record<string, PropValue>; docRaw: string } | null>(null);
+  // The base Navegar's write in flight goes to (null: none).
+  const [browseWriting, setBrowseWritingState] = useState<string | null>(null);
+  const browseWritingRef = useRef<string | null>(null);
+  const setBrowseWriting = (w: string | null) => { browseWritingRef.current = w; setBrowseWritingState(w); };
   const [browseError, setBrowseError] = useState<{ base: string; id: string; text: string } | null>(null);
+  // What became of a write whose base was left meanwhile, shown on the base now on screen.
+  const [browseNotice, setBrowseNotice] = useState<{ base: string; text: string; warn: boolean } | null>(null);
   const browseDirty = useRef(false);
   const closeBrowseEdit = () => { setBrowseEdit(null); setBrowseError(null); browseDirty.current = false; };
   /** Before leaving the node, the base or the mode: a dirty editor asks first; a confirmed edit being written goes on. */
@@ -181,6 +185,7 @@ export function App() {
   const onBase = (id: string) => {
     if (id === stateRef.current.base) return;
     if (!leaveBrowseEdit()) return;
+    setBrowseNotice(null);
     menuTicket.current++;
     setMenu(null);
     cancelAsk();
@@ -403,18 +408,28 @@ export function App() {
 
   // Editing the node in Navegar (Planejar on): the node as the saved draft leaves it, read again when Planejar gets
   // free, re-reads the draft or the mode changes; the edit goes into the draft and the GUI moves to Planejar.
-  const bn = useBrowseNode(base, selected, planEnabled, `${String(planLock)}|${planReload}|${mode}|${planUnsaved}`);
+  const bn = useBrowseNode(base, selected, planEnabled && !planning, `${String(planLock)}|${planReload}|${planUnsaved}`);
   const saveBrowse = async (edit: (d: Draft | null) => ScreenEdit) => {
     const b = base, id = selected;
     if (!b || !id || browseWritingRef.current) return;
-    setBrowseWriting(true);
+    setBrowseWriting(b);
     setBrowseError(null);
+    setBrowseNotice(null);
+    // Planejar's lock is the one of the base on screen: once the base changed, the original's PlanView is gone (its
+    // draft has no other writer) and the edit still goes into that base's draft.
     const r = await confirmBrowseEdit(b, edit, {
-      blocked: () => (stateRef.current.base !== b ? 'a base mudou'
+      blocked: () => (stateRef.current.base !== b ? null
         : planLockRef.current ? lockText(planLockRef.current) : planUnsavedRef.current ? UNSAVED : null),
     });
-    setBrowseWriting(false);
-    if (stateRef.current.base !== b) return; // another base now: nothing was saved, nothing to show
+    setBrowseWriting(null);
+    const now = stateRef.current.base;
+    if (now !== b) {
+      setBrowseEdit((e) => (e?.base === b ? null : e));
+      if (browseEdit?.base === b) browseDirty.current = false;
+      const name = bases.find((x) => x.id === b)?.name ?? b;
+      if (now) setBrowseNotice({ base: now, warn: !r.ok, text: r.ok ? `A edição foi guardada no rascunho de ${name}` : `A edição em ${name} não foi guardada: ${r.error}` });
+      return;
+    }
     if (!r.ok) { setBrowseError({ base: b, id, text: r.error }); return; }
     closeBrowseEdit();
     menuTicket.current++;
@@ -433,12 +448,13 @@ export function App() {
   const editLock = browseWriting ? LOCKED_SAVE : planLock ? lockText(planLock) : planUnsaved ? UNSAVED : null;
   const browseErr = mine && browseError?.base === base && browseError.id === selected
     ? <p className="warn np-edit-err" role="alert">{browseError.text}</p> : null;
-  const openBrowse = (kind: 'properties' | 'doc') => {
+  function openBrowse(kind: 'properties' | 'doc') {
     if (!base || !selected) return;
     setBrowseError(null);
-    setBrowseEdit({ base, id: selected, kind });
-  };
+    setBrowseEdit({ base, id: selected, kind, props: browseProps, docRaw: bn.node?.docRaw ?? '' });
+  }
   const browseProps = (shownCard?.properties ?? {}) as Record<string, PropValue>;
+  const editProps = mine === 'properties' ? browseEdit!.props : browseProps;
   const nodeName = shownCard?.element.name ?? selected ?? '';
   const docWin = {
     title: `Documentação · ${nodeName}`,
@@ -456,7 +472,7 @@ export function App() {
     properties: mine === 'properties' ? (
       <>
         {browseErr}
-        <PropsEditor base={browseProps} value={browseProps} busy={!!editLock} onDirty={setBrowseDirty} onCancel={closeBrowseEdit}
+        <PropsEditor base={editProps} value={editProps} busy={!!editLock} onDirty={setBrowseDirty} onCancel={closeBrowseEdit}
           onConfirm={(changes) => void saveBrowse((d) => ({ op: 'properties', id: selected!, properties: { ...screenProps(d, selected!), ...changes } }))} />
       </>
     ) : Object.keys(browseProps).length ? (
@@ -464,10 +480,10 @@ export function App() {
         <Fragment key={k}><dt>{k}</dt><dd>{Array.isArray(v) ? v.join(', ') : String(v)}</dd></Fragment>
       ))}</dl>
     ) : shownCard ? <p className="muted">Este nó não tem propriedades.</p> : undefined,
-    doc: mine === 'doc' && bn.node ? (
+    doc: mine === 'doc' ? (
       <>
         {browseErr}
-        <DocEditor {...docWin} text={bn.node.docRaw ?? ''} busy={!!editLock} onDirty={setBrowseDirty} onCancel={closeBrowseEdit}
+        <DocEditor {...docWin} text={browseEdit!.docRaw} busy={!!editLock} onDirty={setBrowseDirty} onCancel={closeBrowseEdit}
           onConfirm={(text) => void saveBrowse(() => ({ op: 'doc', id: selected!, text }))} />
       </>
     ) : !bn.node ? undefined : bn.node.doc || removed
@@ -551,12 +567,13 @@ export function App() {
       rightContent={(
         <>
           <div className="ph">Detalhes</div>
+          {browseNotice?.base === base && <p className={browseNotice.warn ? 'warn' : 'muted'} role="status">{browseNotice.text}</p>}
           {browseEditable && removed && <p className="warn node-removed" role="status">Este nó é removido pelo rascunho.</p>}
           {browseEditable && bn.error && <p className="warn" role="status">Rascunho do Planejar: {bn.error}</p>}
           <Details
             card={browseEditable ? shownCard : card}
             base={base}
-            docsEnabled={browseEditable ? shownDocs : docsEnabled}
+            docsEnabled={browseEditable ? shownDocs || mine === 'doc' : docsEnabled}
             slots={browseSlots}
             actions={browseActions}
             editing={mine}
@@ -570,7 +587,7 @@ export function App() {
         </>
       )}
     >
-      {planEnabled && base && planOpened && <div className="plan-host" hidden={!planning}><PlanView key={base} base={base} active={planning} onNav={setPlanNav} onBusy={onPlanBusy} reload={planReload} focusNode={planFocus?.base === base ? planFocus : undefined} onUnsaved={onPlanUnsaved} externalLock={browseWriting} canBuild={info?.plan?.enabled ? info.plan.build !== false : true} onApplied={() => { void loadBase(base); }} /></div>}
+      {planEnabled && base && planOpened && <div className="plan-host" hidden={!planning}><PlanView key={base} base={base} active={planning} onNav={setPlanNav} onBusy={onPlanBusy} reload={planReload} focusNode={planFocus?.base === base ? planFocus : undefined} onUnsaved={onPlanUnsaved} externalLock={browseWriting === base} canBuild={info?.plan?.enabled ? info.plan.build !== false : true} onApplied={() => { void loadBase(base); }} /></div>}
       {planning ? null : view ? (
         <>
           <nav className="trail" aria-label="Trilha">

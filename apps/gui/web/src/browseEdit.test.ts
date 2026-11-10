@@ -5,7 +5,7 @@ vi.mock('./api', async (orig) => ({ ...(await orig<typeof import('./api')>()), p
 
 import * as api from './api';
 import { load, save } from './plan/draftStore';
-import { CHANGED, confirmBrowseEdit, useBrowseNode } from './browseEdit';
+import { CHANGED, UNREADABLE, confirmBrowseEdit, useBrowseNode } from './browseEdit';
 
 const draft = { 'archlens-draft': 1, base: { id: 'b', version: 'v' }, delta: null, plan: null, note: 'n' };
 const edited = { ...draft, edits: { a: { properties: { dono: 'outro' } } } };
@@ -44,6 +44,15 @@ describe('confirmBrowseEdit', () => {
     vi.mocked(api.planEdit).mockRejectedValue(new Error('rascunho inválido'));
     expect(await confirmBrowseEdit('b', edit)).toEqual({ ok: false, error: 'rascunho inválido' });
     expect(JSON.parse(localStorage.getItem('archlens-gui-draft:b')!)).toEqual(bad);
+  });
+
+  it('rascunho salvo ilegível: recusa sem chamar o servidor e não toca no storage', async () => {
+    localStorage.setItem('archlens-gui-draft:b', '{quebrado');
+    localStorage.setItem('archlens-gui-chat:b', JSON.stringify([{ id: 1, role: 'user', text: 'oi' }]));
+    expect(await confirmBrowseEdit('b', edit)).toEqual({ ok: false, error: UNREADABLE });
+    expect(api.planEdit).not.toHaveBeenCalled();
+    expect(localStorage.getItem('archlens-gui-draft:b')).toBe('{quebrado');
+    expect(JSON.parse(localStorage.getItem('archlens-gui-chat:b')!)).toEqual([{ id: 1, role: 'user', text: 'oi' }]);
   });
 
   it('Planejar ocupado: recusa sem chamar o servidor', async () => {
