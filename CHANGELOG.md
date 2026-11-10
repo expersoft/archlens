@@ -7,6 +7,13 @@ versões seguem [SemVer](https://semver.org/lang/pt-BR/).
 
 ### Adicionado
 
+- **GUI: Agrupar na barra, notação estável, espera por visão e etapas do Aplicar.** O diagrama ganha **Agrupar** na
+  barra. A notação fica estável: o menu, o clique duplo e o Explorador respeitam a notação da visão, e o clique duplo
+  em ArchiMate abre camadas aninhadas. Enquanto uma visão carrega, a barra e a linha de status mostram a espera (com
+  **Cancelar**) e a edição fica em pausa; o texto em edição é preservado, e a visão nova não desmarca mais o nó. O
+  **Aplicar** da GUI abre uma janela com o checklist das etapas e grava num worker. Na CLI, `archlens apply` imprime
+  `✓ Conferindo o plano com a base atual`, `✓ Gravando a base (…)` e `✓ Gerando o ARCHITECTURE.md`, e `archlens build`
+  imprime `visão k de n` na checagem visual. A skill `archlens-apply` passa a mostrar um checklist com esses passos.
 - **GUI: Navegar editável, editor ampliado, logo e avisos.** Com o Planejar ligado, `Editar` no painel do nó do Navegar
   leva ao Planejar (aba **Nó**) com a mudança no Delta, somada ao rascunho existente, com exclusão mútua com o chat e a
   gravação. O editor da documentação ganha janela ampliada com sumário, **Lado a lado**, formatação, `Esc`/`Ctrl+Enter`
