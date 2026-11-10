@@ -169,7 +169,7 @@ export function planRoutes({ registry, provider, config, telemetry, h }) {
       outcome = reply.kind;
       write({ type: 'result', draft: out.draft, reply, previews: out.previews, opsHash: draftOpsHash(out.draft), screenConflicts: conflictsOf(out.draft) });
     } catch (e) {
-      metrics.total = Date.now() - t0;
+      metrics = { ...(e.metrics ?? metrics), total: Date.now() - t0 };
       if (e.code !== 'E_LLM_ABORT' || !ctl.signal.aborted) {
         // The work done so far goes back with the error.
         write({ type: 'error', error: e.message ?? String(e), ...(e.code ? { code: e.code } : {}), draft: e.draft ?? replanned.draft, previews: e.previews ?? [],

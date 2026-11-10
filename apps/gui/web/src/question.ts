@@ -1,4 +1,5 @@
 import type { AskResult, ViewAnswer, ViewResult } from './api';
+import type { CallLog } from './CallFooter';
 
 const PREFIX = /^(o que|quem|qual|quais|como|onde|por que|mostre|me fale|liste)\b/;
 
@@ -20,6 +21,6 @@ export type Turn = {
   markdown?: string;
   warning?: string;
   error?: string;
-  ms?: number;
+  call?: CallLog;
   view?: ViewResult;
 };

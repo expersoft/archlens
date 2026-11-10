@@ -220,6 +220,7 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
       .map((m) => ({ role: m.role, text: m.text })).slice(-HISTORY_MAX);
     const id = ++seq.current;
     const ctl = new AbortController();
+    const startedAt = Date.now();
     run.current = { ctl, id };
     commit(draftRef.current, [...chatRef.current, { id: ++seq.current, role: 'user', text: userText }, { id, role: 'assistant', text: '', status: 'running' }]);
     const live = () => !ctl.signal.aborted;
@@ -227,7 +228,10 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
     const onEvent = (e: PlanEvent) => {
       if (!live()) return;
       if (e.type === 'stage') patch(id, { stage: e.stage });
-      else if (e.type === 'result') {
+      else if (e.type === 'done') {
+        const call = { startedAt, endedAt: Date.now(), usage: e.metrics.usage };
+        commit(draftRef.current, chatRef.current.map((m) => (m.id === id ? { ...m, call } : m)));
+      } else if (e.type === 'result') {
         finished = true; if (run.current?.id === id) run.current = null;
         const { reply } = e;
         setConflicts(e.screenConflicts ?? []);

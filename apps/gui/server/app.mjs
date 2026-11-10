@@ -192,7 +192,7 @@ export async function startServer({ config, staticDir, registry, provider } = {}
       outcome = result.kind;
       write(ev);
     } catch (e) {
-      metrics.total = Date.now() - t0;
+      metrics = { ...(e.metrics ?? metrics), total: Date.now() - t0 };
       if (e.code !== 'E_LLM_ABORT' || !ctl.signal.aborted) write({ type: 'error', error: e.message ?? String(e), ...(e.code ? { code: e.code } : {}) });
     }
     metrics = { ...metrics, render };

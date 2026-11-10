@@ -1,4 +1,5 @@
 import type { Draft, PlanItem } from '../api';
+import type { CallLog } from '../CallFooter';
 
 /** One message of the planning conversation. `text` is what goes back to the agent in `history`. */
 export interface ChatMsg {
@@ -15,6 +16,8 @@ export interface ChatMsg {
   /** The agent's draft of the interpretation notes; `notesState` once the user decided. */
   notes?: { overview: string; notes: string };
   notesState?: 'saved' | 'skipped';
+  /** Start, end and tokens of the agent's call behind this message. */
+  call?: CallLog;
 }
 
 const draftKey = (b: string) => `archlens-gui-draft:${b}`;

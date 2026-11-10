@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { ChatMsg } from './draftStore';
 import { NotesReview } from './NotesReview';
+import { CallFooter } from '../CallFooter';
 import type { RepoAttach } from '../api';
 
 /** The chip of a repository: url@ref, else url@commit (short). */
@@ -97,6 +98,7 @@ export function PlanChat({ chat, onSend, onAnswer, onNotes, notice, repo, onClea
             {m.status === 'canceled' && <p className="meta">cancelada</p>}
             {m.error && !m.notes && <p className="err">{m.error}</p>}
             {m.warning && <p className="warn">{m.warning}</p>}
+            {m.call && <CallFooter call={m.call} />}
           </li>
         ))}
         <li ref={end} aria-hidden="true" />

@@ -170,6 +170,7 @@ export async function runPlan(ctx, req, { provider, maxRounds = 12, timeoutMs = 
     // Keep the tool work so the route can still return it.
     e.draft = { ...session.draft, usage: { tokens: tokens() } };
     e.previews = session.previews;
+    e.metrics = metrics;
     throw e;
   } finally { done(); }
 }

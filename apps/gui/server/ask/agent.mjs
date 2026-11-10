@@ -118,6 +118,7 @@ export async function runAsk(ctx, req, { provider, maxRounds = 4, maxHistory, ti
     return ceiling(roundsReason());
   } catch (e) {
     if (e.code === 'E_LLM_ABORT' && ctl.timedOut && !signal?.aborted) return ceiling(timeReason());
+    e.metrics = metrics; // what was spent before the failure still reaches the `done` event
     throw e;
   } finally { done(); }
 }

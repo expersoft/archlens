@@ -26,6 +26,18 @@ const run = async (turns, opts = {}, scriptOpts) => {
   } finally { registry.close(); }
 };
 
+test('a failure carries what was spent so far', async () => {
+  const { registry, ctx } = open();
+  try {
+    const provider = scripted([turn([['find_elements', { query: 'pedidos' }]]), new Error('provedor caiu')]);
+    await assert.rejects(runAsk(ctx, REQ, { provider }), e => {
+      assert.deepEqual(e.metrics.usage, USAGE);
+      assert.equal(e.metrics.rounds, 2);
+      return true;
+    });
+  } finally { registry.close(); }
+});
+
 test('one round: show_view straight away', async () => {
   const { result, metrics, provider, events } = await run([turn([['show_view', { spec: SUPORTE }]])]);
   assert.equal(result.kind, 'view');

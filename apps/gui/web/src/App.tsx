@@ -271,6 +271,7 @@ export function App() {
     const t = reserve(); // cancela a anterior e reserva o ticket
     const id = ++turnSeq.current;
     const ctl = new AbortController();
+    const startedAt = Date.now();
     askRun.current = { ctl, id };
     setTurns((ts) => [...ts, { id, question, status: 'running' }]);
     const patch = (p: Partial<Turn>) => setTurns((ts) => ts.map((x) => (x.id === id ? { ...x, ...p } : x)));
@@ -279,7 +280,7 @@ export function App() {
     const onAskEvent = (e: AskEvent) => {
       if (ctl.signal.aborted) return;
       if (e.type === 'stage') patch({ stage: e.stage });
-      else if (e.type === 'done') patch({ ms: e.metrics.total });
+      else if (e.type === 'done') patch({ call: { startedAt, endedAt: Date.now(), usage: e.metrics.usage } });
       else if (e.type === 'error') {
         finished = true; release();
         patch({ status: 'error', stage: undefined, error: e.error });

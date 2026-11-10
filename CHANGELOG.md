@@ -14,7 +14,9 @@ versões seguem [SemVer](https://semver.org/lang/pt-BR/).
   novos; o bloco `brand` do `archlens-gui.json` troca a marca do topo pelo logo da empresa (versão para o tema escuro,
   título da aba com o nome). Os avisos da visão saem da faixa e viram um selo ⚠ com painel e ações (agrupar, focar,
   camada, apresentar); `alerts` segue igual para a CLI e o `embed`.
-
+- **GUI, rodapé de cada chamada:** na consulta e no Planejar, uma linha discreta com início, fim, duração e tokens
+  (entrada, saída e cache, como o provedor informa). Vale também para chamadas que terminam em erro, e no Planejar fica
+  salva com a conversa.
 - **GUI, modo Planejar** (`archlens serve … --plan` ou `plan` no `archlens-gui.json`; desligado por padrão, exige LLM com
   ferramentas): chat que monta o delta e o plano, decisões por botões, prévia (diagrama, delta e plano), **Aplicar** com
   confirmação que regrava a base, o `ARCHITECTURE.md` e os diagramas, e rascunho das notas de interpretação. Rascunho no
