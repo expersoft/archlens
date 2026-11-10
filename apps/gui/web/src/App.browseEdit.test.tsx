@@ -3,7 +3,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 
 vi.mock('./api', async (orig) => ({
   ...(await orig<typeof import('./api')>()),
-  getBases: vi.fn(), getCatalog: vi.fn(), getView: vi.fn(), getElement: vi.fn(), getInfo: vi.fn(), getDoc: vi.fn(),
+  getBases: vi.fn(), getCatalog: vi.fn(), getView: vi.fn(), getElement: vi.fn(), getInfo: vi.fn(), getDoc: vi.fn(), getActions: vi.fn(),
   planElement: vi.fn(), planEdit: vi.fn(), planOpen: vi.fn(), planTurn: vi.fn(),
 }));
 
@@ -160,6 +160,34 @@ describe('App, editar o nó no Navegar', () => {
     const b = await editBtn('propriedades');
     expect(b.disabled).toBe(true);
     expect(b.title).toBe('Aguarde o chat terminar para editar');
+  });
+
+  it('durante a espera, Editar fica desabilitado com a dica', async () => {
+    const { post } = await selectA();
+    expect((await editBtn('propriedades')).disabled).toBe(false);
+    vi.mocked(api.getActions).mockResolvedValue({ actions: [{ label: 'Ver B', spec: { level: 'context', k: 'B' } }] });
+    vi.mocked(api.getView).mockImplementation(() => new Promise(() => {}));
+    post({ type: 'context', id: 'A', x: 5, y: 5 });
+    fireEvent.click(await screen.findByText('Ver B'));
+    const b = await editBtn('propriedades');
+    expect(b.disabled).toBe(true);
+    expect(b.title).toBe('Disponível quando a visão terminar de carregar');
+  });
+
+  it('Cancelar mantém a visão atual e a resposta tardia não entra', async () => {
+    const { post } = await selectA();
+    let finish!: (v: api.ViewResult) => void;
+    vi.mocked(api.getActions).mockResolvedValue({ actions: [{ label: 'Ver B', spec: { level: 'context', k: 'B' } }] });
+    vi.mocked(api.getView).mockImplementation(() => new Promise((r) => { finish = r; }));
+    post({ type: 'context', id: 'A', x: 5, y: 5 });
+    fireEvent.click(await screen.findByText('Ver B'));
+    expect((await editBtn('propriedades')).disabled).toBe(true);
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancelar' }));
+    expect(screen.queryByRole('progressbar')).toBeNull();
+    await waitFor(async () => expect((await editBtn('propriedades')).disabled).toBe(false));
+    await act(async () => { finish(view('B')); });
+    expect(screen.getByRole('navigation', { name: 'Trilha' }).textContent).toBe('Inicial');
+    expect((await editBtn('propriedades')).disabled).toBe(false);
   });
 
   it('com o rascunho só em memória (grande demais) o Editar do Navegar fica desabilitado', async () => {

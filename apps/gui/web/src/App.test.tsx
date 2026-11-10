@@ -64,14 +64,14 @@ describe('App', () => {
     expect(trail()).toBe('Inicial › vb');
   });
 
-  it('(b) flip lento superado por escolha do menu: a visão virada não aparece', async () => {
-    const { post } = await boot();
+  it('(b) flip lento superado por uma busca: a visão virada não aparece', async () => {
+    await boot();
     const f = deferred<{ spec: api.ViewSpec }>();
     flip.mockReturnValue(f.promise);
     fireEvent.click(screen.getByRole('button', { name: 'C4' }));
-    getActions.mockResolvedValue({ actions: [{ label: 'Ver', spec: { k: 'menu' } }] });
-    post({ type: 'context', id: 'A', x: 5, y: 5 });
-    await userEvent.click(await screen.findByText('Ver'));
+    getActions.mockResolvedValue({ actions: [{ label: 'Contexto (C4)', spec: { k: 'menu' } }] });
+    find.mockResolvedValueOnce([{ id: 'A', name: 'Elem A', type: 't', score: 1 }]);
+    await userEvent.type(screen.getByLabelText('Buscar'), 'elem{Enter}');
     await waitFor(() => expect(trail()).toContain('menu'));
     await act(async () => { f.resolve({ spec: { k: 'flipped' } }); });
     expect(trail()).not.toContain('flipped');
@@ -224,11 +224,11 @@ describe('App', () => {
     getActions.mockResolvedValue({ actions: [{ label: 'Ver', spec: { k: 'lenta' } }] });
     post({ type: 'context', id: 'A', x: 5, y: 5 });
     await userEvent.click(await screen.findByText('Ver'));
-    await waitFor(() => expect(status()).toBe('Carregando…'));
+    await waitFor(() => expect(status()).toBe('Carregando “Ver: Elem A”…'));
     expect(busy()).toBe('true');
     await act(async () => { v.resolve(mkView('lenta')); });
     await waitFor(() => expect(trail()).toContain('lenta'));
-    expect(status()).not.toBe('Carregando…');
+    expect(status()).not.toContain('Carregando');
     expect(busy()).not.toBe('true');
     const w = deferred<api.ViewResult>();
     getView.mockReturnValueOnce(w.promise);
@@ -322,6 +322,71 @@ describe('App: aninhamento', () => {
     getView.mockImplementation(async (_b, s) => ({ ...mkView('Inicial', s), nest: null }));
     await boot();
     expect(screen.queryByRole('button', { name: /Agrupar tudo|Desagrupar tudo/ })).toBeNull();
+  });
+});
+
+describe('App: espera por visão', () => {
+  const nestOf = (open: string[]): api.NestState => ({ mode: 'edges', except: [], holders: ['A'], open });
+  it('durante a espera, botão direito e clique duplo no diagrama não fazem nada', async () => {
+    const { post } = await boot();
+    flip.mockReturnValue(new Promise(() => {}));
+    fireEvent.click(screen.getByRole('button', { name: 'C4' }));
+    getActions.mockResolvedValue(primary('x'));
+    post({ type: 'context', id: 'A', x: 5, y: 5 });
+    post({ type: 'expand', id: 'A' });
+    expect(getActions).not.toHaveBeenCalled();
+    expect(screen.queryByText('Carregando…')).toBeNull();
+  });
+  it('durante a espera, um clique no diagrama devolve a seleção anterior', async () => {
+    const { post } = await boot();
+    post({ type: 'select', id: 'A' });
+    flip.mockReturnValue(new Promise(() => {}));
+    fireEvent.click(screen.getByRole('button', { name: 'C4' }));
+    send.mockClear();
+    post({ type: 'select', id: 'B' });
+    expect(send).toHaveBeenCalledWith(expect.anything(), { type: 'select', id: 'A' });
+    expect(getElement).not.toHaveBeenCalledWith('b', 'B');
+  });
+  it('ArchiMate | C4 e Agrupar desabilitados durante a espera', async () => {
+    const spec = { notation: 'archimate', k: 'x' };
+    getView.mockImplementation(async (_b, s) => ({ ...mkView('Inicial', s), nest: nestOf([]) }));
+    vi.mocked(api.getCatalog).mockResolvedValue({ id: 'b', name: 'Base', views: [{ key: 'v', title: 'Inicial', spec, saved: true }], elements: [] });
+    await boot();
+    const HINT = 'Disponível quando a visão terminar de carregar';
+    const nest = () => screen.getByRole('button', { name: 'Agrupar tudo' }) as HTMLButtonElement;
+    const c4 = () => screen.getByRole('button', { name: 'C4' }) as HTMLButtonElement;
+    const am = () => screen.getByRole('button', { name: 'ArchiMate' }) as HTMLButtonElement;
+    expect(nest().disabled).toBe(false);
+    expect(c4().disabled).toBe(false);
+    const v = deferred<api.ViewResult>();
+    getView.mockReturnValueOnce(v.promise);
+    fireEvent.click(nest());
+    expect(nest().disabled).toBe(true);
+    expect(nest().title).toBe(HINT);
+    expect(c4().disabled).toBe(true);
+    expect(am().disabled).toBe(true);
+    expect(c4().title).toBe(HINT);
+    await act(async () => { v.resolve({ ...mkView('Inicial', { ...spec, nesting: 'nested' }), nest: { ...nestOf(['A']), mode: 'nested' } }); });
+    await waitFor(() => expect(c4().disabled).toBe(false));
+    expect((screen.getByRole('button', { name: 'Desagrupar tudo' }) as HTMLButtonElement).disabled).toBe(false);
+  });
+  it('aviso visual só depois de 300 ms', async () => {
+    await boot();
+    vi.useFakeTimers();
+    try {
+      flip.mockReturnValue(new Promise(() => {}));
+      fireEvent.click(screen.getByRole('button', { name: 'C4' }));
+      expect(screen.queryByRole('progressbar')).toBeNull();
+      expect(document.querySelector('.status')!.textContent).toBe('Base · Inicial');
+      act(() => { vi.advanceTimersByTime(299); });
+      expect(screen.queryByRole('progressbar')).toBeNull();
+      act(() => { vi.advanceTimersByTime(1); });
+      expect(screen.getByRole('progressbar', { name: 'Carregando' })).toBeTruthy();
+      expect(document.querySelector('.status')!.textContent).toBe('Carregando “Ver em C4”…');
+      expect(screen.getByRole('button', { name: 'Cancelar' })).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

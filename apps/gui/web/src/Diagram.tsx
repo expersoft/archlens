@@ -9,7 +9,7 @@ export interface DiagramProps {
   view: Pick<ViewResult, 'html'> & { alertInfo?: ViewResult['alertInfo'] };
   /** Ações do painel de avisos além de "Apresentar com zoom" (que o diagrama mesmo oferece). */
   alertActions?: AlertAction[];
-  /** Uma visão nova está sendo carregada: escurece o diagrama e marca aria-busy. */
+  /** Uma visão nova está sendo carregada: escurece o diagrama, barra os cliques nele e marca aria-busy. */
   busy?: boolean;
   /** Tema do diagrama (independente do tema da interface). */
   theme: Theme;
@@ -19,7 +19,7 @@ export interface DiagramProps {
   /** Antes de Apresentar (tela cheia esconde as laterais): false não apresenta. */
   canPresent?: () => boolean;
   /** Botão Agrupar/Desagrupar tudo da barra. Ausente esconde o botão. */
-  nest?: { label: string; onToggle: () => void; disabled?: boolean };
+  nest?: { label: string; onToggle: () => void; disabled?: boolean; hint?: string };
 }
 
 type Flags = { flowing: boolean; labels: boolean; legend: boolean; matrix: boolean };
@@ -115,7 +115,7 @@ export const Diagram = forwardRef<HTMLIFrameElement, DiagramProps>(function Diag
             {b.label}
           </button>
         ))}
-        {nest && <button type="button" className="nest" disabled={nest.disabled} onClick={nest.onToggle}>{nest.label}</button>}
+        {nest && <button type="button" className="nest" disabled={nest.disabled} title={nest.disabled ? nest.hint : undefined} onClick={nest.onToggle}>{nest.label}</button>}
         <AlertBadge alerts={view.alertInfo ?? []} actions={[...alertActions, { id: 'present', label: 'Apresentar com zoom', run: () => act('present') }]} />
         {onThemeChange && (
           <button

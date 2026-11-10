@@ -8,7 +8,7 @@ html,body,#root{height:100%;margin:0;overflow:hidden}
 body{font:14px/1.4 system-ui,sans-serif;background:var(--bg);color:var(--ink)}
 .app{position:fixed;inset:0;display:grid;grid-template-rows:48px minmax(0,1fr);grid-template-columns:minmax(0,1fr)}
 .app[data-presenting]{grid-template-rows:minmax(0,1fr)}
-.top{min-width:0;overflow:hidden;display:flex;gap:8px;align-items:center;padding:0 10px;border-bottom:1px solid var(--line);background:var(--panel)}
+.top{position:relative;min-width:0;overflow:hidden;display:flex;gap:8px;align-items:center;padding:0 10px;border-bottom:1px solid var(--line);background:var(--panel)}
 .top b{margin-right:6px}
 .top select,.top input{font:inherit;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink)}
 .top input{flex:1;min-width:120px;max-width:720px}
@@ -18,6 +18,11 @@ body{font:14px/1.4 system-ui,sans-serif;background:var(--bg);color:var(--ink)}
 .seg{display:flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
 .seg button{border:0;background:transparent;color:var(--ink);padding:6px 10px;cursor:pointer;font:inherit}
 .seg button.on{background:var(--accent);color:#fff}
+.top .cancel{flex:none;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:6px;padding:3px 8px;cursor:pointer;font:inherit;font-size:12px}
+.top .progress{position:absolute;left:0;right:0;bottom:0;height:2px;overflow:hidden;pointer-events:none}
+.top .progress::before{content:"";position:absolute;top:0;bottom:0;width:30%;background:var(--accent);animation:progress-slide 1.1s ease-in-out infinite}
+@keyframes progress-slide{from{left:-30%}to{left:100%}}
+@media (prefers-reduced-motion:reduce){.top .progress::before{animation:none;left:0;width:100%;opacity:.6}}
 .status{font-size:12px;color:var(--muted);flex:0 1 260px;min-width:0;margin-left:auto;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .main{display:flex;min-height:0;min-width:0;overflow:hidden}
 .rail{flex:0 0 44px;width:44px;border-right:1px solid var(--line);background:var(--panel);display:flex;flex-direction:column;align-items:center;padding-top:6px;gap:4px}
@@ -30,9 +35,11 @@ body{font:14px/1.4 system-ui,sans-serif;background:var(--bg);color:var(--ink)}
 .ph{padding:12px;color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.05em}
 .center{flex:1 1 0;display:flex;flex-direction:column;min-width:0;min-height:0;overflow:hidden}
 .diagram{position:relative;flex:1;display:flex;flex-direction:column;min-width:0;min-height:0;overflow:hidden}
-.diagram .busy{position:absolute;inset:0;background:var(--bg);opacity:.45;pointer-events:none;z-index:2;transition:opacity .15s}
+.diagram .busy{position:absolute;inset:0;background:var(--bg);opacity:.45;pointer-events:auto;cursor:progress;z-index:2;transition:opacity .15s}
+.diagram>.toolbar{position:relative;z-index:3}
 .toolbar{display:flex;gap:6px;flex-wrap:wrap;padding:6px 10px;border-bottom:1px solid var(--line);background:var(--panel)}
 .toolbar button{border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:6px;padding:4px 10px;cursor:pointer;font:inherit;font-size:13px}
+.toolbar button:disabled{opacity:.5;cursor:default}
 .toolbar button.on{background:var(--accent);border-color:var(--accent);color:#fff}
 .alert-badge{position:relative;display:inline-block}
 .toolbar button.alert-btn{background:var(--warn-bg);border-color:var(--warn);color:var(--warn)}

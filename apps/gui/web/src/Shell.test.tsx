@@ -63,6 +63,22 @@ describe('Shell', () => {
     expect(screen.getByText('centro')).toBeTruthy();
   });
 
+  it('progress mostra a barra, o status e Cancelar', async () => {
+    setWidth(1600);
+    let canceled = 0;
+    const { rerender } = render(
+      <Shell leftContent={{ chat: null, tree: null }} rightContent={null} status="Base · Inicial" progress={{ label: 'Contexto: Loja', onCancel: () => { canceled++; } }}><p>centro</p></Shell>,
+    );
+    expect(screen.getByRole('progressbar', { name: 'Carregando' })).toBeTruthy();
+    expect(document.querySelector('.status')!.textContent).toBe('Carregando “Contexto: Loja”…');
+    await userEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+    expect(canceled).toBe(1);
+    rerender(<Shell leftContent={{ chat: null, tree: null }} rightContent={null} status="Base · Inicial" progress={null}><p>centro</p></Shell>);
+    expect(screen.queryByRole('progressbar')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Cancelar' })).toBeNull();
+    expect(document.querySelector('.status')!.textContent).toBe('Base · Inicial');
+  });
+
   it('a barra de cima não tem Agrupar tudo', () => {
     setWidth(1600);
     render(<Wrapped />);

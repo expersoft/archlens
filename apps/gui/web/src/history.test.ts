@@ -44,4 +44,22 @@ describe('history reducer', () => {
     expect(reducer(s, { type: 'settle', ticket: 0 }).pending).toBe(1);
     expect(reducer(s, { type: 'settle', ticket: 1 }).pending).toBeNull();
   });
+  it('request guarda o rótulo da espera', () => {
+    const s = run({ type: 'request', ticket: 1, label: 'Contexto: Loja' });
+    expect(s.pending).toBe(1);
+    expect(s.pendingLabel).toBe('Contexto: Loja');
+  });
+  it('cancel com o ticket da espera limpa sem erro', () => {
+    const s = run({ type: 'request', ticket: 1, label: 'x' }, { type: 'cancel', ticket: 1 });
+    expect(s.pending).toBeNull();
+    expect(s.error).toBeUndefined();
+    expect(reducer(run({ type: 'request', ticket: 2 }), { type: 'cancel', ticket: 1 }).pending).toBe(2);
+  });
+  it('loaded de um ticket cancelado é ignorado', () => {
+    const a = run({ type: 'request', ticket: 1 }, { type: 'loaded', ticket: 1, step: step('a') });
+    const s = [{ type: 'request', ticket: 2 }, { type: 'cancel', ticket: 2 }, { type: 'loaded', ticket: 2, step: step('b') }]
+      .reduce((st, x) => reducer(st, x as HistoryAction), a);
+    expect(s.steps).toEqual(a.steps);
+    expect(s.cur).toBe(0);
+  });
 });
