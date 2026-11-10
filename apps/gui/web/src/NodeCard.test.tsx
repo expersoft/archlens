@@ -23,4 +23,16 @@ describe('NodeCard', () => {
     await userEvent.click(screen.getByRole('button', { name: /Fechado/ }));
     expect(screen.getByText('Dentro')).toBeTruthy();
   });
+
+  it('forceOpen mostra o corpo mesmo recolhido, não deixa recolher e fica aberto depois', async () => {
+    localStorage.setItem('archlens-node-card:f', 'false');
+    const { rerender } = render(<NodeCard id="f" title="Forçado" forceOpen><p>Editor</p></NodeCard>);
+    expect(screen.getByText('Editor')).toBeTruthy();
+    const toggle = screen.getByRole('button', { name: /Forçado/ }) as HTMLButtonElement;
+    expect(toggle.disabled).toBe(true);
+    await userEvent.click(toggle);
+    expect(screen.getByText('Editor')).toBeTruthy();
+    rerender(<NodeCard id="f" title="Forçado"><p>Editor</p></NodeCard>);
+    expect(screen.getByText('Editor')).toBeTruthy();
+  });
 });

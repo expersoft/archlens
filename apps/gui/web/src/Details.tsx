@@ -23,6 +23,8 @@ export interface DetailsProps {
   slots?: { properties?: ReactNode; doc?: ReactNode };
   /** Botões na barra de título dos cartões editáveis (o Planejar põe "✎ Editar"). */
   actions?: { properties?: ReactNode; doc?: ReactNode };
+  /** O cartão com um editor aberto: fica aberto e não recolhe (o texto não confirmado não some). */
+  editing?: 'properties' | 'doc' | null;
 }
 
 const ROLES: Record<string, string> = {
@@ -52,7 +54,7 @@ function Capped({ items, empty }: { items: ReactNode[]; empty?: string }) {
   );
 }
 
-export function Details({ card, viewNode, viewEdges, nodeId, onPick, onSelectInView, onGlossary, base, docsEnabled, layer, slots, actions }: DetailsProps) {
+export function Details({ card, viewNode, viewEdges, nodeId, onPick, onSelectInView, onGlossary, base, docsEnabled, layer, slots, actions, editing }: DetailsProps) {
   if (!nodeId) return <div className="dp muted">Selecione um elemento no diagrama ou no Explorador.</div>;
   const e = card?.element;
   const rels = viewNode ? viewEdges.filter((x) => x.from === nodeId || x.to === nodeId) : [];
@@ -91,7 +93,7 @@ export function Details({ card, viewNode, viewEdges, nodeId, onPick, onSelectInV
       </header>
       <div className="np-cards" key={nodeId}>
         {(props.length > 0 || slots?.properties) && (
-          <NodeCard id="properties" title="Propriedades" count={props.length} actions={actions?.properties}>
+          <NodeCard id="properties" title="Propriedades" count={props.length} actions={actions?.properties} forceOpen={editing === 'properties'}>
             {slots?.properties ?? (
               <dl>{props.map(([k, v]) => (
                 <Fragment key={k}><dt>{k}</dt><dd>{Array.isArray(v) ? v.join(', ') : String(v)}</dd></Fragment>
@@ -100,7 +102,7 @@ export function Details({ card, viewNode, viewEdges, nodeId, onPick, onSelectInV
           </NodeCard>
         )}
         {showDoc && (
-          <NodeCard id="doc" title="Documentação" actions={actions?.doc}>
+          <NodeCard id="doc" title="Documentação" actions={actions?.doc} forceOpen={editing === 'doc'}>
             {slots?.doc ?? <DocTab base={base!} id={nodeId} max />}
           </NodeCard>
         )}

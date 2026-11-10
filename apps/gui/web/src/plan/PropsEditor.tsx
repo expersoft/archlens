@@ -15,6 +15,9 @@ export function parsePropValue(text: string, original: PropValue | undefined): P
   return text;
 }
 
+/** Keys a plain object reads from its prototype: the server refuses them. */
+const RESERVED = ['__proto__', 'constructor', 'prototype'];
+
 const show = (v: PropValue | undefined) => (v === undefined ? '' : Array.isArray(v) ? v.join(', ') : String(v));
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
@@ -55,7 +58,8 @@ export function PropsEditor({ base, value, onConfirm, onCancel, busy, onDirty }:
   const keys = live.map((r) => r.key.trim());
   const dupe = (k: string) => k !== '' && keys.filter((x) => x === k).length > 1
     || rows.some((r) => r.removed && r.key.trim() === k && live.some((l) => l.fresh && l.key.trim() === k));
-  const invalid = live.some((r) => r.key.trim() === '' || dupe(r.key.trim()));
+  const reserved = live.map((r) => r.key.trim()).find((k) => RESERVED.includes(k));
+  const invalid = !!reserved || live.some((r) => r.key.trim() === '' || dupe(r.key.trim()));
   const dirty = rows.length !== initial.length || rows.some((r, i) => r.removed || r.fresh || r.text !== initial[i]?.text);
   useEffect(() => { onDirty?.(dirty); }, [dirty, onDirty]);
 
@@ -74,6 +78,7 @@ export function PropsEditor({ base, value, onConfirm, onCancel, busy, onDirty }:
           </div>
         ))}
       </div>
+      {reserved && <p className="warn" role="alert">A chave "{reserved}" é reservada; use outro nome.</p>}
       <button type="button" className="linkish" onClick={() => setRows((rs) => [...rs, { rid: nextId.current++, key: '', text: '', fresh: true, removed: false }])}>+ Adicionar propriedade</button>
       <div className="np-edit-actions">
         <button type="button" onClick={onCancel}>Cancelar</button>

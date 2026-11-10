@@ -53,4 +53,16 @@ describe('PropsEditor', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
     expect(onCancel).toHaveBeenCalled();
   });
+
+  it('recusa as chaves reservadas __proto__, constructor e prototype', () => {
+    for (const k of ['__proto__', 'constructor', 'prototype']) {
+      const { unmount } = render(<PropsEditor base={base} value={base} onConfirm={() => {}} onCancel={() => {}} />);
+      fireEvent.click(screen.getByRole('button', { name: '+ Adicionar propriedade' }));
+      fireEvent.change(screen.getByLabelText('Nova chave'), { target: { value: k } });
+      fireEvent.change(screen.getByLabelText(`Valor de ${k}`), { target: { value: 'x' } });
+      expect((screen.getByRole('button', { name: 'Confirmar' }) as HTMLButtonElement).disabled).toBe(true);
+      expect(screen.getByRole('alert').textContent).toContain(`"${k}"`);
+      unmount();
+    }
+  });
 });

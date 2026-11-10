@@ -16,8 +16,10 @@ export interface NodePanelProps {
   onPick?: (id: string) => void;
   /** Há texto de edição não confirmado (o PlanView pergunta antes de trocar de nó ou de aba). */
   onDirty?: (dirty: boolean) => void;
-  /** Um turno do chat está rodando: editar agora seria sobrescrito por ele. */
+  /** Um turno do chat está rodando (ou outra gravação no rascunho): editar agora seria sobrescrito. */
   locked?: boolean;
+  /** Uma edição confirmada está sendo gravada no rascunho (o PlanView segura o chat até ela voltar). */
+  onWriting?: (writing: boolean) => void;
 }
 const LOCKED = 'Aguarde o chat terminar para editar';
 
@@ -25,7 +27,7 @@ const LOCKED = 'Aguarde o chat terminar para editar';
 type Loaded = { draft: Draft; id: string; el: PlanElement } | { draft: Draft; id: string; error: string };
 
 /** A aba Nó do Planejar: o nó como o rascunho o deixa, com os mesmos cartões da tela Navegar. */
-export function NodePanel({ base, draft, id, onPick, onDraft, onDirty, locked }: NodePanelProps) {
+export function NodePanel({ base, draft, id, onPick, onDraft, onDirty, locked, onWriting }: NodePanelProps) {
   const [loaded, setLoaded] = useState<Loaded | null>(null);
   const [editing, setEditing] = useState<{ id: string; kind: 'properties' | 'doc' } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -33,6 +35,8 @@ export function NodePanel({ base, draft, id, onPick, onDraft, onDirty, locked }:
   // The host's callback may change identity on every render: it is read through a ref, never a dependency.
   const onDirtyRef = useRef(onDirty);
   onDirtyRef.current = onDirty;
+  const onWritingRef = useRef(onWriting);
+  onWritingRef.current = onWriting;
   const setDirty = useCallback((d: boolean) => { onDirtyRef.current?.(d); }, []);
   useEffect(() => () => { onDirtyRef.current?.(false); }, []);
   // Another node never inherits the editor of the previous one (the host already asked before leaving a dirty one).
@@ -59,6 +63,7 @@ export function NodePanel({ base, draft, id, onPick, onDraft, onDirty, locked }:
   const open = (kind: 'properties' | 'doc') => { setEditError(null); setEditing({ id, kind }); };
   const save = async (edit: ScreenEdit) => {
     setBusy(true);
+    onWritingRef.current?.(true);
     setEditError(null);
     try {
       const r = await planEdit(base, draft, edit);
@@ -68,6 +73,7 @@ export function NodePanel({ base, draft, id, onPick, onDraft, onDirty, locked }:
       setEditError(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
+      onWritingRef.current?.(false);
     }
   };
   const err = editError && <p className="warn np-edit-err" role="alert">{editError}</p>;
@@ -114,6 +120,7 @@ export function NodePanel({ base, draft, id, onPick, onDraft, onDirty, locked }:
         base={base}
         docsEnabled={el.docs}
         layer={el.card.element.layer}
+        editing={mine}
         slots={{ properties: propsSlot, ...(el.docs ? { doc: docSlot } : {}) }}
         actions={{ properties: editBtn('properties', 'propriedades'), doc: el.docs ? editBtn('doc', 'documentação') : undefined }}
       />

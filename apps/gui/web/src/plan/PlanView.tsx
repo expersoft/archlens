@@ -20,6 +20,7 @@ const BROKEN = 'o rascunho salvo não abre; descarte-o ("Descartar rascunho") ou
 const TRIMMED = 'a conversa antiga foi cortada para caber no navegador; o rascunho está inteiro';
 const NOTES_ASK = 'rascunhe as notas de interpretação desta rodada';
 const ROUND_RUNNING = 'aguarde a rodada em andamento terminar antes de aplicar';
+const WRITING = 'aguarde a edição da tela ser gravada';
 const PREVIEW_FAILED = 'a prévia falhou; tente de novo';
 const REPLANNABLE = new Set(['E_STORE_CONFLICT', 'E_PLAN_STALE']);
 const CONFLICT = 'O chat quer mudar algo que você editou; responda o aviso antes de aplicar';
@@ -105,6 +106,11 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
   const seq = useRef(saved?.chat.reduce((n, m) => Math.max(n, m.id), 0) ?? 0);
   const run = useRef<{ ctl: AbortController; id: number } | null>(null);
   const alive = useRef(true);
+  // A screen edit, an undo, a conflict answer or an opened file is being written into the draft: until it returns,
+  // nothing else writes it (a chat round would start from the old draft and drop the edit).
+  const [writing, setWritingState] = useState(false);
+  const writingRef = useRef(false);
+  const setWriting = useCallback((w: boolean) => { writingRef.current = w; setWritingState(w); }, []);
 
   const commit = useCallback((nextDraft: Draft | null, nextChat: ChatMsg[]) => {
     draftRef.current = nextDraft;
@@ -144,6 +150,7 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
   }, []);
 
   const turn = (req: { message?: string; answer?: { key: string; resolution: string }; attach?: RepoAttach; applied?: AppliedRound }, userText: string, opts: { keepDraft?: boolean } = {}) => {
+    if (writingRef.current) return;
     cancel();
     const history: PlanRequest['history'] = chatRef.current
       .filter((m) => m.status !== 'running' && m.status !== 'canceled' && m.text)
@@ -183,7 +190,7 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
   };
 
   const onAnswer = (msg: ChatMsg, resolution: string) => {
-    if (!msg.item) return;
+    if (!msg.item || writingRef.current) return;
     patch(msg.id, { answered: resolution });
     turn({ answer: { key: msg.item.key, resolution } }, `Resposta: ${resolution}`);
   };
@@ -202,7 +209,8 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
   };
 
   const roundRunning = chat.some((m) => m.status === 'running');
-  const reason = !canBuild ? NO_CHROMIUM : roundRunning ? ROUND_RUNNING : conflicts.length ? CONFLICT : !shown ? (previewFailed ? PREVIEW_FAILED : 'nada planejado para aplicar') : shown.questions.length ? OPEN_QUESTIONS : shown.opsHash ? undefined : 'o plano ainda não está final';
+  const waiting = roundRunning || writing;
+  const reason = !canBuild ? NO_CHROMIUM : roundRunning ? ROUND_RUNNING : writing ? WRITING : conflicts.length ? CONFLICT : !shown ? (previewFailed ? PREVIEW_FAILED : 'nada planejado para aplicar') : shown.questions.length ? OPEN_QUESTIONS : shown.opsHash ? undefined : 'o plano ainda não está final';
   const savedViews = (shown?.views ?? []).filter((v) => v.kind === 'saved' && !v.error).map((v) => v.title);
 
   const replan = async () => {
@@ -248,6 +256,8 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
   };
 
   const upload = async (file: File) => {
+    if (writingRef.current) return;
+    setWriting(true);
     try {
       const r = await planOpen(base, JSON.parse(await readText(file)) as Draft);
       if (draftRef.current && !window.confirm(REPLACE)) return;
@@ -257,11 +267,11 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
       commit(r.draft, r.warning ? [{ id: ++seq.current, role: 'assistant', text: '', warning: r.warning }] : []);
     } catch (e) {
       note({ text: '', error: e instanceof SyntaxError ? 'o arquivo não é um rascunho do archlens' : errMsg(e) });
-    }
+    } finally { setWriting(false); }
   };
 
   const discard = () => {
-    if (!window.confirm(DISCARD)) return;
+    if (writingRef.current || !window.confirm(DISCARD)) return;
     cancel();
     clear(base);
     commit(null, []);
@@ -301,14 +311,13 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
   };
 
   const [editError, setEditError] = useState<string | undefined>();
-  const editing = useRef(false);
   const [epoch, setEpoch] = useState(0);
   /** A screen edit (undo, or the answer to a conflict) goes through the server, which plans again. */
   const screenEdit = async (op: Parameters<typeof planEdit>[2]) => {
     const current = draftRef.current;
-    if (!current || editing.current || roundRunning) return;
+    if (!current || writingRef.current || roundRunning) return;
     if (!leaveEdit()) return;
-    editing.current = true;
+    setWriting(true);
     setEditError(undefined);
     try {
       const r = await planEdit(base, current, op);
@@ -316,7 +325,7 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
       setConflicts(r.screenConflicts ?? []);
       editDirty.current = false;
       setEpoch((n) => n + 1); // the node editor, whose text was just discarded, starts closed
-    } catch (e) { setEditError(errMsg(e)); } finally { editing.current = false; }
+    } catch (e) { setEditError(errMsg(e)); } finally { setWriting(false); }
   };
   const firstConflict = conflicts[0];
   const nameOf = (id: string) => listed?.changes.find((c) => c.id === id)?.name ?? id;
@@ -332,6 +341,7 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
             onSend={(t, attach) => turn({ message: t, ...(attach ? { attach } : {}) }, attach ? `${t}\n(anexo: ${attach.url}${attach.ref ? `@${attach.ref}` : ''})` : t)}
             repo={(draft?.repo as { url: string; ref?: string; commit?: string } | null | undefined) ?? null}
             onAnswer={onAnswer}
+            locked={writing}
             onNotes={onNotes}
             onClear={clearChat}
             notice={stored === 'too-big' ? (
@@ -346,18 +356,18 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
             <div className="toolbar">
               <label className="filebtn" title="Abrir um rascunho salvo (.json)">
                 Abrir
-                <input type="file" accept="application/json,.json" aria-label="Abrir rascunho" onChange={(e) => {
+                <input type="file" accept="application/json,.json" aria-label="Abrir rascunho" disabled={writing} onChange={(e) => {
                   const f = e.target.files?.[0];
                   e.target.value = '';
                   if (f) void upload(f);
                 }} />
               </label>
               {saveBtn}
-              <button type="button" aria-label="Descartar rascunho" disabled={!draft} onClick={discard}>Descartar</button>
+              <button type="button" aria-label="Descartar rascunho" disabled={!draft || writing} title={writing ? WRITING : undefined} onClick={discard}>Descartar</button>
               <button type="button" disabled={!!reason || applying} title={reason} onClick={() => { setApplyError(null); setReplannable(false); setApplyOpen(true); }}>Aplicar</button>
             </div>
             {firstConflict && (
-              <ScreenConflictDialog key={`${firstConflict.id}:${firstConflict.field}`} conflict={firstConflict} nodeName={nameOf(firstConflict.id)} locked={roundRunning}
+              <ScreenConflictDialog key={`${firstConflict.id}:${firstConflict.field}`} conflict={firstConflict} nodeName={nameOf(firstConflict.id)} locked={waiting}
                 onChoose={(choice) => void screenEdit({ op: 'resolve', id: firstConflict.id, field: firstConflict.field, choice })} />
             )}
             {editError && <p className="err" role="alert">{editError}</p>}
@@ -374,9 +384,9 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
             <button type="button" role="tab" aria-selected={tab === 'node'} className={tab === 'node' ? 'on' : ''} onClick={() => { if (leaveEdit()) setTab('node'); }}>Nó</button>
           </div>
           {tab === 'delta' ? (
-            <DeltaPanel result={changed ? listed : null} selected={selected} onPick={pick} onUndo={(id) => void screenEdit({ op: 'undo', id })} locked={roundRunning} />
+            <DeltaPanel result={changed ? listed : null} selected={selected} onPick={pick} onUndo={(id) => void screenEdit({ op: 'undo', id })} locked={waiting} />
           ) : (
-            <NodePanel key={epoch} locked={roundRunning} base={base} draft={draft} id={selected} onPick={pick} onDraft={(d, _h, c) => { commit(d, chatRef.current); setConflicts(c ?? []); }} onDirty={(d) => { editDirty.current = d; }} />
+            <NodePanel key={epoch} locked={waiting} onWriting={setWriting} base={base} draft={draft} id={selected} onPick={pick} onDraft={(d, _h, c) => { commit(d, chatRef.current); setConflicts(c ?? []); }} onDirty={(d) => { editDirty.current = d; }} />
           )}
         </aside>
       )}

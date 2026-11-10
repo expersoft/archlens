@@ -9,7 +9,8 @@ describe('ScreenConflictDialog', () => {
     render(<ScreenConflictDialog conflict={conflict} nodeName="Cashback" onChoose={vi.fn()} />);
     expect(screen.getByText('O chat quer mudar algo que você editou')).toBeTruthy();
     expect(screen.getByRole('dialog').textContent).toContain('Cashback');
-    expect(screen.getByRole('dialog').textContent).toContain('properties.dono');
+    expect(screen.getByRole('dialog').textContent).toContain('propriedade dono');
+    expect(screen.getByRole('dialog').textContent).not.toContain('properties.dono');
     expect((screen.getByLabelText('Manter o seu') as HTMLInputElement).checked).toBe(true);
     expect((screen.getByLabelText('Usar o do chat') as HTMLInputElement).checked).toBe(false);
   });
@@ -36,5 +37,10 @@ describe('ScreenConflictDialog', () => {
     const b = screen.getByRole('button', { name: 'Confirmar' }) as HTMLButtonElement;
     expect(b.disabled).toBe(true);
     expect(b.title).toBe('Aguarde o chat terminar para editar');
+  });
+
+  it('conflito de documentação mostra "documentação" em vez do campo cru', () => {
+    render(<ScreenConflictDialog conflict={{ id: 'a', field: 'doc', mine: 'meu', theirs: 'do chat' }} nodeName="Cashback" onChoose={vi.fn()} />);
+    expect(screen.getByRole('dialog').textContent).toContain('Cashback · documentação');
   });
 });

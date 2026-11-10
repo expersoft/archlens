@@ -152,4 +152,17 @@ describe('NodePanel', () => {
     await screen.findByRole('heading', { name: 'Cashback' });
     expect((screen.getByRole('button', { name: 'Escrever' }) as HTMLButtonElement).disabled).toBe(true);
   });
+
+  it('Editar num cartão recolhido abre o cartão, e ele não recolhe com o editor aberto', async () => {
+    localStorage.setItem('archlens-node-card:properties', 'false');
+    planElement.mockResolvedValue(el('a', 'Cashback'));
+    render(<NodePanel base="b" draft={draft()} id="a" onDraft={() => {}} />);
+    await screen.findByRole('heading', { name: 'Cashback' });
+    fireEvent.click(screen.getByRole('button', { name: 'Editar propriedades' }));
+    const input = screen.getByLabelText('Valor de dono') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: 'outro' } });
+    fireEvent.click(screen.getByRole('button', { name: /Propriedades/ }));
+    expect((screen.getByLabelText('Valor de dono') as HTMLInputElement).value).toBe('outro');
+    localStorage.clear();
+  });
 });

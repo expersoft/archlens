@@ -9,6 +9,10 @@ function brief(v: PropValue | null): string {
   return t.length > SHOWN_MAX ? `${t.slice(0, SHOWN_MAX)}…` : t;
 }
 
+const PROP = 'properties.';
+/** The field as the user knows it: "propriedade <k>" or "documentação". */
+export const fieldLabel = (field: string) => (field === 'doc' ? 'documentação' : field.startsWith(PROP) ? `propriedade ${field.slice(PROP.length)}` : field);
+
 export interface ScreenConflictDialogProps {
   conflict: ScreenConflict;
   nodeName: string;
@@ -23,7 +27,7 @@ export function ScreenConflictDialog({ conflict, nodeName, onChoose, locked }: S
   return (
     <div className="screen-conflict" role="dialog" aria-label="O chat quer mudar algo que você editou">
       <h3>O chat quer mudar algo que você editou</h3>
-      <p><b>{nodeName}</b> · {conflict.field}</p>
+      <p><b>{nodeName}</b> · {fieldLabel(conflict.field)}</p>
       <fieldset>
         <div>
           <label><input type="radio" name="screen-conflict" checked={choice === 'mine'} onChange={() => setChoice('mine')} />Manter o seu</label>
