@@ -15,6 +15,7 @@ import { DEFAULT_MAX_HISTORY } from './ask/context.mjs';
 import { runAsk } from './ask/agent.mjs';
 import { createTelemetry, summarize } from './ask/telemetry.mjs';
 import { planRoutes } from './plan/routes.mjs';
+import { configError, LOGO_MAX } from './config.mjs';
 
 const BODY_LIMIT = 1024 * 1024;
 const QUESTION_MAX = 2000;
@@ -22,7 +23,7 @@ const STREAMED = Symbol('streamed');
 const TYPES = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.json': 'application/json; charset=utf-8',
-  '.png': 'image/png', '.ico': 'image/x-icon',
+  '.png': 'image/png', '.ico': 'image/x-icon', '.webp': 'image/webp',
 };
 
 // Every response: no framing by another origin.
@@ -138,6 +139,20 @@ export async function startServer({ config, staticDir, registry, provider } = {}
   const ownRegistry = !registry;
   registry ??= createBaseRegistry(config);
   const cache = createViewCache();
+  // The logos are read once (size and place were checked at config load): later changes to the files do not matter.
+  const logos = {};
+  if (config?.brand) {
+    const readLogo = async (key) => {
+      const file = config.brand[key];
+      let data;
+      try { data = await readFile(file); } catch (e) { throw configError(`brand.${key}: não foi possível ler ${file} (${e.code ?? e.message})`); }
+      if (data.length > LOGO_MAX) throw configError(`brand.${key} passa de 1 MB`); // it may have grown since the config was loaded
+      return data;
+    };
+    logos.logo = await readLogo('logo');
+    if (config.brand.logoDark) logos['logo-dark'] = await readLogo('logoDark');
+  }
+  const logoType = { logo: config?.brand?.logo, 'logo-dark': config?.brand?.logoDark };
   const telemetry = createTelemetry(config?.telemetry ?? {});
 
   // The question as an NDJSON stream: agent events, then result (or error), then done. A closed connection aborts.
@@ -196,8 +211,18 @@ export async function startServer({ config, staticDir, registry, provider } = {}
   const routes = [
     ['GET', /^\/api\/info$/, async () => ({
       ask: provider ? { enabled: true, provider: provider.name, model: provider.model, mode: provider.tools ? 'tools' : 'json', maxHistory: config?.llm?.maxHistory ?? DEFAULT_MAX_HISTORY } : { enabled: false, ...(askOff ? { reason: askOff } : {}) },
+      ...(config?.brand ? { brand: { ...(config.brand.name ? { name: config.brand.name } : {}), logo: '/api/brand/logo', ...(config.brand.logoDark ? { logoDark: '/api/brand/logo-dark' } : {}) } } : {}),
       plan: planOn ? { enabled: true, maxRounds: config.plan.maxRounds, timeoutMs: config.plan.timeoutMs, build: canBuild } : { enabled: false, ...(planOff ? { reason: planOff } : {}) },
     })],
+    ['GET', /^\/api\/brand\/(logo|logo-dark)$/, async (_req, [which], _url, res) => {
+      const data = logos[which];
+      if (!data) throw httpError(404, 'sem logo configurado');
+      send(res, 200, data, {
+        'content-type': TYPES[extname(logoType[which]).toLowerCase()], 'x-content-type-options': 'nosniff',
+        'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'", 'cache-control': 'no-cache',
+      });
+      return STREAMED;
+    }],
     ['GET', /^\/api\/telemetry$/, async () => summarize(telemetry.recent())],
     ['POST', /^\/api\/bases\/([^/]+)\/ask$/, (req, [b], _url, res) => ask(req, res, b)],
     ...(planOn ? planRoutes({ registry, provider, config, telemetry, h: { readJson, httpError, STREAMED, NDJSON_HEADERS } }) : []),

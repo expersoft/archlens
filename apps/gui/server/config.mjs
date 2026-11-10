@@ -1,11 +1,11 @@
 // GUI configuration: a JSON file listing the bases, or a single base given on the command line.
-import { readFileSync } from 'node:fs';
-import { basename, dirname, resolve } from 'node:path';
+import { readFileSync, realpathSync, statSync } from 'node:fs';
+import { basename, dirname, extname, resolve, sep } from 'node:path';
 import { loadEnv } from './envfile.mjs';
 
 export const DEFAULT_PORT = 5180;
 
-const configError = message => Object.assign(new Error(message), { code: 'E_GUI_CONFIG' });
+export const configError = message => Object.assign(new Error(message), { code: 'E_GUI_CONFIG' });
 
 /** Each base needs a non-empty string id and path; ids are unique. */
 function checkBases(list, file) {
@@ -91,6 +91,37 @@ function checkTelemetry(t, dir) {
   return { ...(t.file ? { file: resolve(dir, t.file) } : {}), ...(t.questions !== undefined ? { questions: t.questions } : {}) };
 }
 
+const LOGO_EXT = new Set(['.svg', '.png', '.webp']);
+export const LOGO_MAX = 1024 * 1024;
+
+/** The `brand` block: company logo (and an optional dark-theme one) inside the config file's folder; absolute paths out. */
+function checkBrand(brand, dir) {
+  if (!isObj(brand)) throw configError('brand deve ser um objeto');
+  if (brand.name !== undefined && (typeof brand.name !== 'string' || !brand.name.trim())) throw configError('brand.name deve ser texto não vazio');
+  const one = (key, required) => {
+    const v = brand[key];
+    if (v === undefined && !required) return undefined;
+    if (typeof v !== 'string' || !v.trim()) throw configError(required ? `brand.${key} é obrigatório` : `brand.${key}, se informado, precisa ser um caminho`);
+    const lexical = resolve(dir, v);
+    const inside = (p, root) => p.startsWith(root.endsWith(sep) ? root : root + sep);
+    if (!inside(lexical, resolve(dir))) throw configError(`brand.${key} precisa ficar dentro da pasta do archlens-gui.json`);
+    const abs = lexical;
+    if (!LOGO_EXT.has(extname(abs).toLowerCase())) throw configError(`brand.${key}: use .svg, .png ou .webp`);
+    let real, st;
+    try { real = realpathSync(abs); st = statSync(real); } catch { throw configError(`brand.${key}: arquivo não encontrado: ${abs}`); }
+    if (!st.isFile()) throw configError(`brand.${key}: arquivo não encontrado: ${abs}`);
+    // A link inside the folder must not lead out of it.
+    if (!inside(real, realpathSync(dir))) throw configError(`brand.${key} precisa ficar dentro da pasta do archlens-gui.json`);
+    // The route's content type comes from the real file: a link named .svg to a .txt or .html is refused too.
+    if (!LOGO_EXT.has(extname(real).toLowerCase())) throw configError(`brand.${key}: use .svg, .png ou .webp`);
+    if (st.size > LOGO_MAX) throw configError(`brand.${key} passa de 1 MB`);
+    return real;
+  };
+  const logo = one('logo', true);
+  const logoDark = one('logoDark', false);
+  return { logo, ...(logoDark ? { logoDark } : {}), ...(brand.name ? { name: brand.name } : {}) };
+}
+
 /**
  * The LLM part: `llm` + the environment for the provider (process env over the .env file). Without `llm` nothing is
  * read: the text search is opt-in.
@@ -121,6 +152,7 @@ export function loadConfig({ file, base, port, host, llm, envFile, plan } = {}) 
       port: port ?? cfg.port ?? DEFAULT_PORT, ...(h ? { host: h } : {}), bases,
       ...llmCfg,
       ...(plan ? planPart(isObj(cfg.plan) ? cfg.plan : true, llmCfg, 'cli') : planPart(cfg.plan, llmCfg, 'file')),
+      ...(cfg.brand !== undefined ? { brand: checkBrand(cfg.brand, dir) } : {}),
       ...(cfg.telemetry !== undefined ? { telemetry: checkTelemetry(cfg.telemetry, dir) } : {}),
     };
   }

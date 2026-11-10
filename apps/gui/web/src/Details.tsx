@@ -1,7 +1,8 @@
-import { Fragment, useState } from 'react';
+import { Fragment, useState, type ReactNode } from 'react';
 import type { Card, RelRef, ViewEdge, ViewNode } from './api';
 import { DocTab } from './DocTab';
-import { layerLabel } from './labels';
+import { LAYER_VAR, layerLabel } from './labels';
+import { NodeCard } from './NodeCard';
 
 export interface DetailsProps {
   card: Card | null;
@@ -14,16 +15,41 @@ export interface DetailsProps {
   onSelectInView: (id: string) => void;
   onGlossary: () => void;
   base?: string | null;
-  /** A base guarda documentação dos nós: mostra as abas. */
+  /** A base guarda documentação dos nós: mostra o cartão Documentação. */
   docsEnabled?: boolean;
+  /** Camada ArchiMate do nó, para a cor do cabeçalho; sem ela vem do nó na visão ou do cartão. */
+  layer?: string;
+  /** O Planejar troca o conteúdo dos cartões Propriedades e Documentação pelos editores. */
+  slots?: { properties?: ReactNode; doc?: ReactNode };
+  /** Botões na barra de título dos cartões editáveis (o Planejar põe "✎ Editar"). */
+  actions?: { properties?: ReactNode; doc?: ReactNode };
+  /** O cartão com um editor aberto: fica aberto e não recolhe (o texto não confirmado não some). */
+  editing?: 'properties' | 'doc' | null;
 }
 
 const ROLES: Record<string, string> = {
   supporter: 'Suporte', dependent: 'Dependente', both: 'Suporte e dependente', anchor: 'Âncora',
 };
+const CAP = 5;
 
-export function Details({ card, viewNode, viewEdges, nodeId, onPick, onSelectInView, onGlossary, base, docsEnabled }: DetailsProps) {
-  const [tab, setTab] = useState<'details' | 'doc'>('details');
+/** Lista que mostra 5 itens e "Mostrar mais N". */
+function Capped({ items, empty }: { items: ReactNode[]; empty?: string }) {
+  const [all, setAll] = useState(false);
+  if (items.length === 0) return empty ? <p className="muted">{empty}</p> : null;
+  const shown = all ? items : items.slice(0, CAP);
+  return (
+    <>
+      <ul>{shown}</ul>
+      {items.length > CAP && (
+        <button type="button" className="linkish" onClick={() => setAll((v) => !v)}>
+          {all ? 'Mostrar menos' : `Mostrar mais ${items.length - CAP}`}
+        </button>
+      )}
+    </>
+  );
+}
+
+export function Details({ card, viewNode, viewEdges, nodeId, onPick, onSelectInView, onGlossary, base, docsEnabled, layer, slots, actions, editing }: DetailsProps) {
   if (!nodeId) return <div className="dp muted">Selecione um elemento no diagrama ou no Explorador.</div>;
   const e = card?.element;
   const rels = viewNode ? viewEdges.filter((x) => x.from === nodeId || x.to === nodeId) : [];
@@ -35,84 +61,98 @@ export function Details({ card, viewNode, viewEdges, nodeId, onPick, onSelectInV
     )));
   const props = Object.entries(card?.properties ?? {});
   const baseRels = card && !viewNode ? [...relList('out', card.outgoing), ...relList('in', card.incoming)] : [];
-  const tabs = !!docsEnabled && !!base;
-  const onDoc = tabs && tab === 'doc';
+  const showDoc = !!docsEnabled && !!base;
+  const lv = LAYER_VAR[layer ?? viewNode?.layer ?? e?.layer ?? 'other'] ?? 'oth';
+  const c4 = viewNode?.c4Label ?? e?.c4Label;
+  const typeLabel = viewNode?.typeLabel ?? e?.typeLabel ?? e?.type;
+  const description = viewNode?.description ?? e?.description;
+  const relItems = rels.map((r) => {
+    const other = r.from === nodeId ? r.to : r.from;
+    return (
+      <li key={r.id} className="go" onClick={() => onSelectInView(other)}>
+        {r.help?.sentence ?? `${r.type}: ${r.from} → ${r.to}`}
+        {r.technology && <span className="chip">{r.technology}</span>}
+      </li>
+    );
+  });
 
   return (
     <div className="dp">
-      <h2>{viewNode?.name ?? e?.name ?? nodeId}</h2>
-      {tabs && (
-        <div role="tablist" className="dp-tabs">
-          <button type="button" role="tab" aria-selected={!onDoc} className={onDoc ? '' : 'on'} onClick={() => setTab('details')}>Detalhes</button>
-          <button type="button" role="tab" aria-selected={onDoc} className={onDoc ? 'on' : ''} onClick={() => setTab('doc')}>Documentação</button>
+      <header className="np-head" style={{ background: `var(--${lv})`, borderBottom: `3px solid var(--${lv}-s)` }}>
+        <h2>{viewNode?.name ?? e?.name ?? nodeId}</h2>
+        <div className="np-chips">
+          {c4 && <span className="np-chip">{c4}</span>}
+          {typeLabel && <span className="np-chip">ArchiMate {typeLabel}</span>}
         </div>
-      )}
-      {onDoc && <DocTab base={base!} id={nodeId} />}
-      {!onDoc && viewNode && (
-        <section>
-          <div className="tag">Nesta visão</div>
-          <div className="kind">
-            {viewNode.c4Label ? `${viewNode.c4Label} · ` : ''}ArchiMate {viewNode.typeLabel}
-          </div>
-          {viewNode.description && <p>{viewNode.description}</p>}
-          <dl>
-            {viewNode.technology && <><dt>Tecnologia</dt><dd><span className="chip">{viewNode.technology}</span></dd></>}
-            {viewNode.layer && <><dt>Camada</dt><dd>{layerLabel(viewNode.layer)}</dd></>}
-            {viewNode.role && <><dt>Papel</dt><dd>{ROLES[viewNode.role] ?? viewNode.role}</dd></>}
-            {viewNode.distance != null && <><dt>Distância</dt><dd>{viewNode.distance}</dd></>}
-          </dl>
-          <h3>Relações na visão</h3>
-          <ul>
-            {rels.map((r) => {
-              const other = r.from === nodeId ? r.to : r.from;
-              return (
-                <li key={r.id} className="go" onClick={() => onSelectInView(other)}>
-                  {r.help?.sentence ?? `${r.type}: ${r.from} → ${r.to}`}
-                  {r.technology && <span className="chip">{r.technology}</span>}
-                </li>
-              );
-            })}
-            {rels.length === 0 && <li className="muted">Nenhuma relação na visão.</li>}
-          </ul>
-          <button type="button" className="linkish" onClick={onGlossary}>Como ler as relações?</button>
-        </section>
-      )}
-      {!onDoc && card && e && (
-        <section className={viewNode ? 'sec' : undefined}>
-          {viewNode ? <div className="tag">Na base</div> : (
-            <>
-              <div className="kind">{e.c4Label ? `${e.c4Label} · ` : ''}ArchiMate {e.typeLabel ?? e.type}</div>
-              {e.description && <p>{e.description}</p>}
-              {e.technology && <p><span className="chip">{e.technology}</span></p>}
-            </>
-          )}
-          <dl>
-            {!!e.aliases?.length && <><dt>Apelidos</dt><dd>{e.aliases.join(', ')}</dd></>}
-            {card.parent && <><dt>Pai</dt><dd className="go" onClick={() => onPick(card.parent!.id)}>{card.parent.name}</dd></>}
-            <dt>Id</dt><dd><code>{e.id}</code></dd>
-            {e.status && <><dt>Status</dt><dd>{e.status}</dd></>}
-          </dl>
-          {props.length > 0 && (
-            <><h3>Propriedades</h3><dl>{props.map(([k, v]) => (
-              <Fragment key={k}><dt>{k}</dt><dd>{Array.isArray(v) ? v.join(', ') : String(v)}</dd></Fragment>
-            ))}</dl></>
-          )}
-          {baseRels.length > 0 && <><h3>Relações</h3><ul>{baseRels}</ul></>}
-          {card.children.length > 0 && (
-            <><h3>Filhos</h3><ul>{card.children.map((c) => <li key={c.id} className="go" onClick={() => onPick(c.id)}>{c.name}</li>)}</ul></>
-          )}
-          {!!card.sources?.length && (
-            <><h3>Fontes</h3><ul>{card.sources.map((s, i) => (
-              <li key={i}>{s.kind ?? ''}{s.ref ? `: ${s.ref}` : ''}{s.excerpt && <> <span className="muted">“{s.excerpt}”</span></>}</li>
-            ))}</ul></>
-          )}
-          {!!card.rounds?.length && (
-            <><h3>Rodadas</h3><ul>{card.rounds.map((r, i) => (
-              <li key={i}><b>{r.date ?? r.id ?? ''}</b> {r.summary ?? ''}{(r.how ?? []).map((h) => <span className="chip" key={h}>{h}</span>)}</li>
-            ))}</ul></>
-          )}
-        </section>
-      )}
+        {description && <p>{description}</p>}
+      </header>
+      <div className="np-cards" key={nodeId}>
+        {(props.length > 0 || slots?.properties) && (
+          <NodeCard id="properties" title="Propriedades" count={props.length} actions={actions?.properties} forceOpen={editing === 'properties'}>
+            {slots?.properties ?? (
+              <dl>{props.map(([k, v]) => (
+                <Fragment key={k}><dt>{k}</dt><dd>{Array.isArray(v) ? v.join(', ') : String(v)}</dd></Fragment>
+              ))}</dl>
+            )}
+          </NodeCard>
+        )}
+        {showDoc && (
+          <NodeCard id="doc" title="Documentação" actions={actions?.doc} forceOpen={editing === 'doc'}>
+            {slots?.doc ?? <DocTab base={base!} id={nodeId} max title={`Documentação · ${viewNode?.name ?? e?.name ?? nodeId}`} layer={layer ?? viewNode?.layer ?? e?.layer} labels={[c4, typeLabel && `ArchiMate ${typeLabel}`].filter((x): x is string => !!x)} />}
+          </NodeCard>
+        )}
+        {viewNode && (
+          <NodeCard id="in-view" title="Nesta visão">
+            <dl>
+              {viewNode.technology && <><dt>Tecnologia</dt><dd><span className="chip">{viewNode.technology}</span></dd></>}
+              {viewNode.layer && <><dt>Camada</dt><dd>{layerLabel(viewNode.layer)}</dd></>}
+              {viewNode.role && <><dt>Papel</dt><dd>{ROLES[viewNode.role] ?? viewNode.role}</dd></>}
+              {viewNode.distance != null && <><dt>Distância</dt><dd>{viewNode.distance}</dd></>}
+            </dl>
+          </NodeCard>
+        )}
+        {viewNode && (
+          <NodeCard id="view-rels" title="Relações na visão" count={relItems.length}>
+            <Capped items={relItems} empty="Nenhuma relação na visão." />
+            <button type="button" className="linkish" onClick={onGlossary}>Como ler as relações?</button>
+          </NodeCard>
+        )}
+        {!viewNode && baseRels.length > 0 && (
+          <NodeCard id="base-rels" title="Relações" count={baseRels.length}>
+            <Capped items={baseRels} />
+          </NodeCard>
+        )}
+        {card && e && (
+          <NodeCard id="base" title="Na base" defaultOpen={false}>
+            {!viewNode && e.technology && <p><span className="chip">{e.technology}</span></p>}
+            <dl>
+              {!!e.aliases?.length && <><dt>Apelidos</dt><dd>{e.aliases.join(', ')}</dd></>}
+              {card.parent && <><dt>Pai</dt><dd className="go" onClick={() => onPick(card.parent!.id)}>{card.parent.name}</dd></>}
+              <dt>Id</dt><dd><code>{e.id}</code></dd>
+              {e.status && <><dt>Status</dt><dd>{e.status}</dd></>}
+            </dl>
+          </NodeCard>
+        )}
+        {card && card.children.length > 0 && (
+          <NodeCard id="children" title="Filhos" count={card.children.length} defaultOpen={false}>
+            <Capped items={card.children.map((c) => <li key={c.id} className="go" onClick={() => onPick(c.id)}>{c.name}</li>)} />
+          </NodeCard>
+        )}
+        {card && (!!card.sources?.length || !!card.rounds?.length) && (
+          <NodeCard id="sources" title="Fontes e rodadas" count={(card.sources?.length ?? 0) + (card.rounds?.length ?? 0)} defaultOpen={false}>
+            {!!card.sources?.length && (
+              <><h3>Fontes</h3><ul>{card.sources.map((s, i) => (
+                <li key={i}>{s.kind ?? ''}{s.ref ? `: ${s.ref}` : ''}{s.excerpt && <> <span className="muted">“{s.excerpt}”</span></>}</li>
+              ))}</ul></>
+            )}
+            {!!card.rounds?.length && (
+              <><h3>Rodadas</h3><ul>{card.rounds.map((r, i) => (
+                <li key={i}><b>{r.date ?? r.id ?? ''}</b> {r.summary ?? ''}{(r.how ?? []).map((h) => <span className="chip" key={h}>{h}</span>)}</li>
+              ))}</ul></>
+            )}
+          </NodeCard>
+        )}
+      </div>
     </div>
   );
 }

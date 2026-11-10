@@ -204,3 +204,37 @@ test('o pedido de notas leva a rodada aplicada como conteúdo externo', () => wi
   const t = p.seen[0].input.text;
   assert.match(t, /<conteudo-externo origem="rodada">\nresumo: \+1 ~1 −0\nadicionados: sistema-novo\nalterados: loja\.pedidos\nremovidos: nenhum\n<\/conteudo-externo>/);
 }));
+
+const EDITS = { loja: { properties: { criticidade: 'média', removida: null, lista: ['a', 'b'] }, doc: 'Linha um\nLinha dois' } };
+
+test('draftState lista as edições da tela', () => withBase(async ctx => {
+  const p = scripted([turn([call('reply', { text: 'ok' })])]);
+  await runPlan(ctx, req(ctx, { draft: { ...newDraft(ctx), edits: EDITS } }), opts(p));
+  const t = p.seen[0].input.text;
+  assert.ok(t.includes('edições feitas na tela (não refaça nem contradiga sem perguntar): loja: properties.criticidade = média; loja: properties.removida = (removida); loja: properties.lista = ["a","b"]; loja: documentação (2 linhas)'), t);
+  const none = scripted([turn([call('reply', { text: 'ok' })])]);
+  await runPlan(ctx, req(ctx), opts(none));
+  assert.doesNotMatch(none.seen[0].input.text, /edições feitas na tela/);
+  const cleared = scripted([turn([call('reply', { text: 'ok' })])]);
+  await runPlan(ctx, req(ctx, { draft: { ...newDraft(ctx), edits: { loja: { doc: '  \n' } } } }), opts(cleared));
+  assert.ok(cleared.seen[0].input.text.includes('edições feitas na tela (não refaça nem contradiga sem perguntar): loja: documentação (apagada)'));
+}));
+
+test('set_delta do agente que não cita o nó editado mantém draft.edits', () => withBase(async ctx => {
+  const edits = { loja: { properties: { criticidade: 'média' } } };
+  const p = scripted([turn([call('set_delta', { delta: NEW })]), turn([call('plan_draft')]), turn([call('reply', { text: 'pronto' })])]);
+  const r = await runPlan(ctx, req(ctx, { draft: { ...newDraft(ctx), edits } }), opts(p));
+  assert.deepEqual(r.draft.edits, edits);
+  assert.deepEqual(r.draft.delta, NEW);
+  assert.equal(r.draft.plan.state, 'final');
+  const els = r.draft.plan.delta.model.elements;
+  assert.ok(els.some(e => e.id === 'sistema-novo'));
+  assert.deepEqual(els.find(e => e.id === 'loja').properties, { criticidade: 'média' });
+}));
+
+test('plan_draft com só edições da tela planeja', () => withBase(async ctx => {
+  const p = scripted([turn([call('plan_draft')]), turn([call('reply', { text: 'pronto' })])]);
+  const r = await runPlan(ctx, req(ctx, { draft: { ...newDraft(ctx), edits: { loja: { properties: { criticidade: 'média' } } } } }), opts(p));
+  assert.equal(r.draft.plan.state, 'final');
+  assert.match(p.seen[1].input.results[0].content, /^plano final/);
+}));

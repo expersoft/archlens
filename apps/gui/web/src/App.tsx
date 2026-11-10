@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
-import { ask as askApi, find, flip, getActions, getBases, getCatalog, getElement, getInfo, getView, type Action, type AskEvent, type Info, type BaseInfo, type Card, type Catalog, type FindHit, type ViewData, type ViewResult, type ViewSpec } from './api';
+import { Fragment, useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import { ask as askApi, find, flip, getActions, getBases, getCatalog, getElement, getInfo, getView, type Action, type AskEvent, type Info, type BaseInfo, type Card, type Catalog, type Draft, type FindHit, type PropValue, type ScreenEdit, type ViewData, type ViewResult, type ViewSpec } from './api';
 import { pickInitialView } from './pick';
 import { Diagram } from './Diagram';
+import type { AlertAction } from './AlertBadge';
+import { alertActions } from './alertActions';
 import { Shell } from './Shell';
 import { ContextMenu } from './ContextMenu';
 import { History } from './History';
@@ -15,11 +17,21 @@ import { send, type BridgeEvent } from './bridge';
 import { typeHint } from './labels';
 import { PlanView } from './plan/PlanView';
 import type { PreviewNav } from './plan/PlanPreview';
+import { LOCKED_SAVE, lockText, type Lock } from './plan/lock';
+import { PropsEditor } from './plan/PropsEditor';
+import { DocEditor } from './plan/DocEditor';
+import { DocTab } from './DocTab';
+import { confirmBrowseEdit, UNSAVED, useBrowseNode } from './browseEdit';
+import { TRIMMED } from './plan/draftStore';
 import { allLabel, oneLabel, toggleAll, toggleOne } from './nesting';
 
 const totalMs = (v: ViewResult) => v.ms.resolve + v.ms.layout + v.ms.render;
 /** `items` null: as ações ainda estão chegando (o menu já abre com "Carregando…"). */
 type Menu = { id: string; at: { x: number; y: number }; title: string; items: Action[] | null };
+const DISCARD_EDIT = 'Descartar a edição não confirmada?';
+/** The properties the screen layer of the draft already sets on the node: a new edit keeps them. */
+const screenProps = (d: Draft | null, id: string) =>
+  ((d?.edits as Record<string, { properties?: Record<string, PropValue | null> }> | undefined)?.[id]?.properties) ?? {};
 
 export function App() {
   const [theme, setTheme] = useTheme();
@@ -40,6 +52,48 @@ export function App() {
   const [mode, setMode] = useState<'browse' | 'plan'>('browse');
   const [planOpened, setPlanOpened] = useState(false); // PlanView stays mounted once opened, so a round in flight finishes
   const [planNav, setPlanNav] = useState<PreviewNav | null>(null);
+  // What PlanView tells the App (busy: a round or a write in flight) and what the App asks of it (re-read the saved
+  // draft, focus a node): the bridge an edit made in Navegar goes through.
+  const [planLock, setPlanLock] = useState<Lock>(false);
+  const [planReload, setPlanReload] = useState(0);
+  // the node to focus carries its base: the PlanView of another base (mounted anew) never takes it
+  const [planFocus, setPlanFocus] = useState<{ base: string; id: string; n: number } | undefined>(undefined);
+  // the draft lives only in memory (too big to save): a reload would not adopt what Navegar saves
+  const [planUnsaved, setPlanUnsaved] = useState(false);
+  // a focus is for the base it was asked on: another base (or coming back, A→B→A) never re-selects it
+  useEffect(() => { setPlanFocus(undefined); }, [base]);
+  // Read again at the moment Navegar writes (compare-and-swap): the state of the last render could be stale.
+  const planLockRef = useRef<Lock>(false);
+  const planUnsavedRef = useRef(false);
+  const onPlanBusy = useCallback((l: Lock) => { planLockRef.current = l; setPlanLock(l); }, []);
+  const onPlanUnsaved = useCallback((u: boolean) => { planUnsavedRef.current = u; setPlanUnsaved(u); }, []);
+  // Editing the node in Navegar: the editor open (for one node of one base), Navegar's write in flight, its error.
+  // The editor keeps what it started from (props, raw doc): a later re-read, failed or not, never swaps or closes it.
+  const [browseEdit, setBrowseEdit] = useState<{ base: string; id: string; kind: 'properties' | 'doc'; props: Record<string, PropValue>; docRaw: string } | null>(null);
+  // The base Navegar's write in flight goes to (null: none).
+  const [browseWriting, setBrowseWritingState] = useState<string | null>(null);
+  const browseWritingRef = useRef<string | null>(null);
+  const setBrowseWriting = (w: string | null) => { browseWritingRef.current = w; setBrowseWritingState(w); };
+  const [browseError, setBrowseError] = useState<{ base: string; id: string; text: string } | null>(null);
+  // What became of a write whose base was left meanwhile, shown on the base now on screen.
+  const [browseNotice, setBrowseNotice] = useState<{ base: string; text: string; warn: boolean } | null>(null);
+  const browseDirty = useRef(false);
+  const closeBrowseEdit = () => { setBrowseEdit(null); setBrowseError(null); browseDirty.current = false; };
+  // Navegar is writing a confirmed edit into the draft of the base on screen.
+  const writingHere = () => !!browseWritingRef.current && browseWritingRef.current === stateRef.current.base;
+  /**
+   * Before leaving the node or the mode, hiding the right panel or presenting: a dirty editor asks first. While a
+   * confirmed edit of the base on screen is being written nothing leaves it: a failure must show its error on the
+   * editor that still holds the typed text.
+   */
+  const leaveBrowseEdit = () => {
+    if (writingHere()) { setNotice(LOCKED_SAVE); return false; }
+    if (browseDirty.current && !window.confirm(DISCARD_EDIT)) return false;
+    closeBrowseEdit();
+    return true;
+  };
+  // Re-reads the node in Navegar on every return from Planejar (Descartar, Limpar, Abrir change the saved draft).
+  const [browseRev, setBrowseRev] = useState(0);
   const [selected, setSelected] = useState<string | null>(null);
   const [menu, setMenu] = useState<Menu | null>(null);
   const frame = useRef<HTMLIFrameElement>(null);
@@ -139,6 +193,9 @@ export function App() {
 
   const onBase = (id: string) => {
     if (id === stateRef.current.base) return;
+    // a confirmed edit being written goes on: it lands in its base's draft and the new base says what became of it
+    if (!writingHere() && !leaveBrowseEdit()) return;
+    setBrowseNotice(null);
     menuTicket.current++;
     setMenu(null);
     cancelAsk();
@@ -182,13 +239,14 @@ export function App() {
   };
 
   const inView = (id: string) => !!(stateRef.current.step?.view.data as ViewData | null)?.nodes?.[id];
-  const selectInView = (id: string) => { setSelected(id); send(frame.current, { type: 'select', id }); };
+  const selectInView = (id: string) => { if (!leaveBrowseEdit()) return; setSelected(id); send(frame.current, { type: 'select', id }); };
   const expandTicket = useRef(0);
 
   /** Escolha no Explorador/busca: seleciona se está na visão; senão abre a primeira ação de contexto. */
   const pickElement = (id: string) => {
     const b = stateRef.current.base;
     if (!b) return;
+    if (id !== stateRef.current.selected && !leaveBrowseEdit()) return;
     setHits([]);
     setSelected(id);
     if (inView(id)) { send(frame.current, { type: 'select', id, focus: true }); return; }
@@ -289,7 +347,11 @@ export function App() {
     else if (e.type === 'select') {
       menuTicket.current++;
       setMenu(null);
-      if (e.id !== stateRef.current.selected) setSelected(e.id);
+      const prev = stateRef.current.selected;
+      if (e.id === prev) return;
+      // the diagram already highlighted the other node: kept on the edited one, it goes back
+      if (!leaveBrowseEdit()) { send(frame.current, { type: 'select', id: prev }); return; }
+      setSelected(e.id);
     } else if (e.type === 'ready') {
       const sel = stateRef.current.selected;
       if (sel && (cur?.view.data as ViewData | null)?.nodes?.[sel]) send(frame.current, { type: 'select', id: sel });
@@ -345,13 +407,119 @@ export function App() {
   };
 
   const viewData = (view?.data ?? null) as ViewData | null;
+  const layersHere = [...new Set(Object.values(viewData?.nodes ?? {}).map((n) => n.layer).filter((l): l is string => !!l))];
+  const alertActs: AlertAction[] = base && view ? alertActions({
+    spec: view.spec, nest, selected, selectedName: selected ? nameOf(selected) : '', layers: layersHere, notation,
+    nestAll: onNestAll, runSpec: (sp, label) => void run(reserve(), base, sp, 'Visão', label),
+  }) : [];
   const planEnabled = info?.plan?.enabled === true;
+  const brandName = info?.brand?.name;
+  useEffect(() => { document.title = brandName ? `${brandName} · archlens` : 'archlens'; }, [brandName]);
   const planning = planEnabled && mode === 'plan';
-  const onMode = (m: 'browse' | 'plan') => {
+
+  // Editing the node in Navegar (Planejar on): the node as the saved draft leaves it, read again when Planejar gets
+  // free, re-reads the draft or the GUI comes back from Planejar; the edit goes into the draft and the GUI moves to
+  // Planejar.
+  const bn = useBrowseNode(base, selected, planEnabled && !planning, `${String(planLock)}|${planReload}|${planUnsaved}|${browseRev}`);
+  const saveBrowse = async (edit: (d: Draft | null) => ScreenEdit) => {
+    const b = base, id = selected;
+    if (!b || !id || browseWritingRef.current) return;
+    setBrowseWriting(b);
+    setBrowseError(null);
+    setBrowseNotice(null);
+    // Planejar's lock is the one of the base on screen: once the base changed, the original's PlanView is gone (its
+    // draft has no other writer) and the edit still goes into that base's draft.
+    const r = await confirmBrowseEdit(b, edit, {
+      blocked: () => (stateRef.current.base !== b ? null
+        : planLockRef.current ? lockText(planLockRef.current) : planUnsavedRef.current ? UNSAVED : null),
+    });
+    setBrowseWriting(null);
+    setNotice((n) => (n === LOCKED_SAVE ? null : n)); // the hint of a blocked click goes with the write
+    const now = stateRef.current.base;
+    if (now !== b) {
+      setBrowseEdit((e) => (e?.base === b ? null : e));
+      if (browseEdit?.base === b) browseDirty.current = false;
+      const name = bases.find((x) => x.id === b)?.name ?? b;
+      const trimmed = r.ok && !!r.trimmed;
+      if (now) setBrowseNotice({ base: now, warn: !r.ok || trimmed, text: r.ok ? `A edição foi guardada no rascunho de ${name}${trimmed ? `; ${TRIMMED}` : ''}` : `A edição em ${name} não foi guardada: ${r.error}` });
+      return;
+    }
+    if (!r.ok) { setBrowseError({ base: b, id, text: r.error }); return; }
+    if (r.trimmed) setBrowseNotice({ base: b, warn: true, text: `A edição foi guardada; ${TRIMMED}` });
+    closeBrowseEdit();
     menuTicket.current++;
     setMenu(null);
     cancelAsk();
+    setPlanOpened(true);
+    setPlanReload((n) => n + 1);
+    setPlanFocus((f) => ({ base: b, id, n: (f?.n ?? 0) + 1 }));
+    setMode('plan');
+  };
+  const browseEditable = planEnabled && !planning && !!base && !!selected;
+  const mine = browseEditable && browseEdit?.base === base && browseEdit.id === selected ? browseEdit.kind : null;
+  const removed = !!bn.el?.removed;
+  const shownCard = bn.el ? bn.el.card : card;
+  const shownDocs = bn.node ? bn.node.docs : docsEnabled;
+  const editLock = browseWriting ? LOCKED_SAVE : planLock ? lockText(planLock) : planUnsaved ? UNSAVED : null;
+  // An editor never outlives its dirty flag (closed, or hidden by another node, base or mode).
+  useEffect(() => { if (!mine) browseDirty.current = false; }, [mine]);
+  const browseErrText = mine && browseError?.base === base && browseError.id === selected ? browseError.text : null;
+  const browseErr = browseErrText ? <p className="warn np-edit-err" role="alert">{browseErrText}</p> : null;
+  function openBrowse(kind: 'properties' | 'doc') {
+    if (!base || !selected) return;
+    setBrowseError(null);
+    setBrowseEdit({ base, id: selected, kind, props: browseProps, docRaw: bn.node?.docRaw ?? '' });
+  }
+  const browseProps = (shownCard?.properties ?? {}) as Record<string, PropValue>;
+  const editProps = mine === 'properties' ? browseEdit!.props : browseProps;
+  const nodeName = shownCard?.element.name ?? selected ?? '';
+  const docWin = {
+    title: `Documentação · ${nodeName}`,
+    layer: shownCard?.element.layer,
+    labels: [shownCard?.element.c4Label, shownCard?.element.typeLabel ? `ArchiMate ${shownCard.element.typeLabel}` : undefined].filter((x): x is string => !!x),
+  };
+  // Doc editing starts from the raw text (wikilinks kept) the server answered; props from the card shown.
+  const canProps = !removed && !bn.loading && !!shownCard;
+  const canDoc = !removed && !bn.loading && !!bn.node;
+  const editBtn = (kind: 'properties' | 'doc', label: string, ok: boolean) => (ok && !mine
+    ? <button type="button" className="linkish" aria-label={`Editar ${label}`} disabled={!!editLock} title={editLock ?? undefined} onClick={() => openBrowse(kind)}>✎ Editar</button>
+    : undefined);
+  const setBrowseDirty = useCallback((d: boolean) => { browseDirty.current = d; }, []);
+  const browseSlots = !browseEditable ? undefined : {
+    properties: mine === 'properties' ? (
+      <>
+        {browseErr}
+        <PropsEditor base={editProps} value={editProps} busy={!!editLock} onDirty={setBrowseDirty} onCancel={closeBrowseEdit}
+          onConfirm={(changes) => void saveBrowse((d) => ({ op: 'properties', id: selected!, properties: { ...screenProps(d, selected!), ...changes } }))} />
+      </>
+    ) : Object.keys(browseProps).length ? (
+      <dl>{Object.entries(browseProps).map(([k, v]) => (
+        <Fragment key={k}><dt>{k}</dt><dd>{Array.isArray(v) ? v.join(', ') : String(v)}</dd></Fragment>
+      ))}</dl>
+    ) : shownCard ? <p className="muted">Este nó não tem propriedades.</p> : undefined,
+    doc: mine === 'doc' ? (
+      <DocEditor {...docWin} text={browseEdit!.docRaw} busy={!!editLock} error={browseErrText} onDirty={setBrowseDirty} onCancel={closeBrowseEdit}
+        onConfirm={(text) => void saveBrowse(() => ({ op: 'doc', id: selected!, text }))} />
+    ) : !bn.node ? undefined : bn.node.doc || removed
+      ? <DocTab {...docWin} base={base!} id={selected!} text={bn.node.doc} max />
+      : (
+        <>
+          <p className="muted">Este nó ainda não tem documentação.</p>
+          <button type="button" className="linkish" disabled={!!editLock} title={editLock ?? undefined} onClick={() => openBrowse('doc')}>Escrever</button>
+        </>
+      ),
+  };
+  const browseActions = !browseEditable ? undefined : {
+    properties: editBtn('properties', 'propriedades', canProps),
+    doc: editBtn('doc', 'documentação', canDoc),
+  };
+  const onMode = (m: 'browse' | 'plan') => {
+    menuTicket.current++;
+    setMenu(null);
+    if (m === 'plan' && !leaveBrowseEdit()) return;
+    cancelAsk();
     if (m === 'plan') setPlanOpened(true);
+    else setBrowseRev((n) => n + 1);
     setMode(m);
   };
   const closeMenu = useCallback(() => setMenu(null), []);
@@ -362,6 +530,7 @@ export function App() {
   return (
     <Shell
       theme={theme}
+      brand={info?.brand}
       onThemeChange={setTheme}
       presenting={presenting}
       status={shownStatus}
@@ -375,6 +544,7 @@ export function App() {
       mode={planning ? 'plan' : 'browse'}
       planEnabled={planEnabled}
       onMode={onMode}
+      canHideRight={leaveBrowseEdit}
       onSearch={base && !planning ? onSearch : undefined}
       chatRequest={chatRequest}
       rightRequest={rightRequest}
@@ -413,10 +583,16 @@ export function App() {
       rightContent={(
         <>
           <div className="ph">Detalhes</div>
+          {browseNotice?.base === base && <p className={browseNotice.warn ? 'warn' : 'muted'} role="status">{browseNotice.text}</p>}
+          {browseEditable && removed && <p className="warn node-removed" role="status">Este nó é removido pelo rascunho.</p>}
+          {browseEditable && bn.error && <p className="warn" role="status">Rascunho do Planejar: {bn.error}</p>}
           <Details
-            card={card}
+            card={browseEditable ? shownCard : card}
             base={base}
-            docsEnabled={docsEnabled}
+            docsEnabled={browseEditable ? shownDocs || mine === 'doc' : docsEnabled}
+            slots={browseSlots}
+            actions={browseActions}
+            editing={mine}
             viewNode={selected ? viewData?.nodes?.[selected] ?? null : null}
             viewEdges={viewData?.edges ?? []}
             nodeId={selected}
@@ -427,7 +603,7 @@ export function App() {
         </>
       )}
     >
-      {planEnabled && base && planOpened && <div className="plan-host" hidden={!planning}><PlanView key={base} base={base} active={planning} onNav={setPlanNav} canBuild={info?.plan?.enabled ? info.plan.build !== false : true} onApplied={() => { void loadBase(base); }} /></div>}
+      {planEnabled && base && planOpened && <div className="plan-host" hidden={!planning}><PlanView key={base} base={base} active={planning} onNav={setPlanNav} onBusy={onPlanBusy} reload={planReload} focusNode={planFocus?.base === base ? planFocus : undefined} onUnsaved={onPlanUnsaved} externalLock={browseWriting === base} canBuild={info?.plan?.enabled ? info.plan.build !== false : true} onApplied={() => { void loadBase(base); }} /></div>}
       {planning ? null : view ? (
         <>
           <nav className="trail" aria-label="Trilha">
@@ -440,7 +616,7 @@ export function App() {
               </span>
             ))}
           </nav>
-          <Diagram ref={frame} view={view} theme={diagramTheme} onThemeChange={setDiagramTheme} onEvent={onEvent} busy={loading} />
+          <Diagram ref={frame} view={view} theme={diagramTheme} onThemeChange={setDiagramTheme} onEvent={onEvent} busy={loading} alertActions={alertActs} canPresent={leaveBrowseEdit} />
         </>
       ) : <div className="empty">{shownStatus}</div>}
       {menu && <ContextMenu at={menu.at} title={menu.title} items={menu.items} onPick={(a) => openAction(a, menu.id, 'Menu')} onClose={closeMenu} nest={nest} nodeId={menu.id} onNest={onNestOne} />}

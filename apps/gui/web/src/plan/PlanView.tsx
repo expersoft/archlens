@@ -1,24 +1,30 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ApiError, planApply, planNotes, planOpen, planTurn, type AppliedRound, type Draft, type PlanApplyResult, type PlanEvent, type PlanPreviewResult, type PlanRequest, type RepoAttach, type ViewSpec } from '../api';
+import { ApiError, planApply, planEdit, planNotes, planOpen, planTurn, type AppliedRound, type Draft, type PlanApplyResult, type PlanEvent, type PlanPreviewResult, type PlanRequest, type RepoAttach, type ScreenConflict, type ViewSpec } from '../api';
 import { ApplyDialog } from './ApplyDialog';
 import { PlanPreview, type PreviewNav } from './PlanPreview';
 import { DeltaPanel } from './DeltaPanel';
+import { NodePanel } from './NodePanel';
+import { ScreenConflictDialog } from './ScreenConflictDialog';
+import { LOCKED_SAVE, type Lock } from './lock';
 import { useStoredState } from '../store';
 import { PlanChat } from './PlanChat';
 import { Split } from './Split';
-import { clear, load, save, type ChatMsg } from './draftStore';
+import { InfoIcon } from '../icons';
+import { clear, hasChanges, load, save, TRIMMED, type ChatMsg } from './draftStore';
 
 const HISTORY_MAX = 40; // the server's limit
 const TOO_BIG = 'o rascunho não cabe no navegador; baixe-o para não perder o trabalho';
 const REPLACE = 'Substituir o rascunho atual pelo do arquivo? O atual se perde se não foi baixado.';
+const DISCARD_EDIT = 'Descartar a edição não confirmada?';
 const DISCARD = 'Descartar o rascunho atual? Ele se perde se não foi baixado.';
 const CLEAR_PENDING = 'Há decisão ou notas esperando resposta nesta conversa. Limpar mesmo assim? O rascunho do delta continua.';
 const BROKEN = 'o rascunho salvo não abre; descarte-o ("Descartar rascunho") ou suba outro';
-const TRIMMED = 'a conversa antiga foi cortada para caber no navegador; o rascunho está inteiro';
 const NOTES_ASK = 'rascunhe as notas de interpretação desta rodada';
 const ROUND_RUNNING = 'aguarde a rodada em andamento terminar antes de aplicar';
+const WRITING = 'aguarde a edição da tela ser gravada';
 const PREVIEW_FAILED = 'a prévia falhou; tente de novo';
 const REPLANNABLE = new Set(['E_STORE_CONFLICT', 'E_PLAN_STALE']);
+const CONFLICT = 'O chat quer mudar algo que você editou; responda o aviso antes de aplicar';
 const OPEN_QUESTIONS = 'responda as perguntas abertas antes de aplicar';
 const NO_CHROMIUM = 'Chromium indisponível no servidor; rode "npx playwright install chromium" na máquina do servidor';
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -74,23 +80,48 @@ export interface PlanViewProps {
   active?: boolean;
   /** The preview's notation and flip, for the top bar's ArchiMate | C4. */
   onNav?: (nav: PreviewNav) => void;
+  /** Called whenever the lock changes: a chat round ('chat'), a write into the draft ('save') or neither (false). */
+  onBusy?: (lock: Lock) => void;
+  /**
+   * When it changes, the draft and the conversation saved in the browser (by Navegar) are adopted and planned again, as
+   * on mount. During a chat round or a write it waits for them to end.
+   */
+  reload?: number;
+  /** When it changes, the node is selected and the panel opens on the Nó tab (through the discard confirmation). */
+  focusNode?: { id: string; n: number };
+  /**
+   * Called whenever the draft starts or stops living only in memory (too big for the browser's storage): then a reload
+   * keeps it and does not adopt what is saved, so Navegar should not write a draft meanwhile.
+   */
+  onUnsaved?: (unsaved: boolean) => void;
+  /**
+   * Navegar is writing an edit into the saved draft: like a write of its own, no chat round, Aplicar, Replanejar,
+   * Abrir, Descartar or node write starts meanwhile (it is not reported back through `onBusy`).
+   */
+  externalLock?: boolean;
 }
 
-export function PlanView({ base, canBuild = true, onApplied, active = true, onNav }: PlanViewProps) {
+export function PlanView({ base, canBuild = true, onApplied, active = true, onNav, onBusy, reload, focusNode, onUnsaved, externalLock = false }: PlanViewProps) {
   const [saved] = useState(() => load(base));
   const [draft, setDraft] = useState<Draft | null>(saved?.draft ?? null);
   const [chat, setChat] = useState<ChatMsg[]>(saved?.chat ?? []);
   const [stored, setStored] = useState<'ok' | 'chat-trimmed' | 'too-big'>('ok');
+  const storedRef = useRef(stored);
   const [previews, setPreviews] = useState<ViewSpec[]>([]);
   const [shown, setShown] = useState<PlanPreviewResult | null>(null);
+  const [conflicts, setConflicts] = useState<ScreenConflict[]>([]);
   const [previewFailed, setPreviewFailed] = useState(false);
   const [replannable, setReplannable] = useState(false);
   const [applyOpen, setApplyOpen] = useState(false);
-  const [applying, setApplying] = useState(false);
+  const [applying, setApplyingState] = useState(false);
+  // Aplicar (and its Replanejar) writes the draft at the end: it counts as busy for the App and for a reload.
+  const applyingRef = useRef(false);
+  const setApplying = useCallback((a: boolean) => { applyingRef.current = a; setApplyingState(a); }, []);
   const [applyError, setApplyError] = useState<string | null>(null);
   const [panel, setPanel] = useStoredState<boolean>('archlens-plan-delta', true);
   // The panel keeps the last preview while the next one is drawn (`shown` goes null then, which only gates Aplicar).
   const [listed, setListed] = useState<PlanPreviewResult | null>(null);
+  const [tab, setTab] = useStoredState<'delta' | 'node'>('archlens-plan-tab', 'delta');
   const [selected, setSelected] = useState<string | null>(null);
   const [focus, setFocus] = useState<{ id: string; n: number } | null>(null);
   const navigated = useCallback((spec: ViewSpec) => setPreviews((p) => addNew(p, [spec])), []);
@@ -99,13 +130,26 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
   const seq = useRef(saved?.chat.reduce((n, m) => Math.max(n, m.id), 0) ?? 0);
   const run = useRef<{ ctl: AbortController; id: number } | null>(null);
   const alive = useRef(true);
+  // Each opening of the saved draft (the mount's, a reload's) takes a number: only the latest one is adopted.
+  const opening = useRef(0);
+  // A screen edit, an undo, a conflict answer or an opened file is being written into the draft: until it returns,
+  // nothing else writes it (a chat round would start from the old draft and drop the edit).
+  const [writing, setWritingState] = useState(false);
+  const writingRef = useRef(false);
+  const setWriting = useCallback((w: boolean) => { writingRef.current = w; setWritingState(w); }, []);
+  // Navegar's write counts as one of ours for what may start here; `held` is the one check every writer goes through.
+  const externalRef = useRef(externalLock);
+  externalRef.current = externalLock;
+  const held = useCallback(() => writingRef.current || externalRef.current, []);
+  const writingAny = writing || externalLock;
 
   const commit = useCallback((nextDraft: Draft | null, nextChat: ChatMsg[]) => {
     draftRef.current = nextDraft;
     chatRef.current = nextChat;
     setDraft(nextDraft);
     setChat(nextChat);
-    setStored(save(base, nextDraft, nextChat.filter((m) => m.status !== 'running')));
+    storedRef.current = save(base, nextDraft, nextChat.filter((m) => m.status !== 'running'));
+    setStored(storedRef.current);
   }, [base]);
   const setChatOnly = useCallback((fn: (c: ChatMsg[]) => ChatMsg[]) => {
     chatRef.current = fn(chatRef.current);
@@ -126,17 +170,50 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
   useEffect(() => {
     alive.current = true;
     if (saved?.draft) {
+      const n = ++opening.current;
       planOpen(base, saved.draft).then((r) => {
-        if (!alive.current || run.current) return;
+        if (!alive.current || run.current || n !== opening.current) return;
         commit(r.draft, chatRef.current);
+        setConflicts(r.screenConflicts ?? []);
         if (r.warning) { note({ text: '', warning: r.warning }); }
-      }).catch((e) => { if (alive.current) note({ text: '', error: `${errMsg(e)}; ${BROKEN}` }); });
+      }).catch((e) => { if (alive.current && n === opening.current) note({ text: '', error: `${errMsg(e)}; ${BROKEN}` }); });
     }
     return () => { alive.current = false; run.current?.ctl.abort(); run.current = null; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  /**
+   * Adopts `s`, the draft and the conversation saved in the browser (by Navegar) when the reload arrived, never the
+   * draft in memory: it is planned again by the server as on mount, under the write flag so nothing else writes it
+   * meanwhile. The messages only in memory (notes and errors are not saved) stay, after the saved ones. Nothing
+   * readable saved (storage blocked), or a draft that lives only in memory (too big to save): the screen keeps what it
+   * has (the too-big notice stays on).
+   */
+  const adopt = useCallback((s: ReturnType<typeof load>) => {
+    if (!s || storedRef.current === 'too-big') return;
+    const n = ++opening.current;
+    const savedIds = new Set(s.chat.map((m) => m.id));
+    // by id: a saved conversation trimmed to fit (only its newest messages) plus the older ones in memory keeps its order
+    const nextChat = [...s.chat, ...chatRef.current.filter((m) => !savedIds.has(m.id) && m.status !== 'running')].sort((a, b) => a.id - b.id);
+    seq.current = nextChat.reduce((m, x) => Math.max(m, x.id), seq.current);
+    draftRef.current = s.draft;
+    chatRef.current = nextChat;
+    setDraft(s.draft);
+    setChat(nextChat);
+    setConflicts([]);
+    if (!s.draft) return;
+    setWriting(true);
+    planOpen(base, s.draft).then((r) => {
+      if (!alive.current || n !== opening.current) return;
+      commit(r.draft, chatRef.current);
+      setConflicts(r.screenConflicts ?? []);
+      if (r.warning) note({ text: '', warning: r.warning });
+    }).catch((e) => { if (alive.current && n === opening.current) note({ text: '', error: `${errMsg(e)}; ${BROKEN}` }); })
+      .finally(() => { if (alive.current && n === opening.current) setWriting(false); });
+  }, [base, commit, note, setWriting]);
+
   const turn = (req: { message?: string; answer?: { key: string; resolution: string }; attach?: RepoAttach; applied?: AppliedRound }, userText: string, opts: { keepDraft?: boolean } = {}) => {
+    if (held()) return;
     cancel();
     const history: PlanRequest['history'] = chatRef.current
       .filter((m) => m.status !== 'running' && m.status !== 'canceled' && m.text)
@@ -157,6 +234,7 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
       } else if (e.type === 'result') {
         finished = true; if (run.current?.id === id) run.current = null;
         const { reply } = e;
+        setConflicts(e.screenConflicts ?? []);
         if (e.previews?.length) setPreviews((p) => addNew(p, e.previews));
         const msg: Partial<ChatMsg> = { status: undefined, stage: undefined, warning: reply.warning };
         if (reply.kind === 'text') msg.text = reply.text;
@@ -179,7 +257,7 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
   };
 
   const onAnswer = (msg: ChatMsg, resolution: string) => {
-    if (!msg.item) return;
+    if (!msg.item || held()) return;
     patch(msg.id, { answered: resolution });
     turn({ answer: { key: msg.item.key, resolution } }, `Resposta: ${resolution}`);
   };
@@ -198,24 +276,56 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
   };
 
   const roundRunning = chat.some((m) => m.status === 'running');
-  const reason = !canBuild ? NO_CHROMIUM : roundRunning ? ROUND_RUNNING : !shown ? (previewFailed ? PREVIEW_FAILED : 'nada planejado para aplicar') : shown.questions.length ? OPEN_QUESTIONS : shown.opsHash ? undefined : 'o plano ainda não está final';
+  // The screen controls' lock says why they wait: the chat round, or a screen edit being written.
+  const ownLock: Lock = roundRunning ? 'chat' : writing ? 'save' : false;
+  const lock: Lock = ownLock || (externalLock ? 'save' : false);
+  // What the App is told: our lock (never Navegar's own write), or 'save' while Aplicar (or its Replanejar) runs,
+  // since it writes the draft too.
+  const busy: Lock = ownLock || (applying ? 'save' : false);
+  // A reload that arrives while busy waits for it to end. What was saved is read when it arrives (the round or the
+  // apply in flight writes the storage when it ends), and adopted then.
+  const reloadSeen = useRef(reload);
+  const reloadWaiting = useRef<{ snap: ReturnType<typeof load> } | null>(null);
+  useEffect(() => {
+    if (reload === reloadSeen.current) return;
+    reloadSeen.current = reload;
+    const snap = load(base);
+    if (writingRef.current || applyingRef.current || chatRef.current.some((m) => m.status === 'running')) reloadWaiting.current = { snap };
+    else adopt(snap);
+  }, [reload, adopt, base]);
+  const onBusyRef = useRef(onBusy);
+  onBusyRef.current = onBusy;
+  useEffect(() => {
+    onBusyRef.current?.(busy);
+    const waiting = reloadWaiting.current;
+    if (!busy && waiting) { reloadWaiting.current = null; adopt(waiting.snap); }
+  }, [busy, adopt]);
+  // Unmounted (the base changed), it is busy no more.
+  useEffect(() => () => { onBusyRef.current?.(false); }, []);
+  const onUnsavedRef = useRef(onUnsaved);
+  onUnsavedRef.current = onUnsaved;
+  const unsaved = stored === 'too-big';
+  useEffect(() => { onUnsavedRef.current?.(unsaved); }, [unsaved]);
+  useEffect(() => () => { onUnsavedRef.current?.(false); }, []);
+  const reason = !canBuild ? NO_CHROMIUM : roundRunning ? ROUND_RUNNING : writing ? WRITING : externalLock ? LOCKED_SAVE : conflicts.length ? CONFLICT : !shown ? (previewFailed ? PREVIEW_FAILED : 'nada planejado para aplicar') : shown.questions.length ? OPEN_QUESTIONS : shown.opsHash ? undefined : 'o plano ainda não está final';
   const savedViews = (shown?.views ?? []).filter((v) => v.kind === 'saved' && !v.error).map((v) => v.title);
 
   const replan = async () => {
     const current = draftRef.current;
-    if (!current) return;
+    if (!current || held()) return;
     setApplying(true);
     try {
       const r = await planOpen(base, current);
       setApplyOpen(false);
       commit(r.draft, chatRef.current);
+      setConflicts(r.screenConflicts ?? []);
       note({ text: '', warning: r.warning ?? 'o plano foi refeito sobre a base atual; revise e aplique de novo' });
     } catch (e) { setApplyError(errMsg(e)); } finally { setApplying(false); }
   };
 
   const apply = async () => {
     const current = draftRef.current;
-    if (!current || !shown?.opsHash) return;
+    if (!current || !shown?.opsHash || held()) return;
     setApplying(true);
     setApplyError(null);
     setReplannable(false);
@@ -227,6 +337,7 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
       else note({ text: `Plano aplicado: base gravada e ${r.doc ?? 'ARCHITECTURE.md'} regenerado.` });
       for (const path of r.preserved) note({ text: `Texto do nó removido guardado em ${path}.` });
       note({ text: buildText(base, r.build) });
+      setConflicts([]);
       commit(null, chatRef.current); // the draft goes; the conversation stays saved
       setPreviews([]);
       onApplied?.();
@@ -235,28 +346,33 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
       if (e instanceof ApiError && e.code === 'E_GUI_PLAN_CHANGED' && e.extra.draft) {
         setApplyOpen(false);
         commit(e.extra.draft as Draft, chatRef.current);
+        setConflicts((e.extra.screenConflicts as ScreenConflict[] | undefined) ?? []);
         note({ text: '', warning: e.message });
       } else { setApplyError(errMsg(e)); setReplannable(e instanceof ApiError && REPLANNABLE.has(e.code ?? '')); }
     } finally { setApplying(false); }
   };
 
   const upload = async (file: File) => {
+    if (held()) return;
+    setWriting(true);
     try {
       const r = await planOpen(base, JSON.parse(await readText(file)) as Draft);
       if (draftRef.current && !window.confirm(REPLACE)) return;
       cancel();
       setPreviews([]);
+      setConflicts(r.screenConflicts ?? []);
       commit(r.draft, r.warning ? [{ id: ++seq.current, role: 'assistant', text: '', warning: r.warning }] : []);
     } catch (e) {
       note({ text: '', error: e instanceof SyntaxError ? 'o arquivo não é um rascunho do archlens' : errMsg(e) });
-    }
+    } finally { setWriting(false); }
   };
 
   const discard = () => {
-    if (!window.confirm(DISCARD)) return;
+    if (held() || !window.confirm(DISCARD)) return;
     cancel();
     clear(base);
     commit(null, []);
+    setConflicts([]);
     setPreviews([]);
     setApplyOpen(false);
   };
@@ -281,6 +397,41 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
     return () => window.removeEventListener('keydown', onKey);
   }, [active, setPanel]);
 
+  const changed = hasChanges(draft);
+  const editDirty = useRef(false);
+  const leaveEdit = () => !editDirty.current || window.confirm(DISCARD_EDIT);
+  const pick = (id: string) => { if (!leaveEdit()) return; setSelected(id); setTab('node'); setPanel(true); setFocus((f) => ({ id, n: (f?.n ?? 0) + 1 })); };
+  // From the App (an edit made in Navegar): the node selected, on the Nó tab, through the same discard confirmation.
+  useEffect(() => {
+    if (focusNode) pick(focusNode.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusNode?.id, focusNode?.n]);
+  // The rail button shows its tab; on the tab already shown it hides the panel.
+  const railTo = (t: 'delta' | 'node') => {
+    if (panel && tab === t) { if (leaveEdit()) setPanel(false); }
+    else if (leaveEdit()) { setTab(t); setPanel(true); }
+  };
+
+  const [editError, setEditError] = useState<string | undefined>();
+  const [epoch, setEpoch] = useState(0);
+  /** A screen edit (undo, or the answer to a conflict) goes through the server, which plans again. */
+  const screenEdit = async (op: Parameters<typeof planEdit>[2]) => {
+    const current = draftRef.current;
+    if (!current || held() || roundRunning) return;
+    if (!leaveEdit()) return;
+    setWriting(true);
+    setEditError(undefined);
+    try {
+      const r = await planEdit(base, current, op);
+      commit(r.draft, chatRef.current);
+      setConflicts(r.screenConflicts ?? []);
+      editDirty.current = false;
+      setEpoch((n) => n + 1); // the node editor, whose text was just discarded, starts closed
+    } catch (e) { setEditError(errMsg(e)); } finally { setWriting(false); }
+  };
+  const firstConflict = conflicts[0];
+  const nameOf = (id: string) => listed?.changes.find((c) => c.id === id)?.name ?? id;
+
   const saveBtn = <button type="button" aria-label="Salvar rascunho" title="Salvar o rascunho num arquivo .json" disabled={!draft} onClick={() => draft && download(base, draft)}>Salvar</button>;
 
   return (
@@ -292,6 +443,8 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
             onSend={(t, attach) => turn({ message: t, ...(attach ? { attach } : {}) }, attach ? `${t}\n(anexo: ${attach.url}${attach.ref ? `@${attach.ref}` : ''})` : t)}
             repo={(draft?.repo as { url: string; ref?: string; commit?: string } | null | undefined) ?? null}
             onAnswer={onAnswer}
+            locked={writingAny}
+            lockedText={externalLock ? LOCKED_SAVE : undefined}
             onNotes={onNotes}
             onClear={clearChat}
             notice={stored === 'too-big' ? (
@@ -306,30 +459,43 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
             <div className="toolbar">
               <label className="filebtn" title="Abrir um rascunho salvo (.json)">
                 Abrir
-                <input type="file" accept="application/json,.json" aria-label="Abrir rascunho" onChange={(e) => {
+                <input type="file" accept="application/json,.json" aria-label="Abrir rascunho" disabled={writingAny} onChange={(e) => {
                   const f = e.target.files?.[0];
                   e.target.value = '';
                   if (f) void upload(f);
                 }} />
               </label>
               {saveBtn}
-              <button type="button" aria-label="Descartar rascunho" disabled={!draft} onClick={discard}>Descartar</button>
+              <button type="button" aria-label="Descartar rascunho" disabled={!draft || writingAny} title={writing ? WRITING : externalLock ? LOCKED_SAVE : undefined} onClick={discard}>Descartar</button>
               <button type="button" disabled={!!reason || applying} title={reason} onClick={() => { setApplyError(null); setReplannable(false); setApplyOpen(true); }}>Aplicar</button>
             </div>
-            {applyOpen && shown && <ApplyDialog summary={shown.summary} views={savedViews} busy={applying} error={applyError} onConfirm={() => void apply()} onCancel={() => setApplyOpen(false)} onReplan={replannable ? () => void replan() : undefined} />}
-            <PlanPreview base={base} draft={draft} previews={previews} onLoaded={(r, failed) => { setShown(r); if (r) setListed(r); setPreviewFailed(!!failed); }}
-              onNavigate={navigated} onNav={onNav} onSelect={setSelected} focus={focus} />
+            {firstConflict && (
+              <ScreenConflictDialog key={`${firstConflict.id}:${firstConflict.field}`} conflict={firstConflict} nodeName={nameOf(firstConflict.id)} locked={lock}
+                onChoose={(choice) => void screenEdit({ op: 'resolve', id: firstConflict.id, field: firstConflict.field, choice })} />
+            )}
+            {editError && <p className="err" role="alert">{editError}</p>}
+            {applyOpen && shown && <ApplyDialog summary={shown.summary} views={savedViews} busy={applying || writingAny} error={applyError} onConfirm={() => void apply()} onCancel={() => setApplyOpen(false)} onReplan={replannable ? () => void replan() : undefined} />}
+            <PlanPreview base={base} draft={draft} previews={previews} onLoaded={(r, failed) => { setShown(r); if (r) { setListed(r); setConflicts(r.screenConflicts ?? []); } setPreviewFailed(!!failed); }}
+              onNavigate={navigated} onNav={onNav} onSelect={(id) => { if (!leaveEdit()) return; setSelected(id); if (id) { setTab('node'); setPanel(true); } }} focus={focus} />
           </div>
         )}
       />
       {panel && (
-        <aside className="side r" data-testid="delta-panel" aria-label="Delta">
-          <div className="ph">Delta</div>
-          <DeltaPanel result={draft?.delta ? listed : null} selected={selected} onPick={(id) => { setSelected(id); setFocus((f) => ({ id, n: (f?.n ?? 0) + 1 })); }} />
+        <aside className="side r" data-testid="delta-panel" aria-label="Painel do nó e do delta">
+          <div role="tablist" className="side-tabs">
+            <button type="button" role="tab" aria-selected={tab === 'delta'} className={tab === 'delta' ? 'on' : ''} onClick={() => { if (leaveEdit()) setTab('delta'); }}>Delta ({changed ? listed?.changes.length ?? 0 : 0})</button>
+            <button type="button" role="tab" aria-selected={tab === 'node'} className={tab === 'node' ? 'on' : ''} onClick={() => { if (leaveEdit()) setTab('node'); }}><InfoIcon size={14} /> Nó</button>
+          </div>
+          {tab === 'delta' ? (
+            <DeltaPanel result={changed ? listed : null} selected={selected} onPick={pick} onUndo={(id) => void screenEdit({ op: 'undo', id })} locked={lock} />
+          ) : (
+            <NodePanel key={epoch} locked={lock} onWriting={setWriting} base={base} draft={draft} id={selected} onPick={pick} onDraft={(d, _h, c) => { commit(d, chatRef.current); setConflicts(c ?? []); }} onDirty={(d) => { editDirty.current = d; }} />
+          )}
         </aside>
       )}
       <nav className="rail r" aria-label="Painel direito">
-        <button type="button" aria-label="Delta" title="Delta (Ctrl+Alt+B ou Ctrl+Shift+B)" className={panel ? 'on' : ''} onClick={() => setPanel((v) => !v)}>Δ</button>
+        <button type="button" aria-label="Delta" title="Delta (Ctrl+Alt+B ou Ctrl+Shift+B)" className={panel && tab === 'delta' ? 'on' : ''} onClick={() => railTo('delta')}>Δ</button>
+        <button type="button" aria-label="Nó" title="Nó (detalhes do item selecionado)" className={panel && tab === 'node' ? 'on' : ''} onClick={() => railTo('node')}><InfoIcon /></button>
       </nav>
     </div>
   );

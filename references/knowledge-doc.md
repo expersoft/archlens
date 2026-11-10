@@ -80,7 +80,7 @@ na rota do cartão nem na de visão.
 
 | Saída | Como a documentação aparece | Quando atualiza |
 |---|---|---|
-| GUI | aba Documentação no painel do nó, buscada só ao abrir | na hora, sem reiniciar o servidor |
+| GUI | cartão Documentação no painel do nó, buscada só ao abrir | na hora, sem reiniciar o servidor |
 | `query --element` em markdown | seção `## Documentação`, com os títulos rebaixados e os wikilinks como nomes (o `--format json` não a traz) | na hora |
 | `query --element --doc` | o texto como está na página, títulos e wikilinks intactos: é dele que se parte para editar. Nó sem texto: aviso, sem saída. Base `json`: `E_STORE_DOC` | na hora |
 | busca com LLM | só quando o agente abre o nó, com teto de tamanho | na hora |

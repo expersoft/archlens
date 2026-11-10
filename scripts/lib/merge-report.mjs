@@ -13,6 +13,9 @@ export function describeItem(it) {
   if (it.class === 'conflict' && it.kind === 'doc') {
     return `documentação de ${it.target}: ${it.base.trim() ? 'o texto existente será trocado' : 'o texto foi esvaziado depois da resposta anterior; gravar o texto novo?'}  → keep | take`;
   }
+  if (it.class === 'conflict' && it.delta === null && it.field?.startsWith('properties.')) {
+    return `conflito ${it.target}: remover a propriedade "${it.field.slice('properties.'.length)}" (base ${show(it.base)})${cond}  → keep | take`;
+  }
   if (it.class === 'conflict') return `conflito ${it.target}.${it.field}: base ${show(it.base)} ≠ delta ${show(it.delta)}${cond}  → keep | take | value:<x>`;
   if (it.class === 'possible-duplicate') return `possível duplicata: "${it.target}" parece "${it.candidate}" (${it.score}; ${it.why})  → same | different`;
   if (it.op === 'remove') {

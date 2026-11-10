@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { act, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Shell } from './Shell';
 
@@ -100,5 +100,57 @@ describe('Shell, modo Planejar', () => {
     expect(screen.queryByTestId('side-left')).toBeNull();
     expect(screen.queryByTestId('side-right')).toBeNull();
     expect(screen.getByText('centro')).toBeTruthy();
+  });
+
+  it('barra do topo mostra a marca do archlens antes do nome', () => {
+    setWidth(1600);
+    render(<Wrapped />);
+    const mark = screen.getByTestId('topbar').querySelector('svg[data-mark="archlens"]')!;
+    expect(mark).toBeTruthy();
+    expect(mark.nextElementSibling?.textContent).toBe('archlens');
+  });
+
+  const brand = { name: 'Acme', logo: '/api/brand/logo', logoDark: '/api/brand/logo-dark' };
+  const WithBrand = (p: { theme: 'light' | 'dark'; brand?: typeof brand }) => (
+    <Shell leftContent={{ chat: <p>c</p>, tree: <p>t</p> }} rightContent={<p>d</p>} theme={p.theme} brand={p.brand}><p>centro</p></Shell>
+  );
+
+  it('com brand mostra o logo da empresa, o traço e archlens discreto', () => {
+    setWidth(1600);
+    render(<WithBrand theme="light" brand={brand} />);
+    const bar = screen.getByTestId('topbar');
+    const img = bar.querySelector('img.brand-logo') as HTMLImageElement;
+    expect(img.getAttribute('src')).toBe('/api/brand/logo');
+    expect(img.alt).toBe('Acme');
+    expect(bar.querySelector('.brand-sep')).toBeTruthy();
+    expect(bar.querySelector('.brand-product')?.textContent).toBe('archlens');
+    expect(bar.querySelector('svg[data-mark="archlens"]')).toBeNull();
+  });
+
+  it('no tema escuro usa logoDark', () => {
+    setWidth(1600);
+    const { rerender } = render(<WithBrand theme="dark" brand={brand} />);
+    expect(screen.getByTestId('topbar').querySelector('img.brand-logo')?.getAttribute('src')).toBe('/api/brand/logo-dark');
+    rerender(<WithBrand theme="dark" brand={{ logo: '/api/brand/logo' } as typeof brand} />);
+    expect(screen.getByTestId('topbar').querySelector('img.brand-logo')?.getAttribute('src')).toBe('/api/brand/logo');
+    expect(screen.getByTestId('topbar').querySelector('img.brand-logo')?.getAttribute('alt')).toBe('Logo da empresa');
+  });
+
+  it('logo que não carrega volta à marca do archlens', () => {
+    setWidth(1600);
+    render(<WithBrand theme="light" brand={brand} />);
+    const bar = screen.getByTestId('topbar');
+    fireEvent.error(bar.querySelector('img.brand-logo')!);
+    expect(bar.querySelector('img.brand-logo')).toBeNull();
+    expect(bar.querySelector('svg[data-mark="archlens"]')).toBeTruthy();
+    expect(bar.querySelector('b')?.textContent).toBe('archlens');
+  });
+
+  it('sem brand mostra a marca do archlens', () => {
+    setWidth(1600);
+    render(<WithBrand theme="light" />);
+    const bar = screen.getByTestId('topbar');
+    expect(bar.querySelector('img.brand-logo')).toBeNull();
+    expect(bar.querySelector('svg[data-mark="archlens"]')).toBeTruthy();
   });
 });

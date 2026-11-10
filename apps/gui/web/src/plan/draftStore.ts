@@ -44,6 +44,9 @@ export function load(base: string): { draft: Draft | null; chat: ChatMsg[] } | n
   } catch { return null; }
 }
 
+/** What a save that had to cut the conversation says (the draft is whole). */
+export const TRIMMED = 'a conversa antiga foi cortada para caber no navegador; o rascunho está inteiro';
+
 /**
  * The draft always wins over the conversation: when storage is full the oldest messages go first. Without a draft (after
  * an apply) only the conversation is kept.
@@ -77,6 +80,18 @@ export function save(base: string, draft: Draft | null, chat: ChatMsg[]): 'ok' |
   return 'chat-trimmed';
 }
 
+/** A draft is saved but cannot be read (broken JSON, not an object): writing over it would lose it. */
+export function unreadable(base: string): boolean {
+  let raw: string | null;
+  try { raw = localStorage.getItem(draftKey(base)); } catch { return false; }
+  if (raw == null) return false;
+  try { const d: unknown = JSON.parse(raw); return d === null || typeof d !== 'object'; } catch { return true; }
+}
+
 export function clear(base: string) {
   try { localStorage.removeItem(draftKey(base)); localStorage.removeItem(chatKey(base)); } catch { /* sem storage */ }
 }
+
+/** The draft changes something: a delta from the conversation or edits made on screen. */
+export const hasChanges = (d: Draft | null): boolean =>
+  !!d && (!!d.delta || Object.keys((d.edits as object | undefined) ?? {}).length > 0);

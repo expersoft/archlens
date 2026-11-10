@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { normalizeModel } from '../scripts/lib/model.mjs';
 import { resolveView } from '../scripts/lib/query.mjs';
-import { layoutView } from '../scripts/lib/layout.mjs';
-import { buildView, viewAlerts } from '../scripts/lib/view-build.mjs';
+import { layoutView, legibility } from '../scripts/lib/layout.mjs';
+import { buildView, viewAlerts, viewAlertInfo } from '../scripts/lib/view-build.mjs';
 import { asBase } from './helpers.mjs';
 
 const model = () => normalizeModel(asBase(JSON.parse(readFileSync(new URL('./fixtures/shop.json', import.meta.url)))));
@@ -31,3 +31,31 @@ test('viewAlerts warns above 40 nodes', async () => {
   const a = viewAlerts(big, laid);
   assert.ok(a.some(s => s.includes('41 nós') && s.includes('focus/depth')));
 });
+
+test('viewAlertInfo marca size e legibility com os mesmos textos de viewAlerts', async () => {
+  const view = resolveView(model(), spec);
+  const laid = await layoutView(view);
+  const big = { ...view, nodes: Array.from({ length: 41 }, (_, i) => ({ id: `n${i}` })) };
+  const wide = { ...laid, width: 40000, height: 20000, layoutNote: 'nota' };
+  const info = viewAlertInfo(big, wide);
+  assert.deepEqual(info.map(a => a.kind), ['size', 'layout', 'legibility']);
+  assert.equal(info[0].nodes, 41);
+  assert.equal(typeof info[2].minFontPx, 'number');
+  assert.equal(info[2].nodes, 41);
+  assert.deepEqual(info.map(a => a.text), viewAlerts(big, wide));
+});
+
+test('viewAlerts devolve só o texto de legibilidade numa visão larga', async () => {
+  const view = resolveView(model(), spec);
+  const laid = await layoutView(view);
+  const wide = { ...laid, width: 40000, height: 20000 };
+  const [key] = [view.key ?? laid.key];
+  assert.deepEqual(viewAlerts(view, wide), [`"${key}": ${legibilityText(wide)}`]);
+});
+
+test('buildView devolve alertInfo coerente com alerts', async () => {
+  const r = await buildView(model(), spec);
+  assert.deepEqual(r.alertInfo.map(a => a.text), r.alerts);
+});
+
+function legibilityText(laid) { return legibility(laid, 1920, 1080 - 56).suggestion; }

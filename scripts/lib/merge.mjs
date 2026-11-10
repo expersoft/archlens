@@ -295,7 +295,12 @@ function fieldsOf(target, incoming, names) {
   return [
     // "group": null takes the element out of its group: the key is removed, not set to null.
     ...names.map(f => [f, target[f] ?? (f === 'status' ? 'active' : undefined), incoming[f], v => { if (f === 'group' && v === null) delete target[f]; else target[f] = v; }]),
-    ...Object.entries(incoming.properties || {}).map(([k, v]) => [`properties.${k}`, target.properties?.[k], v, x => { (target.properties ??= {})[k] = x; }]),
+    // Own keys only: a property named like an Object member (constructor, __proto__) is just a property.
+    ...Object.entries(incoming.properties || {}).map(([k, v]) => [`properties.${k}`, target.properties && Object.hasOwn(target.properties, k) ? target.properties[k] : undefined, v, x => {
+      // "properties": { k: null } removes the property (and the empty object it leaves).
+      if (x === null) { if (target.properties) { delete target.properties[k]; if (!Object.keys(target.properties).length) delete target.properties; } return; }
+      Object.defineProperty(target.properties ??= {}, k, { value: x, writable: true, enumerable: true, configurable: true });
+    }]),
   ];
 }
 
@@ -305,6 +310,7 @@ function reconcile(ctx, { fields, keyPrefix, kind, target, dry = false, when }) 
   let changed = false;
   for (const [field, bv, dv, apply] of fields) {
     if (dv === undefined || sameValue(field, bv, dv)) continue;
+    if (dv === null && bv === undefined && field.startsWith('properties.')) continue; // nothing to remove
     if (bv === undefined || bv === '') {
       if (field === 'group' && dv === null) continue; // no group already
       if (!dry) { apply(dv); filled = true; }
@@ -398,6 +404,11 @@ function mergeElementInto(ctx, baseId, el, parentId, { dry = false, when, aliase
 function insertElement(ctx, el, parentId) {
   const { source, sources, parent, ...rest } = el;
   const node = structuredClone(rest);
+  // A null property removes a key; on a new element there is none to remove.
+  if (node.properties && typeof node.properties === 'object') {
+    for (const [k, v] of Object.entries(node.properties)) if (v === null) delete node.properties[k];
+    if (!Object.keys(node.properties).length) delete node.properties;
+  }
   const srcs = deltaSources(el, ctx.delta.source);
   if (srcs.length) node.sources = srcs;
   attach(ctx.raw, ctx.tree, node, parentId);

@@ -1,11 +1,14 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { parseMessage, send, type Act, type BridgeEvent } from './bridge';
 import type { ViewResult } from './api';
+import { AlertBadge, type AlertAction } from './AlertBadge';
 import { DIAGRAM_THEME_KEY, type Theme } from './theme';
 import { isGuiShortcut } from './shortcuts';
 
 export interface DiagramProps {
-  view: Pick<ViewResult, 'html' | 'alerts'>;
+  view: Pick<ViewResult, 'html'> & { alertInfo?: ViewResult['alertInfo'] };
+  /** Ações do painel de avisos além de "Apresentar com zoom" (que o diagrama mesmo oferece). */
+  alertActions?: AlertAction[];
   /** Uma visão nova está sendo carregada: escurece o diagrama e marca aria-busy. */
   busy?: boolean;
   /** Tema do diagrama (independente do tema da interface). */
@@ -13,6 +16,8 @@ export interface DiagramProps {
   /** Se informado, mostra na barra do diagrama o botão que alterna o tema do diagrama. */
   onThemeChange?: (t: Theme) => void;
   onEvent: (e: BridgeEvent) => void;
+  /** Antes de Apresentar (tela cheia esconde as laterais): false não apresenta. */
+  canPresent?: () => boolean;
 }
 
 type Flags = { flowing: boolean; labels: boolean; legend: boolean; matrix: boolean };
@@ -30,7 +35,7 @@ const BUTTONS: { act: Act; label: string; flag?: keyof Flags }[] = [
   { act: 'present', label: 'Apresentar' },
 ];
 
-export const Diagram = forwardRef<HTMLIFrameElement, DiagramProps>(function Diagram({ view, theme, onThemeChange, onEvent, busy = false }, ref) {
+export const Diagram = forwardRef<HTMLIFrameElement, DiagramProps>(function Diagram({ view, theme, onThemeChange, onEvent, busy = false, alertActions = [], canPresent }, ref) {
   const frame = useRef<HTMLIFrameElement>(null);
   useImperativeHandle(ref, () => frame.current as HTMLIFrameElement);
   const [flags, setFlags] = useState<Flags>(OFF);
@@ -40,6 +45,8 @@ export const Diagram = forwardRef<HTMLIFrameElement, DiagramProps>(function Diag
   themeRef.current = theme;
   const onEventRef = useRef(onEvent);
   onEventRef.current = onEvent;
+  const canPresentRef = useRef(canPresent);
+  canPresentRef.current = canPresent;
 
   // O iframe lê o tema do localStorage (mesma origem do srcDoc): o host grava antes de carregar.
   const writeTheme = (t: Theme) => { try { localStorage.setItem(DIAGRAM_THEME_KEY, t); } catch { /* sem storage */ } };
@@ -61,6 +68,7 @@ export const Diagram = forwardRef<HTMLIFrameElement, DiagramProps>(function Diag
 
   const act = useCallback((a: Act) => {
     if (a === 'present') {
+      if (canPresentRef.current && !canPresentRef.current()) return;
       // O host é o único dono do fullscreen: requestFullscreen exige ativação do usuário (este clique)
       // e não se manda act:'present' ao iframe.
       try { void frame.current?.requestFullscreen?.()?.catch(() => {}); } catch { /* sem fullscreen */ }
@@ -105,6 +113,7 @@ export const Diagram = forwardRef<HTMLIFrameElement, DiagramProps>(function Diag
             {b.label}
           </button>
         ))}
+        <AlertBadge alerts={view.alertInfo ?? []} actions={[...alertActions, { id: 'present', label: 'Apresentar com zoom', run: () => act('present') }]} />
         {onThemeChange && (
           <button
             type="button"
@@ -116,11 +125,6 @@ export const Diagram = forwardRef<HTMLIFrameElement, DiagramProps>(function Diag
           </button>
         )}
       </div>
-      {view.alerts.length > 0 && (
-        <div className="alerts" role="status">
-          {view.alerts.map((a, i) => <div key={i}>{a}</div>)}
-        </div>
-      )}
       {busy && <div className="busy" aria-hidden="true" />}
       {/* allow-same-origin só existe para o iframe ler o mesmo localStorage `archlens-theme` do host;
           com allow-scripts junto ele NÃO isola nada (o srcdoc é da base, conteúdo confiável). */}

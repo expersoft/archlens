@@ -1,16 +1,20 @@
 // The planning routes: /plan (the agent, as NDJSON), /plan/open (restore a draft), /plan/preview (draw it),
-// /plan/apply (write the confirmed plan, then the document and the diagrams) and /plan/notes (the interpretation notes).
+// /plan/edit (an edit made on screen), /plan/element (a node as the draft leaves it), /plan/apply (write the confirmed
+// plan, then the document and the diagrams) and /plan/notes (the interpretation notes).
 import { dirname, relative, sep } from 'node:path';
-import { newDraft, checkDraft, replanDraft, opsHashOf, DRAFT_MAX_BYTES } from './draft.mjs';
+import { newDraft, checkDraft, replanDraft, draftOpsHash, draftBytes, DRAFT_MAX_BYTES, TOO_BIG } from './draft.mjs';
+import { applyEdit, screenConflicts, findDeltaElement } from './edits.mjs';
 import { runPlan } from './agent.mjs';
 import { checkRepo, scrubCredentials } from './repo.mjs';
 import { ONE_REPO } from './tools.mjs';
 import { normalizeRepoUrl } from '../../../../scripts/lib/scan/git.mjs';
-import { buildPreview, previewActions, previewFlip } from './preview.mjs';
+import { buildPreview, previewActions, previewFlip, previewElement } from './preview.mjs';
 import { applyAndDocument, writeNotes } from '../../../../scripts/lib/apply-flow.mjs';
 import { buildDiagrams } from '../../../../scripts/lib/build.mjs';
 import { openQuestions } from '../../../../scripts/lib/merge.mjs';
 import { describeItem } from '../../../../scripts/lib/merge-report.mjs';
+import { checkDocText, plainWikilinks } from '../../../../scripts/lib/node-doc.mjs';
+import { docsUnsupported } from '../../../../scripts/lib/store/errors.mjs';
 
 const MESSAGE_MAX = 20000;
 const HISTORY_MAX = 40;
@@ -32,6 +36,9 @@ const REFUSALS = {
 const NO_CHROMIUM = 'Chromium indisponível no servidor; rode "npx playwright install chromium" na máquina do servidor';
 const BUILD_FAILED = { E_BUILD_INVALID: 'o modelo gravado tem erros', E_BUILD_EMPTY: 'nenhuma visão com conteúdo', E_BUILD_VIEW: 'uma visão salva não abre' };
 const isObject = v => v !== null && typeof v === 'object' && !Array.isArray(v);
+const SCREEN_CONFLICT = 'O chat quer mudar algo que você editou; responda o aviso antes de aplicar';
+/** The core's message without its leading code ("E_X: …"). */
+const coreMessage = e => (e.code && e.message.startsWith(`${e.code}: `) ? e.message.slice(e.code.length + 2) : e.message);
 
 /** Runs a write; a refusal in REFUSALS comes back as 409 with its GUI message and code. */
 function guiWrite(fn) {
@@ -55,6 +62,19 @@ function draftFrom(ctx, raw) {
 
 /** The document's path as the user knows it: relative to the folder that holds the base. */
 const docName = (store, doc) => relative(dirname(store.locator.path), doc).split(sep).join('/');
+
+/** The chat × screen conflicts of a draft still waiting for the user's answer. */
+const conflictsOf = draft => screenConflicts(draft.delta, draft.edits ?? {}, draft.kept ?? []);
+
+/** `draft` with the documentation of `id` out of the screen layer (and its "keep mine" answers). */
+function dropDoc(draft, id) {
+  const entry = draft.edits?.[id];
+  if (typeof entry?.doc !== 'string') return draft;
+  const { doc: _doc, ...rest } = entry;
+  const edits = { ...draft.edits };
+  if (Object.keys(rest).length) edits[id] = rest; else delete edits[id];
+  return { ...draft, edits, kept: (draft.kept ?? []).filter(k => !(k.id === id && k.field === 'doc')) };
+}
 
 const questionsOf = plan => (plan ? openQuestions(plan).map(i => ({ key: i.key, class: i.class, question: describeItem(i).split('  → ')[0] })) : []);
 
@@ -147,7 +167,7 @@ export function planRoutes({ registry, provider, config, telemetry, h }) {
       let { reply } = out;
       if (replanned.warning && !reply.warning) reply = { ...reply, warning: replanned.warning };
       outcome = reply.kind;
-      write({ type: 'result', draft: out.draft, reply, previews: out.previews, opsHash: opsHashOf(out.draft.plan) });
+      write({ type: 'result', draft: out.draft, reply, previews: out.previews, opsHash: draftOpsHash(out.draft), screenConflicts: conflictsOf(out.draft) });
     } catch (e) {
       metrics = { ...(e.metrics ?? metrics), total: Date.now() - t0 };
       if (e.code !== 'E_LLM_ABORT' || !ctl.signal.aborted) {
@@ -179,13 +199,14 @@ export function planRoutes({ registry, provider, config, telemetry, h }) {
     const res = await registry.inTurn(b, () => {
       const replanned = draftFrom(ctx, draft);
       const { plan: planned } = replanned.draft;
-      const opsHash = opsHashOf(planned);
+      const opsHash = draftOpsHash(replanned.draft);
+      const conflicts = conflictsOf(replanned.draft);
       if (opsHash === null || opsHash !== confirm) {
-        const message = opsHash === null
+        const message = conflicts.length ? SCREEN_CONFLICT : opsHash === null
           ? `o plano não está final; responda as perguntas abertas antes de aplicar${replanned.warning ? ` (${replanned.warning})` : ''}`
           : 'o plano mudou desde a confirmação (a base mudou); revise o plano novo e confirme de novo';
         throw Object.assign(httpError(409, message, 'E_GUI_PLAN_CHANGED'), {
-          extra: { draft: replanned.draft, opsHash, questions: questionsOf(planned), ...(replanned.warning ? { warning: replanned.warning } : {}) },
+          extra: { draft: replanned.draft, opsHash, questions: questionsOf(planned), screenConflicts: conflicts, ...(replanned.warning ? { warning: replanned.warning } : {}) },
         });
       }
       return guiWrite(() => applyAndDocument(ctx.store, planned));
@@ -195,6 +216,58 @@ export function planRoutes({ registry, provider, config, telemetry, h }) {
     // the base is written: a document that failed is reported, not thrown (the core's error names the machine's paths)
     const doc = res.docError ? { error: DOC_FAILED } : docName(ctx.store, res.doc);
     return { entry: res.entry, doc, build: await registry.inTurn(b, () => rebuild(ctx.store)), preserved: res.preserved, notesDraftNeeded: true };
+  }
+
+  /**
+   * An edit made on screen (over a new draft when none is sent: Navegar before any planning): validated, put in the draft's screen layer and planned again. A documentation equal to the
+   * base's leaves the layer (unless the chat proposes another text): it changes nothing.
+   */
+  async function edit(req, b) {
+    const { draft, edit: e } = await read(req);
+    const ctx = registry.get(b);
+    assertLocal(ctx);
+    if (!isObject(e) || typeof e.id !== 'string' || !e.id.trim()) throw httpError(400, 'informe a edição em {edit}, com o id do nó');
+    const { id } = e;
+    const inBase = ctx.model.elements.has(id);
+    let baseDoc = null;
+    if (e.op === 'doc') {
+      if (!ctx.store.supportsDocs) { const err = docsUnsupported(); throw httpError(400, coreMessage(err), err.code); }
+      if (typeof e.text !== 'string') throw httpError(400, `a documentação editada de "${id}" precisa ser texto`, 'E_GUI_DRAFT');
+      try { checkDocText(e.text, id); } catch (err) { throw httpError(400, coreMessage(err), err.code); }
+      // read before the turn: readDoc waits on the queue of the base
+      if (inBase) baseDoc = await ctx.readDoc(id);
+    }
+    const out = await registry.inTurn(b, () => {
+      const checked = checkDraft(draft ?? newDraft(ctx), ctx);
+      if ((e.op === 'properties' || e.op === 'doc') && !inBase && !findDeltaElement(checked.delta, id)) {
+        throw httpError(400, `"${id}" não existe na base nem no rascunho`, 'E_UNKNOWN_REF');
+      }
+      let next = applyEdit(checked, e, ctx.model.elements.get(id)?.properties ?? {});
+      if (e.op === 'doc' && e.text.trim() === (baseDoc ?? '').trim()) {
+        const chat = checked.delta?.docs?.find(d => d?.id === id);
+        if (!chat || chat.text.trim() === e.text.trim()) next = dropDoc(next, id);
+      }
+      // the cap the draft is opened with: an edit never leaves a draft that would not open again
+      if (draftBytes(next) > DRAFT_MAX_BYTES) throw httpError(400, TOO_BIG, 'E_GUI_DRAFT');
+      // applyEdit leaves the plan's state and ops behind: always plan again
+      return replanDraft(ctx, next);
+    });
+    return { ...out, opsHash: draftOpsHash(out.draft), screenConflicts: conflictsOf(out.draft) };
+  }
+
+  /** A node as the draft (a new one when none is sent) leaves it: its card over the preview, its documentation and whether the draft removes it. */
+  async function element(req, b) {
+    const { draft, id } = await read(req);
+    if (typeof id !== 'string' || !id) throw httpError(400, 'informe o id do elemento');
+    const ctx = registry.get(b);
+    const { draft: replanned } = await replan(b, ctx, draft ?? newDraft(ctx));
+    const { card, removed, doc: drafted } = previewElement(ctx, replanned, id);
+    // the draft's text, else the base's read now (not the snapshot in memory); `docRaw` as written (what the editor
+    // loads), `doc` with its wikilinks as names (what is shown)
+    let raw = drafted ?? null;
+    if (drafted === undefined && ctx.store.supportsDocs && ctx.model.elements.has(id)) raw = await ctx.readDoc(id);
+    const docRaw = raw || null;
+    return { card, doc: docRaw ? plainWikilinks(docRaw) : null, docRaw, docs: !!ctx.store.supportsDocs, removed };
   }
 
   async function notes(req, b) {
@@ -217,7 +290,7 @@ export function planRoutes({ registry, provider, config, telemetry, h }) {
     ['POST', /^\/api\/bases\/([^/]+)\/plan\/open$/, async (req, [b]) => {
       const { draft } = await read(req);
       const out = await replan(b, registry.get(b), draft);
-      return { ...out, opsHash: opsHashOf(out.draft.plan) };
+      return { ...out, opsHash: draftOpsHash(out.draft), screenConflicts: conflictsOf(out.draft) };
     }],
     ['POST', /^\/api\/bases\/([^/]+)\/plan\/preview$/, async (req, [b]) => {
       const { draft, specs, notation } = await read(req);
@@ -226,7 +299,7 @@ export function planRoutes({ registry, provider, config, telemetry, h }) {
       if (notation !== undefined && !NOTATIONS.has(notation)) throw httpError(400, 'notation deve ser archimate ou c4');
       const ctx = registry.get(b);
       const { draft: replanned } = await replan(b, ctx, draft);
-      return { ...(await buildPreview(ctx, replanned, specs, { notation })), opsHash: opsHashOf(replanned.plan) };
+      return { ...(await buildPreview(ctx, replanned, specs, { notation })), opsHash: draftOpsHash(replanned), screenConflicts: conflictsOf(replanned) };
     }],
     // Navigation over the preview: the context menu and the notation flip see what the draft adds.
     ['POST', /^\/api\/bases\/([^/]+)\/plan\/actions$/, async (req, [b]) => {
@@ -241,6 +314,8 @@ export function planRoutes({ registry, provider, config, telemetry, h }) {
       const ctx = registry.get(b);
       return { spec: previewFlip(ctx, (await replan(b, ctx, draft)).draft, spec) };
     }],
+    ['POST', /^\/api\/bases\/([^/]+)\/plan\/edit$/, async (req, [b]) => edit(req, b)],
+    ['POST', /^\/api\/bases\/([^/]+)\/plan\/element$/, async (req, [b]) => element(req, b)],
     ['POST', /^\/api\/bases\/([^/]+)\/plan\/apply$/, async (req, [b]) => apply(req, b)],
     ['POST', /^\/api\/bases\/([^/]+)\/plan\/notes$/, async (req, [b]) => notes(req, b)],
   ];

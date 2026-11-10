@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
@@ -26,9 +26,9 @@ const result = (extra: Partial<api.PlanPreviewResult> = {}): api.PlanPreviewResu
   skipped: [],
   summary: '+1 ~1 −1',
   changes: [
-    { sign: '+', kind: 'element', id: 'a', name: 'Novo' },
-    { sign: '~', kind: 'element', id: 'b', name: 'Mudou' },
-    { sign: '−', kind: 'relationship', id: 'c', name: 'X → Y' },
+    { sign: '+', kind: 'element', id: 'a', name: 'Novo', origin: 'chat' },
+    { sign: '~', kind: 'element', id: 'b', name: 'Mudou', origin: 'chat' },
+    { sign: '−', kind: 'relationship', id: 'c', name: 'X → Y', origin: 'chat' },
   ],
   questions: [{ key: 'q1', question: 'conflito b.description', options: ['keep', 'take'], assumed: 'take' }],
   report: '# Plano: teste\n\nrelatório do plano',
@@ -165,7 +165,7 @@ describe('PlanPreview', () => {
   });
 
   it('seleção no diagrama vai para o host', async () => {
-    const onSelect = vi.fn();
+    const onSelect = vi.fn<(id: string | null) => void>();
     const { container } = render(<PlanPreview base="b" draft={withDelta} previews={[]} onSelect={onSelect} />);
     await waitFor(() => expect(frames(container)).toHaveLength(1));
     await fromFrame(container, { type: 'select', id: 'b' }, () => expect(onSelect).toHaveBeenCalledWith('b'));
@@ -203,5 +203,51 @@ describe('PlanPreview', () => {
     expect(screen.queryByRole('heading', { name: 'Plano: teste' })).toBeNull();
     await u.click(screen.getByRole('button', { name: 'Preview' }));
     expect(screen.getByRole('heading', { name: 'Plano: teste' })).toBeTruthy();
+  });
+
+  const html1 = result({ views: [{ key: 'delta', title: 'O que muda', html: '<p>v1</p>', viewData: { nodes: { b: { name: 'Mudou' } } }, kind: 'change', spec }] });
+  const html2 = result({ views: [{ key: 'delta', title: 'O que muda', html: '<p>v2</p>', viewData: { nodes: { b: { name: 'Mudou' } } }, kind: 'change', spec }] });
+  const emit = (c: HTMLElement, data: Record<string, unknown>) =>
+    act(() => { window.dispatchEvent(new MessageEvent('message', { data: { source: 'archlens', ...data }, source: c.querySelector('iframe')!.contentWindow })); });
+  const mountSelected = async (onSelect: Mock<(id: string | null) => void>) => {
+    planPreview.mockResolvedValue(html1);
+    const r = render(<PlanPreview base="b" draft={withDelta} previews={[]} onSelect={onSelect} />);
+    await waitFor(() => expect(frames(r.container)).toEqual(['<p>v1</p>']));
+    await fromFrame(r.container, { type: 'select', id: 'b' }, () => expect(onSelect).toHaveBeenCalledWith('b'));
+    onSelect.mockClear();
+    return r;
+  };
+
+  it('um select(null) deliberado logo depois de escolher um nó desenhado limpa a seleção', async () => {
+    const onSelect = vi.fn<(id: string | null) => void>();
+    const { container } = await mountSelected(onSelect);
+    emit(container, { type: 'select', id: null });
+    expect(onSelect).toHaveBeenCalledWith(null);
+  });
+
+  it('numa recarga do quadro, o select(null) não limpa a seleção, mesmo com o ready atrasado', async () => {
+    const onSelect = vi.fn<(id: string | null) => void>();
+    const { container, rerender } = await mountSelected(onSelect);
+    planPreview.mockResolvedValue(html2);
+    rerender(<PlanPreview base="b" draft={{ ...withDelta, note: 'outro' } as never} previews={[]} onSelect={onSelect} />);
+    await waitFor(() => expect(frames(container)).toEqual(['<p>v2</p>']));
+    emit(container, { type: 'select', id: null });
+    expect(onSelect).not.toHaveBeenCalledWith(null);
+    const post = vi.spyOn(container.querySelector('iframe')!.contentWindow!, 'postMessage');
+    emit(container, { type: 'ready' });
+    expect(onSelect).not.toHaveBeenCalledWith(null);
+    expect(post).toHaveBeenCalledWith(expect.objectContaining({ type: 'select', id: 'b' }), '*');
+  });
+
+  it('escolher um nó que a visão não desenha não manda nada ao quadro', async () => {
+    const onSelect = vi.fn<(id: string | null) => void>();
+    planPreview.mockResolvedValue(html1);
+    const { container, rerender } = render(<PlanPreview base="b" draft={withDelta} previews={[]} onSelect={onSelect} focus={null} />);
+    await waitFor(() => expect(frames(container)).toEqual(['<p>v1</p>']));
+    const post = vi.spyOn(container.querySelector('iframe')!.contentWindow!, 'postMessage');
+    rerender(<PlanPreview base="b" draft={withDelta} previews={[]} onSelect={onSelect} focus={{ id: 'fora', n: 1 }} />);
+    expect(post).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'select' }), '*');
+    rerender(<PlanPreview base="b" draft={withDelta} previews={[]} onSelect={onSelect} focus={{ id: 'b', n: 2 }} />);
+    expect(post).toHaveBeenCalledWith(expect.objectContaining({ type: 'select', id: 'b', focus: true }), '*');
   });
 });

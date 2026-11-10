@@ -418,14 +418,13 @@ describe('App: busca em texto', () => {
     await waitFor(() => expect(trail()).toBe('Inicial › ctx'));
   });
 
-  it('a aba Documentação segue o que a rota do cartão diz da base', async () => {
+  it('o cartão Documentação segue o que a rota do cartão diz da base', async () => {
     handler = () => nd({ type: 'result', result: { kind: 'element', id: 'A' } }, { type: 'done', metrics: { total: 1 } });
     getElement.mockResolvedValue({ card: null, actions: [], docs: true });
     vi.mocked(api.getDoc).mockResolvedValue({ text: 'Texto do nó A' });
     render(<App />);
     await screen.findByRole('navigation', { name: 'Trilha' });
     await userEvent.type(await askBox(), 'onde fica o elemento A?{Enter}');
-    await userEvent.click(await screen.findByRole('tab', { name: 'Documentação' }));
     expect(await screen.findByText('Texto do nó A')).toBeTruthy();
     expect(api.getDoc).toHaveBeenCalledWith('b', 'A');
   });
@@ -439,5 +438,20 @@ describe('App: busca em texto', () => {
     await userEvent.type(box, 'onde fica o elemento A?{Enter}');
     await waitFor(() => expect(getElement).toHaveBeenCalledWith('b', 'A'));
     await waitFor(() => expect(trail()).toBe('Inicial › ctx'));
+  });
+
+  it('(i) Mostrar só uma camada do selo abre a visão com a spec da camada', async () => {
+    const big = { kind: 'legibility', text: 't', nodes: 50, minFontPx: 9 } as const;
+    getView.mockImplementation(async (_b, spec) => ({
+      ...mkView(spec.level === 'landscape' ? 'Inicial' : String(spec.k), spec),
+      alertInfo: [big],
+      data: { nodes: { A: { name: 'A', layer: 'business' }, B: { name: 'B', layer: 'technology' } }, edges: [] },
+    }));
+    await boot();
+    await userEvent.click(await screen.findByRole('button', { name: 'Avisos da visão (1)' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Mostrar só uma camada' }));
+    getView.mockClear();
+    await userEvent.click(screen.getByRole('button', { name: 'Tecnologia' }));
+    await waitFor(() => expect(getView).toHaveBeenCalledWith('b', { level: 'landscape', layers: ['technology'] }));
   });
 });

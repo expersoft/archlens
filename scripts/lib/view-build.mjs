@@ -5,15 +5,21 @@ import { renderHtml, viewData } from './render.mjs';
 
 const since = t0 => Math.round(performance.now() - t0);
 
+/** Structured warnings for a laid-out view; `text` is what the CLI prints. */
+export function viewAlertInfo(view, laid) {
+  const key = view.key ?? laid.key;
+  const nodes = view.nodes.length;
+  const out = [];
+  if (nodes > 40) out.push({ kind: 'size', text: `visão "${key}" tem ${nodes} nós; considere focus/depth, collapse ou layers`, nodes });
+  if (laid.layoutNote) out.push({ kind: 'layout', text: `"${key}": ${laid.layoutNote}` });
+  const leg = legibility(laid, 1920, 1080 - 56);
+  if (!leg.ok) out.push({ kind: 'legibility', text: `"${key}": ${leg.suggestion}`, nodes, minFontPx: leg.minFontPx });
+  return out;
+}
+
 /** Warnings for a laid-out view; the same text the CLI prints. */
 export function viewAlerts(view, laid) {
-  const key = view.key ?? laid.key;
-  const out = [];
-  if (view.nodes.length > 40) out.push(`visão "${key}" tem ${view.nodes.length} nós; considere focus/depth, collapse ou layers`);
-  if (laid.layoutNote) out.push(`"${key}": ${laid.layoutNote}`);
-  const leg = legibility(laid, 1920, 1080 - 56);
-  if (!leg.ok) out.push(`"${key}": ${leg.suggestion}`);
-  return out;
+  return viewAlertInfo(view, laid).map(a => a.text);
 }
 
 /** The single spec -> view path. Takes an already normalized model. */
@@ -30,10 +36,13 @@ export async function buildView(model, spec, { embed = true, title, subtitle } =
   t = performance.now();
   const html = renderHtml({ title: title ?? model.name, subtitle: subtitle ?? 'archlens', views: [laid], embed });
   const render = since(t);
+  const alertInfo = viewAlertInfo(view, laid);
+  const alerts = alertInfo.map(a => a.text);
   return {
     html,
     data: viewData(laid),
-    alerts: viewAlerts(view, laid),
+    alerts,
+    alertInfo,
     nodes: view.nodes.map(n => n.id),
     layoutStyle: laid.layoutStyle ?? null,
     ms: { resolve, layout, render },

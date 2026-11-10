@@ -102,7 +102,8 @@ function planSummary(plan) {
 }
 
 function planDraftTool(ctx, session) {
-  if (!session.draft.delta) return fail('o rascunho não tem delta; use set_delta antes');
+  // the screen edits alone are something to plan too
+  if (!session.draft.delta && !Object.keys(session.draft.edits ?? {}).length) return fail('o rascunho não tem delta; use set_delta antes');
   const { draft, warning } = replanDraft(ctx, session.draft);
   session.draft = draft;
   return { ok: true, content: `${planSummary(draft.plan)}${warning ? `\naviso: ${warning}` : ''}` };

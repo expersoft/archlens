@@ -393,3 +393,88 @@ test('aplicar grava só o trecho liberado e regenera o documento',() => withVaul
   assert.equal(docOf(dir), 'Texto do agente.');
   assert.match(readFileSync(join(top, 'ARCHITECTURE.md'), 'utf8'), /Texto do agente\./);
 }));
+
+// --- Screen edits: the conflict with the chat blocks the apply; the documentation edited on screen. ---
+const edit = async (url, draft, e) => post(url, 'plan/edit', { draft, edit: e });
+const edited = async (url, draft, e) => {
+  const r = await edit(url, draft, e);
+  assert.equal(r.status, 200, await r.clone().text());
+  return r.json();
+};
+
+test('/plan/apply responde 409 enquanto houver screenConflicts', () => withPlan(async (url, dir) => {
+  const mine = await edited(url, newDraft({ id: 'loja', version: '' }), { op: 'properties', id: 'loja', properties: { criticidade: 'média' } });
+  // the agent proposes another value for the same property
+  const chat = delta([{ id: 'loja', properties: { criticidade: 'baixa' } }]);
+  const out = await (await post(url, 'plan/open', { draft: { ...mine.draft, delta: chat } })).json();
+  assert.equal(out.opsHash, null);
+  assert.deepEqual(out.screenConflicts, [{ id: 'loja', field: 'properties.criticidade', mine: 'média', theirs: 'baixa' }]);
+  const r = await post(url, 'plan/apply', { draft: out.draft, confirm: 'x' });
+  assert.equal(r.status, 409);
+  const e = await r.json();
+  assert.equal(e.code, 'E_GUI_PLAN_CHANGED');
+  assert.equal(e.error, 'O chat quer mudar algo que você editou; responda o aviso antes de aplicar');
+  assert.deepEqual(e.screenConflicts, out.screenConflicts);
+  assert.equal(e.opsHash, null);
+  assert.equal(elementOf(dir, 'loja').properties.criticidade, 'alta');
+  // "keep mine" answers it: the plan is final with the screen value
+  const kept = await edited(url, out.draft, { op: 'resolve', id: 'loja', field: 'properties.criticidade', choice: 'mine' });
+  assert.deepEqual(kept.screenConflicts, []);
+  assert.match(kept.opsHash, /^[0-9a-f]{64}$/);
+  const done = await withoutChromium(async () => post(url, 'plan/apply', { draft: kept.draft, confirm: kept.opsHash }));
+  assert.equal(done.status, 200);
+  assert.equal(elementOf(dir, 'loja').properties.criticidade, 'média');
+}));
+
+test('/plan/edit recusa documentação com marcador do archlens', () => withVault(async url => {
+  for (const marker of ['<!-- archlens:begin -->', END]) {
+    const r = await edit(url, newDraft({ id: 'loja', version: '' }), { op: 'doc', id: DOC_ID, text: `Antes\n${marker}\nDepois` });
+    assert.equal(r.status, 400);
+    const e = await r.json();
+    assert.equal(e.error, `a documentação de "${DOC_ID}" contém o marcador ${marker}, que delimita o bloco do archlens na página`);
+  }
+}));
+
+test('/plan/edit grava a documentação sem pergunta; texto igual ao da base sai da camada', () => withVault(async url => {
+  const out = await edited(url, newDraft({ id: 'loja', version: '' }), { op: 'doc', id: DOC_ID, text: 'Texto da tela.\nSegunda linha.' });
+  assert.equal(out.draft.edits[DOC_ID].doc, 'Texto da tela.\nSegunda linha.');
+  assert.equal(out.draft.plan.state, 'final', 'a troca pela tela não abre a pergunta com diferença');
+  assert.ok(out.opsHash);
+  const preview = await (await post(url, 'plan/preview', { draft: out.draft })).json();
+  const change = preview.changes.find(c => c.kind === 'doc');
+  assert.equal(change.origin, 'tela');
+  assert.deepEqual(change.lines, { added: 2, removed: 1 });
+  const node = await (await post(url, 'plan/element', { draft: out.draft, id: DOC_ID })).json();
+  assert.equal(node.doc, 'Texto da tela.\nSegunda linha.');
+  assert.equal(node.docs, true);
+  const back = await edited(url, out.draft, { op: 'doc', id: DOC_ID, text: '  Texto original.\n' });
+  assert.deepEqual(back.draft.edits, {});
+  assert.equal((await (await post(url, 'plan/element', { draft: back.draft, id: DOC_ID })).json()).doc, 'Texto original.');
+}, 'Texto original.'));
+
+test('a prévia marca a documentação do chat com a origem e a contagem de linhas', () => withVault(async url => {
+  const { draft } = await opened(url, docDelta('Linha 1\nLinha 2\nLinha 3'));
+  const change = (await (await post(url, 'plan/preview', { draft })).json()).changes.find(c => c.kind === 'doc');
+  assert.equal(change.origin, 'chat');
+  assert.deepEqual(change.lines, { added: 3, removed: 0 });
+}));
+
+test('/plan/element devolve docRaw como escrito e doc com os wikilinks como nomes', () => withVault(async url => {
+  const base = await (await post(url, 'plan/element', { draft: newDraft({ id: 'loja', version: '' }), id: DOC_ID })).json();
+  assert.equal(base.docRaw, 'Veja [[algo]] e [[a/b|Nome]].');
+  assert.equal(base.doc, 'Veja algo e Nome.');
+  const { draft } = await edited(url, newDraft({ id: 'loja', version: '' }), { op: 'doc', id: DOC_ID, text: 'Da tela, com [[outro]].' });
+  const node = await (await post(url, 'plan/element', { draft, id: DOC_ID })).json();
+  assert.equal(node.docRaw, 'Da tela, com [[outro]].');
+  assert.equal(node.doc, 'Da tela, com outro.');
+  const none = await (await post(url, 'plan/element', { draft: newDraft({ id: 'loja', version: '' }), id: 'loja' })).json();
+  assert.equal(none.doc, null);
+  assert.equal(none.docRaw, null);
+}, 'Veja [[algo]] e [[a/b|Nome]].'));
+
+test('/plan/edit na documentação que o chat escreveu não abre aviso e deixa aplicar', () => withVault(async url => {
+  const { draft } = await opened(url, docDelta('Texto do chat.'));
+  const out = await edited(url, draft, { op: 'doc', id: DOC_ID, text: 'Texto do chat.\nCom uma linha minha.' });
+  assert.deepEqual(out.screenConflicts, []);
+  assert.match(out.opsHash, /^[0-9a-f]{64}$/);
+}, 'Texto original.'));

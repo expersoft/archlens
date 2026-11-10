@@ -151,7 +151,8 @@ gravada; por isso você pode escrever o delta como sempre (`references/merge.md`
 ## Propriedades
 
 `properties` guarda o que o usuário quer anotar (squad, unidade de negócio, canais): valores texto, número, booleano
-ou **lista de textos**. Um catálogo opcional em `properties` do `archlens.json` (`label`, `type`, `values`,
+ou **lista de textos**. No delta, `properties: { "chave": null }` remove a propriedade do elemento: passa pela pergunta
+de conflito (`keep` mantém, `take` remove) e, se a base não tem a chave, não faz nada. Um catálogo opcional em `properties` do `archlens.json` (`label`, `type`, `values`,
 `appliesTo`) faz o `validate` avisar `W_PROPERTY` (chave desconhecida, tipo errado, valor fora da lista).
 Regra: **propriedade serve para filtrar (`where`, veja `views.md`), elemento serve para atravessar.** Se o usuário
 pedir uma visão que atravesse por um valor ("o que sustenta tudo da squad Checkout"), sugira promovê-lo a
@@ -172,7 +173,7 @@ elemento, então só existe em base `markdown` ou `gbrain`.
   mudam no `build`, e até lá o `archlens check` falha indicando-o.
 - **Conflito:** um plano que escreve a documentação de um nó cujo texto mudou depois da revisão é recusado com
   `E_STORE_CONFLICT`, sem gravar nada. Planos que só mexem em campos ou relações preservam o texto.
-- **Leitura:** aba Documentação na GUI e no HTML gerado, seção Documentação em `archlens query <base> --element <id>`
+- **Leitura:** cartão Documentação no painel do nó da GUI e aba Documentação no HTML gerado, seção Documentação em `archlens query <base> --element <id>`
   (`--doc` imprime só o texto, como está na página) e seção `Documentação dos nós` no `ARCHITECTURE.md`. A busca por nome não olha dentro do texto. Detalhes em
   `references/knowledge-doc.md`.
 

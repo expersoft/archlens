@@ -152,7 +152,7 @@ O que faz:
   ArchiMate e C4; o tema da interface (botão da barra do topo) e o do diagrama (o mesmo botão ☀/☾ na barra do diagrama, ou `T`
   no diagrama) são escolhidos em separado; o painel esquerdo (`Ctrl+B`) e o direito (`Ctrl+Alt+B` ou `Ctrl+Shift+B`) seguem o seu gosto.
 - **Detalhes** do elemento: "Nesta visão" (tipo C4 e ArchiMate, papel, distância, relações como frases) e "Na base"
-  (apelidos, pai, filhos, propriedades, fontes e rodadas). Em base `markdown` ou `gbrain`, a aba Documentação traz o
+  (apelidos, pai, filhos, propriedades, fontes e rodadas). Em base `markdown` ou `gbrain`, o cartão Documentação do painel do nó traz o
   texto do nó.
 - **Busca por nome** (`Ctrl+K`), seletor de base, e a troca de base reinicia o histórico.
 
@@ -186,6 +186,17 @@ arquivo não estiver no `.gitignore`, o `serve` avisa, porque a chave poderia ir
 `archlens-gui.json` (que o time pode versionar), a GUI sobe com a busca desligada: o terminal avisa e a caixa de
 pergunta diz qual variável definir; diagramas e navegação seguem normais. Um `llm` malformado no arquivo continua
 impedindo a subida.
+
+**Logo da empresa.** O bloco `brand` do `archlens-gui.json` troca a marca do archlens no topo pelo logo da empresa
+(com um traço e "archlens" discreto ao lado); a aba do navegador passa a ter o título `<name> · archlens`:
+
+```json
+{ "brand": { "name": "Acme", "logo": "marca/acme.svg", "logoDark": "marca/acme-claro.svg" } }
+```
+
+`logo` é obrigatório; `logoDark` (opcional) vale no tema escuro; `name` serve de texto alternativo e título. Os caminhos
+são relativos à pasta do `archlens-gui.json` e precisam ficar dentro dela; só `.svg`, `.png` e `.webp`, até 1 MB. Com
+`serve <base>` (sem arquivo de configuração) não há marca.
 
 O bloco `llm` (e `telemetry`) do `archlens-gui.json`:
 
@@ -303,6 +314,43 @@ avaliação desses limites roda sem chave no `gui:test` e, com um LLM real:
 npm --prefix apps/gui run eval -- --plan-limits [--config archlens-gui.json] [--provider P] [--model M] [--dry]
 ```
 
+### Editar o nó pela tela (Planejar)
+
+No Planejar, a lateral direita tem duas abas, **Delta** e **Nó** (botões no trilho; clicar num nó da prévia ou no nome
+de um item do Delta abre o Nó). O painel mostra o nó **como ficará** (base + rascunho), em cartões recolhíveis, com o
+cabeçalho na cor da camada; o Navegar usa o mesmo painel, só leitura.
+
+- **Propriedades:** `Editar` no cartão abre uma linha por propriedade, onde você altera valores, adiciona outras e
+  remove. O tipo original (número, booleano, lista) é preservado; uma lista se edita como texto separado por vírgula.
+  `Confirmar` põe a edição no rascunho, `Cancelar` descarta.
+- **Documentação** (base `markdown` ou `gbrain`; em base `json` o cartão não aparece): `Editar` abre uma caixa de
+  markdown redimensionável, com `Tela cheia`, que abre o **editor ampliado**: sumário dos títulos (clicar leva à seção e
+  a destaca), **Lado a lado** (texto e prévia) como padrão, ou só Escrever ou só Prévia, barra de formatação que insere
+  markdown (título, negrito, itálico, listas, citação, código, link, tabela), `Esc` fecha devolvendo o texto à caixa,
+  `Ctrl+Enter` confirma, **Cancelar** pergunta antes de descartar e o foco fica preso na janela. Na leitura (Navegar sem
+  Planejar, ou o cartão sem edição) a mesma janela abre só para ler. Trocar o texto pela tela não abre a pergunta com a
+  diferença do chat.
+- **Origem no Delta:** cada mudança leva o selo **chat** ou **tela**; nas da tela há **desfazer**, que apaga as edições
+  da tela daquele nó e deixa o nó como o chat o deixa (ou como está na base).
+- **O que não se perde:** as edições da tela ficam numa camada própria do rascunho, que sobrevive a recarregar a
+  página, a `Salvar`/`Abrir` e a um `set_delta` do agente que não cita o nó.
+- **Conflito com o chat:** se o chat quiser mudar uma propriedade ou documentação que você editou, abre um aviso:
+  **Manter o seu** ou **Usar o do chat**; o **Aplicar** fica bloqueado até a resposta.
+- **Enquanto o chat roda**, as edições da tela ficam travadas.
+- Editar a estrutura (nós e relações) pela tela fica para uma fase seguinte.
+
+**Editar no Navegar.** Com o Planejar ligado, o painel do nó do Navegar também tem `Editar` (propriedades e
+documentação). `Confirmar` leva ao Planejar, na aba **Nó** daquele nó, com a mudança no Delta (selo **tela**); se já
+existe rascunho, a edição se soma a ele. Com o Planejar desligado o Navegar segue só de leitura. Durante uma rodada do
+chat ou uma gravação o `Editar` fica desabilitado (`Aguarde o chat terminar para editar`, `Aguarde a gravação
+terminar`), e um rascunho salvo ilegível não é sobrescrito: o erro aparece e o modo não muda. O nó que o rascunho remove
+mostra "removido pelo rascunho" e não oferece `Editar`; nós que só existem no rascunho se editam no Planejar.
+
+**Avisos da visão.** Uma visão grande demais para a tela, ou com nota de layout, mostra um selo **⚠ n** ao lado das
+ferramentas do diagrama (no Navegar e na prévia do Planejar) em vez de uma faixa sobre o diagrama. O painel do selo
+explica cada aviso e oferece só as ações que se aplicam: agrupar, focar no selecionado, mostrar só uma camada e
+apresentar com zoom. A CLI e o `embed` continuam imprimindo os mesmos textos de `alerts`.
+
 ## Documentação do nó
 
 Cada nó da base (sistema, processo de negócio ou qualquer outro) carrega duas coisas: `properties`, fatos curtos para
@@ -321,7 +369,7 @@ pedido recusa com `E_STORE_DOC` (`archlens store convert` troca o conector).
 
 **Para ler:**
 
-- aba **Documentação** no painel do nó, na GUI e no HTML gerado, ao lado de Detalhes e com o diagrama visível;
+- cartão **Documentação** no painel do nó da GUI e aba **Documentação** no HTML gerado (ao lado de Detalhes), com o diagrama visível;
 - seção Documentação em `archlens query <base> --element <id>`; com `--doc`, só o texto, como está na página;
 - seção `Documentação dos nós` no `ARCHITECTURE.md`;
 - busca com LLM, quando o agente abre o nó.

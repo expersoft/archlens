@@ -95,6 +95,7 @@ test('plan/preview padrão traz a visão do que muda e as salvas afetadas', () =
   assert.equal(views[0].spec.key, 'delta');
   assert.equal(views[0].viewData.nodes['loja.pedidos'].change, 'changed');
   assert.ok(views[0].html.includes('data-node'));
+  assert.ok(Array.isArray(views[0].alertInfo), 'a prévia devolve alertInfo');
   const saved = views.slice(1);
   assert.ok(saved.every(v => v.kind === 'saved'));
   // Every saved view whose result holds loja.pedidos, and no other.
@@ -118,7 +119,7 @@ test('plan/preview traz a lista do delta (+ ~ −), as perguntas abertas e o rel
   assert.deepEqual(alter.questions[0].options, ['keep', 'take', 'value:<x>']);
   assert.match(alter.report, /^# Plano/);
   const added = await (await post(url, 'plan/preview', { draft: await draftWith(url, NEW) })).json();
-  assert.deepEqual(added.changes, [{ sign: '+', kind: 'element', id: 'sistema-novo', name: 'Sistema Novo Zeta', type: 'Application Component', fields: [] }]);
+  assert.deepEqual(added.changes, [{ sign: '+', kind: 'element', id: 'sistema-novo', name: 'Sistema Novo Zeta', type: 'Application Component', fields: [], origin: 'chat' }]);
   const rel = await (await post(url, 'plan/preview', { draft: await draftWith(url, delta({ relationships: [{ from: 'loja.bff', to: 'loja.cache', type: 'association', description: 'nova' }] })) })).json();
   assert.ok(rel.changes.some(c => c.sign === '+' && c.kind === 'relationship' && c.name.includes(" → ") && !c.name.includes("loja.")
     && c.type === 'association' && c.description === 'nova' && c.ends.join() === 'loja.bff,loja.cache'));
@@ -246,7 +247,7 @@ test('base MCP → 409 E_GUI_PLAN_MCP', () => {
   const real = createBaseRegistry({ port: 0, bases: [{ id: 'loja', path: dir }] }, { pollMs: 100000 });
   const registry = { list: () => real.list(), close: () => real.close(), inTurn: (id, fn) => real.inTurn(id, fn), get: id => ({ ...real.get(id), store: { ...real.get(id).store, remote: {} } }) };
   return withPlan(async url => {
-    for (const p of ['plan', 'plan/open', 'plan/preview', 'plan/actions', 'plan/flip', 'plan/apply', 'plan/notes']) {
+    for (const p of ['plan', 'plan/open', 'plan/preview', 'plan/actions', 'plan/flip', 'plan/apply', 'plan/notes', 'plan/edit', 'plan/element']) {
       const r = await post(url, p, { draft: newDraft({ id: 'loja', version: '' }), message: 'x', history: [], confirm: 'x', notes: 'x', id: 'loja', spec: {} });
       assert.equal(r.status, 409);
       const e = await r.json();
@@ -284,3 +285,129 @@ test('plan: applied vai ao agente; applied inválido → 400', () => withPlan(as
     assert.equal(res.status, 400, JSON.stringify(bad));
   }
 }, { provider: notesProvider }));
+
+// --- Screen edits (Planejar): the layer of the draft apart from the agent's delta. ---
+const edit = async (url, draft, e) => post(url, 'plan/edit', { draft, edit: e });
+const edited = async (url, draft, e) => {
+  const r = await edit(url, draft, e);
+  assert.equal(r.status, 200, await r.clone().text());
+  return r.json();
+};
+
+test('/plan/edit grava propriedade e devolve opsHash', () => withPlan(async url => {
+  const out = await edited(url, newDraft({ id: 'loja', version: '' }), { op: 'properties', id: 'loja', properties: { criticidade: 'média', novo: 'sim' } });
+  assert.deepEqual(out.draft.edits, { loja: { properties: { criticidade: 'média', novo: 'sim' } } });
+  assert.equal(out.draft.delta, null, 'o delta do agente não muda');
+  assert.equal(out.draft.plan.state, 'final', 'a edição responde a própria pergunta');
+  assert.match(out.opsHash, /^[0-9a-f]{64}$/);
+  assert.deepEqual(out.screenConflicts, []);
+  // the preview works with only screen edits
+  const preview = await post(url, 'plan/preview', { draft: out.draft });
+  assert.equal(preview.status, 200);
+  assert.equal((await preview.json()).opsHash, out.opsHash);
+  const unknown = await edit(url, out.draft, { op: 'properties', id: 'nao-existe', properties: { a: '1' } });
+  assert.equal(unknown.status, 400);
+  assert.match((await unknown.json()).error, /nao-existe/);
+  const blank = await edit(url, out.draft, { op: 'properties', id: 'loja', properties: { ' ': '1' } });
+  assert.equal(blank.status, 400);
+  assert.equal((await edit(url, out.draft)).status, 400);
+}));
+
+test('/plan/edit: documentação numa base JSON é 400 com a mensagem do núcleo', () => withPlan(async url => {
+  const r = await edit(url, newDraft({ id: 'loja', version: '' }), { op: 'doc', id: 'loja', text: 'Texto.' });
+  assert.equal(r.status, 400);
+  const e = await r.json();
+  assert.equal(e.code, 'E_STORE_DOC');
+  assert.match(e.error, /^documentação do nó exige uma base markdown ou gbrain/);
+}));
+
+test('/plan/element mostra nó proposto pelo chat e removed para nó removido', () => withPlan(async url => {
+  const draft = await draftWith(url, NEW);
+  const r = await post(url, 'plan/element', { draft, id: 'sistema-novo' });
+  assert.equal(r.status, 200);
+  const out = await r.json();
+  assert.equal(out.card.element.name, 'Sistema Novo Zeta');
+  assert.equal(out.card.element.typeLabel, 'Application Component');
+  assert.equal(out.removed, false);
+  assert.equal(out.doc, null);
+  assert.equal(out.docs, false);
+  // the base alone does not know it
+  assert.equal((await fetch(`${url}/api/bases/loja/elements/sistema-novo`)).status, 400);
+  const removing = await draftWith(url, { ...delta({}), ops: [{ op: 'remove', id: 'loja.cache' }] });
+  const gone = await (await post(url, 'plan/element', { draft: removing, id: 'loja.cache' })).json();
+  assert.equal(gone.removed, true);
+  assert.equal(gone.card.element.id, 'loja.cache');
+  const props = await edited(url, newDraft({ id: 'loja', version: '' }), { op: 'properties', id: 'loja', properties: { criticidade: 'média' } });
+  const card = (await (await post(url, 'plan/element', { draft: props.draft, id: 'loja' })).json()).card;
+  assert.equal(card.properties.criticidade, 'média', 'o cartão é o da prévia');
+  const empty = await (await post(url, 'plan/element', { draft: newDraft({ id: 'loja', version: '' }), id: 'loja' })).json();
+  assert.equal(empty.card.properties.criticidade, 'alta', 'rascunho vazio: o nó como na base');
+  assert.equal(empty.removed, false);
+  assert.equal((await post(url, 'plan/element', { draft, id: 'nao-existe' })).status, 400);
+  assert.equal((await post(url, 'plan/element', { draft })).status, 400);
+}));
+
+test('/plan/edit sem draft cria o rascunho com a edição', () => withPlan(async url => {
+  for (const body of [{}, { draft: null }]) {
+    const r = await post(url, 'plan/edit', { ...body, edit: { op: 'properties', id: 'loja', properties: { criticidade: 'média' } } });
+    assert.equal(r.status, 200, await r.clone().text());
+    const out = await r.json();
+    assert.deepEqual(out.draft.edits, { loja: { properties: { criticidade: 'média' } } });
+    assert.equal(out.draft.delta, null);
+    assert.equal(out.draft.base.id, 'loja');
+    assert.match(out.opsHash, /^[0-9a-f]{64}$/);
+  }
+  const bad = await post(url, 'plan/edit', { draft: 'lixo', edit: { op: 'properties', id: 'loja', properties: { a: '1' } } });
+  assert.equal(bad.status, 400, 'rascunho inválido continua recusado');
+}));
+
+test('/plan/element sem draft mostra o nó da base', () => withPlan(async url => {
+  for (const body of [{}, { draft: null }]) {
+    const r = await post(url, 'plan/element', { ...body, id: 'loja' });
+    assert.equal(r.status, 200, await r.clone().text());
+    const out = await r.json();
+    assert.equal(out.card.element.id, 'loja');
+    assert.equal(out.card.properties.criticidade, 'alta');
+    assert.equal(out.removed, false);
+  }
+  assert.equal((await post(url, 'plan/element', { id: 'nao-existe' })).status, 400);
+}));
+
+test('deltaList separa properties por chave e marca a origem', () => withPlan(async url => {
+  const chat = delta({ elements: [{ id: 'loja', properties: { chat: 'do chat' } }, { id: 'erp', properties: { sla: '99' } }] });
+  const opened = await draftWith(url, chat);
+  let out = await edited(url, opened, { op: 'properties', id: 'loja', properties: { 'a.b': 'com ponto', criticidade: null } });
+  out = await edited(url, out.draft, { op: 'properties', id: 'loja.cache', properties: { tela: 'só tela' } });
+  const { changes } = await (await post(url, 'plan/preview', { draft: out.draft })).json();
+  const of = id => changes.find(c => c.kind === 'element' && c.id === id);
+  const fields = c => Object.fromEntries(c.fields.map(f => [f.field, f]));
+  const loja = fields(of('loja'));
+  assert.deepEqual(Object.keys(loja).sort(), ['properties.a.b', 'properties.chat', 'properties.criticidade']);
+  assert.deepEqual(loja['properties.a.b'], { field: 'properties.a.b', before: '—', after: 'com ponto', origin: 'tela' });
+  assert.deepEqual(loja['properties.chat'], { field: 'properties.chat', before: '—', after: 'do chat', origin: 'chat' });
+  assert.deepEqual(loja['properties.criticidade'], { field: 'properties.criticidade', before: 'alta', after: '—', origin: 'tela' });
+  assert.equal(of('loja').origin, 'ambos');
+  assert.equal(of('erp').origin, 'chat');
+  assert.equal(fields(of('erp'))['properties.sla'].origin, 'chat');
+  assert.equal(of('loja.cache').origin, 'tela');
+}));
+
+test('/plan/edit em nó novo aninhado em children do delta grava a edição', () => withPlan(async url => {
+  const draft = await draftWith(url, delta({ elements: [{ id: 'sis-novo', name: 'Sis Novo', type: 'application-component',
+    children: [{ id: 'sis-novo.api', name: 'API Nova', type: 'application-component' }] }] }));
+  const out = await edited(url, draft, { op: 'properties', id: 'sis-novo.api', properties: { owner: 'Time X' } });
+  assert.deepEqual(out.draft.edits, { 'sis-novo.api': { properties: { owner: 'Time X' } } });
+}));
+
+test('/plan/edit na propriedade que o chat propôs não abre aviso e deixa aplicar', () => withPlan(async url => {
+  const draft = await draftWith(url, delta({ elements: [{ id: 'loja', properties: { criticidade: 'baixa' } }] }));
+  const out = await edited(url, draft, { op: 'properties', id: 'loja', properties: { criticidade: 'média' } });
+  assert.deepEqual(out.screenConflicts, []);
+  assert.match(out.opsHash, /^[0-9a-f]{64}$/);
+}));
+
+test('/plan/edit que deixa o rascunho grande demais é 400 com a mensagem do teto', () => withPlan(async url => {
+  const r = await edit(url, newDraft({ id: 'loja', version: '' }), { op: 'properties', id: 'loja', properties: { grande: 'x'.repeat(2_100_000) } });
+  assert.equal(r.status, 400);
+  assert.match((await r.json()).error, /grande demais/);
+}));

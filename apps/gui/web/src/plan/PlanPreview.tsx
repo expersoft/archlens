@@ -6,6 +6,7 @@ import { send, type BridgeEvent } from '../bridge';
 import { useDiagramTheme } from '../theme';
 import { useStoredState } from '../store';
 import { Markdown } from './Markdown';
+import { hasChanges } from './draftStore';
 
 type Tab = 'diagram' | 'plan';
 type Mode = 'base' | 'delta' | 'both';
@@ -14,7 +15,7 @@ const GROUPS: [PreviewView['kind'], string][] = [['change', 'O que muda'], ['sav
 const MODES: [Mode, string][] = [['base', 'Base atual'], ['delta', 'Com o delta'], ['both', 'Lado a lado']];
 const NO_BASE = 'Esta visão não existe na base atual (só aparece com o delta).';
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
-const asView = (html: string) => ({ html, alerts: [] as string[] });
+const asView = (html: string, alertInfo?: PreviewView['alertInfo']) => ({ html, alertInfo });
 const noop = () => {};
 
 type Loaded = { default: PlanPreviewResult; asked: PreviewView[]; failed: string[] };
@@ -57,7 +58,7 @@ export function PlanPreview({ base, draft, previews, onLoaded, onNavigate, onNav
   const matrixSent = useRef<string | null>(null);
   const menuTicket = useRef(0);
   const frame = useRef<HTMLIFrameElement>(null);
-  const planned = !!draft && !!draft.delta;
+  const planned = hasChanges(draft);
   const askedKey = JSON.stringify(previews);
 
   // The default views come with the draft; the ones asked in the conversation are drawn with the same delta.
@@ -107,17 +108,45 @@ export function PlanPreview({ base, draft, previews, onLoaded, onNavigate, onNav
   }, [base, navigate]);
   useEffect(() => { onNav?.({ notation, flip: flipTo }); }, [notation, flipTo, onNav]);
 
+  // A node the view does not draw cannot be selected in the frame (it would answer select(null)); the panel still shows it.
+  const inView = (id: string) => !!(current?.viewData as { nodes?: Record<string, unknown> } | undefined)?.nodes?.[id];
+  const lastSel = useRef<string | null>(null);
+  const echo = useRef<string | null>(null);
+  const reloading = useRef(false);
   useEffect(() => {
-    if (focus) send(frame.current, { type: 'select', id: focus.id, focus: true });
+    if (!focus) return;
+    lastSel.current = focus.id;
+    if (inView(focus.id)) send(frame.current, { type: 'select', id: focus.id, focus: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focus]);
+  // A new document in the frame (or the frame mounted again) loads, says select(null) and then ready.
+  useEffect(() => { reloading.current = true; echo.current = null; }, [current?.html, tab]);
   useEffect(() => { matrixSent.current = null; }, [current?.id, current?.html]);
 
   const nameIn = (id: string) => (current?.viewData as { nodes?: Record<string, { name?: string }> } | undefined)?.nodes?.[id]?.name ?? id;
   const onEvent = (e: BridgeEvent) => {
     if (!draft) return;
     if (e.type === 'theme') setTheme(e.theme);
-    else if (e.type === 'select') { menuTicket.current++; setMenu(null); onSelect?.(e.id); }
-    else if (e.type === 'ready') {
+    else if (e.type === 'select') {
+      menuTicket.current++; setMenu(null);
+      if (e.id !== null) {
+        reloading.current = false; // the frame is alive and answering
+        if (e.id === echo.current) { echo.current = null; return; } // the answer to the selection restored after a load
+        echo.current = null;
+        lastSel.current = e.id;
+        onSelect?.(e.id);
+        return;
+      }
+      // A frame that is loading says select(null) on its own; that is not the user deselecting.
+      if (reloading.current) return;
+      lastSel.current = null;
+      onSelect?.(null);
+    } else if (e.type === 'ready') {
+      if (reloading.current) {
+        reloading.current = false;
+        echo.current = null;
+        if (lastSel.current && inView(lastSel.current)) { echo.current = lastSel.current; send(frame.current, { type: 'select', id: lastSel.current }); }
+      }
       if (current?.key && matrixKeys.current.has(current.key) && matrixSent.current !== current.id) {
         matrixSent.current = current.id;
         send(frame.current, { type: 'act', act: 'matrix' });
@@ -156,7 +185,7 @@ export function PlanPreview({ base, draft, previews, onLoaded, onNavigate, onNav
   const d = loaded.default;
 
   const baseHere = baseView?.id === current?.id ? baseView : null;
-  const withDelta = current?.html != null ? <Diagram ref={frame} view={asView(current.html)} theme={theme} onThemeChange={setTheme} onEvent={onEvent} /> : null;
+  const withDelta = current?.html != null ? <Diagram ref={frame} view={asView(current.html, current.alertInfo)} theme={theme} onThemeChange={setTheme} onEvent={onEvent} /> : null;
   const baseSide = !baseHere ? <div className="empty">Carregando a base atual…</div>
     : baseHere.html != null ? <Diagram view={asView(baseHere.html)} theme={theme} onEvent={noop} />
       : <div className="empty" role="status">{NO_BASE}</div>;

@@ -344,3 +344,58 @@ test('catálogo, busca e cartão trazem typeLabel e c4Label', () => withServer(a
   assert.equal(el.card.element.typeLabel, 'Application Component');
   assert.equal(el.card.element.c4Label, 'Container');
 }));
+
+test('/api/info traz brand e /api/brand/logo serve o arquivo com CSP', async () => {
+  const d = tmp();
+  writeFileSync(join(d, 'l.svg'), '<svg xmlns="http://www.w3.org/2000/svg"/>');
+  writeFileSync(join(d, 'd.png'), 'PNG');
+  const cfg = { ...config(), brand: { name: 'Acme', logo: join(d, 'l.svg'), logoDark: join(d, 'd.png') } };
+  const srv = await startServer({ config: cfg });
+  try {
+    const info = await (await fetch(`${srv.url}/api/info`)).json();
+    assert.deepEqual(info.brand, { name: 'Acme', logo: '/api/brand/logo', logoDark: '/api/brand/logo-dark' });
+    const r = await fetch(`${srv.url}/api/brand/logo`);
+    assert.equal(r.status, 200);
+    assert.equal(r.headers.get('content-type'), 'image/svg+xml');
+    assert.equal(r.headers.get('content-security-policy'), "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'");
+    assert.equal(r.headers.get('x-content-type-options'), 'nosniff');
+    assert.match(await r.text(), /<svg/);
+    const dk = await fetch(`${srv.url}/api/brand/logo-dark`);
+    assert.equal(dk.headers.get('content-type'), 'image/png');
+  } finally { await srv.close(); }
+});
+
+test('logo que sumiu ou cresceu depois da configuração: o servidor não sobe e diz por quê', async () => {
+  const d = tmp();
+  await assert.rejects(startServer({ config: { ...config(), brand: { logo: join(d, 'sumiu.svg') } } }),
+    e => e.code === 'E_GUI_CONFIG' && /brand\.logo: não foi possível ler .*sumiu\.svg/.test(e.message));
+  writeFileSync(join(d, 'l.svg'), '<svg/>');
+  writeFileSync(join(d, 'grande.png'), Buffer.alloc(1024 * 1024 + 1));
+  await assert.rejects(startServer({ config: { ...config(), brand: { logo: join(d, 'l.svg'), logoDark: join(d, 'grande.png') } } }),
+    e => e.code === 'E_GUI_CONFIG' && /brand\.logoDark passa de 1 MB/.test(e.message));
+});
+
+test('/api/brand/logo-dark sem logoDark responde 404; sem brand também', async () => {
+  const d = tmp();
+  writeFileSync(join(d, 'l.svg'), '<svg/>');
+  const srv = await startServer({ config: { ...config(), brand: { logo: join(d, 'l.svg') } } });
+  try {
+    assert.equal((await fetch(`${srv.url}/api/brand/logo-dark`)).status, 404);
+    assert.equal((await fetch(`${srv.url}/api/brand/logo`)).status, 200);
+    assert.equal((await (await fetch(`${srv.url}/api/info`)).json()).brand.name, undefined);
+  } finally { await srv.close(); }
+  await withServer(async url => {
+    assert.equal((await fetch(`${url}/api/brand/logo`)).status, 404);
+    assert.equal((await (await fetch(`${url}/api/info`)).json()).brand, undefined);
+  });
+});
+
+test('logo é lido uma vez: trocar o arquivo depois não muda a resposta', async () => {
+  const d = tmp();
+  writeFileSync(join(d, 'l.svg'), '<svg id="um"/>');
+  const srv = await startServer({ config: { ...config(), brand: { logo: join(d, 'l.svg') } } });
+  try {
+    writeFileSync(join(d, 'l.svg'), '<svg id="dois"/>');
+    assert.match(await (await fetch(`${srv.url}/api/brand/logo`)).text(), /id="um"/);
+  } finally { await srv.close(); }
+});

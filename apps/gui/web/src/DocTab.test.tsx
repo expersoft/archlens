@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 
 vi.mock('./api', async (orig) => ({ ...(await orig<typeof import('./api')>()), getDoc: vi.fn() }));
 
@@ -38,7 +39,8 @@ describe('DocTab', () => {
   it('estado vazio diz como escrever', async () => {
     doc.mockResolvedValue({ text: null });
     render(<DocTab base="b" id="x" />);
-    expect(await screen.findByText('Este nó ainda não tem documentação. Peça no Planejar, use a skill archlens-plan ou escreva no markdown, depois do bloco do archlens.')).toBeTruthy();
+    expect(await screen.findByText('Este nó ainda não tem documentação. Use a skill archlens-plan ou escreva no markdown, depois do bloco do archlens.')).toBeTruthy();
+    expect(screen.queryByText(/Planejar/)).toBeNull();
   });
 
   it('resposta atrasada do nó anterior é ignorada', async () => {
@@ -65,5 +67,34 @@ describe('DocTab', () => {
     doc.mockRejectedValue(new Error('o remoto não respondeu'));
     render(<DocTab base="b" id="x" />);
     expect(await screen.findByText('Não consegui ler a documentação: o remoto não respondeu')).toBeTruthy();
+  });
+
+  it('com text dado, não busca', () => {
+    render(<DocTab base="b" id="x" text="Já em mãos" />);
+    expect(screen.getByText('Já em mãos')).toBeTruthy();
+    expect(doc).not.toHaveBeenCalled();
+  });
+
+  it('max corta, expande e abre a janela de leitura', async () => {
+    const { container } = render(<DocTab base="b" id="x" text="Corpo" max />);
+    expect(container.querySelector('.doc-box.open')).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'Expandir' }));
+    expect(container.querySelector('.doc-box.open')).toBeTruthy();
+    await userEvent.click(screen.getByRole('button', { name: 'Tela cheia' }));
+    expect(screen.getByRole('dialog', { name: 'Documentação do nó' })).toBeTruthy();
+    expect(screen.getByRole('dialog').getAttribute('aria-modal')).toBe('true');
+    expect(screen.queryByRole('button', { name: 'Confirmar' })).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'Fechar' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'Tela cheia' }));
+    await userEvent.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('ao fechar a janela, o foco volta ao botão Tela cheia', async () => {
+    render(<DocTab base="b" id="x" text="Corpo" max />);
+    await userEvent.click(screen.getByRole('button', { name: 'Tela cheia' }));
+    await userEvent.keyboard('{Escape}');
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Tela cheia' }));
   });
 });

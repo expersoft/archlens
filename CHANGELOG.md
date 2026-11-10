@@ -7,6 +7,13 @@ versões seguem [SemVer](https://semver.org/lang/pt-BR/).
 
 ### Adicionado
 
+- **GUI: Navegar editável, editor ampliado, logo e avisos.** Com o Planejar ligado, `Editar` no painel do nó do Navegar
+  leva ao Planejar (aba **Nó**) com a mudança no Delta, somada ao rascunho existente, com exclusão mútua com o chat e a
+  gravação. O editor da documentação ganha janela ampliada com sumário, **Lado a lado**, formatação, `Esc`/`Ctrl+Enter`
+  e foco preso, e uma versão só de leitura. A aba **Nó** ganha o ícone "i"; o archlens ganha logo (lente) e favicon
+  novos; o bloco `brand` do `archlens-gui.json` troca a marca do topo pelo logo da empresa (versão para o tema escuro,
+  título da aba com o nome). Os avisos da visão saem da faixa e viram um selo ⚠ com painel e ações (agrupar, focar,
+  camada, apresentar); `alerts` segue igual para a CLI e o `embed`.
 - **GUI, rodapé de cada chamada:** na consulta e no Planejar, uma linha discreta com início, fim, duração e tokens
   (entrada, saída e cache, como o provedor informa). Vale também para chamadas que terminam em erro, e no Planejar fica
   salva com a conversa.
@@ -28,7 +35,7 @@ versões seguem [SemVer](https://semver.org/lang/pt-BR/).
 - **Documentação do nó** (base `markdown` ou `gbrain`): `docs` no delta escreve o texto livre da página, com a diferença
   linha a linha no plano e pergunta `keep`/`take` ao trocar texto existente; a operação de store `putDoc` grava o texto e
   a rodada registra quais nós mudaram (`doc N` no resumo), sem copiar o texto. Base `json` recusa com `E_STORE_DOC`.
-- **Abas Documentação:** no painel do nó, na GUI e no HTML gerado, ao lado de Detalhes. O modo Planejar lê e edita o
+- **Documentação no painel do nó:** aba Documentação ao lado de Detalhes no HTML gerado e cartão Documentação no painel da GUI. O modo Planejar lê e edita o
   texto, com a diferença no painel Delta. A documentação também aparece no cartão de `query --element`, na busca com LLM
   e na seção `Documentação dos nós` do `ARCHITECTURE.md`.
 - **`archlens query <base> --element <id> --doc`:** imprime o texto como está na página, títulos e wikilinks intactos,
@@ -36,6 +43,13 @@ versões seguem [SemVer](https://semver.org/lang/pt-BR/).
 - **`where` nas visões:** filtro por valor de propriedade, com os ancestrais como moldura (`references/views.md`). Sem
   resultado, a resposta diz que nenhum nó da visão tem o valor e quantos o têm fora dela. Um `where` malformado numa
   visão salva é erro em `validate`, `check` e `plan` (`E_VIEW_WHERE`).
+- **GUI, painel do nó e edição no Planejar:** o painel do nó (Navegar e Planejar) vira cartões recolhíveis, com o
+  cabeçalho na cor da camada, tetos e "Mostrar mais". No Planejar, a lateral direita ganha as abas **Delta** e **Nó**;
+  propriedades (alterar, adicionar, remover) e documentação se editam pela tela, com `Confirmar`/`Cancelar` e tela cheia.
+  As edições entram no Delta com o selo **tela** (ou **chat**) e **desfazer**, ficam numa camada própria do rascunho
+  (sobrevivem a recarregar, `Salvar`/`Abrir` e `set_delta`) e, se o chat quiser mudar o mesmo valor, um aviso pede
+  **Manter o seu** ou **Usar o do chat**. Rotas `/plan/edit` e `/plan/element`.
+- **Delta:** `null` em `properties` remove a propriedade (com pergunta de conflito no merge).
 
 ### Mudado
 

@@ -30,6 +30,8 @@ em `$OUT` (`remote pull`/`check` só atualizam o espelho local de uma base gbrai
 2. **Traduza a informação nova em delta** (`references/merge.md`):
    - **texto livre**: siga `references/free-text.md` (`source` com o trecho, `inferred` + `confidence`,
      `assumptions`). Pergunte ao usuário **só** o que bloqueia;
+   - **remover uma propriedade de um elemento**: `properties: { "chave": null }` no elemento do delta; vira pergunta
+     de conflito (`keep` | `take`), e `take` remove a chave;
    - **JSON DSL**: embrulhe em `{"archlens-delta":"1.0","source":…,"model":…}`;
    - **"X foi desligado / será substituído / renomeie Y"**: `ops` (`status`, `rename`, `alias`, `remove`);
    - **visão que o usuário quer manter** (vinda da skill archlens-query): delta só com `views` (`key` único, `title`);
