@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, cpSync, readFileSync, existsSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { startServer } from './app.mjs';
 import { createBaseRegistry } from './bases.mjs';
 import { rebuild } from './plan/routes.mjs';
@@ -30,11 +30,11 @@ function lojaCopy() {
   return { top, dir };
 }
 
-async function withPlan(fn, { provider = scripted([]), plan = true, registry, copy = lojaCopy() } = {}) {
+async function withPlan(fn, { provider = scripted([]), plan = true, registry, copy = lojaCopy(), applyWorker } = {}) {
   const { top, dir } = copy;
   const cfg = { port: 0, bases: [{ id: 'loja', path: dir }], llm: { provider: 'anthropic' },
     ...(plan ? { plan: { maxRounds: 8, timeoutMs: 20000, maxTokens: 100000 } } : {}) };
-  const srv = await startServer({ config: cfg, provider, registry: registry?.(dir) });
+  const srv = await startServer({ config: cfg, provider, registry: registry?.(dir), applyWorker });
   try { await fn(srv.url, dir, top); } finally { await srv.close(); }
 }
 const post = (url, path, body) => fetch(`${url}/api/bases/loja/${path}`, { method: 'POST', headers: json, body: JSON.stringify(body) });
@@ -86,6 +86,147 @@ test('apply com build indisponível', () => withPlan(async (url, dir) => {
   assert.equal(out.entry.added[0], 'sistema-novo');
   assert.equal(elementOf(dir, 'sistema-novo').name, 'Sistema Novo Zeta');
 }));
+
+// --- Apply as a stream of steps (stream: true), written in a worker. ---
+const REAL_WORKER = new URL('./plan/apply-worker.mjs', import.meta.url).href;
+const LIB = new URL('../../../scripts/lib/', import.meta.url).href;
+/** A worker that runs `before` (code over workerData, parentPort) and then the real apply worker. */
+function wrapWorker(before) {
+  const file = join(mkdtempSync(join(tmpdir(), 'archlens-aworker-')), 'worker.mjs');
+  writeFileSync(file, `import { workerData, parentPort } from 'node:worker_threads';\n${before}\nawait import(${JSON.stringify(REAL_WORKER)});\n`);
+  return pathToFileURL(file);
+}
+/** The events of a stream, each with the time it arrived. */
+async function timedLines(res) {
+  const out = [];
+  const decoder = new TextDecoder();
+  let buf = '';
+  for await (const chunk of res.body) {
+    buf += decoder.decode(chunk, { stream: true });
+    let i;
+    while ((i = buf.indexOf('\n')) >= 0) {
+      const line = buf.slice(0, i);
+      buf = buf.slice(i + 1);
+      if (line) out.push({ ...JSON.parse(line), at: performance.now() });
+    }
+  }
+  return out;
+}
+const shape = e => (e.type === 'step' ? `${e.step} ${e.state}` : e.type);
+
+test('stream: etapas em ordem e result no fim', () => withoutChromium(() => withPlan(async (url, dir) => {
+  const { draft, opsHash } = await opened(url, NEW);
+  const r = await post(url, 'plan/apply', { draft, confirm: opsHash, stream: true });
+  assert.equal(r.status, 200);
+  assert.match(r.headers.get('content-type'), /ndjson/);
+  const evs = await timedLines(r);
+  assert.deepEqual(evs.filter(e => e.type !== 'check').map(shape),
+    ['check done', 'write start', 'write done', 'doc start', 'doc done', 'views start', 'views done', 'result']);
+  assert.ok(evs.find(e => e.step === 'write' && e.state === 'done').detail);
+  assert.equal(evs.find(e => e.step === 'views' && e.state === 'done').detail, 'checagem visual indisponível');
+  const result = evs.at(-1);
+  assert.ok(result.entry);
+  assert.deepEqual(result.entry.added, ['sistema-novo']);
+  assert.equal(result.doc, 'ARCHITECTURE.md');
+  assert.equal(result.notesDraftNeeded, true);
+  assert.deepEqual(result.preserved, []);
+  assert.equal(result.build.available, false);
+  assert.equal(elementOf(dir, 'sistema-novo').name, 'Sistema Novo Zeta');
+  // the registry sees the write right away
+  assert.notEqual((await opened(url, NEW)).draft.base.version, draft.base.version);
+})));
+
+test('stream: plano mudado é 409 com extra, sem fluxo', () => withPlan(async (url, dir) => {
+  const { draft, opsHash } = await opened(url, NEW);
+  const r = await post(url, 'plan/apply', { draft, confirm: 'f'.repeat(64), stream: true });
+  assert.equal(r.status, 409);
+  assert.match(r.headers.get('content-type'), /json/);
+  const e = await r.json();
+  assert.equal(e.code, 'E_GUI_PLAN_CHANGED');
+  assert.equal(e.opsHash, opsHash);
+  assert.ok(e.draft.plan);
+  assert.equal(elementOf(dir, 'sistema-novo'), undefined);
+  assert.equal((await post(url, 'plan/apply', { draft, stream: true })).status, 400);
+}));
+
+test('stream: documento falha depois de gravar: result com doc.error e write done antes', () => withoutChromium(() => withPlan(async (url, dir) => {
+  const { draft, opsHash } = await opened(url, NEW);
+  const evs = await timedLines(await post(url, 'plan/apply', { draft, confirm: opsHash, stream: true }));
+  const shapes = evs.map(shape);
+  assert.ok(shapes.indexOf('write done') >= 0 && shapes.indexOf('write done') < shapes.indexOf('result'), shapes.join(', '));
+  assert.ok(!shapes.includes('doc done'));
+  const result = evs.find(e => e.type === 'result');
+  assert.equal(result.entry.added[0], 'sistema-novo');
+  assert.equal(result.doc.error, 'a base foi gravada, mas o ARCHITECTURE.md não foi regenerado; rode "archlens doc" na base');
+  assert.ok(!PATHS.test(JSON.stringify(result)));
+  assert.ok(!('docError' in result));
+  assert.equal(elementOf(dir, 'sistema-novo').name, 'Sistema Novo Zeta');
+}, { applyWorker: wrapWorker(`
+import { rmSync, mkdirSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+// once the base is written, the document's place is taken by a folder: regenerating it fails
+const post = parentPort.postMessage.bind(parentPort);
+parentPort.postMessage = m => {
+  if (m.step?.step === 'write' && m.step.state === 'done') {
+    const doc = join(dirname(workerData.path), 'ARCHITECTURE.md');
+    rmSync(doc);
+    mkdirSync(doc);
+  }
+  post(m);
+};`) })));
+
+test('stream: conflito no worker vira evento error com written false e code E_STORE_CONFLICT', () => withPlan(async (url, dir) => {
+  const { draft, opsHash } = await opened(url, NEW);
+  const evs = await timedLines(await post(url, 'plan/apply', { draft, confirm: opsHash, stream: true }));
+  assert.equal(evs[0].type, 'step');
+  assert.equal(shape(evs[0]), 'check done');
+  const err = evs.at(-1);
+  assert.equal(err.type, 'error');
+  assert.equal(err.code, 'E_STORE_CONFLICT');
+  assert.equal(err.written, false);
+  assert.equal(err.error, 'a base mudou enquanto o plano era aplicado; nada foi gravado. Revise o plano novo');
+  assert.ok(!evs.some(e => e.type === 'result' || shape(e) === 'write done'));
+  assert.equal(elementOf(dir, 'sistema-novo'), undefined);
+  assert.equal(elementOf(dir, 'sistema-outro').name, 'Gravado no meio');
+}, { applyWorker: wrapWorker(`
+// another write lands between the check (main thread) and this write
+import { openStore, resolveBase } from ${JSON.stringify(`${LIB}store/index.mjs`)};
+import { plan } from ${JSON.stringify(`${LIB}api.mjs`)};
+import { applyAndDocument } from ${JSON.stringify(`${LIB}apply-flow.mjs`)};
+const store = openStore(resolveBase(workerData.path));
+const d = { 'archlens-delta': '1.0', source: { kind: 'prompt', ref: 'teste' }, model: { elements: [{ id: 'sistema-outro', name: 'Gravado no meio', type: 'application-component' }], relationships: [] } };
+applyAndDocument(store, plan(store, d).plan);`) }));
+
+test('a gravação roda fora da thread principal', () => withoutChromium(() => withPlan(async url => {
+  const { draft, opsHash } = await opened(url, NEW);
+  const r = await post(url, 'plan/apply', { draft, confirm: opsHash, stream: true });
+  assert.equal(r.status, 200);
+  const events = timedLines(r);
+  const info = await fetch(`${url}/api/info`);
+  assert.equal(info.status, 200);
+  await info.json();
+  const infoAt = performance.now();
+  const evs = await events;
+  const result = evs.find(e => e.type === 'result');
+  assert.ok(result?.entry, JSON.stringify(evs.at(-1)));
+  assert.ok(infoAt < result.at, 'o /api/info respondeu antes do result');
+}, { applyWorker: wrapWorker(`
+// a slow connector: the worker holds its thread for a while before writing
+Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 600);`) })));
+
+test('rebuild repassa onCheck ao build', async () => {
+  const { dir } = lojaCopy();
+  const store = openStore(resolveBase(dir));
+  const seen = [];
+  const build = async (_s, _raw, opts) => {
+    opts.onCheck({ done: 1, total: 2, key: 'a', viewport: 'desktop' });
+    opts.onCheck({ done: 2, total: 2, key: 'b', viewport: 'desktop' });
+    return { available: true, problems: 0, results: [] };
+  };
+  const out = await rebuild(store, build, { onCheck: c => seen.push(c) });
+  assert.equal(out.available, true);
+  assert.deepEqual(seen.map(c => `${c.done}/${c.total} ${c.key}`), ['1/2 a', '2/2 b']);
+});
 
 test('apply grava, roda o build e devolve o relatório', () => withPlan(async (url, dir, top) => {
   const { draft, opsHash } = await opened(url, NEW);
