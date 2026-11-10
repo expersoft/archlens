@@ -95,6 +95,7 @@ test('plan/preview padrão traz a visão do que muda e as salvas afetadas', () =
   assert.equal(views[0].spec.key, 'delta');
   assert.equal(views[0].viewData.nodes['loja.pedidos'].change, 'changed');
   assert.ok(views[0].html.includes('data-node'));
+  assert.ok(Array.isArray(views[0].alertInfo), 'a prévia devolve alertInfo');
   const saved = views.slice(1);
   assert.ok(saved.every(v => v.kind === 'saved'));
   // Every saved view whose result holds loja.pedidos, and no other.

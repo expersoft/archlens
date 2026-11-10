@@ -66,3 +66,21 @@ it('botão de tema do diagrama alterna só o tema do diagrama', async () => {
   expect(screen.getByRole('button', { name: 'Alternar tema do diagrama' }).textContent).toBe('☀');
   expect(localStorage.getItem('archlens-theme')).toBe('dark');
 });
+
+it('o diagrama não mostra mais a faixa de avisos', () => {
+  const v = { html: '<p>x</p>', alerts: ['texto antigo'], alertInfo: [] } as unknown as ViewResult;
+  render(<Diagram view={v} theme="light" onEvent={() => {}} />);
+  expect(screen.queryByText('texto antigo')).toBeNull();
+  expect(screen.queryByRole('status')).toBeNull();
+});
+
+it('com avisos, a barra do diagrama mostra o selo e Apresentar com zoom pede fullscreen', async () => {
+  const v = { html: '<p>x</p>', alerts: ['a'], alertInfo: [{ kind: 'legibility', text: 'a', nodes: 50, minFontPx: 8 }] } as unknown as ViewResult;
+  const { container } = render(<Diagram view={v} theme="light" onEvent={() => {}} />);
+  const frame = container.querySelector('iframe')!;
+  const rf = vi.fn(() => Promise.resolve());
+  (frame as unknown as { requestFullscreen: unknown }).requestFullscreen = rf;
+  await userEvent.click(screen.getByRole('button', { name: 'Avisos da visão (1)' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Apresentar com zoom' }));
+  expect(rf).toHaveBeenCalledTimes(1);
+});

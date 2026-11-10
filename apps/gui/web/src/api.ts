@@ -24,10 +24,13 @@ export interface FindHit { id: string; name: string; type: string; kind?: string
 export type ViewSpec = { level?: string; [k: string]: unknown };
 /** Estado do aninhamento da visão (null: C4 ou sem pai visual). */
 export interface NestState { mode: 'edges' | 'nested'; except: string[]; holders: string[]; open: string[] }
+/** Aviso estruturado da visão (o `text` é o mesmo de `alerts`). */
+export interface AlertInfo { kind: 'size' | 'layout' | 'legibility'; text: string; nodes?: number; minFontPx?: number }
 export interface ViewResult {
   html: string;
   data: unknown;
   alerts: string[];
+  alertInfo?: AlertInfo[];
   nodes: unknown;
   layoutStyle?: string;
   ms: { resolve: number; layout: number; render: number };
@@ -215,7 +218,7 @@ export interface PlanElement {
 }
 export const planElement = (base: string, draft: Draft, id: string) => call<PlanElement>(`${b(base)}/plan/element`, { draft, id });
 
-export interface PreviewView { key: string; title: string; html?: string; viewData?: unknown; kind: 'change' | 'saved' | 'asked'; error?: string; spec: ViewSpec }
+export interface PreviewView { key: string; title: string; html?: string; viewData?: unknown; kind: 'change' | 'saved' | 'asked'; error?: string; spec: ViewSpec; alertInfo?: AlertInfo[] }
 /** `field` é `properties.<k>` para cada chave de propriedade que muda ('—' quando ausente). */
 export interface PreviewField { field: string; before: string; after: string; origin: ChangeOrigin }
 export interface PreviewChange {

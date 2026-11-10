@@ -34,7 +34,14 @@ body{font:14px/1.4 system-ui,sans-serif;background:var(--bg);color:var(--ink)}
 .toolbar{display:flex;gap:6px;flex-wrap:wrap;padding:6px 10px;border-bottom:1px solid var(--line);background:var(--panel)}
 .toolbar button{border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:6px;padding:4px 10px;cursor:pointer;font:inherit;font-size:13px}
 .toolbar button.on{background:var(--accent);border-color:var(--accent);color:#fff}
-.alerts{padding:4px 12px;font-size:12px;background:var(--warn-bg);color:var(--warn)}
+.alert-badge{position:relative;display:inline-block}
+.toolbar button.alert-btn{background:var(--warn-bg);border-color:var(--warn);color:var(--warn)}
+.alert-panel{position:absolute;z-index:20;top:calc(100% + 6px);left:0;width:320px;max-width:80vw;padding:10px 12px;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,.18);font-size:13px}
+.alert-item h4{margin:0 0 4px;font-size:13px}
+.alert-item p{margin:0 0 8px;color:var(--muted)}
+.alert-actions{display:flex;flex-direction:column;gap:6px;border-top:1px solid var(--line);padding-top:8px}
+.alert-actions button{width:100%;text-align:left}
+.alert-options{display:flex;flex-direction:column;gap:4px;margin:4px 0 0 12px}
 .diagram iframe{flex:1;border:0;width:100%;min-height:0;background:var(--bg)}
 .empty{flex:1;display:grid;place-items:center;color:var(--muted)}
 .trail{padding:4px 12px;font-size:12px;color:var(--muted);border-bottom:1px solid var(--line);background:var(--panel);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}

@@ -7,6 +7,7 @@ import { normalizeModel } from '../../../../scripts/lib/model.mjs';
 import { resolveView } from '../../../../scripts/lib/query.mjs';
 import { emptyViewMessage } from '../../../../scripts/lib/query-where.mjs';
 import { layoutView } from '../../../../scripts/lib/layout.mjs';
+import { viewAlertInfo } from '../../../../scripts/lib/view-build.mjs';
 import { renderHtml, viewData } from '../../../../scripts/lib/render.mjs';
 import { lineDiff } from '../../../../scripts/lib/node-doc.mjs';
 import { ELEMENT_TYPES } from '../../../../scripts/lib/registry.mjs';
@@ -197,9 +198,10 @@ function deltaList(model, p, edits) {
 async function drawView(model, p, spec, kind) {
   const view = resolveView(model, spec, { keep: p.keep });
   if (!view.nodes.length) throw planError(emptyViewMessage(model, { key: 'view', ...spec }, view), 'E_VIEW_EMPTY');
-  const laid = await layoutView(annotateView(view, p));
+  const annotated = annotateView(view, p);
+  const laid = await layoutView(annotated);
   const html = renderHtml({ title: model.name, subtitle: 'archlens · prévia', views: [laid], embed: true });
-  return { key: laid.key, title: laid.title, html, viewData: viewData(laid), kind, spec };
+  return { key: laid.key, title: laid.title, html, viewData: viewData(laid), alertInfo: viewAlertInfo(annotated, laid), kind, spec };
 }
 
 /**

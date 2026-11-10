@@ -15,7 +15,7 @@ const GROUPS: [PreviewView['kind'], string][] = [['change', 'O que muda'], ['sav
 const MODES: [Mode, string][] = [['base', 'Base atual'], ['delta', 'Com o delta'], ['both', 'Lado a lado']];
 const NO_BASE = 'Esta visão não existe na base atual (só aparece com o delta).';
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
-const asView = (html: string) => ({ html, alerts: [] as string[] });
+const asView = (html: string, alertInfo?: PreviewView['alertInfo']) => ({ html, alertInfo });
 const noop = () => {};
 
 type Loaded = { default: PlanPreviewResult; asked: PreviewView[]; failed: string[] };
@@ -185,7 +185,7 @@ export function PlanPreview({ base, draft, previews, onLoaded, onNavigate, onNav
   const d = loaded.default;
 
   const baseHere = baseView?.id === current?.id ? baseView : null;
-  const withDelta = current?.html != null ? <Diagram ref={frame} view={asView(current.html)} theme={theme} onThemeChange={setTheme} onEvent={onEvent} /> : null;
+  const withDelta = current?.html != null ? <Diagram ref={frame} view={asView(current.html, current.alertInfo)} theme={theme} onThemeChange={setTheme} onEvent={onEvent} /> : null;
   const baseSide = !baseHere ? <div className="empty">Carregando a base atual…</div>
     : baseHere.html != null ? <Diagram view={asView(baseHere.html)} theme={theme} onEvent={noop} />
       : <div className="empty" role="status">{NO_BASE}</div>;
