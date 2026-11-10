@@ -255,8 +255,8 @@ export function App() {
     getActions(b, id, shown).then((d) => {
       if (t !== ticket.current) return;
       const withSpec = d.actions.filter((a) => a.spec);
-      // Numa visão ArchiMate o Explorador fica em ArchiMate; numa C4 (ou sem visão) segue o Contexto de hoje.
-      const keep = shown && (shown as { notation?: string }).notation !== 'c4'
+      // Só numa visão com notation 'archimate' o Explorador fica em ArchiMate; nas demais segue o Contexto de hoje.
+      const keep = (shown as { notation?: string } | undefined)?.notation === 'archimate'
         ? withSpec.find((x) => x.label === 'Ver em ArchiMate (camadas)') ?? withSpec.find((x) => (x.spec as { notation?: string }).notation === 'archimate' && !x.matrix)
         : undefined;
       const a = keep ?? withSpec.find((x) => /^(Contexto|Containers do sistema|Componentes do container)/.test(x.label)) ?? withSpec[0];
