@@ -119,6 +119,11 @@ test('ações com a visão atual ArchiMate: clique duplo em camadas', () => with
   assert.equal(plain.find(a => a.primary && a.spec).spec.notation, 'c4');
 }));
 
+test('método não suportado numa rota existente continua 405', () => withServer(async url => {
+  const r = await fetch(`${url}/api/bases/loja-online/elements/loja/actions`, { method: 'PUT' });
+  assert.equal(r.status, 405);
+}));
+
 test('spec que não é objeto: 400', () => withServer(async url => {
   const r = await post(`${url}/api/bases/loja-online/elements/${encodeURIComponent('loja')}/actions`, { spec: 'x' });
   assert.equal(r.status, 400);

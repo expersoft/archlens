@@ -251,10 +251,15 @@ export function App() {
     setSelected(id);
     if (inView(id)) { send(frame.current, { type: 'select', id, focus: true }); return; }
     const t = reserve();
-    getActions(b, id, stateRef.current.step?.view.spec).then((d) => {
+    const shown = stateRef.current.step?.view.spec;
+    getActions(b, id, shown).then((d) => {
       if (t !== ticket.current) return;
       const withSpec = d.actions.filter((a) => a.spec);
-      const a = withSpec.find((x) => /^(Contexto|Containers do sistema|Componentes do container)/.test(x.label)) ?? withSpec[0];
+      // Numa visão ArchiMate o Explorador fica em ArchiMate; numa C4 (ou sem visão) segue o Contexto de hoje.
+      const keep = shown && (shown as { notation?: string }).notation !== 'c4'
+        ? withSpec.find((x) => x.label === 'Ver em ArchiMate (camadas)') ?? withSpec.find((x) => (x.spec as { notation?: string }).notation === 'archimate' && !x.matrix)
+        : undefined;
+      const a = keep ?? withSpec.find((x) => /^(Contexto|Containers do sistema|Componentes do container)/.test(x.label)) ?? withSpec[0];
       if (!a) { dispatch({ type: 'failed', ticket: t, error: `sem visão para ${nameOf(id)}` }); return; }
       return run(t, b, a.spec!, 'Explorador', `${nameOf(id)}: ${a.label}`, a.matrix);
     }).catch((err) => { if (t === ticket.current) fail(t, err); });

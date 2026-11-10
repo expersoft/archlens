@@ -126,6 +126,28 @@ describe('App', () => {
     expect(getActions).toHaveBeenCalledWith('b', 'A', { level: 'landscape' }); // no pickElement a visão atual é a mostrada
   });
 
+  it('Explorador numa visão ArchiMate abre em ArchiMate', async () => {
+    getView.mockImplementation(async (_b, spec) => mkView(spec.level === 'landscape' ? 'Inicial' : String(spec.k), spec.level === 'landscape' ? { level: 'landscape', notation: 'archimate' } : spec));
+    await boot();
+    getActions.mockResolvedValue({ actions: [
+      { label: 'Contexto (C4)', spec: { k: 'ctx', notation: 'c4' } },
+      { label: 'Ver em ArchiMate (camadas)', spec: { k: 'am', notation: 'archimate' } }] });
+    await userEvent.click(screen.getByRole('button', { name: 'Explorador' }));
+    await userEvent.click(await screen.findByText('Elem A'));
+    await waitFor(() => expect(trail()).toBe('Inicial › am'));
+  });
+
+  it('Explorador numa visão C4 segue abrindo o contexto', async () => {
+    getView.mockImplementation(async (_b, spec) => mkView(spec.level === 'landscape' ? 'Inicial' : String(spec.k), spec.level === 'landscape' ? { level: 'landscape', notation: 'c4' } : spec));
+    await boot();
+    getActions.mockResolvedValue({ actions: [
+      { label: 'Ver em ArchiMate (camadas)', spec: { k: 'am', notation: 'archimate' } },
+      { label: 'Contexto (C4)', spec: { k: 'ctx', notation: 'c4' } }] });
+    await userEvent.click(screen.getByRole('button', { name: 'Explorador' }));
+    await userEvent.click(await screen.findByText('Elem A'));
+    await waitFor(() => expect(trail()).toBe('Inicial › ctx'));
+  });
+
   it('(g) elemento que está na visão só manda select pela ponte', async () => {
     vi.mocked(api.getView).mockResolvedValue({ ...mkView('Inicial', { level: 'landscape' }), data: { nodes: { A: { name: 'Elem A' } }, edges: [] } });
     await boot();
