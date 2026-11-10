@@ -14,7 +14,7 @@ vi.mock('./PlanPreview', () => ({
 }));
 
 import * as api from '../api';
-import { save } from './draftStore';
+import { load, save } from './draftStore';
 import { PlanView } from './PlanView';
 
 const draft = { 'archlens-draft': 1, base: { id: 'b', version: 'v' }, delta: null, plan: null, note: 'n' };
@@ -133,5 +133,95 @@ describe('PlanView com o editor do nó', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
     await waitFor(() => expect((screen.getByRole('button', { name: /Editar propriedades/ }) as HTMLButtonElement).disabled).toBe(true));
     expect((screen.getByRole('button', { name: /Editar propriedades/ }) as HTMLButtonElement).title).toBe('Aguarde a gravação terminar');
+  });
+});
+
+describe('PlanView falando com o App', () => {
+  it('onBusy informa chat e gravação', async () => {
+    const onBusy = vi.fn();
+    let finish!: (r: Awaited<ReturnType<typeof api.planEdit>>) => void;
+    vi.mocked(api.planEdit).mockImplementation(() => new Promise((r) => { finish = r; }));
+    let events!: (e: api.PlanEvent) => void;
+    let ended!: () => void;
+    vi.mocked(api.planTurn).mockImplementation((_b, _r, onEvent) => { events = onEvent; return new Promise((r) => { ended = () => r(undefined as never); }); });
+    render(<PlanView base="b" onBusy={onBusy} />);
+    await waitFor(() => expect(api.planOpen).toHaveBeenCalled());
+    expect(onBusy).toHaveBeenLastCalledWith(false);
+    fireEvent.click(screen.getByText('selecionar a'));
+    await screen.findByRole('heading', { name: 'Cashback' });
+    fireEvent.click(screen.getByRole('button', { name: /Editar documentação/ }));
+    fireEvent.change(screen.getByLabelText('Documentação'), { target: { value: 'novo texto' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar' }));
+    await waitFor(() => expect(onBusy).toHaveBeenLastCalledWith('save'));
+    finish({ draft, opsHash: 'h', screenConflicts: [] } as never);
+    await waitFor(() => expect(onBusy).toHaveBeenLastCalledWith(false));
+    fireEvent.change(screen.getByLabelText('Mensagem'), { target: { value: 'adicione X' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar' }));
+    await waitFor(() => expect(onBusy).toHaveBeenLastCalledWith('chat'));
+    events({ type: 'result', draft, reply: { kind: 'text', text: 'feito' }, previews: [] } as never);
+    ended();
+    await waitFor(() => expect(onBusy).toHaveBeenLastCalledWith(false));
+  });
+
+  it('reload adota o rascunho salvo por fora', async () => {
+    const { rerender } = render(<PlanView base="b" reload={0} />);
+    await waitFor(() => expect(api.planOpen).toHaveBeenCalledTimes(1));
+    // o Navegar grava o rascunho e a conversa por fora
+    const outside = { ...draft, note: 'de fora', edits: { a: { properties: { dono: 'outro' } } } };
+    const replanned = { ...outside, plan: { state: 'final' } };
+    save('b', outside, [{ id: 7, role: 'assistant', text: 'conversa salva' }]);
+    vi.mocked(api.planOpen).mockResolvedValue({ draft: replanned, screenConflicts: [] } as never);
+    rerender(<PlanView base="b" reload={1} />);
+    await waitFor(() => expect(api.planOpen).toHaveBeenCalledTimes(2));
+    expect(vi.mocked(api.planOpen).mock.calls[1][1]).toEqual(outside);
+    expect(await screen.findByText('conversa salva')).toBeTruthy();
+    await waitFor(() => expect(load('b')?.draft).toEqual(replanned));
+    expect(load('b')?.chat.map((m) => m.text)).toEqual(['conversa salva']);
+    // a próxima rodada parte do rascunho adotado
+    vi.mocked(api.planTurn).mockResolvedValue(undefined as never);
+    fireEvent.change(screen.getByLabelText('Mensagem'), { target: { value: 'continue' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar' }));
+    await waitFor(() => expect(api.planTurn).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(api.planTurn).mock.calls[0][1].draft).toEqual(replanned);
+  });
+
+  it('reload durante a rodada espera ela terminar', async () => {
+    let events!: (e: api.PlanEvent) => void;
+    let ended!: () => void;
+    vi.mocked(api.planTurn).mockImplementation((_b, _r, onEvent) => { events = onEvent; return new Promise((r) => { ended = () => r(undefined as never); }); });
+    const { rerender } = render(<PlanView base="b" reload={0} />);
+    await waitFor(() => expect(api.planOpen).toHaveBeenCalledTimes(1));
+    fireEvent.change(screen.getByLabelText('Mensagem'), { target: { value: 'adicione X' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar' }));
+    await waitFor(() => expect(api.planTurn).toHaveBeenCalled());
+    rerender(<PlanView base="b" reload={1} />);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(api.planOpen).toHaveBeenCalledTimes(1);
+    const after = { ...draft, note: 'da rodada' };
+    events({ type: 'result', draft: after, reply: { kind: 'text', text: 'feito' }, previews: [] } as never);
+    ended();
+    await waitFor(() => expect(api.planOpen).toHaveBeenCalledTimes(2));
+    expect(vi.mocked(api.planOpen).mock.calls[1][1]).toEqual(after);
+  });
+
+  it('focusNode abre a aba Nó no nó', async () => {
+    const { rerender } = render(<PlanView base="b" />);
+    await waitFor(() => expect(api.planOpen).toHaveBeenCalled());
+    rerender(<PlanView base="b" focusNode={{ id: 'a', n: 1 }} />);
+    await screen.findByRole('heading', { name: 'Cashback' });
+    expect(screen.getByRole('tab', { name: /Nó/ }).getAttribute('aria-selected')).toBe('true');
+    expect(vi.mocked(api.planElement).mock.calls.at(-1)?.[2]).toBe('a');
+  });
+
+  it('focusNode com a edição não confirmada pergunta antes de trocar', async () => {
+    const ask = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    const { rerender } = render(<PlanView base="b" />);
+    fireEvent.click(screen.getByText('selecionar a'));
+    await screen.findByRole('heading', { name: 'Cashback' });
+    fireEvent.click(screen.getByRole('button', { name: /Editar documentação/ }));
+    fireEvent.change(screen.getByLabelText('Documentação'), { target: { value: 'novo texto' } });
+    rerender(<PlanView base="b" focusNode={{ id: 'p', n: 1 }} />);
+    expect(ask).toHaveBeenCalledWith('Descartar a edição não confirmada?');
+    expect((screen.getByLabelText('Documentação') as HTMLTextAreaElement).value).toBe('novo texto');
   });
 });

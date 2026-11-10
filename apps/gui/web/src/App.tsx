@@ -17,6 +17,7 @@ import { send, type BridgeEvent } from './bridge';
 import { typeHint } from './labels';
 import { PlanView } from './plan/PlanView';
 import type { PreviewNav } from './plan/PlanPreview';
+import type { Lock } from './plan/lock';
 import { allLabel, oneLabel, toggleAll, toggleOne } from './nesting';
 
 const totalMs = (v: ViewResult) => v.ms.resolve + v.ms.layout + v.ms.render;
@@ -42,6 +43,12 @@ export function App() {
   const [mode, setMode] = useState<'browse' | 'plan'>('browse');
   const [planOpened, setPlanOpened] = useState(false); // PlanView stays mounted once opened, so a round in flight finishes
   const [planNav, setPlanNav] = useState<PreviewNav | null>(null);
+  // What PlanView tells the App (busy: a round or a write in flight) and what the App asks of it (re-read the saved
+  // draft, focus a node): the bridge an edit made in Navegar goes through.
+  const [planLock, setPlanLock] = useState<Lock>(false);
+  const [planReload, setPlanReload] = useState(0);
+  // the node to focus carries its base: the PlanView of another base (mounted anew) never takes it
+  const [planFocus, setPlanFocus] = useState<{ base: string; id: string; n: number } | undefined>(undefined);
   const [selected, setSelected] = useState<string | null>(null);
   const [menu, setMenu] = useState<Menu | null>(null);
   const frame = useRef<HTMLIFrameElement>(null);
@@ -436,7 +443,7 @@ export function App() {
         </>
       )}
     >
-      {planEnabled && base && planOpened && <div className="plan-host" hidden={!planning}><PlanView key={base} base={base} active={planning} onNav={setPlanNav} canBuild={info?.plan?.enabled ? info.plan.build !== false : true} onApplied={() => { void loadBase(base); }} /></div>}
+      {planEnabled && base && planOpened && <div className="plan-host" hidden={!planning}><PlanView key={base} base={base} active={planning} onNav={setPlanNav} onBusy={setPlanLock} reload={planReload} focusNode={planFocus?.base === base ? planFocus : undefined} canBuild={info?.plan?.enabled ? info.plan.build !== false : true} onApplied={() => { void loadBase(base); }} /></div>}
       {planning ? null : view ? (
         <>
           <nav className="trail" aria-label="Trilha">

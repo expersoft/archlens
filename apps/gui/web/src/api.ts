@@ -201,8 +201,11 @@ export const planTurn = (base: string, body: PlanRequest, onEvent: (e: PlanEvent
 /** Valida o rascunho no servidor e o replaneja contra a base atual. */
 export const planOpen = (base: string, draft: Draft) =>
   call<{ draft: Draft; warning?: string; opsHash?: string | null; screenConflicts?: ScreenConflict[] }>(`${b(base)}/plan/open`, { draft });
-/** Põe uma edição da tela no rascunho e o replaneja; 400 com a mensagem do servidor quando a edição é recusada. */
-export const planEdit = (base: string, draft: Draft, edit: ScreenEdit) =>
+/**
+ * Põe uma edição da tela no rascunho e o replaneja; 400 com a mensagem do servidor quando a edição é recusada. Sem
+ * rascunho (null), o servidor começa um novo (o Navegar antes de qualquer planejamento).
+ */
+export const planEdit = (base: string, draft: Draft | null, edit: ScreenEdit) =>
   call<{ draft: Draft; warning?: string; opsHash: string | null; screenConflicts: ScreenConflict[] }>(`${b(base)}/plan/edit`, { draft, edit });
 /** Um nó como o rascunho o deixa: o cartão sobre a prévia e a documentação (a do rascunho, senão a da base). */
 export interface PlanElement {
@@ -216,7 +219,8 @@ export interface PlanElement {
   /** O rascunho remove o nó. */
   removed: boolean;
 }
-export const planElement = (base: string, draft: Draft, id: string) => call<PlanElement>(`${b(base)}/plan/element`, { draft, id });
+/** Sem rascunho (null), o nó como na base. */
+export const planElement = (base: string, draft: Draft | null, id: string) => call<PlanElement>(`${b(base)}/plan/element`, { draft, id });
 
 export interface PreviewView { key: string; title: string; html?: string; viewData?: unknown; kind: 'change' | 'saved' | 'asked'; error?: string; spec: ViewSpec; alertInfo?: AlertInfo[] }
 /** `field` é `properties.<k>` para cada chave de propriedade que muda ('—' quando ausente). */

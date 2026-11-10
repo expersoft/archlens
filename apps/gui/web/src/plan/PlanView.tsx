@@ -81,9 +81,18 @@ export interface PlanViewProps {
   active?: boolean;
   /** The preview's notation and flip, for the top bar's ArchiMate | C4. */
   onNav?: (nav: PreviewNav) => void;
+  /** Called whenever the lock changes: a chat round ('chat'), a write into the draft ('save') or neither (false). */
+  onBusy?: (lock: Lock) => void;
+  /**
+   * When it changes, the draft and the conversation saved in the browser (by Navegar) are adopted and planned again, as
+   * on mount. During a chat round or a write it waits for them to end.
+   */
+  reload?: number;
+  /** When it changes, the node is selected and the panel opens on the Nó tab (through the discard confirmation). */
+  focusNode?: { id: string; n: number };
 }
 
-export function PlanView({ base, canBuild = true, onApplied, active = true, onNav }: PlanViewProps) {
+export function PlanView({ base, canBuild = true, onApplied, active = true, onNav, onBusy, reload, focusNode }: PlanViewProps) {
   const [saved] = useState(() => load(base));
   const [draft, setDraft] = useState<Draft | null>(saved?.draft ?? null);
   const [chat, setChat] = useState<ChatMsg[]>(saved?.chat ?? []);
@@ -108,6 +117,8 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
   const seq = useRef(saved?.chat.reduce((n, m) => Math.max(n, m.id), 0) ?? 0);
   const run = useRef<{ ctl: AbortController; id: number } | null>(null);
   const alive = useRef(true);
+  // Each opening of the saved draft (the mount's, a reload's) takes a number: only the latest one is adopted.
+  const opening = useRef(0);
   // A screen edit, an undo, a conflict answer or an opened file is being written into the draft: until it returns,
   // nothing else writes it (a chat round would start from the old draft and drop the edit).
   const [writing, setWritingState] = useState(false);
@@ -140,16 +151,43 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
   useEffect(() => {
     alive.current = true;
     if (saved?.draft) {
+      const n = ++opening.current;
       planOpen(base, saved.draft).then((r) => {
-        if (!alive.current || run.current) return;
+        if (!alive.current || run.current || n !== opening.current) return;
         commit(r.draft, chatRef.current);
         setConflicts(r.screenConflicts ?? []);
         if (r.warning) { note({ text: '', warning: r.warning }); }
-      }).catch((e) => { if (alive.current) note({ text: '', error: `${errMsg(e)}; ${BROKEN}` }); });
+      }).catch((e) => { if (alive.current && n === opening.current) note({ text: '', error: `${errMsg(e)}; ${BROKEN}` }); });
     }
     return () => { alive.current = false; run.current?.ctl.abort(); run.current = null; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  /**
+   * Adopts the draft and the conversation saved in the browser (written by Navegar), never the ones in memory: the
+   * draft is planned again by the server as on mount, under the write flag so nothing else writes it meanwhile. Nothing
+   * readable saved (storage blocked): the screen keeps what it has.
+   */
+  const adopt = useCallback(() => {
+    const s = load(base);
+    if (!s) return;
+    const n = ++opening.current;
+    seq.current = s.chat.reduce((m, x) => Math.max(m, x.id), seq.current);
+    draftRef.current = s.draft;
+    chatRef.current = s.chat;
+    setDraft(s.draft);
+    setChat(s.chat);
+    setConflicts([]);
+    if (!s.draft) return;
+    setWriting(true);
+    planOpen(base, s.draft).then((r) => {
+      if (!alive.current || n !== opening.current) return;
+      commit(r.draft, chatRef.current);
+      setConflicts(r.screenConflicts ?? []);
+      if (r.warning) note({ text: '', warning: r.warning });
+    }).catch((e) => { if (alive.current && n === opening.current) note({ text: '', error: `${errMsg(e)}; ${BROKEN}` }); })
+      .finally(() => { if (alive.current && n === opening.current) setWriting(false); });
+  }, [base, commit, note, setWriting]);
 
   const turn = (req: { message?: string; answer?: { key: string; resolution: string }; attach?: RepoAttach; applied?: AppliedRound }, userText: string, opts: { keepDraft?: boolean } = {}) => {
     if (writingRef.current) return;
@@ -213,6 +251,21 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
   const roundRunning = chat.some((m) => m.status === 'running');
   // The screen controls' lock says why they wait: the chat round, or a screen edit being written.
   const lock: Lock = roundRunning ? 'chat' : writing ? 'save' : false;
+  // A reload that arrives during a round or a write waits for the lock to clear.
+  const reloadSeen = useRef(reload);
+  const reloadWaiting = useRef(false);
+  useEffect(() => {
+    if (reload === reloadSeen.current) return;
+    reloadSeen.current = reload;
+    if (writingRef.current || chatRef.current.some((m) => m.status === 'running')) reloadWaiting.current = true;
+    else adopt();
+  }, [reload, adopt]);
+  const onBusyRef = useRef(onBusy);
+  onBusyRef.current = onBusy;
+  useEffect(() => {
+    onBusyRef.current?.(lock);
+    if (!lock && reloadWaiting.current) { reloadWaiting.current = false; adopt(); }
+  }, [lock, adopt]);
   const reason = !canBuild ? NO_CHROMIUM : roundRunning ? ROUND_RUNNING : writing ? WRITING : conflicts.length ? CONFLICT : !shown ? (previewFailed ? PREVIEW_FAILED : 'nada planejado para aplicar') : shown.questions.length ? OPEN_QUESTIONS : shown.opsHash ? undefined : 'o plano ainda não está final';
   const savedViews = (shown?.views ?? []).filter((v) => v.kind === 'saved' && !v.error).map((v) => v.title);
 
@@ -307,6 +360,11 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
   const editDirty = useRef(false);
   const leaveEdit = () => !editDirty.current || window.confirm(DISCARD_EDIT);
   const pick = (id: string) => { if (!leaveEdit()) return; setSelected(id); setTab('node'); setPanel(true); setFocus((f) => ({ id, n: (f?.n ?? 0) + 1 })); };
+  // From the App (an edit made in Navegar): the node selected, on the Nó tab, through the same discard confirmation.
+  useEffect(() => {
+    if (focusNode) pick(focusNode.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusNode?.id, focusNode?.n]);
   // The rail button shows its tab; on the tab already shown it hides the panel.
   const railTo = (t: 'delta' | 'node') => {
     if (panel && tab === t) { if (leaveEdit()) setPanel(false); }

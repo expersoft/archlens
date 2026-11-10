@@ -347,6 +347,32 @@ test('/plan/element mostra nó proposto pelo chat e removed para nó removido', 
   assert.equal((await post(url, 'plan/element', { draft })).status, 400);
 }));
 
+test('/plan/edit sem draft cria o rascunho com a edição', () => withPlan(async url => {
+  for (const body of [{}, { draft: null }]) {
+    const r = await post(url, 'plan/edit', { ...body, edit: { op: 'properties', id: 'loja', properties: { criticidade: 'média' } } });
+    assert.equal(r.status, 200, await r.clone().text());
+    const out = await r.json();
+    assert.deepEqual(out.draft.edits, { loja: { properties: { criticidade: 'média' } } });
+    assert.equal(out.draft.delta, null);
+    assert.equal(out.draft.base.id, 'loja');
+    assert.match(out.opsHash, /^[0-9a-f]{64}$/);
+  }
+  const bad = await post(url, 'plan/edit', { draft: 'lixo', edit: { op: 'properties', id: 'loja', properties: { a: '1' } } });
+  assert.equal(bad.status, 400, 'rascunho inválido continua recusado');
+}));
+
+test('/plan/element sem draft mostra o nó da base', () => withPlan(async url => {
+  for (const body of [{}, { draft: null }]) {
+    const r = await post(url, 'plan/element', { ...body, id: 'loja' });
+    assert.equal(r.status, 200, await r.clone().text());
+    const out = await r.json();
+    assert.equal(out.card.element.id, 'loja');
+    assert.equal(out.card.properties.criticidade, 'alta');
+    assert.equal(out.removed, false);
+  }
+  assert.equal((await post(url, 'plan/element', { id: 'nao-existe' })).status, 400);
+}));
+
 test('deltaList separa properties por chave e marca a origem', () => withPlan(async url => {
   const chat = delta({ elements: [{ id: 'loja', properties: { chat: 'do chat' } }, { id: 'erp', properties: { sla: '99' } }] });
   const opened = await draftWith(url, chat);

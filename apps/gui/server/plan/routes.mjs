@@ -219,7 +219,7 @@ export function planRoutes({ registry, provider, config, telemetry, h }) {
   }
 
   /**
-   * An edit made on screen: validated, put in the draft's screen layer and planned again. A documentation equal to the
+   * An edit made on screen (over a new draft when none is sent: Navegar before any planning): validated, put in the draft's screen layer and planned again. A documentation equal to the
    * base's leaves the layer (unless the chat proposes another text): it changes nothing.
    */
   async function edit(req, b) {
@@ -238,7 +238,7 @@ export function planRoutes({ registry, provider, config, telemetry, h }) {
       if (inBase) baseDoc = await ctx.readDoc(id);
     }
     const out = await registry.inTurn(b, () => {
-      const checked = checkDraft(draft, ctx);
+      const checked = checkDraft(draft ?? newDraft(ctx), ctx);
       if ((e.op === 'properties' || e.op === 'doc') && !inBase && !findDeltaElement(checked.delta, id)) {
         throw httpError(400, `"${id}" não existe na base nem no rascunho`, 'E_UNKNOWN_REF');
       }
@@ -255,12 +255,12 @@ export function planRoutes({ registry, provider, config, telemetry, h }) {
     return { ...out, opsHash: draftOpsHash(out.draft), screenConflicts: conflictsOf(out.draft) };
   }
 
-  /** A node as the draft leaves it: its card over the preview, its documentation and whether the draft removes it. */
+  /** A node as the draft (a new one when none is sent) leaves it: its card over the preview, its documentation and whether the draft removes it. */
   async function element(req, b) {
     const { draft, id } = await read(req);
     if (typeof id !== 'string' || !id) throw httpError(400, 'informe o id do elemento');
     const ctx = registry.get(b);
-    const { draft: replanned } = await replan(b, ctx, draft);
+    const { draft: replanned } = await replan(b, ctx, draft ?? newDraft(ctx));
     const { card, removed, doc: drafted } = previewElement(ctx, replanned, id);
     // the draft's text, else the base's read now (not the snapshot in memory); `docRaw` as written (what the editor
     // loads), `doc` with its wikilinks as names (what is shown)
