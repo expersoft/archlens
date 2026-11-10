@@ -174,6 +174,70 @@ describe('App, editar o nó no Navegar', () => {
     expect(b.title).toBe('Disponível quando a visão terminar de carregar');
   });
 
+  it('documentação em edição: a visão nova chega e o texto continua', async () => {
+    vi.mocked(api.planElement).mockResolvedValue(el({ doc: 'antigo', docRaw: 'antigo' }));
+    const { post } = await selectA();
+    fireEvent.click(await editBtn('documentação'));
+    fireEvent.change(screen.getByLabelText('Documentação'), { target: { value: 'rascunho' } });
+    let finish!: (v: api.ViewResult) => void;
+    vi.mocked(api.getActions).mockResolvedValue({ actions: [{ label: 'Ver B', spec: { level: 'context', k: 'B' } }] });
+    vi.mocked(api.getView).mockImplementation(() => new Promise((r) => { finish = r; }));
+    post({ type: 'context', id: 'A', x: 5, y: 5 });
+    fireEvent.click(await screen.findByText('Ver B'));
+    const ta = () => screen.getByLabelText('Documentação') as HTMLTextAreaElement;
+    await waitFor(() => expect(ta().readOnly).toBe(true));
+    expect(ta().value).toBe('rascunho');
+    expect(confirmBtn().hasAttribute('disabled')).toBe(true);
+    await act(async () => { finish({ ...view('B'), data: { nodes: { A: { name: 'Elem A' } }, edges: [] } }); });
+    await waitFor(() => expect(screen.getByRole('navigation', { name: 'Trilha' }).textContent).toBe('Inicial › B'));
+    post({ type: 'ready' }); // a página nova só avisa ready ao carregar (server/embed.test.mjs)
+    await new Promise((res) => setTimeout(res, 30));
+    expect(ta().value).toBe('rascunho');
+    expect(ta().readOnly).toBe(false);
+    expect(confirmBtn().hasAttribute('disabled')).toBe(false);
+  });
+
+  it('propriedades em edição: a visão nova chega e o texto continua', async () => {
+    const { post } = await selectA();
+    await editDono('rascunho');
+    let finish!: (v: api.ViewResult) => void;
+    vi.mocked(api.getActions).mockResolvedValue({ actions: [{ label: 'Ver B', spec: { level: 'context', k: 'B' } }] });
+    vi.mocked(api.getView).mockImplementation(() => new Promise((r) => { finish = r; }));
+    post({ type: 'context', id: 'A', x: 5, y: 5 });
+    fireEvent.click(await screen.findByText('Ver B'));
+    const inp = () => screen.getByLabelText('Valor de dono') as HTMLInputElement;
+    await waitFor(() => expect(inp().readOnly).toBe(true));
+    expect(inp().value).toBe('rascunho');
+    expect((screen.getByRole('button', { name: 'Remover dono' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole('button', { name: '+ Adicionar propriedade' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(confirmBtn().hasAttribute('disabled')).toBe(true);
+    await act(async () => { finish({ ...view('B'), data: { nodes: { A: { name: 'Elem A' } }, edges: [] } }); });
+    await waitFor(() => expect(screen.getByRole('navigation', { name: 'Trilha' }).textContent).toBe('Inicial › B'));
+    post({ type: 'ready' }); // a página nova só avisa ready ao carregar (server/embed.test.mjs)
+    await new Promise((res) => setTimeout(res, 30));
+    expect(inp().value).toBe('rascunho');
+    expect(inp().readOnly).toBe(false);
+    expect(confirmBtn().hasAttribute('disabled')).toBe(false);
+  });
+
+  it('nó fora da visão nova: o painel continua no nó', async () => {
+    vi.mocked(api.planElement).mockResolvedValue(el({ doc: 'antigo', docRaw: 'antigo' }));
+    const { post } = await selectA();
+    fireEvent.click(await editBtn('documentação'));
+    fireEvent.change(screen.getByLabelText('Documentação'), { target: { value: 'rascunho' } });
+    let finish!: (v: api.ViewResult) => void;
+    vi.mocked(api.getActions).mockResolvedValue({ actions: [{ label: 'Ver B', spec: { level: 'context', k: 'B' } }] });
+    vi.mocked(api.getView).mockImplementation(() => new Promise((r) => { finish = r; }));
+    post({ type: 'context', id: 'A', x: 5, y: 5 });
+    fireEvent.click(await screen.findByText('Ver B'));
+    await act(async () => { finish({ ...view('B'), data: { nodes: { B: { name: 'Elem B' } }, edges: [] } }); });
+    await waitFor(() => expect(screen.getByRole('navigation', { name: 'Trilha' }).textContent).toBe('Inicial › B'));
+    post({ type: 'ready' }); // a página nova só avisa ready ao carregar (server/embed.test.mjs)
+    await new Promise((res) => setTimeout(res, 30));
+    expect(screen.getByRole('heading', { name: 'Elem A' })).toBeTruthy();
+    expect((screen.getByLabelText('Documentação') as HTMLTextAreaElement).value).toBe('rascunho');
+  });
+
   it('Cancelar mantém a visão atual e a resposta tardia não entra', async () => {
     const { post } = await selectA();
     let finish!: (v: api.ViewResult) => void;

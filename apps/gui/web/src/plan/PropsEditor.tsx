@@ -31,6 +31,7 @@ export interface PropsEditorProps {
   /** Só o que mudou em relação a `base`; `null` marca a propriedade removida. */
   onConfirm: (props: Record<string, PropValue | null>) => void;
   onCancel: () => void;
+  /** Uma espera (visão, gravação, rodada): o texto fica, mas não aceita digitação nem Confirmar. */
   busy?: boolean;
   /** Avisa quando há texto não confirmado. */
   onDirty?: (dirty: boolean) => void;
@@ -70,17 +71,17 @@ export function PropsEditor({ base, value, onConfirm, onCancel, busy, onDirty }:
         {rows.map((r) => (
           <div key={r.rid} className={`np-row${status.get(r.rid) ? ` np-${status.get(r.rid)}` : ''}`}>
             {r.fresh
-              ? <input className="np-k" aria-label="Nova chave" value={r.key} onChange={(e) => patch(r.rid, { key: e.target.value })} />
+              ? <input className="np-k" aria-label="Nova chave" value={r.key} readOnly={busy} onChange={(e) => patch(r.rid, { key: e.target.value })} />
               : <span className="np-k">{r.key}</span>}
-            <input className="np-v" aria-label={`Valor de ${r.key.trim()}`} value={r.text} disabled={r.removed}
+            <input className="np-v" aria-label={`Valor de ${r.key.trim()}`} value={r.text} disabled={r.removed} readOnly={busy}
               onChange={(e) => patch(r.rid, { text: e.target.value })} />
-            <button type="button" className="np-x" aria-label={`Remover ${r.key.trim()}`} title="Remover"
+            <button type="button" className="np-x" aria-label={`Remover ${r.key.trim()}`} title="Remover" disabled={busy}
               onClick={() => (r.fresh ? setRows((rs) => rs.filter((x) => x.rid !== r.rid)) : patch(r.rid, { removed: !r.removed }))}>×</button>
           </div>
         ))}
       </div>
       {reserved && <p className="warn" role="alert">A chave "{reserved}" é reservada; use outro nome.</p>}
-      <button type="button" className="linkish" onClick={() => setRows((rs) => [...rs, { rid: nextId.current++, key: '', text: '', fresh: true, removed: false }])}>+ Adicionar propriedade</button>
+      <button type="button" className="linkish" disabled={busy} onClick={() => setRows((rs) => [...rs, { rid: nextId.current++, key: '', text: '', fresh: true, removed: false }])}>+ Adicionar propriedade</button>
       <div className="np-edit-actions">
         <button type="button" onClick={onCancel}>Cancelar</button>
         <button type="button" className="primary" disabled={invalid || busy || Object.keys(changes).length === 0} onClick={() => onConfirm(changes)}>Confirmar</button>

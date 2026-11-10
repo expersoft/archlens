@@ -6,6 +6,7 @@ export interface DocEditorProps {
   text: string;
   onConfirm: (text: string) => void;
   onCancel: () => void;
+  /** Uma espera (visão, gravação, rodada): o texto fica, mas não aceita digitação nem Confirmar. */
   busy?: boolean;
   /** Por que a última confirmação falhou (no editor ou no rodapé da janela ampliada). */
   error?: string | null;
@@ -42,7 +43,7 @@ export function DocEditor({ text, onConfirm, onCancel, busy, error, onDirty, tit
       <button type="button" className="primary" disabled={!dirty || busy} onClick={() => confirm()}>Confirmar</button>
     </div>
   );
-  const area = <textarea className="np-doc-ta" aria-label="Documentação" value={value} onChange={(e) => setValue(e.target.value)} spellCheck={false} />;
+  const area = <textarea className="np-doc-ta" aria-label="Documentação" value={value} readOnly={busy} onChange={(e) => setValue(e.target.value)} spellCheck={false} />;
 
   if (full) {
     return (

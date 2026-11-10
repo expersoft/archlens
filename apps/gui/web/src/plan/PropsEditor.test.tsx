@@ -26,6 +26,19 @@ describe('PropsEditor', () => {
     expect(onConfirm).toHaveBeenCalledWith({ nivel: 5, velho: null, canal: 'app' });
   });
 
+  it('ocupado: o texto fica, mas não aceita digitação, remover, adicionar nem Confirmar', () => {
+    const { rerender } = render(<PropsEditor base={base} value={base} onConfirm={() => {}} onCancel={() => {}} />);
+    fireEvent.change(screen.getByLabelText('Valor de dono'), { target: { value: 'outro' } });
+    rerender(<PropsEditor base={base} value={base} busy onConfirm={() => {}} onCancel={() => {}} />);
+    const v = screen.getByLabelText('Valor de dono') as HTMLInputElement;
+    expect(v.value).toBe('outro');
+    expect(v.readOnly).toBe(true);
+    expect((screen.getByRole('button', { name: 'Remover dono' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole('button', { name: '+ Adicionar propriedade' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole('button', { name: 'Confirmar' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole('button', { name: 'Cancelar' }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
   it('destaca alterada, nova e removida', () => {
     render(<PropsEditor base={base} value={base} onConfirm={() => {}} onCancel={() => {}} />);
     fireEvent.change(screen.getByLabelText('Valor de dono'), { target: { value: 'outro' } });

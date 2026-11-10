@@ -696,7 +696,7 @@ const JS = String.raw`
   const svg = () => $('svg', sec());
   function show(i, fromHash) {
     if (i < 0 || i >= sections.length) return;
-    stop(); clearTrace(); clearPreview(); unpin();
+    stop(); clearTrace(selected === null); clearPreview(); unpin(); // nothing selected (the page loading): the host's selection stays
     sections.forEach((s, k) => { s.hidden = k !== i; });
     current = i;
     tb('#viewSelect').value = view().key;

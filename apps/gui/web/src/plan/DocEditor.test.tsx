@@ -5,6 +5,20 @@ import { DocEditor } from './DocEditor';
 afterEach(() => vi.restoreAllMocks());
 
 describe('DocEditor', () => {
+  it('ocupado: o texto fica e não aceita digitação, nem no editor ampliado', () => {
+    const { rerender } = render(<DocEditor text="um" onConfirm={() => {}} onCancel={() => {}} />);
+    fireEvent.change(screen.getByLabelText('Documentação'), { target: { value: 'um dois' } });
+    rerender(<DocEditor text="um" busy onConfirm={() => {}} onCancel={() => {}} />);
+    const ta = screen.getByLabelText('Documentação') as HTMLTextAreaElement;
+    expect(ta.value).toBe('um dois');
+    expect(ta.readOnly).toBe(true);
+    expect((screen.getByRole('button', { name: 'Confirmar' }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Tela cheia' }));
+    const dlg = screen.getByRole('dialog');
+    expect((dlg.querySelector('textarea') as HTMLTextAreaElement).readOnly).toBe(true);
+    expect((screen.getByRole('button', { name: 'Negrito' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
   it('Prévia mostra o markdown', () => {
     render(<DocEditor text="# Título" onConfirm={() => {}} onCancel={() => {}} />);
     fireEvent.click(screen.getByRole('tab', { name: 'Prévia' }));
