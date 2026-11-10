@@ -172,3 +172,18 @@ test('checkEdits recusa as chaves __proto__, constructor e prototype', () => {
     rejects(() => applyEdit(draftOf(null), { op: 'properties', id: 'loja', properties: JSON.parse(`{"${k}":"x"}`) }), /reservad/);
   }
 });
+
+test('applyEdit: editar outra propriedade do nó não fecha o aviso pendente como "Manter o seu"', () => {
+  const before = agent([{ id: 'loja', properties: { k: 'B' } }], { docs: [{ id: 'loja', text: 'do chat' }] });
+  let d = applyEdit(draftOf(before), { op: 'properties', id: 'loja', properties: { k: 'A' } }, {});
+  d = applyEdit(d, { op: 'doc', id: 'loja', text: 'meu texto' });
+  // o chat propõe valores novos: os dois avisos ficam pendentes
+  d = { ...d, delta: agent([{ id: 'loja', properties: { k: 'C', j: 'chat' } }], { docs: [{ id: 'loja', text: 'outro do chat' }] }) };
+  assert.deepEqual(screenConflicts(d.delta, d.edits, d.kept).map(c => c.field), ['properties.k', 'doc']);
+  // o usuário edita só j (o painel reenvia k com o mesmo valor) e regrava a doc sem mudar o texto
+  d = applyEdit(d, { op: 'properties', id: 'loja', properties: { k: 'A', j: 'x' } }, {});
+  d = applyEdit(d, { op: 'doc', id: 'loja', text: 'meu texto' });
+  assert.deepEqual(screenConflicts(d.delta, d.edits, d.kept).map(c => c.field), ['properties.k', 'doc'], 'os avisos continuam esperando resposta');
+  assert.deepEqual(d.kept.filter(k => k.field !== 'properties.j').map(k => k.value), ['B', 'do chat']);
+  assert.deepEqual(d.kept.find(k => k.field === 'properties.j'), { id: 'loja', field: 'properties.j', value: 'chat' }, 'j mudou: a edição responde ao chat');
+});

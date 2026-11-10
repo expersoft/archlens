@@ -5,6 +5,7 @@ import { PlanPreview, type PreviewNav } from './PlanPreview';
 import { DeltaPanel } from './DeltaPanel';
 import { NodePanel } from './NodePanel';
 import { ScreenConflictDialog } from './ScreenConflictDialog';
+import type { Lock } from './lock';
 import { useStoredState } from '../store';
 import { PlanChat } from './PlanChat';
 import { Split } from './Split';
@@ -209,13 +210,14 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
   };
 
   const roundRunning = chat.some((m) => m.status === 'running');
-  const waiting = roundRunning || writing;
+  // The screen controls' lock says why they wait: the chat round, or a screen edit being written.
+  const lock: Lock = roundRunning ? 'chat' : writing ? 'save' : false;
   const reason = !canBuild ? NO_CHROMIUM : roundRunning ? ROUND_RUNNING : writing ? WRITING : conflicts.length ? CONFLICT : !shown ? (previewFailed ? PREVIEW_FAILED : 'nada planejado para aplicar') : shown.questions.length ? OPEN_QUESTIONS : shown.opsHash ? undefined : 'o plano ainda não está final';
   const savedViews = (shown?.views ?? []).filter((v) => v.kind === 'saved' && !v.error).map((v) => v.title);
 
   const replan = async () => {
     const current = draftRef.current;
-    if (!current) return;
+    if (!current || writingRef.current) return;
     setApplying(true);
     try {
       const r = await planOpen(base, current);
@@ -228,7 +230,7 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
 
   const apply = async () => {
     const current = draftRef.current;
-    if (!current || !shown?.opsHash) return;
+    if (!current || !shown?.opsHash || writingRef.current) return;
     setApplying(true);
     setApplyError(null);
     setReplannable(false);
@@ -367,11 +369,11 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
               <button type="button" disabled={!!reason || applying} title={reason} onClick={() => { setApplyError(null); setReplannable(false); setApplyOpen(true); }}>Aplicar</button>
             </div>
             {firstConflict && (
-              <ScreenConflictDialog key={`${firstConflict.id}:${firstConflict.field}`} conflict={firstConflict} nodeName={nameOf(firstConflict.id)} locked={waiting}
+              <ScreenConflictDialog key={`${firstConflict.id}:${firstConflict.field}`} conflict={firstConflict} nodeName={nameOf(firstConflict.id)} locked={lock}
                 onChoose={(choice) => void screenEdit({ op: 'resolve', id: firstConflict.id, field: firstConflict.field, choice })} />
             )}
             {editError && <p className="err" role="alert">{editError}</p>}
-            {applyOpen && shown && <ApplyDialog summary={shown.summary} views={savedViews} busy={applying} error={applyError} onConfirm={() => void apply()} onCancel={() => setApplyOpen(false)} onReplan={replannable ? () => void replan() : undefined} />}
+            {applyOpen && shown && <ApplyDialog summary={shown.summary} views={savedViews} busy={applying || writing} error={applyError} onConfirm={() => void apply()} onCancel={() => setApplyOpen(false)} onReplan={replannable ? () => void replan() : undefined} />}
             <PlanPreview base={base} draft={draft} previews={previews} onLoaded={(r, failed) => { setShown(r); if (r) { setListed(r); setConflicts(r.screenConflicts ?? []); } setPreviewFailed(!!failed); }}
               onNavigate={navigated} onNav={onNav} onSelect={(id) => { if (!leaveEdit()) return; setSelected(id); if (id) { setTab('node'); setPanel(true); } }} focus={focus} />
           </div>
@@ -384,9 +386,9 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
             <button type="button" role="tab" aria-selected={tab === 'node'} className={tab === 'node' ? 'on' : ''} onClick={() => { if (leaveEdit()) setTab('node'); }}>Nó</button>
           </div>
           {tab === 'delta' ? (
-            <DeltaPanel result={changed ? listed : null} selected={selected} onPick={pick} onUndo={(id) => void screenEdit({ op: 'undo', id })} locked={waiting} />
+            <DeltaPanel result={changed ? listed : null} selected={selected} onPick={pick} onUndo={(id) => void screenEdit({ op: 'undo', id })} locked={lock} />
           ) : (
-            <NodePanel key={epoch} locked={waiting} onWriting={setWriting} base={base} draft={draft} id={selected} onPick={pick} onDraft={(d, _h, c) => { commit(d, chatRef.current); setConflicts(c ?? []); }} onDirty={(d) => { editDirty.current = d; }} />
+            <NodePanel key={epoch} locked={lock} onWriting={setWriting} base={base} draft={draft} id={selected} onPick={pick} onDraft={(d, _h, c) => { commit(d, chatRef.current); setConflicts(c ?? []); }} onDirty={(d) => { editDirty.current = d; }} />
           )}
         </aside>
       )}

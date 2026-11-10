@@ -165,4 +165,15 @@ describe('NodePanel', () => {
     expect((screen.getByLabelText('Valor de dono') as HTMLInputElement).value).toBe('outro');
     localStorage.clear();
   });
+
+  it('travado só pela gravação, a dica pede para esperar a gravação', async () => {
+    planElement.mockResolvedValue(el('a', 'Cashback', { docs: true, doc: 'x', docRaw: 'x' }));
+    render(<NodePanel base="b" draft={draft()} id="a" onDraft={() => {}} locked="save" />);
+    await screen.findByRole('heading', { name: 'Cashback' });
+    for (const n of [/Editar propriedades/, /Editar documentação/]) {
+      const b = screen.getByRole('button', { name: n }) as HTMLButtonElement;
+      expect(b.disabled).toBe(true);
+      expect(b.title).toBe('Aguarde a gravação terminar');
+    }
+  });
 });

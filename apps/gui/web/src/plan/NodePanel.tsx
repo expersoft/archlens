@@ -4,6 +4,7 @@ import { Details } from '../Details';
 import { DocTab } from '../DocTab';
 import { DocEditor } from './DocEditor';
 import { PropsEditor } from './PropsEditor';
+import { lockText, type Lock } from './lock';
 
 export interface NodePanelProps {
   base: string;
@@ -16,13 +17,11 @@ export interface NodePanelProps {
   onPick?: (id: string) => void;
   /** Há texto de edição não confirmado (o PlanView pergunta antes de trocar de nó ou de aba). */
   onDirty?: (dirty: boolean) => void;
-  /** Um turno do chat está rodando (ou outra gravação no rascunho): editar agora seria sobrescrito. */
-  locked?: boolean;
+  /** Um turno do chat está rodando (true ou 'chat') ou outra gravação no rascunho ('save'): editar agora seria sobrescrito. */
+  locked?: Lock;
   /** Uma edição confirmada está sendo gravada no rascunho (o PlanView segura o chat até ela voltar). */
   onWriting?: (writing: boolean) => void;
 }
-const LOCKED = 'Aguarde o chat terminar para editar';
-
 
 type Loaded = { draft: Draft; id: string; el: PlanElement } | { draft: Draft; id: string; error: string };
 
@@ -79,7 +78,7 @@ export function NodePanel({ base, draft, id, onPick, onDraft, onDirty, locked, o
   const err = editError && <p className="warn np-edit-err" role="alert">{editError}</p>;
   const props = (el.card.properties ?? {}) as Record<string, PropValue>;
   const editBtn = (kind: 'properties' | 'doc', label: string) => (!el.removed && !mine
-    ? <button type="button" className="linkish" aria-label={`Editar ${label}`} disabled={locked} title={locked ? LOCKED : undefined} onClick={() => open(kind)}>✎ Editar</button> : undefined);
+    ? <button type="button" className="linkish" aria-label={`Editar ${label}`} disabled={!!locked} title={locked ? lockText(locked) : undefined} onClick={() => open(kind)}>✎ Editar</button> : undefined);
   const screenProps = ((draft.edits as Record<string, { properties?: Record<string, PropValue | null> }> | undefined)?.[id]?.properties) ?? {};
   const propsSlot = mine === 'properties' ? (
     <>
@@ -103,7 +102,7 @@ export function NodePanel({ base, draft, id, onPick, onDraft, onDirty, locked, o
     : (
       <>
         <p className="muted">Este nó ainda não tem documentação.</p>
-        <button type="button" className="linkish" disabled={locked} title={locked ? LOCKED : undefined} onClick={() => open('doc')}>Escrever</button>
+        <button type="button" className="linkish" disabled={!!locked} title={locked ? lockText(locked) : undefined} onClick={() => open('doc')}>Escrever</button>
       </>
     );
   return (

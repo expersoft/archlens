@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 
-vi.mock('../api', async (orig) => ({ ...(await orig<typeof import('../api')>()), planEdit: vi.fn(), planElement: vi.fn(), planOpen: vi.fn(), planTurn: vi.fn() }));
+vi.mock('../api', async (orig) => ({ ...(await orig<typeof import('../api')>()), planApply: vi.fn(), planEdit: vi.fn(), planElement: vi.fn(), planOpen: vi.fn(), planTurn: vi.fn() }));
 const shown: api.PlanPreviewResult = {
   views: [], skipped: [], summary: '~1', report: null, opsHash: 'h', questions: [],
   changes: [{ sign: '~', kind: 'element', id: 'a', name: 'Cashback', origin: 'tela', fields: [] }],
@@ -94,5 +94,28 @@ describe('PlanView com conflito de tela', () => {
     expect(ask).toHaveBeenCalledTimes(1);
     expect(ask).toHaveBeenCalledWith('Descartar a edição não confirmada?');
     await waitFor(() => expect(api.planEdit).toHaveBeenCalled());
+  });
+
+  it('com uma edição do nó gravando, Confirmar e aplicar do diálogo aberto espera', async () => {
+    globalThis.__shown = { ...shown, screenConflicts: [] };
+    vi.mocked(api.planOpen).mockResolvedValue({ draft, opsHash: 'h', screenConflicts: [] } as never);
+    vi.mocked(api.planElement).mockResolvedValue({
+      card: { element: { id: 'a', name: 'Cashback', type: 'application-component', layer: 'application' }, parent: null, children: [], outgoing: {}, incoming: {}, properties: {} },
+      doc: 'x', docRaw: 'x', docs: true, removed: false,
+    } as never);
+    vi.mocked(api.planEdit).mockImplementation(() => new Promise(() => {}));
+    render(<PlanView base="b" />);
+    fireEvent.click(screen.getByText('carregar prévia'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Cashback' }));
+    fireEvent.click(await screen.findByRole('button', { name: /Editar documentação/ }));
+    fireEvent.change(screen.getByLabelText('Documentação'), { target: { value: 'novo' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Aplicar' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Confirmar a aplicação' });
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar' }));
+    await waitFor(() => expect(api.planEdit).toHaveBeenCalled());
+    const go = within(dialog).getByRole('button', { name: 'Confirmar e aplicar' }) as HTMLButtonElement;
+    expect(go.disabled).toBe(true);
+    fireEvent.click(go);
+    expect(api.planApply).not.toHaveBeenCalled();
   });
 });

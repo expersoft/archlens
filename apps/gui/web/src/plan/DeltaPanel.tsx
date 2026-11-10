@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { ChangeOrigin, PlanPreviewResult, PreviewChange } from '../api';
+import { lockText, type Lock } from './lock';
 
 const SIGN_CLASS = { '+': 'add', '~': 'mod', '−': 'del' } as const;
 const SIGN_WORD = { '+': 'adicionado', '~': 'alterado', '−': 'removido' } as const;
@@ -13,12 +14,12 @@ function Origin({ o }: { o: ChangeOrigin | 'ambos' | undefined }) {
 }
 
 /** ↶ desfazer: only for what the screen touched. */
-function Undo({ c, onUndo, locked }: { c: PreviewChange; onUndo?: (id: string) => void; locked?: boolean }) {
+function Undo({ c, onUndo, locked }: { c: PreviewChange; onUndo?: (id: string) => void; locked?: Lock }) {
   if (!onUndo || c.kind === 'relationship' || (c.origin !== 'tela' && c.origin !== 'ambos')) return null;
-  return <button type="button" className="undo" disabled={locked} title={locked ? 'Aguarde o chat terminar para editar' : 'Desfazer as edições da tela neste nó'} onClick={() => onUndo(c.id)}>↶ desfazer</button>;
+  return <button type="button" className="undo" disabled={!!locked} title={locked ? lockText(locked) : 'Desfazer as edições da tela neste nó'} onClick={() => onUndo(c.id)}>↶ desfazer</button>;
 }
 
-function Change({ c, selected, onPick, onUndo, locked }: { c: PreviewChange; selected: boolean; onPick?: (id: string) => void; onUndo?: (id: string) => void; locked?: boolean }) {
+function Change({ c, selected, onPick, onUndo, locked }: { c: PreviewChange; selected: boolean; onPick?: (id: string) => void; onUndo?: (id: string) => void; locked?: Lock }) {
   const target = c.kind === 'element' ? c.id : null;
   return (
     <li className={`chg ${SIGN_CLASS[c.sign]}${selected ? ' sel' : ''}`}>
@@ -48,7 +49,7 @@ function Change({ c, selected, onPick, onUndo, locked }: { c: PreviewChange; sel
 
 const LINE_CLASS = { ' ': 'same', '-': 'del', '+': 'add' } as const;
 
-function DocChange({ c, selected, onPick, onUndo, locked }: { c: PreviewChange; selected: boolean; onPick?: (id: string) => void; onUndo?: (id: string) => void; locked?: boolean }) {
+function DocChange({ c, selected, onPick, onUndo, locked }: { c: PreviewChange; selected: boolean; onPick?: (id: string) => void; onUndo?: (id: string) => void; locked?: Lock }) {
   const [open, setOpen] = useState(false);
   const added = c.lines?.added ?? (c.diff ?? []).filter((l) => l.sign === '+').length;
   const removed = c.lines?.removed ?? (c.diff ?? []).filter((l) => l.sign === '-').length;
@@ -75,7 +76,7 @@ function DocChange({ c, selected, onPick, onUndo, locked }: { c: PreviewChange; 
 }
 
 /** The right panel of Planejar: what the draft changes, as text, and the questions still open. */
-export function DeltaPanel({ result, selected, onPick, onUndo, locked }: { result: PlanPreviewResult | null; selected?: string | null; onPick?: (id: string) => void; onUndo?: (id: string) => void; locked?: boolean }) {
+export function DeltaPanel({ result, selected, onPick, onUndo, locked }: { result: PlanPreviewResult | null; selected?: string | null; onPick?: (id: string) => void; onUndo?: (id: string) => void; locked?: Lock }) {
   if (!result) return <p className="meta delta-empty">Nada planejado ainda.</p>;
   const elements = result.changes.filter((c) => c.kind === 'element');
   const relations = result.changes.filter((c) => c.kind === 'relationship');

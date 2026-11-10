@@ -96,4 +96,42 @@ describe('PlanView com o editor do nó', () => {
     await waitFor(() => expect(screen.queryByLabelText('Documentação')).toBeNull());
     expect(screen.queryByRole('dialog', { name: /O chat quer mudar/ })).toBeNull();
   });
+
+  it('editar outra propriedade do nó com aviso pendente não fecha o aviso nem libera o Aplicar', async () => {
+    const pending = {
+      ...draft,
+      delta: { 'archlens-delta': '1.0', model: { elements: [{ id: 'a', properties: { dono: 'squad' } }] } },
+      edits: { a: { properties: { dono: 'time' } } },
+      kept: [{ id: 'a', field: 'properties.dono', value: 'tribo' }],
+    };
+    save('b', pending, []);
+    vi.mocked(api.planOpen).mockResolvedValue({ draft: pending, screenConflicts: screenConflicts(pending.delta, pending.edits, pending.kept) } as never);
+    // o servidor de verdade: a camada da tela e o cálculo dos conflitos
+    vi.mocked(api.planEdit).mockImplementation(async (_b, d, e) => {
+      const next = applyEdit(d, e, {});
+      return { draft: next, opsHash: 'h', screenConflicts: screenConflicts(next.delta, next.edits, next.kept) } as never;
+    });
+    render(<PlanView base="b" />);
+    await screen.findByRole('dialog', { name: /O chat quer mudar/ });
+    fireEvent.click(screen.getByText('selecionar a'));
+    await screen.findByRole('heading', { name: 'Cashback' });
+    fireEvent.click(screen.getByRole('button', { name: /Editar propriedades/ }));
+    fireEvent.click(screen.getByRole('button', { name: '+ Adicionar propriedade' }));
+    fireEvent.change(screen.getByLabelText('Nova chave'), { target: { value: 'canal' } });
+    fireEvent.change(screen.getByLabelText('Valor de canal'), { target: { value: 'app' } });
+    fireEvent.click(screen.getAllByRole('button', { name: 'Confirmar' }).find((b) => !b.closest('[role="dialog"]'))!);
+    await waitFor(() => expect(api.planEdit).toHaveBeenCalledWith('b', pending, { op: 'properties', id: 'a', properties: { dono: 'time', canal: 'app' } }));
+    await waitFor(() => expect(screen.queryByLabelText('Nova chave')).toBeNull());
+    expect(screen.getByRole('dialog', { name: /O chat quer mudar/ })).toBeTruthy();
+    expect((screen.getByRole('button', { name: 'Aplicar' }) as HTMLButtonElement).title).toBe('O chat quer mudar algo que você editou; responda o aviso antes de aplicar');
+  });
+
+  it('com o Confirmar gravando, as dicas pedem para esperar a gravação, não o chat', async () => {
+    vi.mocked(api.planEdit).mockImplementation(() => new Promise(() => {}));
+    await openEditor();
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+    await waitFor(() => expect((screen.getByRole('button', { name: /Editar propriedades/ }) as HTMLButtonElement).disabled).toBe(true));
+    expect((screen.getByRole('button', { name: /Editar propriedades/ }) as HTMLButtonElement).title).toBe('Aguarde a gravação terminar');
+  });
 });

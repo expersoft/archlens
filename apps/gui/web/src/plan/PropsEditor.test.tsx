@@ -65,4 +65,14 @@ describe('PropsEditor', () => {
       unmount();
     }
   });
+
+  it('nó da base com a chave constructor confirma a edição de outra propriedade', () => {
+    const onConfirm = vi.fn();
+    const withReserved = JSON.parse('{"constructor":"x","dono":"time"}');
+    render(<PropsEditor base={withReserved} value={withReserved} onConfirm={onConfirm} onCancel={() => {}} />);
+    fireEvent.change(screen.getByLabelText('Valor de dono'), { target: { value: 'outro' } });
+    expect(screen.queryByRole('alert')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar' }));
+    expect(onConfirm).toHaveBeenCalledWith({ dono: 'outro' });
+  });
 });

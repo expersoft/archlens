@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { PropValue, ScreenConflict } from '../api';
+import { lockText, type Lock } from './lock';
 
 const SHOWN_MAX = 200;
 /** A value as one short line (a doc can be 100 KB). */
@@ -17,8 +18,8 @@ export interface ScreenConflictDialogProps {
   conflict: ScreenConflict;
   nodeName: string;
   onChoose: (choice: 'mine' | 'theirs') => void;
-  /** Um turno do chat está rodando: responder agora seria sobrescrito por ele. */
-  locked?: boolean;
+  /** Um turno do chat está rodando (true ou 'chat') ou uma edição está sendo gravada ('save'): responder agora seria sobrescrito. */
+  locked?: Lock;
 }
 
 /** The chat wants another value for a field edited on screen: keep yours (default) or take the chat's. */
@@ -38,7 +39,7 @@ export function ScreenConflictDialog({ conflict, nodeName, onChoose, locked }: S
           <span className="val">{brief(conflict.theirs)}</span>
         </div>
       </fieldset>
-      <div className="acts"><button type="button" className="on" disabled={locked} title={locked ? 'Aguarde o chat terminar para editar' : undefined} onClick={() => onChoose(choice)}>Confirmar</button></div>
+      <div className="acts"><button type="button" className="on" disabled={!!locked} title={locked ? lockText(locked) : undefined} onClick={() => onChoose(choice)}>Confirmar</button></div>
     </div>
   );
 }

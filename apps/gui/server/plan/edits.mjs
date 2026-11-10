@@ -166,7 +166,11 @@ export function applyEdit(draft, edit, baseProperties = {}) {
       const isBase = (k, v) => (v === null ? !hasOwn(base, k) : hasOwn(base, k) && same(base[k], v));
       const props = Object.fromEntries(Object.entries(edit.properties)
         .filter(([k, v]) => !(isBase(k, v) && (!hasOwn(agent, k) || isBase(k, agent[k])))));
-      for (const [k, v] of Object.entries(props)) if (hasOwn(agent, k) && !same(agent[k], v)) seen.push({ id, field: PROP + k, value: agent[k] });
+      // Only the keys this edit changes answer the chat: a key re-sent unchanged keeps its pending conflict.
+      const changed = (k, v) => !hasOwn(entry.properties, k) || !same(entry.properties[k], v);
+      for (const [k, v] of Object.entries(props)) {
+        if (changed(k, v) && hasOwn(agent, k) && !same(agent[k], v)) seen.push({ id, field: PROP + k, value: agent[k] });
+      }
       const left = Object.keys(entry.properties ?? {}).filter(k => !hasOwn(props, k)).map(k => PROP + k);
       next = { edits: withEntry(edits, id, { ...entry, properties: props }), left };
       break;
@@ -174,7 +178,7 @@ export function applyEdit(draft, edit, baseProperties = {}) {
     case 'doc': {
       if (typeof edit.text !== 'string') throw editError(`a documentação editada de "${id}" precisa ser texto`);
       const chat = agentDoc(draft.delta, id);
-      if (typeof chat?.text === 'string' && chat.text !== edit.text) seen.push({ id, field: 'doc', value: chat.text });
+      if (entry.doc !== edit.text && typeof chat?.text === 'string' && chat.text !== edit.text) seen.push({ id, field: 'doc', value: chat.text });
       next = { edits: withEntry(edits, id, { ...entry, doc: edit.text }), left: [] };
       break;
     }

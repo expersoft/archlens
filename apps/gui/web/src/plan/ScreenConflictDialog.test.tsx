@@ -43,4 +43,11 @@ describe('ScreenConflictDialog', () => {
     render(<ScreenConflictDialog conflict={{ id: 'a', field: 'doc', mine: 'meu', theirs: 'do chat' }} nodeName="Cashback" onChoose={vi.fn()} />);
     expect(screen.getByRole('dialog').textContent).toContain('Cashback · documentação');
   });
+
+  it('travado só pela gravação, a dica pede para esperar a gravação', () => {
+    render(<ScreenConflictDialog conflict={conflict} nodeName="N" onChoose={vi.fn()} locked="save" />);
+    const b = screen.getByRole('button', { name: 'Confirmar' }) as HTMLButtonElement;
+    expect(b.disabled).toBe(true);
+    expect(b.title).toBe('Aguarde a gravação terminar');
+  });
 });

@@ -115,4 +115,11 @@ describe('DeltaPanel', () => {
     expect(b.disabled).toBe(true);
     expect(b.title).toBe('Aguarde o chat terminar para editar');
   });
+
+  it('travado só pela gravação, a dica do desfazer pede para esperar a gravação', () => {
+    render(<DeltaPanel result={withOrigin([{ sign: '~', kind: 'element', id: 'b', name: 'B', origin: 'tela', fields: [] }])} onUndo={vi.fn()} locked="save" />);
+    const b = screen.getByRole('button', { name: /desfazer/ }) as HTMLButtonElement;
+    expect(b.disabled).toBe(true);
+    expect(b.title).toBe('Aguarde a gravação terminar');
+  });
 });

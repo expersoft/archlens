@@ -58,7 +58,8 @@ export function PropsEditor({ base, value, onConfirm, onCancel, busy, onDirty }:
   const keys = live.map((r) => r.key.trim());
   const dupe = (k: string) => k !== '' && keys.filter((x) => x === k).length > 1
     || rows.some((r) => r.removed && r.key.trim() === k && live.some((l) => l.fresh && l.key.trim() === k));
-  const reserved = live.map((r) => r.key.trim()).find((k) => RESERVED.includes(k));
+  // Only what the edit sends: a reserved key the base node already has, left as is, never blocks Confirmar.
+  const reserved = Object.keys(changes).find((k) => RESERVED.includes(k));
   const invalid = !!reserved || live.some((r) => r.key.trim() === '' || dupe(r.key.trim()));
   const dirty = rows.length !== initial.length || rows.some((r, i) => r.removed || r.fresh || r.text !== initial[i]?.text);
   useEffect(() => { onDirty?.(dirty); }, [dirty, onDirty]);
