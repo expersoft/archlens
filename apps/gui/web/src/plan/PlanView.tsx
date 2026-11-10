@@ -126,6 +126,7 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
   const [selected, setSelected] = useState<string | null>(null);
   const [focus, setFocus] = useState<{ id: string; n: number } | null>(null);
   const navigated = useCallback((spec: ViewSpec) => setPreviews((p) => addNew(p, [spec])), []);
+  const unnavigated = useCallback((spec: ViewSpec) => { const k = JSON.stringify(spec); setPreviews((p) => p.filter((x) => JSON.stringify(x) !== k)); }, []);
   const draftRef = useRef(draft);
   const chatRef = useRef(chat);
   const seq = useRef(saved?.chat.reduce((n, m) => Math.max(n, m.id), 0) ?? 0);
@@ -478,7 +479,7 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
             {editError && <p className="err" role="alert">{editError}</p>}
             {applyOpen && shown && <ApplyDialog summary={shown.summary} views={savedViews} busy={applying || writingAny} error={applyError} onConfirm={() => void apply()} onCancel={() => setApplyOpen(false)} onReplan={replannable ? () => void replan() : undefined} />}
             <PlanPreview base={base} draft={draft} previews={previews} onLoaded={(r, failed) => { setShown(r); if (r) { setListed(r); setConflicts(r.screenConflicts ?? []); } setPreviewFailed(!!failed); }}
-              onNavigate={navigated} onNav={onNav} onLoading={setPreviewLoading} onSelect={(id) => { if (!leaveEdit()) return; setSelected(id); if (id) { setTab('node'); setPanel(true); } }} focus={focus} />
+              onNavigate={navigated} onUnnavigate={unnavigated} onNav={onNav} onLoading={setPreviewLoading} onSelect={(id) => { if (!leaveEdit()) return; setSelected(id); if (id) { setTab('node'); setPanel(true); } }} focus={focus} />
           </div>
         )}
       />

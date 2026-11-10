@@ -254,9 +254,10 @@ describe('PlanPreview', () => {
   });
 
   /** Like PlanView: a view navigated from the diagram joins the asked ones, and the preview is asked again. */
-  function Host({ onNav, onSelect }: { onNav: (n: PreviewNav) => void; onSelect?: (id: string | null) => void }) {
+  function Host({ onNav, onSelect, draft = withDelta }: { onNav: (n: PreviewNav) => void; onSelect?: (id: string | null) => void; draft?: api.Draft }) {
     const [previews, setPreviews] = useState<api.ViewSpec[]>([]);
-    return <PlanPreview base="b" draft={withDelta} previews={previews} onNav={onNav} onSelect={onSelect} onNavigate={(sp) => setPreviews((p) => [...p, sp])} />;
+    return <PlanPreview base="b" draft={draft} previews={previews} onNav={onNav} onSelect={onSelect} onNavigate={(sp) => setPreviews((p) => [...p, sp])}
+      onUnnavigate={(sp) => setPreviews((p) => p.filter((x) => x !== sp))} />;
   }
   const later = <T,>() => { let done!: (v: T) => void; const p = new Promise<T>((r) => { done = r; }); return { p, done }; };
   const go = { key: 'nav-9', notation: 'c4', level: 'container', scope: 'a', title: 'Containers de Novo' };
@@ -293,7 +294,7 @@ describe('PlanPreview', () => {
     act(() => nav!.flip('archimate'));
     await waitFor(() => expect(nav!.loading?.label).toBe('Ver em ArchiMate'));
     const calls = planPreview.mock.calls.length;
-    act(() => nav!.loading!.cancel());
+    act(() => nav!.loading!.cancel!());
     expect(nav!.loading).toBeNull();
     expect(nav!.notation).toBe('c4');
     await act(async () => { slow.done(result({ views: [{ key: 'delta', title: 'O que muda', html: '<p>am</p>', kind: 'change', spec: am }] })); });
@@ -319,5 +320,45 @@ describe('PlanPreview', () => {
     expect(planActions).not.toHaveBeenCalled();
     expect(screen.queryByRole('menu')).toBeNull();
     expect(onSelect).not.toHaveBeenCalledWith('a');
+  });
+
+  it('cancelar uma navegação tira a visão da lista Pedidas e navegadas', async () => {
+    const u = userEvent.setup();
+    let nav: PreviewNav | null = null;
+    const slow = later<api.PlanPreviewResult>();
+    planPreview.mockImplementation((_b, _d, specs) => (specs ? slow.p : Promise.resolve(result())));
+    planActions.mockResolvedValue({ actions: [{ label: 'Abrir containers', spec: go, primary: true }] });
+    const { container, rerender } = render(<Host onNav={(n) => { nav = n; }} />);
+    await waitFor(() => expect(frames(container)).toEqual(['<p>com-delta</p>']));
+    await fromFrame(container, { type: 'context', id: 'a', x: 10, y: 10 }, () => expect(screen.getByRole('menu')).toBeTruthy());
+    await u.click(await screen.findByRole('menuitem', { name: 'Abrir containers' }));
+    await waitFor(() => expect(nav!.loading?.cancel).toBeTypeOf('function'));
+    const calls = planPreview.mock.calls.length;
+    act(() => nav!.loading!.cancel!());
+    expect(nav!.loading).toBeNull();
+    await act(async () => { slow.done(navResult); });
+    expect(frames(container)).toEqual(['<p>com-delta</p>']);
+    expect(screen.queryByRole('group', { name: /Pedidas e navegadas/ })).toBeNull();
+    expect(planPreview.mock.calls.length).toBe(calls); // the list went back to what is drawn: nothing to ask
+    expect((screen.getByRole('combobox', { name: 'Visão da prévia' }) as HTMLSelectElement).selectedOptions[0].textContent).toBe('O que muda');
+    // the next preview (a new draft) no longer asks for the cancelled view
+    planPreview.mockClear();
+    rerender(<Host onNav={(n) => { nav = n; }} draft={{ ...withDelta, note: 'outro' } as api.Draft} />);
+    await waitFor(() => expect(planPreview).toHaveBeenCalled());
+    expect(planPreview).not.toHaveBeenCalledWith('b', expect.anything(), [go]);
+  });
+
+  it('recarga por rascunho novo não oferece Cancelar', async () => {
+    let nav: PreviewNav | null = null;
+    const slow = later<api.PlanPreviewResult>();
+    const next = { ...withDelta, note: 'outro' } as api.Draft;
+    planPreview.mockImplementation((_b, d) => (d === next ? slow.p : Promise.resolve(result())));
+    const { container, rerender } = render(<Host onNav={(n) => { nav = n; }} />);
+    await waitFor(() => expect(frames(container)).toEqual(['<p>com-delta</p>']));
+    rerender(<Host onNav={(n) => { nav = n; }} draft={next} />);
+    await waitFor(() => expect(nav!.loading?.label).toBe('prévia do rascunho'));
+    expect(nav!.loading!.cancel).toBeUndefined();
+    await act(async () => { slow.done(result()); });
+    await waitFor(() => expect(nav!.loading).toBeNull());
   });
 });

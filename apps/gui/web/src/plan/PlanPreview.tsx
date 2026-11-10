@@ -26,16 +26,22 @@ type Base = { id: string; html?: string; error?: string };
 type Menu = { id: string; at: { x: number; y: number }; title: string; items: Action[] | null };
 /** What was shown before a request, to go back to on Cancelar. */
 type Before = { pick: string | null; notation: Notation | undefined };
-/** A preview request after one was drawn: the drawn one stays, dimmed, until it arrives. */
-type Wait = { label: string; before: Before };
+/**
+ * A preview request after one was drawn: the drawn one stays, dimmed, until it arrives. Only a navigation or a notation
+ * switch can be cancelled (`cancellable`); a new draft must be drawn. `spec`: the navigated view, out of the asked
+ * ones again on Cancelar.
+ */
+type Wait = { label: string; before: Before; cancellable: boolean; spec?: ViewSpec };
+/** What the action about to ask for a preview leaves for it. */
+type Intent = { label: string; before: Before; spec?: ViewSpec };
 /** What the drawn preview answers. */
 type Have = { base: string; draft: Draft; askedKey: string; notation: Notation | undefined; result: PlanPreviewResult };
 
 /**
  * The notation of the view shown and how to switch it (the top bar's ArchiMate | C4), and the preview request in
- * flight (`loading`), with its status label and how to cancel it.
+ * flight (`loading`), with its status label and how to cancel it (no `cancel` for a new draft's preview).
  */
-export interface PreviewNav { notation: Notation | null; flip: (n: Notation) => void; loading: { label: string; cancel: () => void } | null }
+export interface PreviewNav { notation: Notation | null; flip: (n: Notation) => void; loading: { label: string; cancel?: () => void } | null }
 
 export interface PlanPreviewProps {
   base: string;
@@ -44,6 +50,8 @@ export interface PlanPreviewProps {
   onLoaded?: (r: PlanPreviewResult | null, failed?: boolean) => void;
   /** A view opened from the diagram (context menu, double click, notation): the host keeps it with the asked ones. */
   onNavigate?: (spec: ViewSpec) => void;
+  /** A navigation cancelled while its preview was drawn: the host takes the view out of the asked ones. */
+  onUnnavigate?: (spec: ViewSpec) => void;
   onNav?: (nav: PreviewNav) => void;
   /** A preview request is in flight after one was drawn: screen editing waits for it. */
   onLoading?: (loading: boolean) => void;
@@ -54,11 +62,13 @@ export interface PlanPreviewProps {
 }
 
 /** The right pane of Planejar: the draft drawn with the delta, and the plan report. Navigation runs over the preview. */
-export function PlanPreview({ base, draft, previews, onLoaded, onNavigate, onNav, onLoading, onSelect, focus }: PlanPreviewProps) {
+export function PlanPreview({ base, draft, previews, onLoaded, onNavigate, onUnnavigate, onNav, onLoading, onSelect, focus }: PlanPreviewProps) {
   const loadedCb = useRef(onLoaded);
   loadedCb.current = onLoaded;
   const loadingCb = useRef(onLoading);
   loadingCb.current = onLoading;
+  const unnavigateCb = useRef(onUnnavigate);
+  unnavigateCb.current = onUnnavigate;
   const [theme, setTheme] = useDiagramTheme();
   const [tab, setTab] = useState<Tab>('diagram');
   const [raw, setRaw] = useStoredState<boolean>('archlens-plan-report-raw', false);
@@ -75,7 +85,7 @@ export function PlanPreview({ base, draft, previews, onLoaded, onNavigate, onNav
   waitRef.current = wait;
   const have = useRef<Have | null>(null);
   // The label and what was shown, set by the action (navigate, notation) that is about to ask for a preview.
-  const intent = useRef<Wait | null>(null);
+  const intent = useRef<Intent | null>(null);
   const ticket = useRef(0);
   const now = useRef<Before>({ pick, notation: changeNotation });
   now.current = { pick, notation: changeNotation };
@@ -100,7 +110,13 @@ export function PlanPreview({ base, draft, previews, onLoaded, onNavigate, onNav
     if (h) {
       // A request that replaces one in flight keeps what was shown before the first.
       const w = waitRef.current;
-      setWait({ label: asked?.label ?? w?.label ?? DRAFT_LABEL, before: w?.before ?? asked?.before ?? { pick: now.current.pick, notation: h.notation } });
+      const sameDraft = h.base === base && h.draft === draft;
+      setWait({
+        label: asked?.label ?? w?.label ?? DRAFT_LABEL,
+        before: w?.before ?? asked?.before ?? { pick: now.current.pick, notation: h.notation },
+        cancellable: !!asked && sameDraft && (!w || w.cancellable),
+        spec: asked?.spec ?? w?.spec,
+      });
     }
     const specs = JSON.parse(askedKey) as ViewSpec[];
     // One request per asked spec: a bad one is reported next to the list and does not hide the rest.
@@ -134,7 +150,7 @@ export function PlanPreview({ base, draft, previews, onLoaded, onNavigate, onNav
     const key = typeof spec.key === 'string' ? spec.key : null;
     if (!key) return;
     if (matrix) matrixKeys.current.add(key);
-    intent.current = { label: label ?? (typeof spec.title === 'string' ? spec.title : key), before: now.current };
+    intent.current = { label: label ?? (typeof spec.title === 'string' ? spec.title : key), before: now.current, spec };
     setNavError(null);
     setPick(`asked:${key}`);
     setTab('diagram');
@@ -151,19 +167,21 @@ export function PlanPreview({ base, draft, previews, onLoaded, onNavigate, onNav
     if (cur.kind === 'change') { intent.current = { label: flipLabel(n), before: now.current }; setChangeNotation(n); return; }
     planFlip(base, d, cur.spec).then((r) => navigate(r.spec, undefined, flipLabel(n)), (e) => setNavError(errMsg(e)));
   }, [base, navigate]);
-  // Cancelar drops the request (its late answer is ignored) and goes back to the view and notation shown before it.
+  // Cancelar drops the request (its late answer is ignored) and goes back to the view and notation shown before it; a
+  // navigated view leaves the asked ones.
   const cancel = useCallback(() => {
     const w = waitRef.current;
-    if (!w) return;
+    if (!w?.cancellable) return;
     ticket.current++;
     setWait(null);
     setPick(w.before.pick);
     setChangeNotation(w.before.notation);
+    if (w.spec) unnavigateCb.current?.(w.spec);
     const h = have.current;
     // The drawn preview still vouches for the draft unless the request was for a new one.
     if (h && h.base === latest.current.base && h.draft === latest.current.draft) loadedCb.current?.(h.result);
   }, []);
-  useEffect(() => { onNav?.({ notation, flip: flipTo, loading: wait ? { label: wait.label, cancel } : null }); }, [notation, flipTo, onNav, wait, cancel]);
+  useEffect(() => { onNav?.({ notation, flip: flipTo, loading: wait ? { label: wait.label, cancel: wait.cancellable ? cancel : undefined } : null }); }, [notation, flipTo, onNav, wait, cancel]);
 
   // A node the view does not draw cannot be selected in the frame (it would answer select(null)); the panel still shows it.
   const inView = (id: string) => !!(current?.viewData as { nodes?: Record<string, unknown> } | undefined)?.nodes?.[id];
