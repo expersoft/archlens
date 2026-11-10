@@ -5,7 +5,8 @@ import { Markdown } from './plan/Markdown';
 
 type Loaded = { id: string; text: string | null; error?: undefined } | { id: string; error: string };
 
-const EMPTY = 'Este nó ainda não tem documentação. Peça no Planejar, use a skill archlens-plan ou escreva no markdown, depois do bloco do archlens.';
+// Só aparece sem o Planejar: com ele ligado, o painel oferece "Escrever" no lugar.
+const EMPTY = 'Este nó ainda não tem documentação. Use a skill archlens-plan ou escreva no markdown, depois do bloco do archlens.';
 
 export interface DocTabProps {
   base: string;

@@ -39,7 +39,8 @@ describe('DocTab', () => {
   it('estado vazio diz como escrever', async () => {
     doc.mockResolvedValue({ text: null });
     render(<DocTab base="b" id="x" />);
-    expect(await screen.findByText('Este nó ainda não tem documentação. Peça no Planejar, use a skill archlens-plan ou escreva no markdown, depois do bloco do archlens.')).toBeTruthy();
+    expect(await screen.findByText('Este nó ainda não tem documentação. Use a skill archlens-plan ou escreva no markdown, depois do bloco do archlens.')).toBeTruthy();
+    expect(screen.queryByText(/Planejar/)).toBeNull();
   });
 
   it('resposta atrasada do nó anterior é ignorada', async () => {
