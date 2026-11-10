@@ -1,5 +1,5 @@
 import { expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { act as rtlAct, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { AlertBadge, type AlertAction } from './AlertBadge';
 import type { AlertInfo } from './api';
@@ -73,5 +73,23 @@ it('Mostrar só uma camada lista as opções e roda a da camada', async () => {
   await userEvent.click(screen.getByRole('button', { name: 'Tecnologia' }));
   expect(b).toHaveBeenCalledTimes(1);
   expect(a).not.toHaveBeenCalled();
+  expect(screen.queryByRole('dialog')).toBeNull();
+});
+
+it('size e legibility viram uma seção só, contada uma vez, com minFontPx de quem tiver', async () => {
+  render(<AlertBadge alerts={[{ kind: 'size', text: 's', nodes: 52 }, leg]} actions={[]} />);
+  expect(screen.getByRole('button', { name: 'Avisos da visão (1)' })).toBeTruthy();
+  await userEvent.click(screen.getByRole('button', { name: /Avisos/ }));
+  expect(screen.getAllByText('Visão grande para uma tela')).toHaveLength(1);
+  expect(screen.getByText(/cerca de 9.4px/)).toBeTruthy();
+});
+
+it('fecha quando os avisos mudam e quando a janela perde o foco', async () => {
+  const { rerender } = render(<AlertBadge alerts={[leg]} actions={[]} />);
+  await userEvent.click(screen.getByRole('button', { name: /Avisos/ }));
+  rerender(<AlertBadge alerts={[lay]} actions={[]} />);
+  expect(screen.queryByRole('dialog')).toBeNull();
+  await userEvent.click(screen.getByRole('button', { name: /Avisos/ }));
+  rtlAct(() => { window.dispatchEvent(new Event('blur')); });
   expect(screen.queryByRole('dialog')).toBeNull();
 });

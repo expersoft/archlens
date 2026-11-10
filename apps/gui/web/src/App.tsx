@@ -3,7 +3,7 @@ import { ask as askApi, find, flip, getActions, getBases, getCatalog, getElement
 import { pickInitialView } from './pick';
 import { Diagram } from './Diagram';
 import type { AlertAction } from './AlertBadge';
-import { layerLabel } from './labels';
+import { alertActions } from './alertActions';
 import { Shell } from './Shell';
 import { ContextMenu } from './ContextMenu';
 import { History } from './History';
@@ -346,18 +346,11 @@ export function App() {
   };
 
   const viewData = (view?.data ?? null) as ViewData | null;
-  const alertActions: AlertAction[] = [];
-  if (base && view && nest) alertActions.push({ id: 'nest', label: allLabel(nest), run: onNestAll });
-  if (base && view && selected) {
-    alertActions.push({ id: 'focus', label: 'Focar no selecionado', run: () => void run(reserve(), base, { ...view.spec, focus: [selected], depth: 1 }, 'Visão', `Focar: ${nameOf(selected)}`) });
-  }
-  const layersHere = notation === 'c4' ? [] : [...new Set(Object.values(viewData?.nodes ?? {}).map((n) => n.layer).filter((l): l is string => !!l))];
-  if (base && view && layersHere.length > 1) {
-    alertActions.push({
-      id: 'layer', label: 'Mostrar só uma camada', run: () => {},
-      options: layersHere.map((l) => ({ label: layerLabel(l), run: () => void run(reserve(), base, { ...view.spec, layers: [l] }, 'Visão', `Só a camada ${layerLabel(l)}`) })),
-    });
-  }
+  const layersHere = [...new Set(Object.values(viewData?.nodes ?? {}).map((n) => n.layer).filter((l): l is string => !!l))];
+  const alertActs: AlertAction[] = base && view ? alertActions({
+    spec: view.spec, nest, selected, selectedName: selected ? nameOf(selected) : '', layers: layersHere, notation,
+    nestAll: onNestAll, runSpec: (sp, label) => void run(reserve(), base, sp, 'Visão', label),
+  }) : [];
   const planEnabled = info?.plan?.enabled === true;
   const brandName = info?.brand?.name;
   useEffect(() => { document.title = brandName ? `${brandName} · archlens` : 'archlens'; }, [brandName]);
@@ -456,7 +449,7 @@ export function App() {
               </span>
             ))}
           </nav>
-          <Diagram ref={frame} view={view} theme={diagramTheme} onThemeChange={setDiagramTheme} onEvent={onEvent} busy={loading} alertActions={alertActions} />
+          <Diagram ref={frame} view={view} theme={diagramTheme} onThemeChange={setDiagramTheme} onEvent={onEvent} busy={loading} alertActions={alertActs} />
         </>
       ) : <div className="empty">{shownStatus}</div>}
       {menu && <ContextMenu at={menu.at} title={menu.title} items={menu.items} onPick={(a) => openAction(a, menu.id, 'Menu')} onClose={closeMenu} nest={nest} nodeId={menu.id} onNest={onNestOne} />}

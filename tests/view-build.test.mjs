@@ -45,7 +45,7 @@ test('viewAlertInfo marca size e legibility com os mesmos textos de viewAlerts',
   assert.deepEqual(info.map(a => a.text), viewAlerts(big, wide));
 });
 
-test('a CLI continua imprimindo os mesmos alerts', async () => {
+test('viewAlerts devolve só o texto de legibilidade numa visão larga', async () => {
   const view = resolveView(model(), spec);
   const laid = await layoutView(view);
   const wide = { ...laid, width: 40000, height: 20000 };
