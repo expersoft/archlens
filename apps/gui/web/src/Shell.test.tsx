@@ -101,4 +101,12 @@ describe('Shell, modo Planejar', () => {
     expect(screen.queryByTestId('side-right')).toBeNull();
     expect(screen.getByText('centro')).toBeTruthy();
   });
+
+  it('barra do topo mostra a marca do archlens antes do nome', () => {
+    setWidth(1600);
+    render(<Wrapped />);
+    const mark = screen.getByTestId('topbar').querySelector('svg[data-mark="archlens"]')!;
+    expect(mark).toBeTruthy();
+    expect(mark.nextElementSibling?.textContent).toBe('archlens');
+  });
 });

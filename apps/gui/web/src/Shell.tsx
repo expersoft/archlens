@@ -1,3 +1,4 @@
+import { ArchlensMark } from './icons';
 import { useEffect, useRef, type ReactNode } from 'react';
 import type { BaseInfo } from './api';
 import { useStoredState } from './store';
@@ -80,7 +81,7 @@ export function Shell(p: ShellProps) {
     <div className="app" data-presenting={presenting || undefined}>
       {!presenting && (
         <header className="top" data-testid="topbar">
-          <b>archlens</b>
+          <ArchlensMark /><b>archlens</b>
           <select aria-label="Base" value={p.base ?? ''} disabled={!p.bases?.length || !p.onBase} onChange={(e) => p.onBase?.(e.target.value)}>
             {!p.bases?.length && <option value="">Base</option>}
             {p.bases?.map((b) => <option key={b.id} value={b.id} disabled={!b.ok} title={b.ok ? undefined : b.error}>{b.name}</option>)}

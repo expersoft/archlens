@@ -9,6 +9,7 @@ import type { Lock } from './lock';
 import { useStoredState } from '../store';
 import { PlanChat } from './PlanChat';
 import { Split } from './Split';
+import { InfoIcon } from '../icons';
 import { clear, hasChanges, load, save, type ChatMsg } from './draftStore';
 
 const HISTORY_MAX = 40; // the server's limit
@@ -383,7 +384,7 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
         <aside className="side r" data-testid="delta-panel" aria-label="Painel do nó e do delta">
           <div role="tablist" className="side-tabs">
             <button type="button" role="tab" aria-selected={tab === 'delta'} className={tab === 'delta' ? 'on' : ''} onClick={() => { if (leaveEdit()) setTab('delta'); }}>Delta ({changed ? listed?.changes.length ?? 0 : 0})</button>
-            <button type="button" role="tab" aria-selected={tab === 'node'} className={tab === 'node' ? 'on' : ''} onClick={() => { if (leaveEdit()) setTab('node'); }}>Nó</button>
+            <button type="button" role="tab" aria-selected={tab === 'node'} className={tab === 'node' ? 'on' : ''} onClick={() => { if (leaveEdit()) setTab('node'); }}><InfoIcon size={14} /> Nó</button>
           </div>
           {tab === 'delta' ? (
             <DeltaPanel result={changed ? listed : null} selected={selected} onPick={pick} onUndo={(id) => void screenEdit({ op: 'undo', id })} locked={lock} />
@@ -394,7 +395,7 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
       )}
       <nav className="rail r" aria-label="Painel direito">
         <button type="button" aria-label="Delta" title="Delta (Ctrl+Alt+B ou Ctrl+Shift+B)" className={panel && tab === 'delta' ? 'on' : ''} onClick={() => railTo('delta')}>Δ</button>
-        <button type="button" aria-label="Nó" title="Nó selecionado" className={panel && tab === 'node' ? 'on' : ''} onClick={() => railTo('node')}>Nó</button>
+        <button type="button" aria-label="Nó" title="Nó (detalhes do item selecionado)" className={panel && tab === 'node' ? 'on' : ''} onClick={() => railTo('node')}><InfoIcon /></button>
       </nav>
     </div>
   );

@@ -94,6 +94,21 @@ describe('App, aba Nó do Planejar', () => {
     expect(screen.getByRole('tab', { name: 'Nó' })).toBeTruthy();
   });
 
+  it('trilho mostra o ícone de informações com a dica, sem o texto Nó', async () => {
+    await open();
+    const b = screen.getByRole('button', { name: 'Nó' });
+    expect(b.getAttribute('title')).toBe('Nó (detalhes do item selecionado)');
+    expect(b.querySelector('svg')).toBeTruthy();
+    expect(b.textContent).toBe('');
+  });
+
+  it('aba do painel mostra ícone e "Nó"', async () => {
+    await open();
+    const t = screen.getByRole('tab', { name: 'Nó' });
+    expect(t.querySelector('svg')).toBeTruthy();
+    expect(t.textContent).toContain('Nó');
+  });
+
   it('clicar no nome de um item do Delta abre a aba Nó', async () => {
     const u = await open();
     await u.click(await screen.findByRole('button', { name: 'Cashback' }));

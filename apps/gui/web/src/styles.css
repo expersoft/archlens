@@ -267,3 +267,5 @@ body{font:14px/1.4 system-ui,sans-serif;background:var(--bg);color:var(--ink)}
 .np-doc-split{display:grid;grid-template-columns:1fr 1fr;gap:16px}
 .np-doc-split .np-doc-ta{min-height:60vh}
 .np-edit-err{margin:0 0 6px}
+.top svg[data-mark]{flex:none;margin-right:-2px}
+.side-tabs button svg{vertical-align:-2px}
