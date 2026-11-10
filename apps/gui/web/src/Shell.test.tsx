@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { act, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Shell } from './Shell';
 
@@ -133,7 +133,17 @@ describe('Shell, modo Planejar', () => {
     expect(screen.getByTestId('topbar').querySelector('img.brand-logo')?.getAttribute('src')).toBe('/api/brand/logo-dark');
     rerender(<WithBrand theme="dark" brand={{ logo: '/api/brand/logo' } as typeof brand} />);
     expect(screen.getByTestId('topbar').querySelector('img.brand-logo')?.getAttribute('src')).toBe('/api/brand/logo');
-    expect(screen.getByTestId('topbar').querySelector('img.brand-logo')?.getAttribute('alt')).toBe('Logo');
+    expect(screen.getByTestId('topbar').querySelector('img.brand-logo')?.getAttribute('alt')).toBe('Logo da empresa');
+  });
+
+  it('logo que não carrega volta à marca do archlens', () => {
+    setWidth(1600);
+    render(<WithBrand theme="light" brand={brand} />);
+    const bar = screen.getByTestId('topbar');
+    fireEvent.error(bar.querySelector('img.brand-logo')!);
+    expect(bar.querySelector('img.brand-logo')).toBeNull();
+    expect(bar.querySelector('svg[data-mark="archlens"]')).toBeTruthy();
+    expect(bar.querySelector('b')?.textContent).toBe('archlens');
   });
 
   it('sem brand mostra a marca do archlens', () => {

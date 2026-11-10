@@ -27,6 +27,15 @@ describe('DocWindow', () => {
     expect(item('Responsabilidades').getAttribute('aria-current')).toBeNull();
   });
 
+  it('erro da confirmação aparece no rodapé, como alerta', () => {
+    const { rerender } = render(<DocWindow title="D" text="a" editable onClose={() => {}} />);
+    expect(screen.queryByRole('alert')).toBeNull();
+    rerender(<DocWindow title="D" text="a" editable error="recusada" onClose={() => {}} />);
+    const alert = screen.getByRole('alert');
+    expect(alert.textContent).toBe('recusada');
+    expect(alert.closest('.doc-win-f')).toBeTruthy();
+  });
+
   it('Ctrl+Enter confirma e Esc fecha devolvendo o texto', () => {
     const onConfirm = vi.fn(), onClose = vi.fn();
     render(<DocWindow title="D" text="a" editable onConfirm={onConfirm} onClose={onClose} />);

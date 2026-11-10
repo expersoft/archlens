@@ -246,16 +246,146 @@ describe('App, editar o nó no Navegar', () => {
     await editDono('novo');
     fireEvent.click(confirmBtn());
     await waitFor(() => expect(api.planEdit).toHaveBeenCalled());
-    toPlan();
+    toPlan(); // bloqueado até a gravação voltar: o Planejar escondido continua travado
+    expect(screen.getByRole('navigation', { name: 'Trilha' })).toBeTruthy();
     fireEvent.change(screen.getByLabelText('Mensagem'), { target: { value: 'adicione X' } });
-    expect((screen.getByRole('button', { name: 'Enviar' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole('button', { name: 'Enviar', hidden: true }) as HTMLButtonElement).disabled).toBe(true);
     fireEvent.keyDown(screen.getByLabelText('Mensagem'), { key: 'Enter', ctrlKey: true });
     expect(api.planTurn).not.toHaveBeenCalled();
     expect((screen.getByLabelText('Abrir rascunho') as HTMLInputElement).disabled).toBe(true);
-    expect((screen.getByRole('button', { name: 'Descartar rascunho' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole('button', { name: 'Descartar rascunho', hidden: true }) as HTMLButtonElement).disabled).toBe(true);
     await act(async () => { finish({ draft: edited, opsHash: 'h', screenConflicts: [] }); });
     await waitFor(() => expect(load('b')?.draft).toEqual(edited));
     await waitFor(() => expect((screen.getByRole('button', { name: 'Enviar' }) as HTMLButtonElement).disabled).toBe(false));
+  });
+
+  it('durante a gravação do Navegar, outro nó, Planejar e esconder o painel ficam bloqueados; a falha mostra o erro e o texto fica', async () => {
+    let fail!: (e: unknown) => void;
+    vi.mocked(api.planEdit).mockImplementation(() => new Promise((_r, j) => { fail = j; }));
+    const ask = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const { post } = await selectA();
+    await editDono('novo');
+    fireEvent.click(confirmBtn());
+    await waitFor(() => expect(api.planEdit).toHaveBeenCalled());
+    post({ type: 'select', id: 'B' });
+    toPlan();
+    fireEvent.click(screen.getByRole('button', { name: 'Detalhes' }));
+    fireEvent.keyDown(window, { key: 'b', code: 'KeyB', ctrlKey: true, altKey: true });
+    expect(ask).not.toHaveBeenCalled();
+    expect(screen.getByText('Aguarde a gravação terminar')).toBeTruthy();
+    expect(screen.getByRole('navigation', { name: 'Trilha' })).toBeTruthy();
+    expect(screen.queryByTestId('plan-view')).toBeNull();
+    expect(screen.getByTestId('side-right')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Elem A' })).toBeTruthy();
+    await act(async () => { fail(new Error('recusada')); });
+    expect((await screen.findByRole('alert')).textContent).toBe('recusada');
+    expect((screen.getByLabelText('Valor de dono') as HTMLInputElement).value).toBe('novo');
+    expect(screen.queryByText('Aguarde a gravação terminar')).toBeNull();
+    expect(load('b')).toBeNull();
+  });
+
+  it('esconder o painel direito com o editor sujo pergunta antes; confirmando, fecha o editor', async () => {
+    const ask = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    const { post } = await selectA();
+    await editDono('novo');
+    fireEvent.click(screen.getByRole('button', { name: 'Detalhes' }));
+    expect(ask).toHaveBeenCalledWith('Descartar a edição não confirmada?');
+    fireEvent.keyDown(window, { key: 'b', code: 'KeyB', ctrlKey: true, altKey: true });
+    expect(ask).toHaveBeenCalledTimes(2);
+    expect((screen.getByLabelText('Valor de dono') as HTMLInputElement).value).toBe('novo');
+    ask.mockReturnValue(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Detalhes' }));
+    expect(screen.queryByTestId('side-right')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Detalhes' }));
+    expect(await editBtn('propriedades')).toBeTruthy();
+    expect(screen.queryByLabelText('Valor de dono')).toBeNull();
+    post({ type: 'select', id: 'B' }); // a edição descartada não deixa o editor "sujo"
+    expect(ask).toHaveBeenCalledTimes(3);
+  });
+
+  it('Apresentar com o editor sujo pergunta antes; confirmando, fecha o editor', async () => {
+    const full = vi.fn(() => Promise.resolve());
+    Object.defineProperty(HTMLIFrameElement.prototype, 'requestFullscreen', { value: full, configurable: true, writable: true });
+    const ask = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    await selectA();
+    await editDono('novo');
+    fireEvent.click(screen.getByRole('button', { name: 'Apresentar' }));
+    expect(ask).toHaveBeenCalledWith('Descartar a edição não confirmada?');
+    expect(full).not.toHaveBeenCalled();
+    expect((screen.getByLabelText('Valor de dono') as HTMLInputElement).value).toBe('novo');
+    ask.mockReturnValue(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Apresentar' }));
+    expect(full).toHaveBeenCalled();
+    expect(screen.queryByLabelText('Valor de dono')).toBeNull();
+  });
+
+  it('falha ao confirmar no editor ampliado do Navegar: o erro aparece na janela', async () => {
+    vi.mocked(api.planElement).mockResolvedValue(el({ doc: 'antigo', docRaw: 'antigo' }));
+    vi.mocked(api.planEdit).mockRejectedValue(new Error('marcador do archlens'));
+    await selectA();
+    fireEvent.click(await editBtn('documentação'));
+    fireEvent.click(screen.getByRole('button', { name: 'Tela cheia' }));
+    const dlg = screen.getByRole('dialog');
+    fireEvent.change(dlg.querySelector('textarea')!, { target: { value: 'novo' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar' }));
+    await waitFor(() => expect(dlg.querySelector('.doc-win-f [role="alert"]')?.textContent).toBe('marcador do archlens'));
+    expect(screen.getAllByRole('alert')).toHaveLength(1);
+    expect((dlg.querySelector('textarea') as HTMLTextAreaElement).value).toBe('novo');
+  });
+
+  it('a conversa salva cortada ao guardar a edição de outra base é avisada no Navegar', async () => {
+    let finish!: (r: Awaited<ReturnType<typeof api.planEdit>>) => void;
+    vi.mocked(api.planEdit).mockImplementation(() => new Promise((r) => { finish = r; }));
+    save('b', draft, [{ id: 1, role: 'user', text: 'oi' }]);
+    await selectA();
+    await editDono('novo');
+    fireEvent.click(confirmBtn());
+    await waitFor(() => expect(api.planEdit).toHaveBeenCalled());
+    fireEvent.change(screen.getByLabelText('Base'), { target: { value: 'c' } });
+    await waitFor(() => expect(screen.getByRole('navigation', { name: 'Trilha' }).textContent).toBe('Nova'));
+    const real = Storage.prototype.setItem;
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (this: Storage, k: string, v: string) {
+      if (k.startsWith('archlens-gui-chat:')) throw new Error('cheio');
+      real.call(this, k, v);
+    });
+    await act(async () => { finish({ draft: edited, opsHash: 'h', screenConflicts: [] }); });
+    expect(await screen.findByText(/A edição foi guardada no rascunho de B; a conversa antiga foi cortada para caber no navegador/)).toBeTruthy();
+    expect(load('b')?.draft).toEqual(edited);
+  });
+
+  it('depois de Descartar no Planejar, o Navegar edita a partir do nó sem o rascunho', async () => {
+    save('b', edited, []);
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    // sem rascunho (depois do Descartar) o servidor demora: até responder, o Navegar não edita o que mostrava antes
+    vi.mocked(api.planElement).mockImplementation(async (_b, d) => {
+      if (!d) await gate;
+      return el({ doc: d ? 'rascunho' : 'base', docRaw: d ? 'rascunho' : 'base' });
+    });
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    await boot();
+    toPlan(); // o PlanView monta (e abre o rascunho) antes
+    await waitFor(() => expect(api.planOpen).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect((screen.getByRole('button', { name: 'Descartar rascunho' }) as HTMLButtonElement).disabled).toBe(false));
+    toBrowse();
+    await screen.findByRole('navigation', { name: 'Trilha' });
+    await new Promise((res) => setTimeout(res, 50));
+    const frame = document.querySelector('iframe')!;
+    act(() => { window.dispatchEvent(new MessageEvent('message', { data: { source: 'archlens', type: 'select', id: 'A' }, source: frame.contentWindow })); });
+    fireEvent.click(await editBtn('documentação'));
+    expect((screen.getByLabelText('Documentação') as HTMLTextAreaElement).value).toBe('rascunho');
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+    toPlan();
+    await waitFor(() => expect((screen.getByRole('button', { name: 'Descartar rascunho' }) as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(screen.getByRole('button', { name: 'Descartar rascunho' }));
+    await waitFor(() => expect(load('b')).toBeNull());
+    toBrowse();
+    await screen.findByRole('navigation', { name: 'Trilha' });
+    await screen.findByRole('heading', { name: 'Elem A' });
+    expect(screen.queryByRole('button', { name: 'Editar documentação' })).toBeNull();
+    await act(async () => { release(); });
+    fireEvent.click(await editBtn('documentação'));
+    expect((screen.getByLabelText('Documentação') as HTMLTextAreaElement).value).toBe('base');
   });
 
   it('o rascunho mudou enquanto a edição do Navegar era gravada: erro e nada gravado', async () => {

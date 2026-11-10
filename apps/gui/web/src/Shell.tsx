@@ -1,5 +1,5 @@
 import { ArchlensMark } from './icons';
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { BaseInfo, Info } from './api';
 import { useStoredState } from './store';
 import { isGuiShortcut } from './shortcuts';
@@ -37,6 +37,8 @@ export interface ShellProps {
   mode?: 'browse' | 'plan';
   planEnabled?: boolean;
   onMode?: (m: 'browse' | 'plan') => void;
+  /** Antes de esconder a lateral direita (botão ou atalho): false a mantém (um editor sujo ou gravando nela). */
+  canHideRight?: () => boolean;
 }
 
 const narrow = () => typeof window !== 'undefined' && window.innerWidth < 1100;
@@ -51,6 +53,20 @@ export function Shell(p: ShellProps) {
   const presenting = !!p.presenting;
   const planning = p.mode === 'plan';
   const search = useRef<HTMLInputElement>(null);
+  // The company logo that fails to load gives way to the archlens mark (a new src tries again).
+  const logoSrc = p.brand ? (theme === 'dark' && p.brand.logoDark ? p.brand.logoDark : p.brand.logo) : null;
+  const [logoFailed, setLogoFailed] = useState<string | null>(null);
+  const showLogo = !!logoSrc && logoFailed !== logoSrc;
+  const rightRef = useRef(right);
+  rightRef.current = right;
+  const canHideRef = useRef(p.canHideRight);
+  canHideRef.current = p.canHideRight;
+  const toggleRight = () => {
+    if (rightRef.current && canHideRef.current && !canHideRef.current()) return;
+    setRight(!rightRef.current);
+  };
+  const toggleRightRef = useRef(toggleRight);
+  toggleRightRef.current = toggleRight;
 
   useEffect(() => { document.documentElement.dataset.theme = theme; }, [theme]);
 
@@ -70,7 +86,7 @@ export function Shell(p: ShellProps) {
       if (e.code === 'KeyK') { e.preventDefault(); search.current?.focus(); search.current?.select(); return; }
       if (e.code !== 'KeyB' || planning) return; // Planejar has its own panel and shortcut
       e.preventDefault();
-      if (e.altKey || e.shiftKey) setRight((r) => !r);
+      if (e.altKey || e.shiftKey) toggleRightRef.current();
       else setLeft((l) => (l ? null : lastLeft));
     };
     window.addEventListener('keydown', onKey);
@@ -83,9 +99,9 @@ export function Shell(p: ShellProps) {
     <div className="app" data-presenting={presenting || undefined}>
       {!presenting && (
         <header className="top" data-testid="topbar">
-          {p.brand ? (
+          {showLogo ? (
             <>
-              <img className="brand-logo" src={theme === 'dark' && p.brand.logoDark ? p.brand.logoDark : p.brand.logo} alt={p.brand.name ?? 'Logo'} />
+              <img className="brand-logo" src={logoSrc} alt={p.brand?.name ?? 'Logo da empresa'} onError={() => setLogoFailed(logoSrc)} />
               <span className="brand-sep" aria-hidden="true" />
               <span className="brand-product">archlens</span>
             </>
@@ -139,7 +155,7 @@ export function Shell(p: ShellProps) {
         )}
         {!presenting && !planning && (
           <nav className="rail r" aria-label="Painel direito">
-            <button aria-label="Detalhes" title="Detalhes (Ctrl+Alt+B ou Ctrl+Shift+B)" className={right ? 'on' : ''} onClick={() => setRight((r) => !r)}>ⓘ</button>
+            <button aria-label="Detalhes" title="Detalhes (Ctrl+Alt+B ou Ctrl+Shift+B)" className={right ? 'on' : ''} onClick={toggleRight}>ⓘ</button>
           </nav>
         )}
       </div>

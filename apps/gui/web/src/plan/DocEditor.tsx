@@ -7,6 +7,8 @@ export interface DocEditorProps {
   onConfirm: (text: string) => void;
   onCancel: () => void;
   busy?: boolean;
+  /** Por que a última confirmação falhou (no editor ou no rodapé da janela ampliada). */
+  error?: string | null;
   /** Avisa quando há texto não confirmado. */
   onDirty?: (dirty: boolean) => void;
   /** Título e rótulos do editor ampliado (camada para a amostra de cor). */
@@ -16,7 +18,7 @@ export interface DocEditorProps {
 }
 
 /** Editor da documentação de um nó: Escrever e Prévia, e a janela ampliada (DocWindow) com sumário e os dois lado a lado. */
-export function DocEditor({ text, onConfirm, onCancel, busy, onDirty, title, layer, labels }: DocEditorProps) {
+export function DocEditor({ text, onConfirm, onCancel, busy, error, onDirty, title, layer, labels }: DocEditorProps) {
   const [value, setValue] = useState(text);
   const [tab, setTab] = useState<'write' | 'preview'>('write');
   const [full, setFull] = useState(false);
@@ -44,12 +46,13 @@ export function DocEditor({ text, onConfirm, onCancel, busy, onDirty, title, lay
 
   if (full) {
     return (
-      <DocWindow title={title ?? 'Documentação do nó'} layer={layer} labels={labels} text={value} original={text} editable busy={busy}
+      <DocWindow title={title ?? 'Documentação do nó'} layer={layer} labels={labels} text={value} original={text} editable busy={busy} error={error}
         onConfirm={confirm} onCancel={onCancel} onClose={(t) => { setValue(t); setFull(false); }} />
     );
   }
   return (
     <div className="np-edit">
+      {error && <p className="warn np-edit-err" role="alert">{error}</p>}
       <div role="tablist" className="np-doc-tabs">
         <button type="button" role="tab" aria-selected={tab === 'write'} className={tab === 'write' ? 'on' : ''} onClick={() => setTab('write')}>Escrever</button>
         <button type="button" role="tab" aria-selected={tab === 'preview'} className={tab === 'preview' ? 'on' : ''} onClick={() => setTab('preview')}>Prévia</button>

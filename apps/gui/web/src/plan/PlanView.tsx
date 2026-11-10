@@ -10,7 +10,7 @@ import { useStoredState } from '../store';
 import { PlanChat } from './PlanChat';
 import { Split } from './Split';
 import { InfoIcon } from '../icons';
-import { clear, hasChanges, load, save, type ChatMsg } from './draftStore';
+import { clear, hasChanges, load, save, TRIMMED, type ChatMsg } from './draftStore';
 
 const HISTORY_MAX = 40; // the server's limit
 const TOO_BIG = 'o rascunho não cabe no navegador; baixe-o para não perder o trabalho';
@@ -19,7 +19,6 @@ const DISCARD_EDIT = 'Descartar a edição não confirmada?';
 const DISCARD = 'Descartar o rascunho atual? Ele se perde se não foi baixado.';
 const CLEAR_PENDING = 'Há decisão ou notas esperando resposta nesta conversa. Limpar mesmo assim? O rascunho do delta continua.';
 const BROKEN = 'o rascunho salvo não abre; descarte-o ("Descartar rascunho") ou suba outro';
-const TRIMMED = 'a conversa antiga foi cortada para caber no navegador; o rascunho está inteiro';
 const NOTES_ASK = 'rascunhe as notas de interpretação desta rodada';
 const ROUND_RUNNING = 'aguarde a rodada em andamento terminar antes de aplicar';
 const WRITING = 'aguarde a edição da tela ser gravada';

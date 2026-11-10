@@ -16,6 +16,8 @@ export interface DiagramProps {
   /** Se informado, mostra na barra do diagrama o botão que alterna o tema do diagrama. */
   onThemeChange?: (t: Theme) => void;
   onEvent: (e: BridgeEvent) => void;
+  /** Antes de Apresentar (tela cheia esconde as laterais): false não apresenta. */
+  canPresent?: () => boolean;
 }
 
 type Flags = { flowing: boolean; labels: boolean; legend: boolean; matrix: boolean };
@@ -33,7 +35,7 @@ const BUTTONS: { act: Act; label: string; flag?: keyof Flags }[] = [
   { act: 'present', label: 'Apresentar' },
 ];
 
-export const Diagram = forwardRef<HTMLIFrameElement, DiagramProps>(function Diagram({ view, theme, onThemeChange, onEvent, busy = false, alertActions = [] }, ref) {
+export const Diagram = forwardRef<HTMLIFrameElement, DiagramProps>(function Diagram({ view, theme, onThemeChange, onEvent, busy = false, alertActions = [], canPresent }, ref) {
   const frame = useRef<HTMLIFrameElement>(null);
   useImperativeHandle(ref, () => frame.current as HTMLIFrameElement);
   const [flags, setFlags] = useState<Flags>(OFF);
@@ -43,6 +45,8 @@ export const Diagram = forwardRef<HTMLIFrameElement, DiagramProps>(function Diag
   themeRef.current = theme;
   const onEventRef = useRef(onEvent);
   onEventRef.current = onEvent;
+  const canPresentRef = useRef(canPresent);
+  canPresentRef.current = canPresent;
 
   // O iframe lê o tema do localStorage (mesma origem do srcDoc): o host grava antes de carregar.
   const writeTheme = (t: Theme) => { try { localStorage.setItem(DIAGRAM_THEME_KEY, t); } catch { /* sem storage */ } };
@@ -64,6 +68,7 @@ export const Diagram = forwardRef<HTMLIFrameElement, DiagramProps>(function Diag
 
   const act = useCallback((a: Act) => {
     if (a === 'present') {
+      if (canPresentRef.current && !canPresentRef.current()) return;
       // O host é o único dono do fullscreen: requestFullscreen exige ativação do usuário (este clique)
       // e não se manda act:'present' ao iframe.
       try { void frame.current?.requestFullscreen?.()?.catch(() => {}); } catch { /* sem fullscreen */ }

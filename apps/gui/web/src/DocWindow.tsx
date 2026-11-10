@@ -13,6 +13,8 @@ export interface DocWindowProps {
   /** Texto de referência para "alterado" e para a pergunta de descarte (padrão: o texto ao abrir). */
   original?: string;
   busy?: boolean;
+  /** Por que a última confirmação falhou: aparece no rodapé, na frente do que a janela cobre. */
+  error?: string | null;
   onConfirm?: (text: string) => void;
   /** Cancelar (editável): quem abriu descarta a edição. Sem ela, Cancelar só fecha. */
   onCancel?: () => void;
@@ -36,7 +38,7 @@ const lineOf = (text: string, pos: number) => {
 };
 
 /** Janela ampliada da documentação: sumário, Escrever / Lado a lado / Prévia e, se editável, formatação. */
-export function DocWindow({ title, layer, labels, text, editable, original, busy, onConfirm, onCancel, onClose }: DocWindowProps) {
+export function DocWindow({ title, layer, labels, text, editable, original, busy, error, onConfirm, onCancel, onClose }: DocWindowProps) {
   const [value, setValue] = useState(text);
   const [mode, setMode] = useState<Mode>(editable ? 'split' : 'preview');
   const [toc, setToc] = useState(true);
@@ -174,6 +176,7 @@ export function DocWindow({ title, layer, labels, text, editable, original, busy
         <div className="doc-win-f">
           <span className="doc-win-m">markdown · {lines} linhas{editable && dirty ? ' · alterado' : ''}</span>
           <span className="doc-win-m">{editable ? 'Esc fecha · Ctrl+Enter confirma' : 'Esc fecha'}</span>
+          {error && <p className="warn doc-win-err" role="alert">{error}</p>}
           {editable && (
             <span className="doc-win-act">
               <button type="button" onClick={cancel}>Cancelar</button>

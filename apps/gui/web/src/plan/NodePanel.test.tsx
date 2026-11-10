@@ -119,6 +119,20 @@ describe('NodePanel', () => {
       expect(screen.getByLabelText('Documentação')).toBeTruthy();
     });
 
+    it('erro ao confirmar no editor ampliado aparece no rodapé da janela', async () => {
+      planElement.mockResolvedValue(el('a', 'Cashback', { docs: true, doc: 'x', docRaw: 'x' }));
+      planEdit.mockRejectedValue(new api.ApiError('marcador do archlens na documentação', undefined, 400));
+      render(<NodePanel base="b" draft={draft()} id="a" onDraft={() => {}} />);
+      await screen.findByRole('heading', { name: 'Cashback' });
+      fireEvent.click(screen.getByRole('button', { name: /Editar documentação/ }));
+      fireEvent.click(screen.getByRole('button', { name: 'Tela cheia' }));
+      const dlg = screen.getByRole('dialog');
+      fireEvent.change(dlg.querySelector('textarea')!, { target: { value: 'y' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Confirmar' }));
+      await waitFor(() => expect(dlg.querySelector('.doc-win-f [role="alert"]')?.textContent).toContain('marcador do archlens'));
+      expect(screen.getAllByRole('alert')).toHaveLength(1);
+    });
+
     it('o editor continua aberto, com o texto, quando o pai renderiza com outro onDirty', async () => {
       planElement.mockResolvedValue(el('a', 'Cashback', { docs: true, doc: 'x', docRaw: 'x' }));
       const { rerender } = render(<NodePanel base="b" draft={draft()} id="a" onDraft={() => {}} onDirty={() => {}} />);

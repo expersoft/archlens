@@ -55,13 +55,14 @@ export function useBrowseNode(base: string | null, id: string | null, enabled: b
  * Puts a Navegar edit into Planejar's draft: the saved draft (or none, and the server starts one) goes with the edit
  * to `/plan/edit`, and the answer is saved with the conversation saved at that moment. Compare-and-swap: when the
  * saved draft changed meanwhile, or `blocked` says Planejar got busy, the answer is dropped. A server refusal (a saved
- * draft of another version, say) comes back as the error, with nothing saved.
+ * draft of another version, say) comes back as the error, with nothing saved. `trimmed`: the saved conversation was cut
+ * to fit beside the new draft.
  */
 export async function confirmBrowseEdit(
   base: string,
   edit: ScreenEdit | ((draft: Draft | null) => ScreenEdit),
   opts: { blocked?: () => string | null } = {},
-): Promise<{ ok: true } | { ok: false; error: string }> {
+): Promise<{ ok: true; trimmed?: true } | { ok: false; error: string }> {
   const busy = opts.blocked?.();
   if (busy) return { ok: false, error: busy };
   if (unreadable(base)) return { ok: false, error: UNREADABLE };
@@ -74,9 +75,11 @@ export async function confirmBrowseEdit(
   const now = load(base);
   if (unreadable(base) || !same(now?.draft ?? null, draft) || opts.blocked?.()) return { ok: false, error: CHANGED };
   const chat = now?.chat ?? [];
-  if (save(base, next, chat) === 'too-big') {
+  const stored = save(base, next, chat);
+  if (stored === 'too-big') {
     save(base, draft, chat); // what was there before goes back
     return { ok: false, error: TOO_BIG };
   }
-  return { ok: true };
+  // the draft is whole but the oldest saved messages were cut to fit: the caller says so
+  return stored === 'chat-trimmed' ? { ok: true, trimmed: true } : { ok: true };
 }

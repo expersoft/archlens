@@ -97,11 +97,8 @@ export function NodePanel({ base, draft, id, onPick, onDraft, onDirty, locked, o
     labels: [el.card.element.c4Label, el.card.element.typeLabel ? `ArchiMate ${el.card.element.typeLabel}` : undefined].filter((x): x is string => !!x),
   };
   const docSlot = mine === 'doc' ? (
-    <>
-      {err}
-      <DocEditor {...docWin} text={el.docRaw ?? ''} busy={busy || !!locked} onDirty={setDirty} onCancel={close}
-        onConfirm={(text) => void save({ op: 'doc', id, text })} />
-    </>
+    <DocEditor {...docWin} text={el.docRaw ?? ''} busy={busy || !!locked} error={editError} onDirty={setDirty} onCancel={close}
+      onConfirm={(text) => void save({ op: 'doc', id, text })} />
   ) : el.doc || el.removed
     ? <DocTab {...docWin} base={base} id={id} text={el.doc} max />
     : (

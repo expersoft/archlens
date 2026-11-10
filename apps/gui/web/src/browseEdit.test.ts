@@ -31,6 +31,18 @@ describe('confirmBrowseEdit', () => {
     expect(load('b')).toEqual({ draft: edited, chat: [{ id: 1, role: 'user', text: 'oi' }] });
   });
 
+  it('conversa salva cortada para caber: grava e avisa', async () => {
+    save('b', draft, [{ id: 1, role: 'user', text: 'oi' }]);
+    vi.mocked(api.planEdit).mockResolvedValue({ draft: edited, opsHash: 'h', screenConflicts: [] });
+    const real = Storage.prototype.setItem;
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (this: Storage, k: string, v: string) {
+      if (k.startsWith('archlens-gui-chat:')) throw new Error('cheio');
+      real.call(this, k, v);
+    });
+    expect(await confirmBrowseEdit('b', edit)).toEqual({ ok: true, trimmed: true });
+    expect(load('b')?.draft).toEqual(edited);
+  });
+
   it('a edição pode ser montada a partir do rascunho lido', async () => {
     save('b', { ...draft, edits: { a: { properties: { canal: 'app' } } } }, []);
     vi.mocked(api.planEdit).mockResolvedValue({ draft: edited, opsHash: 'h', screenConflicts: [] });

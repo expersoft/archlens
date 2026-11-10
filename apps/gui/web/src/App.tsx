@@ -22,6 +22,7 @@ import { PropsEditor } from './plan/PropsEditor';
 import { DocEditor } from './plan/DocEditor';
 import { DocTab } from './DocTab';
 import { confirmBrowseEdit, UNSAVED, useBrowseNode } from './browseEdit';
+import { TRIMMED } from './plan/draftStore';
 import { allLabel, oneLabel, toggleAll, toggleOne } from './nesting';
 
 const totalMs = (v: ViewResult) => v.ms.resolve + v.ms.layout + v.ms.render;
@@ -78,13 +79,21 @@ export function App() {
   const [browseNotice, setBrowseNotice] = useState<{ base: string; text: string; warn: boolean } | null>(null);
   const browseDirty = useRef(false);
   const closeBrowseEdit = () => { setBrowseEdit(null); setBrowseError(null); browseDirty.current = false; };
-  /** Before leaving the node, the base or the mode: a dirty editor asks first; a confirmed edit being written goes on. */
+  // Navegar is writing a confirmed edit into the draft of the base on screen.
+  const writingHere = () => !!browseWritingRef.current && browseWritingRef.current === stateRef.current.base;
+  /**
+   * Before leaving the node or the mode, hiding the right panel or presenting: a dirty editor asks first. While a
+   * confirmed edit of the base on screen is being written nothing leaves it: a failure must show its error on the
+   * editor that still holds the typed text.
+   */
   const leaveBrowseEdit = () => {
-    if (browseWritingRef.current) return true;
+    if (writingHere()) { setNotice(LOCKED_SAVE); return false; }
     if (browseDirty.current && !window.confirm(DISCARD_EDIT)) return false;
     closeBrowseEdit();
     return true;
   };
+  // Re-reads the node in Navegar on every return from Planejar (Descartar, Limpar, Abrir change the saved draft).
+  const [browseRev, setBrowseRev] = useState(0);
   const [selected, setSelected] = useState<string | null>(null);
   const [menu, setMenu] = useState<Menu | null>(null);
   const frame = useRef<HTMLIFrameElement>(null);
@@ -184,7 +193,8 @@ export function App() {
 
   const onBase = (id: string) => {
     if (id === stateRef.current.base) return;
-    if (!leaveBrowseEdit()) return;
+    // a confirmed edit being written goes on: it lands in its base's draft and the new base says what became of it
+    if (!writingHere() && !leaveBrowseEdit()) return;
     setBrowseNotice(null);
     menuTicket.current++;
     setMenu(null);
@@ -407,8 +417,9 @@ export function App() {
   const planning = planEnabled && mode === 'plan';
 
   // Editing the node in Navegar (Planejar on): the node as the saved draft leaves it, read again when Planejar gets
-  // free, re-reads the draft or the mode changes; the edit goes into the draft and the GUI moves to Planejar.
-  const bn = useBrowseNode(base, selected, planEnabled && !planning, `${String(planLock)}|${planReload}|${planUnsaved}`);
+  // free, re-reads the draft or the GUI comes back from Planejar; the edit goes into the draft and the GUI moves to
+  // Planejar.
+  const bn = useBrowseNode(base, selected, planEnabled && !planning, `${String(planLock)}|${planReload}|${planUnsaved}|${browseRev}`);
   const saveBrowse = async (edit: (d: Draft | null) => ScreenEdit) => {
     const b = base, id = selected;
     if (!b || !id || browseWritingRef.current) return;
@@ -422,15 +433,18 @@ export function App() {
         : planLockRef.current ? lockText(planLockRef.current) : planUnsavedRef.current ? UNSAVED : null),
     });
     setBrowseWriting(null);
+    setNotice((n) => (n === LOCKED_SAVE ? null : n)); // the hint of a blocked click goes with the write
     const now = stateRef.current.base;
     if (now !== b) {
       setBrowseEdit((e) => (e?.base === b ? null : e));
       if (browseEdit?.base === b) browseDirty.current = false;
       const name = bases.find((x) => x.id === b)?.name ?? b;
-      if (now) setBrowseNotice({ base: now, warn: !r.ok, text: r.ok ? `A edição foi guardada no rascunho de ${name}` : `A edição em ${name} não foi guardada: ${r.error}` });
+      const trimmed = r.ok && !!r.trimmed;
+      if (now) setBrowseNotice({ base: now, warn: !r.ok || trimmed, text: r.ok ? `A edição foi guardada no rascunho de ${name}${trimmed ? `; ${TRIMMED}` : ''}` : `A edição em ${name} não foi guardada: ${r.error}` });
       return;
     }
     if (!r.ok) { setBrowseError({ base: b, id, text: r.error }); return; }
+    if (r.trimmed) setBrowseNotice({ base: b, warn: true, text: `A edição foi guardada; ${TRIMMED}` });
     closeBrowseEdit();
     menuTicket.current++;
     setMenu(null);
@@ -446,8 +460,10 @@ export function App() {
   const shownCard = bn.el ? bn.el.card : card;
   const shownDocs = bn.node ? bn.node.docs : docsEnabled;
   const editLock = browseWriting ? LOCKED_SAVE : planLock ? lockText(planLock) : planUnsaved ? UNSAVED : null;
-  const browseErr = mine && browseError?.base === base && browseError.id === selected
-    ? <p className="warn np-edit-err" role="alert">{browseError.text}</p> : null;
+  // An editor never outlives its dirty flag (closed, or hidden by another node, base or mode).
+  useEffect(() => { if (!mine) browseDirty.current = false; }, [mine]);
+  const browseErrText = mine && browseError?.base === base && browseError.id === selected ? browseError.text : null;
+  const browseErr = browseErrText ? <p className="warn np-edit-err" role="alert">{browseErrText}</p> : null;
   function openBrowse(kind: 'properties' | 'doc') {
     if (!base || !selected) return;
     setBrowseError(null);
@@ -481,11 +497,8 @@ export function App() {
       ))}</dl>
     ) : shownCard ? <p className="muted">Este nó não tem propriedades.</p> : undefined,
     doc: mine === 'doc' ? (
-      <>
-        {browseErr}
-        <DocEditor {...docWin} text={browseEdit!.docRaw} busy={!!editLock} onDirty={setBrowseDirty} onCancel={closeBrowseEdit}
-          onConfirm={(text) => void saveBrowse(() => ({ op: 'doc', id: selected!, text }))} />
-      </>
+      <DocEditor {...docWin} text={browseEdit!.docRaw} busy={!!editLock} error={browseErrText} onDirty={setBrowseDirty} onCancel={closeBrowseEdit}
+        onConfirm={(text) => void saveBrowse(() => ({ op: 'doc', id: selected!, text }))} />
     ) : !bn.node ? undefined : bn.node.doc || removed
       ? <DocTab {...docWin} base={base!} id={selected!} text={bn.node.doc} max />
       : (
@@ -505,6 +518,7 @@ export function App() {
     if (m === 'plan' && !leaveBrowseEdit()) return;
     cancelAsk();
     if (m === 'plan') setPlanOpened(true);
+    else setBrowseRev((n) => n + 1);
     setMode(m);
   };
   const closeMenu = useCallback(() => setMenu(null), []);
@@ -529,6 +543,7 @@ export function App() {
       mode={planning ? 'plan' : 'browse'}
       planEnabled={planEnabled}
       onMode={onMode}
+      canHideRight={leaveBrowseEdit}
       onSearch={base && !planning ? onSearch : undefined}
       chatRequest={chatRequest}
       rightRequest={rightRequest}
@@ -600,7 +615,7 @@ export function App() {
               </span>
             ))}
           </nav>
-          <Diagram ref={frame} view={view} theme={diagramTheme} onThemeChange={setDiagramTheme} onEvent={onEvent} busy={loading} alertActions={alertActs} />
+          <Diagram ref={frame} view={view} theme={diagramTheme} onThemeChange={setDiagramTheme} onEvent={onEvent} busy={loading} alertActions={alertActs} canPresent={leaveBrowseEdit} />
         </>
       ) : <div className="empty">{shownStatus}</div>}
       {menu && <ContextMenu at={menu.at} title={menu.title} items={menu.items} onPick={(a) => openAction(a, menu.id, 'Menu')} onClose={closeMenu} nest={nest} nodeId={menu.id} onNest={onNestOne} />}

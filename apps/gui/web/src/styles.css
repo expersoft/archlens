@@ -322,6 +322,7 @@ body{font:14px/1.4 system-ui,sans-serif;background:var(--bg);color:var(--ink)}
 .doc-win-pv .doc-text a{color:var(--accent)}
 .doc-win-f{display:flex;align-items:center;gap:12px;padding:9px 14px;border-top:1px solid var(--line);background:var(--bg)}
 .doc-win-act{margin-left:auto;display:flex;gap:6px}
+.doc-win-err{margin:0;min-width:0;overflow-wrap:anywhere}
 .doc-win-act button{border:1px solid var(--line);border-radius:6px;padding:4px 12px;background:var(--panel);cursor:pointer}
 .doc-win-act button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
 .doc-win-act button:disabled{opacity:.5;cursor:default}

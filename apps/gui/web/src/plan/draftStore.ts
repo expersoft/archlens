@@ -41,6 +41,9 @@ export function load(base: string): { draft: Draft | null; chat: ChatMsg[] } | n
   } catch { return null; }
 }
 
+/** What a save that had to cut the conversation says (the draft is whole). */
+export const TRIMMED = 'a conversa antiga foi cortada para caber no navegador; o rascunho está inteiro';
+
 /**
  * The draft always wins over the conversation: when storage is full the oldest messages go first. Without a draft (after
  * an apply) only the conversation is kept.
