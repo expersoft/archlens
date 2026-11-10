@@ -108,6 +108,7 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
   const [stored, setStored] = useState<'ok' | 'chat-trimmed' | 'too-big'>('ok');
   const storedRef = useRef(stored);
   const [previews, setPreviews] = useState<ViewSpec[]>([]);
+  const [previewLoading, setPreviewLoading] = useState(false);
   const [shown, setShown] = useState<PlanPreviewResult | null>(null);
   const [conflicts, setConflicts] = useState<ScreenConflict[]>([]);
   const [previewFailed, setPreviewFailed] = useState(false);
@@ -278,7 +279,8 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
   const roundRunning = chat.some((m) => m.status === 'running');
   // The screen controls' lock says why they wait: the chat round, or a screen edit being written.
   const ownLock: Lock = roundRunning ? 'chat' : writing ? 'save' : false;
-  const lock: Lock = ownLock || (externalLock ? 'save' : false);
+  // A preview being drawn pauses screen editing too (only here: the App is not told, it is no write).
+  const lock: Lock = ownLock || (externalLock ? 'save' : false) || (previewLoading ? 'view' : false);
   // What the App is told: our lock (never Navegar's own write), or 'save' while Aplicar (or its Replanejar) runs,
   // since it writes the draft too.
   const busy: Lock = ownLock || (applying ? 'save' : false);
@@ -476,7 +478,7 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
             {editError && <p className="err" role="alert">{editError}</p>}
             {applyOpen && shown && <ApplyDialog summary={shown.summary} views={savedViews} busy={applying || writingAny} error={applyError} onConfirm={() => void apply()} onCancel={() => setApplyOpen(false)} onReplan={replannable ? () => void replan() : undefined} />}
             <PlanPreview base={base} draft={draft} previews={previews} onLoaded={(r, failed) => { setShown(r); if (r) { setListed(r); setConflicts(r.screenConflicts ?? []); } setPreviewFailed(!!failed); }}
-              onNavigate={navigated} onNav={onNav} onSelect={(id) => { if (!leaveEdit()) return; setSelected(id); if (id) { setTab('node'); setPanel(true); } }} focus={focus} />
+              onNavigate={navigated} onNav={onNav} onLoading={setPreviewLoading} onSelect={(id) => { if (!leaveEdit()) return; setSelected(id); if (id) { setTab('node'); setPanel(true); } }} focus={focus} />
           </div>
         )}
       />

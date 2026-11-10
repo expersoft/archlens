@@ -17,7 +17,7 @@ import { send, type BridgeEvent } from './bridge';
 import { typeHint } from './labels';
 import { PlanView } from './plan/PlanView';
 import type { PreviewNav } from './plan/PlanPreview';
-import { LOCKED_SAVE, lockText, type Lock } from './plan/lock';
+import { LOCKED_SAVE, LOCKED_VIEW as LOADING_VIEW, lockText, type Lock } from './plan/lock';
 import { PropsEditor } from './plan/PropsEditor';
 import { DocEditor } from './plan/DocEditor';
 import { DocTab } from './DocTab';
@@ -30,7 +30,6 @@ const totalMs = (v: ViewResult) => v.ms.resolve + v.ms.layout + v.ms.render;
 /** `items` null: as ações ainda estão chegando (o menu já abre com "Carregando…"). */
 type Menu = { id: string; at: { x: number; y: number }; title: string; items: Action[] | null };
 const DISCARD_EDIT = 'Descartar a edição não confirmada?';
-const LOADING_VIEW = 'Disponível quando a visão terminar de carregar';
 /** The properties the screen layer of the draft already sets on the node: a new edit keeps them. */
 const screenProps = (d: Draft | null, id: string) =>
   ((d?.edits as Record<string, { properties?: Record<string, PropValue | null> }> | undefined)?.[id]?.properties) ?? {};
@@ -550,7 +549,11 @@ export function App() {
   const trail = useMemo(() => hist.steps.slice(0, hist.cur + 1), [hist.steps, hist.cur]);
   // o aviso da espera (barra, status com Cancelar) só aparece depois de ~300 ms; o bloqueio vale desde o início
   const lateLoading = useDelayed(loading);
-  const progress = lateLoading && !planning ? { label: hist.pendingLabel ?? 'visão', onCancel: cancelLoad } : null;
+  // no Planejar, a espera é a da prévia (o pedido em andamento que ela informa)
+  const planWait = planning ? planNav?.loading ?? null : null;
+  const latePlan = useDelayed(!!planWait);
+  const progress = planning ? (latePlan && planWait ? { label: planWait.label, onCancel: planWait.cancel } : null)
+    : lateLoading ? { label: hist.pendingLabel ?? 'visão', onCancel: cancelLoad } : null;
   const shownStatus = hist.error ?? notice ?? (view && catalog ? `${catalog.name} · ${view.title}` : status);
 
   return (
@@ -562,8 +565,8 @@ export function App() {
       status={shownStatus}
       progress={progress}
       notation={planning ? planNav?.notation ?? undefined : notation}
-      onNotation={planning ? (planNav?.notation ? planNav.flip : undefined) : base && view && !loading ? onNotation : undefined}
-      notationHint={!planning && loading ? LOADING_VIEW : undefined}
+      onNotation={planning ? (planNav?.notation && !planWait ? planNav.flip : undefined) : base && view && !loading ? onNotation : undefined}
+      notationHint={(planning ? planWait : loading) ? LOADING_VIEW : undefined}
       bases={bases}
       base={base}
       onBase={onBase}

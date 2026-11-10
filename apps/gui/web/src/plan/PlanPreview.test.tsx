@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { useState } from 'react';
 
 vi.mock('../api', async (orig) => ({ ...(await orig<typeof import('../api')>()), planPreview: vi.fn(), getView: vi.fn(), planActions: vi.fn(), planFlip: vi.fn() }));
 
 import * as api from '../api';
-import { PlanPreview } from './PlanPreview';
+import { PlanPreview, type PreviewNav } from './PlanPreview';
 
 const planPreview = vi.mocked(api.planPreview);
 const planActions = vi.mocked(api.planActions);
@@ -250,5 +251,73 @@ describe('PlanPreview', () => {
     expect(post).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'select' }), '*');
     rerender(<PlanPreview base="b" draft={withDelta} previews={[]} onSelect={onSelect} focus={{ id: 'b', n: 2 }} />);
     expect(post).toHaveBeenCalledWith(expect.objectContaining({ type: 'select', id: 'b', focus: true }), '*');
+  });
+
+  /** Like PlanView: a view navigated from the diagram joins the asked ones, and the preview is asked again. */
+  function Host({ onNav, onSelect }: { onNav: (n: PreviewNav) => void; onSelect?: (id: string | null) => void }) {
+    const [previews, setPreviews] = useState<api.ViewSpec[]>([]);
+    return <PlanPreview base="b" draft={withDelta} previews={previews} onNav={onNav} onSelect={onSelect} onNavigate={(sp) => setPreviews((p) => [...p, sp])} />;
+  }
+  const later = <T,>() => { let done!: (v: T) => void; const p = new Promise<T>((r) => { done = r; }); return { p, done }; };
+  const go = { key: 'nav-9', notation: 'c4', level: 'container', scope: 'a', title: 'Containers de Novo' };
+  const navResult = result({ views: [{ key: 'nav-9', title: 'Containers de Novo', html: '<p>nav</p>', kind: 'asked', spec: go }] });
+
+  it('durante a prévia, onNav informa loading com o rótulo', async () => {
+    const u = userEvent.setup();
+    let nav: PreviewNav | null = null;
+    const slow = later<api.PlanPreviewResult>();
+    planPreview.mockImplementation((_b, _d, specs) => (specs ? slow.p : Promise.resolve(result())));
+    planActions.mockResolvedValue({ actions: [{ label: 'Abrir containers', spec: go, primary: true }] });
+    const { container } = render(<Host onNav={(n) => { nav = n; }} />);
+    await waitFor(() => expect(frames(container)).toEqual(['<p>com-delta</p>']));
+    expect(nav!.loading).toBeNull();
+    await fromFrame(container, { type: 'context', id: 'a', x: 10, y: 10 }, () => expect(screen.getByRole('menu')).toBeTruthy());
+    await u.click(await screen.findByRole('menuitem', { name: 'Abrir containers' }));
+    await waitFor(() => expect(nav!.loading?.label).toBe('Abrir containers: a'));
+    // the previous preview stays, dimmed, until the new one arrives
+    expect(frames(container)).toEqual(['<p>com-delta</p>']);
+    expect(container.querySelector('.diagram')?.getAttribute('aria-busy')).toBe('true');
+    await act(async () => { slow.done(navResult); });
+    await waitFor(() => expect(frames(container)).toEqual(['<p>nav</p>']));
+    expect(nav!.loading).toBeNull();
+    expect(container.querySelector('.diagram')?.getAttribute('aria-busy')).toBeNull();
+  });
+
+  it('cancelar volta à visão anterior e ignora a resposta tardia', async () => {
+    let nav: PreviewNav | null = null;
+    const slow = later<api.PlanPreviewResult>();
+    const am = { key: 'delta', notation: 'archimate', viewpoint: 'layered' };
+    planPreview.mockImplementation((_b, _d, _s, notation) => (notation === 'archimate' ? slow.p : Promise.resolve(result())));
+    const { container } = render(<Host onNav={(n) => { nav = n; }} />);
+    await waitFor(() => expect(nav?.notation).toBe('c4'));
+    act(() => nav!.flip('archimate'));
+    await waitFor(() => expect(nav!.loading?.label).toBe('Ver em ArchiMate'));
+    const calls = planPreview.mock.calls.length;
+    act(() => nav!.loading!.cancel());
+    expect(nav!.loading).toBeNull();
+    expect(nav!.notation).toBe('c4');
+    await act(async () => { slow.done(result({ views: [{ key: 'delta', title: 'O que muda', html: '<p>am</p>', kind: 'change', spec: am }] })); });
+    expect(frames(container)).toEqual(['<p>com-delta</p>']);
+    expect(planPreview.mock.calls.length).toBe(calls); // going back does not ask the old notation again
+    expect(nav!.notation).toBe('c4');
+  });
+
+  it('durante a prévia, botão direito e clique duplo não fazem nada', async () => {
+    let nav: PreviewNav | null = null;
+    const onSelect = vi.fn<(id: string | null) => void>();
+    planPreview.mockImplementation((_b, _d, _s, notation) => (notation === 'archimate' ? new Promise(() => {}) : Promise.resolve(result())));
+    planActions.mockResolvedValue({ actions: [{ label: 'Abrir containers', spec: go, primary: true }] });
+    const { container } = render(<Host onNav={(n) => { nav = n; }} onSelect={onSelect} />);
+    await waitFor(() => expect(frames(container)).toHaveLength(1));
+    await fromFrame(container, { type: 'select', id: 'b' }, () => expect(onSelect).toHaveBeenCalledWith('b'));
+    act(() => nav!.flip('archimate'));
+    await waitFor(() => expect(nav!.loading).not.toBeNull());
+    emit(container, { type: 'context', id: 'a', x: 10, y: 10 });
+    emit(container, { type: 'expand', id: 'a' });
+    emit(container, { type: 'select', id: 'a' });
+    await act(async () => {});
+    expect(planActions).not.toHaveBeenCalled();
+    expect(screen.queryByRole('menu')).toBeNull();
+    expect(onSelect).not.toHaveBeenCalledWith('a');
   });
 });
