@@ -64,6 +64,11 @@ export function ApplyDialog({ phase, summary, views, steps, count, result, failu
     root.current?.focus();
     return () => back?.focus?.();
   }, []);
+  // A phase change unmounts the focused button (Confirmar e aplicar): the focus goes back to the window, never behind it.
+  useEffect(() => {
+    const el = root.current;
+    if (el && !el.contains(document.activeElement)) el.focus();
+  }, [phase]);
   const confirming = phase === 'confirm';
   const ended = phase === 'done' || phase === 'failed';
   const title = confirming ? 'Confirmar a aplicação' : `Aplicando ${changes(count)} na base`;

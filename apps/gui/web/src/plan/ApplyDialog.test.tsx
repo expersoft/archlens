@@ -230,6 +230,27 @@ describe('Aplicar na PlanView', () => {
     expect(planTurn).not.toHaveBeenCalled();
   });
 
+  it('o foco fica na janela depois de Confirmar e aplicar, durante e no fim', async () => {
+    open();
+    const u = userEvent.setup();
+    let on!: (e: api.ApplyEvent) => void;
+    let end!: () => void;
+    planApply.mockImplementation((_b, _d, _c, cb) => { on = cb; return new Promise<void>((r) => { end = r; }); });
+    render(<PlanView base="b" canBuild />);
+    await waitFor(() => expect(aplicar().disabled).toBe(false));
+    await u.click(aplicar());
+    await u.click(screen.getByRole('button', { name: 'Confirmar e aplicar' }));
+    const dlg = await screen.findByRole('dialog', { name: /Aplicando/ });
+    expect(dlg.contains(document.activeElement)).toBe(true);
+    await u.tab();
+    expect(dlg.contains(document.activeElement)).toBe(true);
+    act(() => { on({ type: 'step', step: 'check', state: 'done' }); on({ type: 'result', ...applied() }); end(); });
+    await within(dlg).findByRole('button', { name: 'Fechar' });
+    await waitFor(() => expect(dlg.contains(document.activeElement)).toBe(true));
+    await u.tab();
+    expect(dlg.contains(document.activeElement)).toBe(true);
+  });
+
   it('ao Fechar depois do fim: o chat pede as notas', async () => {
     open();
     const u = userEvent.setup();
