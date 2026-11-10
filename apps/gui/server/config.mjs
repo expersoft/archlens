@@ -1,5 +1,5 @@
 // GUI configuration: a JSON file listing the bases, or a single base given on the command line.
-import { readFileSync, statSync } from 'node:fs';
+import { readFileSync, realpathSync, statSync } from 'node:fs';
 import { basename, dirname, extname, resolve, sep } from 'node:path';
 import { loadEnv } from './envfile.mjs';
 
@@ -101,15 +101,19 @@ function checkBrand(brand, dir) {
   const one = (key, required) => {
     const v = brand[key];
     if (v === undefined && !required) return undefined;
-    if (typeof v !== 'string' || !v.trim()) throw configError(`brand.${key} é obrigatório`);
-    const abs = resolve(dir, v);
-    if (!abs.startsWith(resolve(dir) + sep)) throw configError(`brand.${key} precisa ficar dentro da pasta do archlens-gui.json`);
+    if (typeof v !== 'string' || !v.trim()) throw configError(required ? `brand.${key} é obrigatório` : `brand.${key}, se informado, precisa ser um caminho`);
+    const lexical = resolve(dir, v);
+    const inside = (p, root) => p.startsWith(root.endsWith(sep) ? root : root + sep);
+    if (!inside(lexical, resolve(dir))) throw configError(`brand.${key} precisa ficar dentro da pasta do archlens-gui.json`);
+    const abs = lexical;
     if (!LOGO_EXT.has(extname(abs).toLowerCase())) throw configError(`brand.${key}: use .svg, .png ou .webp`);
-    let st;
-    try { st = statSync(abs); } catch { throw configError(`brand.${key}: arquivo não encontrado: ${abs}`); }
+    let real, st;
+    try { real = realpathSync(abs); st = statSync(real); } catch { throw configError(`brand.${key}: arquivo não encontrado: ${abs}`); }
     if (!st.isFile()) throw configError(`brand.${key}: arquivo não encontrado: ${abs}`);
+    // A link inside the folder must not lead out of it.
+    if (!inside(real, realpathSync(dir))) throw configError(`brand.${key} precisa ficar dentro da pasta do archlens-gui.json`);
     if (st.size > LOGO_MAX) throw configError(`brand.${key} passa de 1 MB`);
-    return abs;
+    return real;
   };
   const logo = one('logo', true);
   const logoDark = one('logoDark', false);

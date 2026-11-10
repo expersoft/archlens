@@ -138,6 +138,13 @@ export async function startServer({ config, staticDir, registry, provider } = {}
   const ownRegistry = !registry;
   registry ??= createBaseRegistry(config);
   const cache = createViewCache();
+  // The logos are read once (size and place were checked at config load): later changes to the files do not matter.
+  const logos = {};
+  if (config?.brand) {
+    logos.logo = await readFile(config.brand.logo);
+    if (config.brand.logoDark) logos['logo-dark'] = await readFile(config.brand.logoDark);
+  }
+  const logoType = { logo: config?.brand?.logo, 'logo-dark': config?.brand?.logoDark };
   const telemetry = createTelemetry(config?.telemetry ?? {});
 
   // The question as an NDJSON stream: agent events, then result (or error), then done. A closed connection aborts.
@@ -200,12 +207,10 @@ export async function startServer({ config, staticDir, registry, provider } = {}
       plan: planOn ? { enabled: true, maxRounds: config.plan.maxRounds, timeoutMs: config.plan.timeoutMs, build: canBuild } : { enabled: false, ...(planOff ? { reason: planOff } : {}) },
     })],
     ['GET', /^\/api\/brand\/(logo|logo-dark)$/, async (_req, [which], _url, res) => {
-      const file = which === 'logo' ? config?.brand?.logo : config?.brand?.logoDark;
-      if (!file) throw httpError(404, 'sem logo configurado');
-      let data;
-      try { data = await readFile(file); } catch { throw httpError(404, 'logo não encontrado'); }
+      const data = logos[which];
+      if (!data) throw httpError(404, 'sem logo configurado');
       send(res, 200, data, {
-        'content-type': TYPES[extname(file).toLowerCase()] ?? 'application/octet-stream',
+        'content-type': TYPES[extname(logoType[which]).toLowerCase()], 'x-content-type-options': 'nosniff',
         'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'", 'cache-control': 'no-cache',
       });
       return STREAMED;

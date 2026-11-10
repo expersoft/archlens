@@ -358,6 +358,7 @@ test('/api/info traz brand e /api/brand/logo serve o arquivo com CSP', async () 
     assert.equal(r.status, 200);
     assert.equal(r.headers.get('content-type'), 'image/svg+xml');
     assert.equal(r.headers.get('content-security-policy'), "default-src 'none'; style-src 'unsafe-inline'");
+    assert.equal(r.headers.get('x-content-type-options'), 'nosniff');
     assert.match(await r.text(), /<svg/);
     const dk = await fetch(`${srv.url}/api/brand/logo-dark`);
     assert.equal(dk.headers.get('content-type'), 'image/png');
@@ -377,4 +378,14 @@ test('/api/brand/logo-dark sem logoDark responde 404; sem brand também', async 
     assert.equal((await fetch(`${url}/api/brand/logo`)).status, 404);
     assert.equal((await (await fetch(`${url}/api/info`)).json()).brand, undefined);
   });
+});
+
+test('logo é lido uma vez: trocar o arquivo depois não muda a resposta', async () => {
+  const d = tmp();
+  writeFileSync(join(d, 'l.svg'), '<svg id="um"/>');
+  const srv = await startServer({ config: { ...config(), brand: { logo: join(d, 'l.svg') } } });
+  try {
+    writeFileSync(join(d, 'l.svg'), '<svg id="dois"/>');
+    assert.match(await (await fetch(`${srv.url}/api/brand/logo`)).text(), /id="um"/);
+  } finally { await srv.close(); }
 });

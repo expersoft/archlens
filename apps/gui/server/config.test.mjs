@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, mkdirSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { loadConfig } from './config.mjs';
@@ -116,7 +116,6 @@ test('config: --plan com arquivo usa o objeto plan do arquivo', () => {
   assert.deepEqual(loadConfig({ file: write({ llm: LLM, plan: false }), plan: true }).plan, PLAN_DEFAULTS);
 });
 
-import { mkdirSync } from 'node:fs';
 const brandDir = join(dir, 'b'); mkdirSync(brandDir, { recursive: true });
 const brandFile = (cfg) => { const f = join(brandDir, 'gui.json'); writeFileSync(f, JSON.stringify({ bases: [{ id: 'a', path: 'x' }], ...cfg })); return f; };
 const badBrand = (brand, re) => assert.throws(() => loadConfig({ file: brandFile({ brand }) }), e => e.code === 'E_GUI_CONFIG' && re.test(e.message));
@@ -146,4 +145,15 @@ test('brand.logo com extensão .gif, ausente ou inexistente é recusado', () => 
   badBrand({}, /brand\.logo é obrigatório/);
   badBrand({ logo: 'nao-existe.svg' }, /brand\.logo: arquivo não encontrado: /);
   badBrand('x', /brand deve ser um objeto/);
+});
+
+test('brand.logo que é link simbólico para fora da pasta é recusado', () => {
+  writeFileSync(join(dir, 'segredo.svg'), '<svg/>');
+  symlinkSync(join(dir, 'segredo.svg'), join(brandDir, 'link.svg'));
+  badBrand({ logo: 'link.svg' }, /brand\.logo precisa ficar dentro da pasta do archlens-gui\.json/);
+});
+
+test('brand.logoDark vazio pede um caminho', () => {
+  writeFileSync(join(brandDir, 'logo.svg'), '<svg/>');
+  badBrand({ logo: 'logo.svg', logoDark: '' }, /brand\.logoDark, se informado, precisa ser um caminho/);
 });
