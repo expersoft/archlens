@@ -49,6 +49,10 @@ export function App() {
   const [planReload, setPlanReload] = useState(0);
   // the node to focus carries its base: the PlanView of another base (mounted anew) never takes it
   const [planFocus, setPlanFocus] = useState<{ base: string; id: string; n: number } | undefined>(undefined);
+  // the draft lives only in memory (too big to save): a reload would not adopt what Navegar saves
+  const [planUnsaved, setPlanUnsaved] = useState(false);
+  // a focus is for the base it was asked on: another base (or coming back, A→B→A) never re-selects it
+  useEffect(() => { setPlanFocus(undefined); }, [base]);
   const [selected, setSelected] = useState<string | null>(null);
   const [menu, setMenu] = useState<Menu | null>(null);
   const frame = useRef<HTMLIFrameElement>(null);
@@ -443,7 +447,7 @@ export function App() {
         </>
       )}
     >
-      {planEnabled && base && planOpened && <div className="plan-host" hidden={!planning}><PlanView key={base} base={base} active={planning} onNav={setPlanNav} onBusy={setPlanLock} reload={planReload} focusNode={planFocus?.base === base ? planFocus : undefined} canBuild={info?.plan?.enabled ? info.plan.build !== false : true} onApplied={() => { void loadBase(base); }} /></div>}
+      {planEnabled && base && planOpened && <div className="plan-host" hidden={!planning}><PlanView key={base} base={base} active={planning} onNav={setPlanNav} onBusy={setPlanLock} reload={planReload} focusNode={planFocus?.base === base ? planFocus : undefined} onUnsaved={setPlanUnsaved} canBuild={info?.plan?.enabled ? info.plan.build !== false : true} onApplied={() => { void loadBase(base); }} /></div>}
       {planning ? null : view ? (
         <>
           <nav className="trail" aria-label="Trilha">

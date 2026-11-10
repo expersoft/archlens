@@ -3,12 +3,14 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 // @ts-expect-error -- módulo JS do servidor, sem declaração de tipos: o teste usa a regra de verdade
 import { applyEdit, screenConflicts } from '../../../server/plan/edits.mjs';
 
-vi.mock('../api', async (orig) => ({ ...(await orig<typeof import('../api')>()), planElement: vi.fn(), planEdit: vi.fn(), planOpen: vi.fn(), planTurn: vi.fn() }));
+vi.mock('../api', async (orig) => ({ ...(await orig<typeof import('../api')>()), planElement: vi.fn(), planEdit: vi.fn(), planOpen: vi.fn(), planTurn: vi.fn(), planApply: vi.fn() }));
+const FINAL = { views: [], skipped: [], summary: 'resumo', changes: [], questions: [], report: null, opsHash: 'h', screenConflicts: [] };
 vi.mock('./PlanPreview', () => ({
-  PlanPreview: ({ onSelect, onLoaded }: { onSelect?: (id: string | null) => void; onLoaded?: (r: null) => void }) => (
+  PlanPreview: ({ onSelect, onLoaded }: { onSelect?: (id: string | null) => void; onLoaded?: (r: unknown) => void }) => (
     <div>
       <button type="button" onClick={() => onSelect?.('a')}>selecionar a</button>
       <button type="button" onClick={() => onLoaded?.(null)}>recarregar prévia</button>
+      <button type="button" onClick={() => onLoaded?.(FINAL)}>prévia final</button>
     </div>
   ),
 }));
@@ -194,14 +196,17 @@ describe('PlanView falando com o App', () => {
     fireEvent.change(screen.getByLabelText('Mensagem'), { target: { value: 'adicione X' } });
     fireEvent.click(screen.getByRole('button', { name: 'Enviar' }));
     await waitFor(() => expect(api.planTurn).toHaveBeenCalled());
+    // o rascunho que o reload traz é o salvo quando ele chega, não o que a rodada grava ao terminar
+    const outside = { ...draft, note: 'de fora' };
+    save('b', outside, load('b')?.chat ?? []);
     rerender(<PlanView base="b" reload={1} />);
     await new Promise((r) => setTimeout(r, 20));
     expect(api.planOpen).toHaveBeenCalledTimes(1);
-    const after = { ...draft, note: 'da rodada' };
-    events({ type: 'result', draft: after, reply: { kind: 'text', text: 'feito' }, previews: [] } as never);
+    events({ type: 'result', draft: { ...draft, note: 'da rodada' }, reply: { kind: 'text', text: 'feito' }, previews: [] } as never);
     ended();
     await waitFor(() => expect(api.planOpen).toHaveBeenCalledTimes(2));
-    expect(vi.mocked(api.planOpen).mock.calls[1][1]).toEqual(after);
+    expect(vi.mocked(api.planOpen).mock.calls[1][1]).toEqual(outside);
+    expect(screen.getByText('feito')).toBeTruthy();
   });
 
   it('focusNode abre a aba Nó no nó', async () => {
@@ -223,5 +228,80 @@ describe('PlanView falando com o App', () => {
     rerender(<PlanView base="b" focusNode={{ id: 'p', n: 1 }} />);
     expect(ask).toHaveBeenCalledWith('Descartar a edição não confirmada?');
     expect((screen.getByLabelText('Documentação') as HTMLTextAreaElement).value).toBe('novo texto');
+  });
+});
+
+describe('PlanView falando com o App: aplicar, conversa e rascunho só em memória', () => {
+  it('reload durante o Aplicar espera ele terminar e o rascunho adotado fica', async () => {
+    const onBusy = vi.fn();
+    let finish!: (r: Awaited<ReturnType<typeof api.planApply>>) => void;
+    vi.mocked(api.planApply).mockImplementation(() => new Promise((r) => { finish = r; }));
+    const { rerender } = render(<PlanView base="b" reload={0} onBusy={onBusy} />);
+    await waitFor(() => expect(api.planOpen).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByText('prévia final'));
+    fireEvent.click(screen.getByRole('button', { name: 'Aplicar' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar e aplicar' }));
+    await waitFor(() => expect(api.planApply).toHaveBeenCalled());
+    await waitFor(() => expect(onBusy).toHaveBeenLastCalledWith('save'));
+    const outside = { ...draft, note: 'de fora' };
+    const replanned = { ...outside, plan: { state: 'final' } };
+    save('b', outside, []);
+    vi.mocked(api.planOpen).mockResolvedValue({ draft: replanned, screenConflicts: [] } as never);
+    rerender(<PlanView base="b" reload={1} onBusy={onBusy} />);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(api.planOpen).toHaveBeenCalledTimes(1);
+    finish({ entry: { summary: 's', added: [], changed: [], removed: [] }, doc: 'ARCHITECTURE.md', build: null, preserved: [], notesDraftNeeded: false } as never);
+    await waitFor(() => expect(api.planOpen).toHaveBeenCalledTimes(2));
+    expect(vi.mocked(api.planOpen).mock.calls[1][1]).toEqual(outside);
+    await waitFor(() => expect(load('b')?.draft).toEqual(replanned));
+    await waitFor(() => expect(onBusy).toHaveBeenLastCalledWith(false));
+  });
+
+  it('reload mantém as mensagens da conversa que estavam só em memória', async () => {
+    vi.mocked(api.planOpen).mockResolvedValue({ draft, warning: 'aviso só em memória' } as never);
+    const { rerender } = render(<PlanView base="b" reload={0} />);
+    await screen.findByText('aviso só em memória');
+    save('b', { ...draft, note: 'de fora' }, [{ id: 7, role: 'assistant', text: 'conversa salva' }]);
+    vi.mocked(api.planOpen).mockResolvedValue({ draft: { ...draft, note: 'de fora' } } as never);
+    rerender(<PlanView base="b" reload={1} />);
+    await screen.findByText('conversa salva');
+    await waitFor(() => expect(api.planOpen).toHaveBeenCalledTimes(2));
+    expect(screen.getByText('aviso só em memória')).toBeTruthy();
+    await waitFor(() => expect(load('b')?.chat.map((m) => m.warning ?? m.text)).toEqual(['conversa salva', 'aviso só em memória']));
+  });
+
+  it('desmontar ocupado avisa que não está mais ocupado', async () => {
+    const onBusy = vi.fn();
+    vi.mocked(api.planEdit).mockImplementation(() => new Promise(() => {}));
+    const { unmount } = render(<PlanView base="b" onBusy={onBusy} />);
+    fireEvent.click(screen.getByText('selecionar a'));
+    await screen.findByRole('heading', { name: 'Cashback' });
+    fireEvent.click(screen.getByRole('button', { name: /Editar documentação/ }));
+    fireEvent.change(screen.getByLabelText('Documentação'), { target: { value: 'novo texto' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar' }));
+    await waitFor(() => expect(onBusy).toHaveBeenLastCalledWith('save'));
+    unmount();
+    expect(onBusy).toHaveBeenLastCalledWith(false);
+  });
+
+  it('com o rascunho só em memória (grande demais), reload não o troca e avisa o App', async () => {
+    const onUnsaved = vi.fn();
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('cheio'); });
+    const kept = { ...draft, note: 'só em memória' };
+    vi.mocked(api.planOpen).mockResolvedValue({ draft: kept } as never);
+    const { rerender } = render(<PlanView base="b" reload={0} onUnsaved={onUnsaved} />);
+    await screen.findByText('o rascunho não cabe no navegador; baixe-o para não perder o trabalho');
+    await waitFor(() => expect(onUnsaved).toHaveBeenLastCalledWith(true));
+    setItem.mockRestore();
+    save('b', { ...draft, note: 'de fora' }, []);
+    rerender(<PlanView base="b" reload={1} onUnsaved={onUnsaved} />);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(api.planOpen).toHaveBeenCalledTimes(1);
+    expect(screen.getByText('o rascunho não cabe no navegador; baixe-o para não perder o trabalho')).toBeTruthy();
+    vi.mocked(api.planTurn).mockResolvedValue(undefined as never);
+    fireEvent.change(screen.getByLabelText('Mensagem'), { target: { value: 'continue' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar' }));
+    await waitFor(() => expect(api.planTurn).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(api.planTurn).mock.calls[0][1].draft).toEqual(kept);
   });
 });

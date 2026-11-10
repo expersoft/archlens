@@ -90,20 +90,29 @@ export interface PlanViewProps {
   reload?: number;
   /** When it changes, the node is selected and the panel opens on the Nó tab (through the discard confirmation). */
   focusNode?: { id: string; n: number };
+  /**
+   * Called whenever the draft starts or stops living only in memory (too big for the browser's storage): then a reload
+   * keeps it and does not adopt what is saved, so Navegar should not write a draft meanwhile.
+   */
+  onUnsaved?: (unsaved: boolean) => void;
 }
 
-export function PlanView({ base, canBuild = true, onApplied, active = true, onNav, onBusy, reload, focusNode }: PlanViewProps) {
+export function PlanView({ base, canBuild = true, onApplied, active = true, onNav, onBusy, reload, focusNode, onUnsaved }: PlanViewProps) {
   const [saved] = useState(() => load(base));
   const [draft, setDraft] = useState<Draft | null>(saved?.draft ?? null);
   const [chat, setChat] = useState<ChatMsg[]>(saved?.chat ?? []);
   const [stored, setStored] = useState<'ok' | 'chat-trimmed' | 'too-big'>('ok');
+  const storedRef = useRef(stored);
   const [previews, setPreviews] = useState<ViewSpec[]>([]);
   const [shown, setShown] = useState<PlanPreviewResult | null>(null);
   const [conflicts, setConflicts] = useState<ScreenConflict[]>([]);
   const [previewFailed, setPreviewFailed] = useState(false);
   const [replannable, setReplannable] = useState(false);
   const [applyOpen, setApplyOpen] = useState(false);
-  const [applying, setApplying] = useState(false);
+  const [applying, setApplyingState] = useState(false);
+  // Aplicar (and its Replanejar) writes the draft at the end: it counts as busy for the App and for a reload.
+  const applyingRef = useRef(false);
+  const setApplying = useCallback((a: boolean) => { applyingRef.current = a; setApplyingState(a); }, []);
   const [applyError, setApplyError] = useState<string | null>(null);
   const [panel, setPanel] = useStoredState<boolean>('archlens-plan-delta', true);
   // The panel keeps the last preview while the next one is drawn (`shown` goes null then, which only gates Aplicar).
@@ -130,7 +139,8 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
     chatRef.current = nextChat;
     setDraft(nextDraft);
     setChat(nextChat);
-    setStored(save(base, nextDraft, nextChat.filter((m) => m.status !== 'running')));
+    storedRef.current = save(base, nextDraft, nextChat.filter((m) => m.status !== 'running'));
+    setStored(storedRef.current);
   }, [base]);
   const setChatOnly = useCallback((fn: (c: ChatMsg[]) => ChatMsg[]) => {
     chatRef.current = fn(chatRef.current);
@@ -164,19 +174,22 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
   }, []);
 
   /**
-   * Adopts the draft and the conversation saved in the browser (written by Navegar), never the ones in memory: the
-   * draft is planned again by the server as on mount, under the write flag so nothing else writes it meanwhile. Nothing
-   * readable saved (storage blocked): the screen keeps what it has.
+   * Adopts `s`, the draft and the conversation saved in the browser (by Navegar) when the reload arrived, never the
+   * draft in memory: it is planned again by the server as on mount, under the write flag so nothing else writes it
+   * meanwhile. The messages only in memory (notes and errors are not saved) stay, after the saved ones. Nothing
+   * readable saved (storage blocked), or a draft that lives only in memory (too big to save): the screen keeps what it
+   * has (the too-big notice stays on).
    */
-  const adopt = useCallback(() => {
-    const s = load(base);
-    if (!s) return;
+  const adopt = useCallback((s: ReturnType<typeof load>) => {
+    if (!s || storedRef.current === 'too-big') return;
     const n = ++opening.current;
-    seq.current = s.chat.reduce((m, x) => Math.max(m, x.id), seq.current);
+    const savedIds = new Set(s.chat.map((m) => m.id));
+    const nextChat = [...s.chat, ...chatRef.current.filter((m) => !savedIds.has(m.id) && m.status !== 'running')];
+    seq.current = nextChat.reduce((m, x) => Math.max(m, x.id), seq.current);
     draftRef.current = s.draft;
-    chatRef.current = s.chat;
+    chatRef.current = nextChat;
     setDraft(s.draft);
-    setChat(s.chat);
+    setChat(nextChat);
     setConflicts([]);
     if (!s.draft) return;
     setWriting(true);
@@ -251,21 +264,33 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
   const roundRunning = chat.some((m) => m.status === 'running');
   // The screen controls' lock says why they wait: the chat round, or a screen edit being written.
   const lock: Lock = roundRunning ? 'chat' : writing ? 'save' : false;
-  // A reload that arrives during a round or a write waits for the lock to clear.
+  // What the App is told: the lock, or 'save' while Aplicar (or its Replanejar) runs, since it writes the draft too.
+  const busy: Lock = lock || (applying ? 'save' : false);
+  // A reload that arrives while busy waits for it to end. What was saved is read when it arrives (the round or the
+  // apply in flight writes the storage when it ends), and adopted then.
   const reloadSeen = useRef(reload);
-  const reloadWaiting = useRef(false);
+  const reloadWaiting = useRef<{ snap: ReturnType<typeof load> } | null>(null);
   useEffect(() => {
     if (reload === reloadSeen.current) return;
     reloadSeen.current = reload;
-    if (writingRef.current || chatRef.current.some((m) => m.status === 'running')) reloadWaiting.current = true;
-    else adopt();
-  }, [reload, adopt]);
+    const snap = load(base);
+    if (writingRef.current || applyingRef.current || chatRef.current.some((m) => m.status === 'running')) reloadWaiting.current = { snap };
+    else adopt(snap);
+  }, [reload, adopt, base]);
   const onBusyRef = useRef(onBusy);
   onBusyRef.current = onBusy;
   useEffect(() => {
-    onBusyRef.current?.(lock);
-    if (!lock && reloadWaiting.current) { reloadWaiting.current = false; adopt(); }
-  }, [lock, adopt]);
+    onBusyRef.current?.(busy);
+    const waiting = reloadWaiting.current;
+    if (!busy && waiting) { reloadWaiting.current = null; adopt(waiting.snap); }
+  }, [busy, adopt]);
+  // Unmounted (the base changed), it is busy no more.
+  useEffect(() => () => { onBusyRef.current?.(false); }, []);
+  const onUnsavedRef = useRef(onUnsaved);
+  onUnsavedRef.current = onUnsaved;
+  const unsaved = stored === 'too-big';
+  useEffect(() => { onUnsavedRef.current?.(unsaved); }, [unsaved]);
+  useEffect(() => () => { onUnsavedRef.current?.(false); }, []);
   const reason = !canBuild ? NO_CHROMIUM : roundRunning ? ROUND_RUNNING : writing ? WRITING : conflicts.length ? CONFLICT : !shown ? (previewFailed ? PREVIEW_FAILED : 'nada planejado para aplicar') : shown.questions.length ? OPEN_QUESTIONS : shown.opsHash ? undefined : 'o plano ainda não está final';
   const savedViews = (shown?.views ?? []).filter((v) => v.kind === 'saved' && !v.error).map((v) => v.title);
 
