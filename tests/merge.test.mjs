@@ -967,3 +967,14 @@ test('elemento novo descarta propriedades null (e o objeto properties vazio)', (
   const { raw: raw2 } = applyPlan(shop(), planMerge(shop(), novo({ b: null }), TODAY), TODAY);
   assert.equal('properties' in find(raw2, 'novo-svc'), false);
 });
+
+test('propriedade com nome de membro do Object (constructor, __proto__) não vira conflito nem troca o protótipo', () => {
+  const props = JSON.parse('{"constructor":"x","__proto__":"y","toString":"z"}');
+  const plan = planMerge(lojaComProps(), delta({ elements: [{ id: 'loja', properties: props }] }), TODAY);
+  assert.equal(plan.items.filter(i => i.class === 'conflict').length, 0, 'nada na base: preencher sem perguntar');
+  const { raw } = applyPlan(lojaComProps(), plan, TODAY);
+  const p = find(raw, 'loja').properties;
+  assert.equal(Object.getPrototypeOf(p), Object.prototype, 'o protótipo continua o de Object');
+  assert.deepEqual(Object.keys(p).sort(), ['__proto__', 'constructor', 'criticidade', 'owner', 'toString']);
+  assert.equal(JSON.parse(JSON.stringify(p))['__proto__'], 'y');
+});

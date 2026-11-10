@@ -295,10 +295,11 @@ function fieldsOf(target, incoming, names) {
   return [
     // "group": null takes the element out of its group: the key is removed, not set to null.
     ...names.map(f => [f, target[f] ?? (f === 'status' ? 'active' : undefined), incoming[f], v => { if (f === 'group' && v === null) delete target[f]; else target[f] = v; }]),
-    ...Object.entries(incoming.properties || {}).map(([k, v]) => [`properties.${k}`, target.properties?.[k], v, x => {
+    // Own keys only: a property named like an Object member (constructor, __proto__) is just a property.
+    ...Object.entries(incoming.properties || {}).map(([k, v]) => [`properties.${k}`, target.properties && Object.hasOwn(target.properties, k) ? target.properties[k] : undefined, v, x => {
       // "properties": { k: null } removes the property (and the empty object it leaves).
       if (x === null) { if (target.properties) { delete target.properties[k]; if (!Object.keys(target.properties).length) delete target.properties; } return; }
-      (target.properties ??= {})[k] = x;
+      Object.defineProperty(target.properties ??= {}, k, { value: x, writable: true, enumerable: true, configurable: true });
     }]),
   ];
 }
