@@ -87,7 +87,8 @@ export const getDoc = (base: string, id: string) => call<{ text: string | null }
 export const getActions = (base: string, id: string) => call<{ actions: Action[] }>(`${b(base)}/elements/${encodeURIComponent(id)}/actions`);
 export const flip = (base: string, spec: ViewSpec) => call<{ spec: ViewSpec }>(`${b(base)}/flip`, { spec });
 
-export interface Info { ask: { enabled: false; reason?: string } | { enabled: true; provider: string; model: string; mode: 'tools' | 'json'; /** Perguntas anteriores enviadas junto (llm.maxHistory). */ maxHistory?: number }
+export interface Info { brand?: { name?: string; logo: string; logoDark?: string }
+  ask: { enabled: false; reason?: string } | { enabled: true; provider: string; model: string; mode: 'tools' | 'json'; /** Perguntas anteriores enviadas junto (llm.maxHistory). */ maxHistory?: number }
   plan?: { enabled: false; reason?: string } | { enabled: true; maxRounds: number; timeoutMs: number; /** Chromium available on the server (needed to apply). */ build?: boolean } }
 export const getInfo = () => call<Info>('/api/info');
 

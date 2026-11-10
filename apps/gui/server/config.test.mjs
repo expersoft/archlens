@@ -115,3 +115,35 @@ test('config: --plan com arquivo usa o objeto plan do arquivo', () => {
   assert.deepEqual(c.plan, { ...PLAN_DEFAULTS, maxRounds: 5, gitTokenEnv: 'GT', gitTokenHosts: ['github.com'] });
   assert.deepEqual(loadConfig({ file: write({ llm: LLM, plan: false }), plan: true }).plan, PLAN_DEFAULTS);
 });
+
+import { mkdirSync } from 'node:fs';
+const brandDir = join(dir, 'b'); mkdirSync(brandDir, { recursive: true });
+const brandFile = (cfg) => { const f = join(brandDir, 'gui.json'); writeFileSync(f, JSON.stringify({ bases: [{ id: 'a', path: 'x' }], ...cfg })); return f; };
+const badBrand = (brand, re) => assert.throws(() => loadConfig({ file: brandFile({ brand }) }), e => e.code === 'E_GUI_CONFIG' && re.test(e.message));
+
+test('brand válido devolve caminhos absolutos', () => {
+  writeFileSync(join(brandDir, 'logo.svg'), '<svg xmlns="http://www.w3.org/2000/svg"/>');
+  writeFileSync(join(brandDir, 'dark.png'), 'x');
+  const c = loadConfig({ file: brandFile({ brand: { name: 'Acme', logo: 'logo.svg', logoDark: 'dark.png' } }) });
+  assert.deepEqual(c.brand, { name: 'Acme', logo: join(brandDir, 'logo.svg'), logoDark: join(brandDir, 'dark.png') });
+  assert.equal(loadConfig({ file: brandFile({}) }).brand, undefined);
+});
+
+test('brand.logo fora da pasta do arquivo é recusado', () => {
+  writeFileSync(join(dir, 'fora.svg'), '<svg/>');
+  badBrand({ logo: '../fora.svg' }, /brand\.logo precisa ficar dentro da pasta do archlens-gui\.json/);
+  badBrand({ logo: 'logo.svg', logoDark: '../fora.svg' }, /brand\.logoDark precisa ficar dentro/);
+});
+
+test('brand.logo de 5 MB é recusado', () => {
+  writeFileSync(join(brandDir, 'grande.png'), Buffer.alloc(5 * 1024 * 1024));
+  badBrand({ logo: 'grande.png' }, /brand\.logo passa de 1 MB/);
+});
+
+test('brand.logo com extensão .gif, ausente ou inexistente é recusado', () => {
+  writeFileSync(join(brandDir, 'a.gif'), 'x');
+  badBrand({ logo: 'a.gif' }, /brand\.logo: use \.svg, \.png ou \.webp/);
+  badBrand({}, /brand\.logo é obrigatório/);
+  badBrand({ logo: 'nao-existe.svg' }, /brand\.logo: arquivo não encontrado: /);
+  badBrand('x', /brand deve ser um objeto/);
+});

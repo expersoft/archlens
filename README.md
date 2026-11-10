@@ -187,6 +187,17 @@ arquivo não estiver no `.gitignore`, o `serve` avisa, porque a chave poderia ir
 pergunta diz qual variável definir; diagramas e navegação seguem normais. Um `llm` malformado no arquivo continua
 impedindo a subida.
 
+**Logo da empresa.** O bloco `brand` do `archlens-gui.json` troca a marca do archlens no topo pelo logo da empresa
+(com um traço e "archlens" discreto ao lado); a aba do navegador passa a ter o título `<name> · archlens`:
+
+```json
+{ "brand": { "name": "Acme", "logo": "marca/acme.svg", "logoDark": "marca/acme-claro.svg" } }
+```
+
+`logo` é obrigatório; `logoDark` (opcional) vale no tema escuro; `name` serve de texto alternativo e título. Os caminhos
+são relativos à pasta do `archlens-gui.json` e precisam ficar dentro dela; só `.svg`, `.png` e `.webp`, até 1 MB. Com
+`serve <base>` (sem arquivo de configuração) não há marca.
+
 O bloco `llm` (e `telemetry`) do `archlens-gui.json`:
 
 ```json

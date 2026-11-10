@@ -345,6 +345,8 @@ export function App() {
 
   const viewData = (view?.data ?? null) as ViewData | null;
   const planEnabled = info?.plan?.enabled === true;
+  const brandName = info?.brand?.name;
+  useEffect(() => { document.title = brandName ? `${brandName} · archlens` : 'archlens'; }, [brandName]);
   const planning = planEnabled && mode === 'plan';
   const onMode = (m: 'browse' | 'plan') => {
     menuTicket.current++;
@@ -361,6 +363,7 @@ export function App() {
   return (
     <Shell
       theme={theme}
+      brand={info?.brand}
       onThemeChange={setTheme}
       presenting={presenting}
       status={shownStatus}

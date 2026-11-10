@@ -1,6 +1,6 @@
 import { ArchlensMark } from './icons';
 import { useEffect, useRef, type ReactNode } from 'react';
-import type { BaseInfo } from './api';
+import type { BaseInfo, Info } from './api';
 import { useStoredState } from './store';
 import { isGuiShortcut } from './shortcuts';
 import { useTheme, type Theme } from './theme';
@@ -22,6 +22,8 @@ export interface ShellProps {
   /** Botão da barra: Agrupar tudo / Desagrupar tudo. Ausente (ou rótulo vazio) esconde o botão. */
   nestLabel?: string;
   onNestAll?: () => void;
+  /** Logo da empresa (archlens-gui.json); com ele, o logo substitui a marca e o archlens fica discreto. */
+  brand?: Info['brand'];
   bases?: BaseInfo[];
   base?: string | null;
   onBase?: (id: string) => void;
@@ -81,7 +83,13 @@ export function Shell(p: ShellProps) {
     <div className="app" data-presenting={presenting || undefined}>
       {!presenting && (
         <header className="top" data-testid="topbar">
-          <ArchlensMark /><b>archlens</b>
+          {p.brand ? (
+            <>
+              <img className="brand-logo" src={theme === 'dark' && p.brand.logoDark ? p.brand.logoDark : p.brand.logo} alt={p.brand.name ?? 'Logo'} />
+              <span className="brand-sep" aria-hidden="true" />
+              <span className="brand-product">archlens</span>
+            </>
+          ) : (<><ArchlensMark /><b>archlens</b></>)}
           <select aria-label="Base" value={p.base ?? ''} disabled={!p.bases?.length || !p.onBase} onChange={(e) => p.onBase?.(e.target.value)}>
             {!p.bases?.length && <option value="">Base</option>}
             {p.bases?.map((b) => <option key={b.id} value={b.id} disabled={!b.ok} title={b.ok ? undefined : b.error}>{b.name}</option>)}

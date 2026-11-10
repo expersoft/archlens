@@ -269,3 +269,6 @@ body{font:14px/1.4 system-ui,sans-serif;background:var(--bg);color:var(--ink)}
 .np-edit-err{margin:0 0 6px}
 .top svg[data-mark]{flex:none;margin-right:-2px}
 .side-tabs button svg{vertical-align:-2px}
+.top .brand-logo{height:24px;max-width:160px;width:auto;object-fit:contain;flex:none}
+.top .brand-sep{flex:none;width:1px;height:18px;background:var(--line)}
+.top .brand-product{flex:none;font-size:12px;color:var(--muted);margin-right:6px}

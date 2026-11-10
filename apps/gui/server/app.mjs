@@ -22,7 +22,7 @@ const STREAMED = Symbol('streamed');
 const TYPES = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.json': 'application/json; charset=utf-8',
-  '.png': 'image/png', '.ico': 'image/x-icon',
+  '.png': 'image/png', '.ico': 'image/x-icon', '.webp': 'image/webp',
 };
 
 // Every response: no framing by another origin.
@@ -196,8 +196,20 @@ export async function startServer({ config, staticDir, registry, provider } = {}
   const routes = [
     ['GET', /^\/api\/info$/, async () => ({
       ask: provider ? { enabled: true, provider: provider.name, model: provider.model, mode: provider.tools ? 'tools' : 'json', maxHistory: config?.llm?.maxHistory ?? DEFAULT_MAX_HISTORY } : { enabled: false, ...(askOff ? { reason: askOff } : {}) },
+      ...(config?.brand ? { brand: { ...(config.brand.name ? { name: config.brand.name } : {}), logo: '/api/brand/logo', ...(config.brand.logoDark ? { logoDark: '/api/brand/logo-dark' } : {}) } } : {}),
       plan: planOn ? { enabled: true, maxRounds: config.plan.maxRounds, timeoutMs: config.plan.timeoutMs, build: canBuild } : { enabled: false, ...(planOff ? { reason: planOff } : {}) },
     })],
+    ['GET', /^\/api\/brand\/(logo|logo-dark)$/, async (_req, [which], _url, res) => {
+      const file = which === 'logo' ? config?.brand?.logo : config?.brand?.logoDark;
+      if (!file) throw httpError(404, 'sem logo configurado');
+      let data;
+      try { data = await readFile(file); } catch { throw httpError(404, 'logo não encontrado'); }
+      send(res, 200, data, {
+        'content-type': TYPES[extname(file).toLowerCase()] ?? 'application/octet-stream',
+        'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'", 'cache-control': 'no-cache',
+      });
+      return STREAMED;
+    }],
     ['GET', /^\/api\/telemetry$/, async () => summarize(telemetry.recent())],
     ['POST', /^\/api\/bases\/([^/]+)\/ask$/, (req, [b], _url, res) => ask(req, res, b)],
     ...(planOn ? planRoutes({ registry, provider, config, telemetry, h: { readJson, httpError, STREAMED, NDJSON_HEADERS } }) : []),

@@ -1,6 +1,6 @@
 // GUI configuration: a JSON file listing the bases, or a single base given on the command line.
-import { readFileSync } from 'node:fs';
-import { basename, dirname, resolve } from 'node:path';
+import { readFileSync, statSync } from 'node:fs';
+import { basename, dirname, extname, resolve, sep } from 'node:path';
 import { loadEnv } from './envfile.mjs';
 
 export const DEFAULT_PORT = 5180;
@@ -91,6 +91,31 @@ function checkTelemetry(t, dir) {
   return { ...(t.file ? { file: resolve(dir, t.file) } : {}), ...(t.questions !== undefined ? { questions: t.questions } : {}) };
 }
 
+const LOGO_EXT = new Set(['.svg', '.png', '.webp']);
+const LOGO_MAX = 1024 * 1024;
+
+/** The `brand` block: company logo (and an optional dark-theme one) inside the config file's folder; absolute paths out. */
+function checkBrand(brand, dir) {
+  if (!isObj(brand)) throw configError('brand deve ser um objeto');
+  if (brand.name !== undefined && (typeof brand.name !== 'string' || !brand.name.trim())) throw configError('brand.name deve ser texto não vazio');
+  const one = (key, required) => {
+    const v = brand[key];
+    if (v === undefined && !required) return undefined;
+    if (typeof v !== 'string' || !v.trim()) throw configError(`brand.${key} é obrigatório`);
+    const abs = resolve(dir, v);
+    if (!abs.startsWith(resolve(dir) + sep)) throw configError(`brand.${key} precisa ficar dentro da pasta do archlens-gui.json`);
+    if (!LOGO_EXT.has(extname(abs).toLowerCase())) throw configError(`brand.${key}: use .svg, .png ou .webp`);
+    let st;
+    try { st = statSync(abs); } catch { throw configError(`brand.${key}: arquivo não encontrado: ${abs}`); }
+    if (!st.isFile()) throw configError(`brand.${key}: arquivo não encontrado: ${abs}`);
+    if (st.size > LOGO_MAX) throw configError(`brand.${key} passa de 1 MB`);
+    return abs;
+  };
+  const logo = one('logo', true);
+  const logoDark = one('logoDark', false);
+  return { logo, ...(logoDark ? { logoDark } : {}), ...(brand.name ? { name: brand.name } : {}) };
+}
+
 /**
  * The LLM part: `llm` + the environment for the provider (process env over the .env file). Without `llm` nothing is
  * read: the text search is opt-in.
@@ -121,6 +146,7 @@ export function loadConfig({ file, base, port, host, llm, envFile, plan } = {}) 
       port: port ?? cfg.port ?? DEFAULT_PORT, ...(h ? { host: h } : {}), bases,
       ...llmCfg,
       ...(plan ? planPart(isObj(cfg.plan) ? cfg.plan : true, llmCfg, 'cli') : planPart(cfg.plan, llmCfg, 'file')),
+      ...(cfg.brand !== undefined ? { brand: checkBrand(cfg.brand, dir) } : {}),
       ...(cfg.telemetry !== undefined ? { telemetry: checkTelemetry(cfg.telemetry, dir) } : {}),
     };
   }
