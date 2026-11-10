@@ -391,8 +391,10 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
       await planApplyStream(base, current, shown.opsHash, onEvent, new AbortController().signal);
       if (!run.result && run.phase === 'running') onEvent({ type: 'error', error: CUT, written });
     } catch (e) {
-      if (streamed) onEvent({ type: 'error', error: errMsg(e), written });
-      else {
+      if (streamed) {
+        // the stream may break after its last line: an apply that already ended stays as it ended
+        if (!run.result && run.phase === 'running') onEvent({ type: 'error', error: errMsg(e), written });
+      } else {
         // refused before the stream: as before the checklist
         setApplyRun(null);
         if (e instanceof ApiError && e.code === 'E_GUI_PLAN_CHANGED' && e.extra.draft) {

@@ -261,7 +261,7 @@ describe('Aplicar na PlanView', () => {
     await u.click(aplicar());
     await u.click(screen.getByRole('button', { name: 'Confirmar e aplicar' }));
     await screen.findByText('A seguir: o chat propõe as notas de interpretação');
-    await new Promise((r) => setTimeout(r, 20));
+    await act(async () => {}); // nada pendente pede as notas antes do Fechar
     expect(planTurn).not.toHaveBeenCalled();
     await fechar(u);
     expect(screen.queryByRole('dialog')).toBeNull();
@@ -320,6 +320,21 @@ describe('Aplicar na PlanView', () => {
     expect(onApplied).toHaveBeenCalledTimes(1);
     await fechar(u);
     expect(planTurn).not.toHaveBeenCalled();
+  });
+
+  it('erro do fluxo depois do resultado (conexão caiu no fim): a janela continua concluída, como o chat', async () => {
+    open();
+    const u = userEvent.setup();
+    planApply.mockImplementation(async (_b, _d, _c, on) => { applyEvents(applied()).forEach(on); throw new Error('a conexão caiu'); });
+    render(<PlanView base="b" canBuild />);
+    await waitFor(() => expect(aplicar().disabled).toBe(false));
+    await u.click(aplicar());
+    await u.click(screen.getByRole('button', { name: 'Confirmar e aplicar' }));
+    const dlg = await screen.findByRole('dialog');
+    await within(dlg).findByText('A seguir: o chat propõe as notas de interpretação');
+    expect(within(dlg).queryByText('a conexão caiu')).toBeNull();
+    expect(dlg.querySelector('li.failed')).toBeNull();
+    expect(await screen.findByText(/Plano aplicado: base gravada/)).toBeTruthy();
   });
 
   it('erro no fluxo antes de gravar: mensagem na etapa Gravando a base e o rascunho fica', async () => {
