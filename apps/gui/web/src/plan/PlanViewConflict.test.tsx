@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 
-vi.mock('../api', async (orig) => ({ ...(await orig<typeof import('../api')>()), planApply: vi.fn(), planEdit: vi.fn(), planElement: vi.fn(), planOpen: vi.fn(), planTurn: vi.fn() }));
+vi.mock('../api', async (orig) => ({ ...(await orig<typeof import('../api')>()), planApplyStream: vi.fn(), planEdit: vi.fn(), planElement: vi.fn(), planOpen: vi.fn(), planTurn: vi.fn() }));
 const shown: api.PlanPreviewResult = {
   views: [], skipped: [], summary: '~1', report: null, opsHash: 'h', questions: [],
   changes: [{ sign: '~', kind: 'element', id: 'a', name: 'Cashback', origin: 'tela', fields: [] }],
@@ -116,6 +116,6 @@ describe('PlanView com conflito de tela', () => {
     const go = within(dialog).getByRole('button', { name: 'Confirmar e aplicar' }) as HTMLButtonElement;
     expect(go.disabled).toBe(true);
     fireEvent.click(go);
-    expect(api.planApply).not.toHaveBeenCalled();
+    expect(api.planApplyStream).not.toHaveBeenCalled();
   });
 });

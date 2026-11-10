@@ -177,7 +177,25 @@ body{font:14px/1.4 system-ui,sans-serif;background:var(--bg);color:var(--ink)}
 .chg b{display:inline-block;width:1.4em}
 .chg.add b{color:#2a8a3e}.chg.mod b{color:#b7791f}.chg.del{text-decoration:line-through}.chg.del b{color:#c0392b}
 .plan-chat .turn p{white-space:pre-wrap}
-.apply-dialog{margin:8px;padding:8px 12px;border:1px solid var(--accent);border-radius:6px;background:var(--panel);font-size:13px}
+/* Aplicar: modal centered over everything, like the doc window; nothing behind it is clickable */
+.apply-veil{position:fixed;inset:0;z-index:60;display:grid;place-items:center;background:rgba(20,23,28,.35);backdrop-filter:blur(3px)}
+:root[data-theme="dark"] .apply-veil{background:rgba(0,0,0,.55)}
+.apply-dialog{width:min(520px,calc(100% - 32px));max-height:88%;overflow:auto;box-sizing:border-box;padding:14px 18px;border:1px solid var(--line);border-radius:14px;background:var(--panel);color:var(--ink);box-shadow:0 24px 60px rgba(0,0,0,.3);font-size:13px}
+.apply-dialog:focus{outline:none}
+.apply-dialog .err{color:#c0392b}
+.apply-dialog .warn{padding:4px 8px;border-radius:4px;background:var(--warn-bg);color:var(--warn)}
+.apply-t{margin:0 0 10px;font-size:15px}
+.apply-steps{list-style:none;margin:0 0 10px;padding:0;display:flex;flex-direction:column;gap:6px}
+.apply-steps li{display:grid;grid-template-columns:20px 1fr;column-gap:6px;align-items:center}
+.apply-steps li.pending{opacity:.45}
+.apply-steps li.done .apply-mk{color:#2a8a3e}
+.apply-steps li.failed,.apply-steps li.failed .apply-d{color:#c0392b}
+.apply-d{grid-column:2;font-size:12px;opacity:.8;white-space:pre-wrap}
+.apply-mk{display:grid;place-items:center;font-weight:bold}
+.apply-spin{width:12px;height:12px;border:2px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:apply-spin .8s linear infinite}
+@keyframes apply-spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.apply-spin{animation-duration:2.4s}}
+.apply-sum{margin:0 0 8px;padding-left:18px}
 .notes-review label{display:block;margin:6px 0;font-size:12px}
 .notes-review textarea{display:block;width:100%;box-sizing:border-box;font:inherit}
 .plan>.side.r{overflow:auto}

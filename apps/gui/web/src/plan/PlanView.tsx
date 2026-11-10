@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ApiError, planApply, planEdit, planNotes, planOpen, planTurn, type AppliedRound, type Draft, type PlanApplyResult, type PlanEvent, type PlanPreviewResult, type PlanRequest, type RepoAttach, type ScreenConflict, type ViewSpec } from '../api';
-import { ApplyDialog } from './ApplyDialog';
+import { ApiError, planApplyStream, planEdit, planNotes, planOpen, planTurn, type AppliedRound, type ApplyEvent, type ApplyStepId, type Draft, type PlanApplyResult, type PlanEvent, type PlanPreviewResult, type PlanRequest, type RepoAttach, type ScreenConflict, type ViewSpec } from '../api';
+import { ApplyDialog, type ApplyDialogProps, type ApplyStepView } from './ApplyDialog';
 import { PlanPreview, type PreviewNav } from './PlanPreview';
 import { DeltaPanel } from './DeltaPanel';
 import { NodePanel } from './NodePanel';
@@ -27,6 +27,21 @@ const REPLANNABLE = new Set(['E_STORE_CONFLICT', 'E_PLAN_STALE']);
 const CONFLICT = 'O chat quer mudar algo que você editou; responda o aviso antes de aplicar';
 const OPEN_QUESTIONS = 'responda as perguntas abertas antes de aplicar';
 const NO_CHROMIUM = 'Chromium indisponível no servidor; rode "npx playwright install chromium" na máquina do servidor';
+const NO_VISUAL_CHECK = 'checagem visual indisponível';
+const CUT = 'a conexão com o servidor terminou antes do fim do Aplicar; recarregue a base para ver o que foi gravado';
+const STEPS: [ApplyStepId, string][] = [
+  ['check', 'Conferindo o plano com a base atual'], ['write', 'Gravando a base'], ['doc', 'Gerando o ARCHITECTURE.md'], ['views', 'Regerando as visões salvas'],
+];
+/** The checklist when Confirmar e aplicar is clicked: the check running, the rest to come. */
+const firstSteps = (): ApplyStepView[] => STEPS.map(([id, label], i) => ({ id, label, state: i === 0 ? 'running' : 'pending' }));
+const setStep = (steps: ApplyStepView[], id: ApplyStepId, p: Partial<ApplyStepView>) => steps.map((s) => (s.id === id ? { ...s, ...p } : s));
+/** The step a failure lands on: the one running, else the next to come (the write, when the base was not written). */
+const failStep = (steps: ApplyStepView[], message: string) => {
+  const at = steps.find((s) => s.state === 'running') ?? steps.find((s) => s.state === 'pending') ?? steps[steps.length - 1];
+  return setStep(steps, at.id, { state: 'failed', detail: message });
+};
+/** Aplicar after Confirmar: its checklist, and how it ended. */
+type ApplyRun = Pick<ApplyDialogProps, 'steps' | 'count' | 'result' | 'failure'> & { phase: 'running' | 'done' | 'failed' };
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 const addNew = (have: ViewSpec[], more: ViewSpec[]) => {
@@ -119,6 +134,7 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
   const applyingRef = useRef(false);
   const setApplying = useCallback((a: boolean) => { applyingRef.current = a; setApplyingState(a); }, []);
   const [applyError, setApplyError] = useState<string | null>(null);
+  const [applyRun, setApplyRun] = useState<ApplyRun | null>(null);
   const [panel, setPanel] = useStoredState<boolean>('archlens-plan-delta', true);
   // The panel keeps the last preview while the next one is drawn (`shown` goes null then, which only gates Aplicar).
   const [listed, setListed] = useState<PlanPreviewResult | null>(null);
@@ -332,27 +348,90 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
     setApplying(true);
     setApplyError(null);
     setReplannable(false);
-    try {
-      const r = await planApply(base, current, shown.opsHash);
-      setApplyOpen(false);
-      if (!r.entry) { note({ text: 'O plano não muda nada na base; nada foi gravado.' }); return; }
-      if (r.doc && typeof r.doc === 'object') note({ text: 'Plano aplicado: base gravada.', error: r.doc.error });
-      else note({ text: `Plano aplicado: base gravada e ${r.doc ?? 'ARCHITECTURE.md'} regenerado.` });
-      for (const path of r.preserved) note({ text: `Texto do nó removido guardado em ${path}.` });
-      note({ text: buildText(base, r.build) });
+    const run: ApplyRun = { phase: 'running', steps: firstSteps(), count: shown.changes.length };
+    const show = () => setApplyRun({ ...run });
+    show();
+    let streamed = false;
+    let written = false;
+    let refused: string | undefined;
+    // The base is written (the result came, or the stream says so): the draft goes and the base is read again.
+    const writtenDone = () => {
       setConflicts([]);
       commit(null, chatRef.current); // the draft goes; the conversation stays saved
       setPreviews([]);
       onApplied?.();
-      if (r.notesDraftNeeded) turn({ message: NOTES_ASK, applied: roundOf(r.entry) }, NOTES_ASK, { keepDraft: false });
+    };
+    const onEvent = (e: ApplyEvent) => {
+      streamed = true;
+      if (e.type === 'step') {
+        if (e.step === 'write' && e.state === 'done') written = true;
+        run.steps = setStep(run.steps, e.step, { state: e.state === 'start' ? 'running' : 'done', ...(e.detail ? { detail: e.detail } : {}) });
+      } else if (e.type === 'check') run.steps = setStep(run.steps, 'views', { detail: `${e.done} de ${e.total}` });
+      else if (e.type === 'result') {
+        const { type: _, ...r } = e;
+        run.result = r;
+        if (r.entry) {
+          // the base is written: what failed after it fails its step (the server does not end those steps)
+          if (r.doc && typeof r.doc === 'object') run.steps = setStep(run.steps, 'doc', { state: 'failed', detail: r.doc.error });
+          if (r.build?.error) run.steps = setStep(run.steps, 'views', { state: 'failed', detail: r.build.error });
+          else if (r.build && !r.build.available) run.steps = setStep(run.steps, 'views', { state: 'done', detail: NO_VISUAL_CHECK });
+          const failed = run.steps.find((s) => s.state === 'failed');
+          if (failed) { run.phase = 'failed'; run.failure = { message: failed.detail ?? '', written: true }; } else run.phase = 'done';
+        }
+      } else if (e.type === 'error') {
+        written ||= e.written;
+        if (!written && REPLANNABLE.has(e.code ?? '')) refused = e.code;
+        run.steps = failStep(run.steps, e.error);
+        run.phase = 'failed';
+        run.failure = { message: e.error, written };
+      }
+      show();
+    };
+    try {
+      await planApplyStream(base, current, shown.opsHash, onEvent, new AbortController().signal);
+      if (!run.result && run.phase === 'running') onEvent({ type: 'error', error: CUT, written });
     } catch (e) {
-      if (e instanceof ApiError && e.code === 'E_GUI_PLAN_CHANGED' && e.extra.draft) {
-        setApplyOpen(false);
-        commit(e.extra.draft as Draft, chatRef.current);
-        setConflicts((e.extra.screenConflicts as ScreenConflict[] | undefined) ?? []);
-        note({ text: '', warning: e.message });
-      } else { setApplyError(errMsg(e)); setReplannable(e instanceof ApiError && REPLANNABLE.has(e.code ?? '')); }
+      if (streamed) onEvent({ type: 'error', error: errMsg(e), written });
+      else {
+        // refused before the stream: as before the checklist
+        setApplyRun(null);
+        if (e instanceof ApiError && e.code === 'E_GUI_PLAN_CHANGED' && e.extra.draft) {
+          setApplyOpen(false);
+          commit(e.extra.draft as Draft, chatRef.current);
+          setConflicts((e.extra.screenConflicts as ScreenConflict[] | undefined) ?? []);
+          note({ text: '', warning: e.message });
+        } else { setApplyError(errMsg(e)); setReplannable(e instanceof ApiError && REPLANNABLE.has(e.code ?? '')); }
+        return;
+      }
     } finally { setApplying(false); }
+    const r = run.result;
+    if (refused) {
+      // a refusal that planning again solves, nothing written: back to the confirmation with Replanejar
+      setApplyRun(null);
+      setApplyError(run.failure?.message ?? null);
+      setReplannable(true);
+    } else if (r && !r.entry) {
+      setApplyRun(null);
+      setApplyOpen(false);
+      note({ text: 'O plano não muda nada na base; nada foi gravado.' });
+    } else if (r?.entry) {
+      if (r.doc && typeof r.doc === 'object') note({ text: 'Plano aplicado: base gravada.', error: r.doc.error });
+      else note({ text: `Plano aplicado: base gravada e ${r.doc ?? 'ARCHITECTURE.md'} regenerado.` });
+      for (const path of r.preserved) note({ text: `Texto do nó removido guardado em ${path}.` });
+      note({ text: buildText(base, r.build) });
+      writtenDone();
+    } else if (written) {
+      note({ text: 'Plano aplicado: base gravada.', error: run.failure?.message });
+      writtenDone();
+    }
+  };
+
+  /** Fechar, at the end of Aplicar: then the chat proposes the interpretation notes, never before. */
+  const closeApply = () => {
+    const r = applyRun?.result;
+    setApplyRun(null);
+    setApplyOpen(false);
+    if (r?.entry && r.notesDraftNeeded) turn({ message: NOTES_ASK, applied: roundOf(r.entry) }, NOTES_ASK, { keepDraft: false });
   };
 
   const upload = async (file: File) => {
@@ -477,7 +556,12 @@ export function PlanView({ base, canBuild = true, onApplied, active = true, onNa
                 onChoose={(choice) => void screenEdit({ op: 'resolve', id: firstConflict.id, field: firstConflict.field, choice })} />
             )}
             {editError && <p className="err" role="alert">{editError}</p>}
-            {applyOpen && shown && <ApplyDialog summary={shown.summary} views={savedViews} busy={applying || writingAny} error={applyError} onConfirm={() => void apply()} onCancel={() => setApplyOpen(false)} onReplan={replannable ? () => void replan() : undefined} />}
+            {applyOpen && (applyRun || shown) && (
+              <ApplyDialog phase={applyRun?.phase ?? 'confirm'} summary={shown?.summary ?? ''} views={savedViews} steps={applyRun?.steps ?? []}
+                count={applyRun?.count ?? shown?.changes.length ?? 0} result={applyRun?.result} failure={applyRun?.failure}
+                busy={applying || writingAny} error={applyError} onConfirm={() => void apply()} onCancel={() => setApplyOpen(false)}
+                onReplan={replannable ? () => void replan() : undefined} onClose={closeApply} />
+            )}
             <PlanPreview base={base} draft={draft} previews={previews} onLoaded={(r, failed) => { setShown(r); if (r) { setListed(r); setConflicts(r.screenConflicts ?? []); } setPreviewFailed(!!failed); }}
               onNavigate={navigated} onUnnavigate={unnavigated} onNav={onNav} onLoading={setPreviewLoading} onSelect={(id) => { if (!leaveEdit()) return; setSelected(id); if (id) { setTab('node'); setPanel(true); } }} focus={focus} />
           </div>
