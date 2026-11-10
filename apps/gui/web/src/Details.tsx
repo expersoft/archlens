@@ -1,7 +1,7 @@
 import { Fragment, useState, type ReactNode } from 'react';
 import type { Card, RelRef, ViewEdge, ViewNode } from './api';
 import { DocTab } from './DocTab';
-import { layerLabel } from './labels';
+import { LAYER_VAR, layerLabel } from './labels';
 import { NodeCard } from './NodeCard';
 
 export interface DetailsProps {
@@ -29,11 +29,6 @@ export interface DetailsProps {
 
 const ROLES: Record<string, string> = {
   supporter: 'Suporte', dependent: 'Dependente', both: 'Suporte e dependente', anchor: 'Âncora',
-};
-/** Variável de cor do diagrama para cada camada (as mesmas do render.mjs). */
-const LAYER_VAR: Record<string, string> = {
-  business: 'biz', application: 'app', technology: 'tech', physical: 'tech', motivation: 'mot',
-  strategy: 'str', implementation: 'impl', other: 'oth',
 };
 const CAP = 5;
 
@@ -103,7 +98,7 @@ export function Details({ card, viewNode, viewEdges, nodeId, onPick, onSelectInV
         )}
         {showDoc && (
           <NodeCard id="doc" title="Documentação" actions={actions?.doc} forceOpen={editing === 'doc'}>
-            {slots?.doc ?? <DocTab base={base!} id={nodeId} max />}
+            {slots?.doc ?? <DocTab base={base!} id={nodeId} max title={`Documentação · ${viewNode?.name ?? e?.name ?? nodeId}`} layer={layer ?? viewNode?.layer ?? e?.layer} labels={[c4, typeLabel && `ArchiMate ${typeLabel}`].filter((x): x is string => !!x)} />}
           </NodeCard>
         )}
         {viewNode && (

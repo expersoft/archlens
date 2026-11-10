@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { getDoc } from './api';
+import { DocWindow } from './DocWindow';
 import { Markdown } from './plan/Markdown';
 
 type Loaded = { id: string; text: string | null; error?: undefined } | { id: string; error: string };
@@ -13,24 +14,18 @@ export interface DocTabProps {
   text?: string | null;
   /** Corta a altura e oferece "Expandir" e "Tela cheia". */
   max?: boolean;
+  /** Título, camada e rótulos da janela ampliada. */
+  title?: string;
+  layer?: string;
+  labels?: string[];
 }
 
 /** A documentação do nó: lida ao abrir o cartão, sempre o texto atual. */
-export function DocTab({ base, id, text, max }: DocTabProps) {
+export function DocTab({ base, id, text, max, title, layer, labels }: DocTabProps) {
   const [loaded, setLoaded] = useState<Loaded | null>(null);
   const [expanded, setExpanded] = useState(false);
   const [full, setFull] = useState(false);
   const given = text !== undefined;
-  const fullRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!full) return undefined;
-    fullRef.current?.focus();
-    const onKey = (ev: KeyboardEvent) => { if (ev.key === 'Escape') setFull(false); };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [full]);
-
   useEffect(() => {
     if (given) return undefined;
     let stale = false;
@@ -59,12 +54,7 @@ export function DocTab({ base, id, text, max }: DocTabProps) {
         <button type="button" className="linkish" aria-expanded={expanded} onClick={() => setExpanded((v) => !v)}>{expanded ? 'Recolher' : 'Expandir'}</button>
         <button type="button" className="linkish" onClick={() => setFull(true)}>Tela cheia</button>
       </div>
-      {full && (
-        <div className="doc-full" role="dialog" aria-modal="true" aria-label="Documentação em tela cheia" tabIndex={-1} ref={fullRef}>
-          <div className="doc-full-bar"><button type="button" onClick={() => setFull(false)}>Fechar</button></div>
-          <Markdown text={body} className="doc-text" />
-        </div>
-      )}
+      {full && <DocWindow title={title ?? 'Documentação do nó'} layer={layer} labels={labels} text={body} editable={false} onClose={() => setFull(false)} />}
     </>
   );
 }

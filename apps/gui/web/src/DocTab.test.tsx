@@ -74,15 +74,15 @@ describe('DocTab', () => {
     expect(doc).not.toHaveBeenCalled();
   });
 
-  it('max corta, expande e abre em tela cheia', async () => {
+  it('max corta, expande e abre a janela de leitura', async () => {
     const { container } = render(<DocTab base="b" id="x" text="Corpo" max />);
     expect(container.querySelector('.doc-box.open')).toBeNull();
     await userEvent.click(screen.getByRole('button', { name: 'Expandir' }));
     expect(container.querySelector('.doc-box.open')).toBeTruthy();
     await userEvent.click(screen.getByRole('button', { name: 'Tela cheia' }));
-    expect(screen.getByRole('dialog', { name: 'Documentação em tela cheia' })).toBeTruthy();
+    expect(screen.getByRole('dialog', { name: 'Documentação do nó' })).toBeTruthy();
     expect(screen.getByRole('dialog').getAttribute('aria-modal')).toBe('true');
-    expect(document.activeElement).toBe(screen.getByRole('dialog'));
+    expect(screen.queryByRole('button', { name: 'Confirmar' })).toBeNull();
     await userEvent.click(screen.getByRole('button', { name: 'Fechar' }));
     expect(screen.queryByRole('dialog')).toBeNull();
     await userEvent.click(screen.getByRole('button', { name: 'Tela cheia' }));

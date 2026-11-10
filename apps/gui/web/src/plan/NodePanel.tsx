@@ -91,14 +91,19 @@ export function NodePanel({ base, draft, id, onPick, onDraft, onDirty, locked, o
       <Fragment key={k}><dt>{k}</dt><dd>{Array.isArray(v) ? v.join(', ') : String(v)}</dd></Fragment>
     ))}</dl>
   ) : <p className="muted">Este nó não tem propriedades.</p>;
+  const docWin = {
+    title: `Documentação · ${el.card.element.name}`,
+    layer: el.card.element.layer,
+    labels: [el.card.element.c4Label, el.card.element.typeLabel ? `ArchiMate ${el.card.element.typeLabel}` : undefined].filter((x): x is string => !!x),
+  };
   const docSlot = mine === 'doc' ? (
     <>
       {err}
-      <DocEditor text={el.docRaw ?? ''} busy={busy || !!locked} onDirty={setDirty} onCancel={close}
+      <DocEditor {...docWin} text={el.docRaw ?? ''} busy={busy || !!locked} onDirty={setDirty} onCancel={close}
         onConfirm={(text) => void save({ op: 'doc', id, text })} />
     </>
   ) : el.doc || el.removed
-    ? <DocTab base={base} id={id} text={el.doc} max />
+    ? <DocTab {...docWin} base={base} id={id} text={el.doc} max />
     : (
       <>
         <p className="muted">Este nó ainda não tem documentação.</p>
