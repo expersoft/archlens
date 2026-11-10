@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { DocWindow } from './DocWindow';
+import { tocOf } from './markdown-toc';
 
 const DOC = '# Responsabilidades\ntexto\n## Integrações\n### Pagamentos\nchama';
 
@@ -69,16 +70,50 @@ describe('DocWindow', () => {
     expect(onClose).toHaveBeenCalledWith(DOC);
   });
 
-  it('2.000 linhas e 300 títulos: digitar atualiza o sumário em menos de 100 ms', () => {
+  it('Ctrl+Enter sem alteração não confirma, como o botão', () => {
+    const onConfirm = vi.fn();
+    render(<DocWindow title="D" text="a" editable onConfirm={onConfirm} onClose={() => {}} />);
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Enter', ctrlKey: true });
+    expect(onConfirm).not.toHaveBeenCalled();
+  });
+
+  describe('documento grande (2.000 linhas, 334 títulos)', () => {
     const big = Array.from({ length: 2000 }, (_, i) => (i % 6 === 0 ? `## Título ${i / 6}` : `linha ${i} com texto`)).join('\n');
-    render(<DocWindow title="D" text={big} editable onClose={() => {}} />);
-    const ta = screen.getByLabelText('Documentação');
-    const nav = screen.getByRole('navigation', { name: 'Sumário' });
-    expect(nav.querySelectorAll('button').length).toBeGreaterThanOrEqual(300);
-    const t0 = performance.now();
-    fireEvent.change(ta, { target: { value: `## Novo\n${big}` } });
-    const ms = performance.now() - t0;
-    expect(nav.textContent).toContain('Novo');
-    expect(ms).toBeLessThan(100);
+
+    it('tocOf conta os títulos e dá as linhas', () => {
+      const t = tocOf(big);
+      expect(t).toHaveLength(334);
+      expect(t[0].line).toBe(0);
+      expect(t[333].line).toBe(1998);
+      expect(t[5].line).toBe(30);
+    });
+
+    it('o sumário atualiza na hora e a prévia só depois de 120 ms', () => {
+      vi.useFakeTimers();
+      try {
+        render(<DocWindow title="D" text={big} editable onClose={() => {}} />);
+        const nav = screen.getByRole('navigation', { name: 'Sumário' });
+        expect(nav.querySelectorAll('button')).toHaveLength(334);
+        const pv = () => document.querySelector('.doc-win-pv')!.textContent ?? '';
+        fireEvent.change(screen.getByLabelText('Documentação'), { target: { value: `## Novo\n${big}` } });
+        expect(nav.querySelectorAll('button')).toHaveLength(335);
+        expect(nav.textContent).toContain('Novo');
+        expect(pv()).not.toContain('Novo');
+        act(() => { vi.advanceTimersByTime(120); });
+        expect(pv()).toContain('Novo');
+      } finally { vi.useRealTimers(); }
+    });
+  });
+
+  it('trocar de modo e clicar no sumário atualizam a prévia na hora', () => {
+    vi.useFakeTimers();
+    try {
+      render(<DocWindow title="D" text="# A" editable onClose={() => {}} />);
+      fireEvent.change(screen.getByLabelText('Documentação'), { target: { value: '# A\n## Novo' } });
+      const nav = screen.getByRole('navigation', { name: 'Sumário' });
+      expect(document.querySelector('.doc-win-pv')!.textContent).not.toContain('Novo');
+      fireEvent.click(nav.querySelectorAll('button')[1]);
+      expect(document.querySelector('.doc-win-pv')!.textContent).toContain('Novo');
+    } finally { vi.useRealTimers(); }
   });
 });

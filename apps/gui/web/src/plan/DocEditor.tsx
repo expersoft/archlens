@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { DocWindow } from '../DocWindow';
 import { Markdown } from './Markdown';
 
@@ -20,8 +20,16 @@ export function DocEditor({ text, onConfirm, onCancel, busy, onDirty, title, lay
   const [value, setValue] = useState(text);
   const [tab, setTab] = useState<'write' | 'preview'>('write');
   const [full, setFull] = useState(false);
+  const fullBtn = useRef<HTMLButtonElement>(null);
+  const wasFull = useRef(false);
   const dirty = value !== text;
   useEffect(() => { onDirty?.(dirty); }, [dirty, onDirty]);
+  // O botão sai da tela enquanto a janela está aberta: o foco volta a ele ao fechar.
+  useEffect(() => {
+    if (wasFull.current && !full) fullBtn.current?.focus();
+    wasFull.current = full;
+  }, [full]);
+
   const confirm = (v: string = value) => {
     if (v.trim() === '' && text.trim() !== '' && !window.confirm('Apagar a documentação deste nó?')) return;
     onConfirm(v);
@@ -46,7 +54,7 @@ export function DocEditor({ text, onConfirm, onCancel, busy, onDirty, title, lay
         <button type="button" role="tab" aria-selected={tab === 'write'} className={tab === 'write' ? 'on' : ''} onClick={() => setTab('write')}>Escrever</button>
         <button type="button" role="tab" aria-selected={tab === 'preview'} className={tab === 'preview' ? 'on' : ''} onClick={() => setTab('preview')}>Prévia</button>
         <span className="np-sp" />
-        <button type="button" className="linkish" onClick={() => setFull(true)}>Tela cheia</button>
+        <button type="button" className="linkish" ref={fullBtn} onClick={() => setFull(true)}>Tela cheia</button>
       </div>
       {tab === 'write' ? area : <Markdown text={value} className="doc-text np-doc-prev" />}
       {actions}

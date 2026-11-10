@@ -44,6 +44,7 @@ export function DocWindow({ title, layer, labels, text, editable, original, busy
   const root = useRef<HTMLDivElement>(null);
   const area = useRef<HTMLTextAreaElement>(null);
   const prev = useRef<HTMLDivElement>(null);
+  const scrollTo = useRef<number | null>(null);
   const pendingSel = useRef<{ start: number; end: number } | null>(null);
   const base = original ?? text;
   const dirty = value !== base;
@@ -69,10 +70,19 @@ export function DocWindow({ title, layer, labels, text, editable, original, busy
     return () => back?.focus?.();
   }, []);
   useEffect(() => {
+    if (scrollTo.current !== null && shown === value) { const i = scrollTo.current; scrollTo.current = null; scrollPreview(i); }
+  });
+  useEffect(() => {
     const s = pendingSel.current;
     if (s && area.current) { area.current.focus(); area.current.setSelectionRange(s.start, s.end); pendingSel.current = null; }
   });
 
+  const scrollPreview = (i: number) => {
+    const e = entries[i];
+    const heads = prev.current?.querySelectorAll('h1,h2,h3');
+    const h = heads && (heads.length === entries.length ? heads[i] : Array.from(heads).find((x) => x.textContent?.trim() === e?.title));
+    (h as HTMLElement | undefined)?.scrollIntoView?.({ block: 'start' });
+  };
   const goTo = (i: number) => {
     const e = entries[i];
     setCursor(e.line);
@@ -83,9 +93,9 @@ export function DocWindow({ title, layer, labels, text, editable, original, busy
       const lh = parseFloat(getComputedStyle(ta).lineHeight) || 18;
       ta.scrollTop = e.line * lh;
     }
-    const heads = prev.current?.querySelectorAll('h1,h2,h3');
-    const h = heads && (heads.length === entries.length ? heads[i] : Array.from(heads).find((x) => x.textContent?.trim() === e.title));
-    (h as HTMLElement | undefined)?.scrollIntoView?.({ block: 'start' });
+    // A prévia pode estar atrasada: atualiza já e rola depois que o DOM novo existir.
+    if (shown === value) scrollPreview(i);
+    else { scrollTo.current = i; setShown(value); }
   };
   const format = (kind: FormatKind) => {
     const ta = area.current;
@@ -95,7 +105,7 @@ export function DocWindow({ title, layer, labels, text, editable, original, busy
     setValue(r.text);
     setCursor(lineOf(r.text, r.sel.start));
   };
-  const confirm = () => { if (editable && !busy) onConfirm?.(value); };
+  const confirm = () => { if (editable && dirty && !busy) onConfirm?.(value); };
   const cancel = () => {
     if (dirty && !window.confirm(DISCARD)) return;
     (onCancel ?? (() => onClose(value)))();
@@ -132,7 +142,7 @@ export function DocWindow({ title, layer, labels, text, editable, original, busy
               ))}
               <div role="tablist" className="doc-win-seg">
                 {MODES.map(([m, label]) => (
-                  <button key={m} type="button" role="tab" aria-selected={mode === m} className={mode === m ? 'on' : ''} onClick={() => setMode(m)}>{label}</button>
+                  <button key={m} type="button" role="tab" aria-selected={mode === m} className={mode === m ? 'on' : ''} onClick={() => { setShown(value); setMode(m); }}>{label}</button>
                 ))}
               </div>
             </>

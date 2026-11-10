@@ -56,15 +56,18 @@ export function applyFormat(text: string, sel: Sel, kind: FormatKind): { text: s
     return { text: text.slice(0, start) + ins + text.slice(end), sel: { start: start + lead.length, end: start + ins.length } };
   }
   // h, ul, ol, quote: prefixo em cada linha tocada pela seleção.
-  const from = text.lastIndexOf('\n', start - 1) + 1;
+  const from = start === 0 ? 0 : text.lastIndexOf('\n', start - 1) + 1;
   const stop = text.indexOf('\n', end > start && text[end - 1] === '\n' ? end - 1 : end);
   const to = stop === -1 ? text.length : stop;
   const lines = text.slice(from, to).split('\n');
   const prefix = (n: number) => (kind === 'h' ? '## ' : kind === 'ul' ? '- ' : kind === 'ol' ? `${n + 1}. ` : '> ');
-  const next = lines.map((l, n) => prefix(n) + l);
+  // Um título existente troca o prefixo # em vez de empilhar outro.
+  const old = (l: string) => (kind === 'h' ? /^#{1,6}[ \t]+/.exec(l)?.[0].length ?? 0 : 0);
+  const next = lines.map((l, n) => prefix(n) + l.slice(old(l)));
   const added = next.join('\n').length - lines.join('\n').length;
+  const first = prefix(0).length - old(lines[0]);
   return {
     text: text.slice(0, from) + next.join('\n') + text.slice(to),
-    sel: { start: start + prefix(0).length, end: end + added },
+    sel: { start: Math.max(from, start + first), end: end + added },
   };
 }

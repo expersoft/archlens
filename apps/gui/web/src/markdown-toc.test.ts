@@ -37,4 +37,16 @@ describe('markdown-toc', () => {
     const r = applyFormat('x', { start: 1, end: 1 }, 'table');
     expect(r.text).toBe('x\n| Coluna 1 | Coluna 2 |\n| --- | --- |\n| valor | valor |');
   });
+
+  it('applyFormat no início do documento, mesmo com linha vazia primeiro', () => {
+    expect(applyFormat('\nb', { start: 0, end: 0 }, 'ul').text).toBe('- \nb');
+    expect(applyFormat('a', { start: 0, end: 0 }, 'h').text).toBe('## a');
+  });
+
+  it('applyFormat h troca o prefixo de um título em vez de empilhar', () => {
+    const r = applyFormat('### Título', { start: 4, end: 6 }, 'h');
+    expect(r.text).toBe('## Título');
+    expect(r.text.slice(r.sel.start, r.sel.end)).toBe('Tí');
+    expect(applyFormat('# A\nb', { start: 0, end: 5 }, 'h').text).toBe('## A\n## b');
+  });
 });

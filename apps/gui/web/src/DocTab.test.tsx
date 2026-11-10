@@ -89,4 +89,11 @@ describe('DocTab', () => {
     await userEvent.keyboard('{Escape}');
     expect(screen.queryByRole('dialog')).toBeNull();
   });
+
+  it('ao fechar a janela, o foco volta ao botão Tela cheia', async () => {
+    render(<DocTab base="b" id="x" text="Corpo" max />);
+    await userEvent.click(screen.getByRole('button', { name: 'Tela cheia' }));
+    await userEvent.keyboard('{Escape}');
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Tela cheia' }));
+  });
 });

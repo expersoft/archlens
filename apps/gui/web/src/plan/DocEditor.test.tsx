@@ -47,6 +47,15 @@ describe('DocEditor', () => {
     expect(onCancel).toHaveBeenCalledTimes(1);
   });
 
+  it('ao fechar a janela, o foco volta ao botão Tela cheia', () => {
+    render(<DocEditor text="um" onConfirm={() => {}} onCancel={() => {}} />);
+    const btn = screen.getByRole('button', { name: 'Tela cheia' });
+    btn.focus();
+    fireEvent.click(btn);
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Tela cheia' }));
+  });
+
   it('esvaziar a documentação pede confirmação', () => {
     const onConfirm = vi.fn();
     const ask = vi.spyOn(window, 'confirm').mockReturnValue(false);
