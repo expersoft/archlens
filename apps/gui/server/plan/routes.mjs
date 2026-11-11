@@ -2,6 +2,7 @@
 // /plan/edit (an edit made on screen), /plan/element (a node as the draft leaves it), /plan/apply (write the confirmed
 // plan, then the document and the diagrams) and /plan/notes (the interpretation notes).
 import { dirname, relative, sep } from 'node:path';
+import { Worker } from 'node:worker_threads';
 import { newDraft, checkDraft, replanDraft, draftOpsHash, draftBytes, DRAFT_MAX_BYTES, TOO_BIG } from './draft.mjs';
 import { applyEdit, screenConflicts, findDeltaElement } from './edits.mjs';
 import { runPlan } from './agent.mjs';
@@ -40,12 +41,34 @@ const SCREEN_CONFLICT = 'O chat quer mudar algo que você editou; responda o avi
 /** The core's message without its leading code ("E_X: …"). */
 const coreMessage = e => (e.code && e.message.startsWith(`${e.code}: `) ? e.message.slice(e.code.length + 2) : e.message);
 
+/** A refusal in REFUSALS as a 409 with its GUI message and code; any other error as it is. */
+const guiRefusal = e => (Object.hasOwn(REFUSALS, e?.code) ? Object.assign(new Error(REFUSALS[e.code]), { status: 409, code: e.code }) : e);
+
 /** Runs a write; a refusal in REFUSALS comes back as 409 with its GUI message and code. */
 function guiWrite(fn) {
-  try { return fn(); } catch (e) {
-    if (!Object.hasOwn(REFUSALS, e.code)) throw e;
-    throw Object.assign(new Error(REFUSALS[e.code]), { status: 409, code: e.code });
-  }
+  try { return fn(); } catch (e) { throw guiRefusal(e); }
+}
+
+const APPLY_WORKER = new URL('./apply-worker.mjs', import.meta.url);
+const NO_VISUAL_CHECK = 'checagem visual indisponível';
+
+/**
+ * applyAndDocument in a worker thread (see apply-worker.mjs), `data` = { path, plan }: `onStep` gets each step it posts;
+ * resolves to its result, with `docError` as { code, message }. An exit before the result is an error.
+ */
+function applyOffThread(url, data, onStep) {
+  return new Promise((done, fail) => {
+    const w = new Worker(url, { workerData: data });
+    let settled = false;
+    w.on('message', m => {
+      if (m.step) return void onStep(m.step);
+      settled = true;
+      if (m.error) fail(Object.assign(new Error(m.error.message), m.error.code ? { code: m.error.code } : {}));
+      else done(m.result);
+    });
+    w.once('error', e => { settled = true; fail(e); });
+    w.once('exit', code => { if (!settled) fail(Object.assign(new Error(`a gravação parou antes do fim (código ${code})`), { code: 'E_GUI_APPLY_WORKER' })); });
+  });
 }
 
 function assertLocal(ctx) {
@@ -79,9 +102,9 @@ function dropDoc(draft, id) {
 const questionsOf = plan => (plan ? openQuestions(plan).map(i => ({ key: i.key, class: i.class, question: describeItem(i).split('  → ')[0] })) : []);
 
 /** The saved diagrams rebuilt with screenshots; the quality report without the machine's paths. Never throws. */
-export async function rebuild(store, build = buildDiagrams) {
+export async function rebuild(store, build = buildDiagrams, { onCheck } = {}) {
   try {
-    const r = await build(store, store.read().raw, { shots: true });
+    const r = await build(store, store.read().raw, { shots: true, ...(onCheck ? { onCheck } : {}) });
     return { available: r.available, problems: r.problems, results: r.results.map(({ shot: _shot, ...rest }) => rest), ...(r.available ? {} : { reason: NO_CHROMIUM }) };
   } catch (e) {
     const why = BUILD_FAILED[e.code] ?? 'erro inesperado';
@@ -123,7 +146,7 @@ const NOTATIONS = new Set(['archimate', 'c4']);
  * Route table entries, to be mounted only when planning is on.
  * `h` brings the server's helpers (readJson, httpError, streaming headers) so this file does not import app.mjs.
  */
-export function planRoutes({ registry, provider, config, telemetry, h }) {
+export function planRoutes({ registry, provider, config, telemetry, h, applyWorker = APPLY_WORKER }) {
   const { readJson, httpError, STREAMED, NDJSON_HEADERS } = h;
   const read = (req, limit = BODY_MAX) => bodyOf(readJson, req, httpError, limit);
   // Replanning reads the connector on this thread: in the turn of the base, it does not cross a read in a worker.
@@ -188,15 +211,26 @@ export function planRoutes({ registry, provider, config, telemetry, h }) {
     return STREAMED;
   }
 
-  /** Plans the draft again over the base as it is now; writes only when its ops are the ones the user confirmed. */
-  async function apply(req, b) {
-    const { draft, confirm } = await read(req);
+  /** The applied plan as the user sees it: the document by its name, its failure without the machine's paths. */
+  const appliedResult = (store, res, build) => ({
+    entry: res.entry, doc: res.docError ? { error: DOC_FAILED } : docName(store, res.doc), build, preserved: res.preserved, notesDraftNeeded: true,
+    ...(res.commit ? { commit: res.commit } : {}),
+  });
+  const NOTHING = { entry: null, doc: null, build: null, preserved: [], notesDraftNeeded: false };
+
+  /**
+   * Plans the draft again over the base as it is now; writes only when its ops are the ones the user confirmed. With
+   * `stream: true`, answers NDJSON: the steps (check, write, doc, views, and the checks of the views) and then the result,
+   * the write running in a worker. A refusal before the stream is an HTTP error, as without it.
+   */
+  async function apply(req, res, b) {
+    const { draft, confirm, stream } = await read(req);
     if (typeof confirm !== 'string') throw httpError(400, 'informe em {confirm} o opsHash do plano confirmado');
     assertLocal(registry.get(b));
     await registry.reload(b); // another write may have landed since the last poll
     const ctx = registry.get(b);
-    // One turn from the check to the write: no read of the base gets between them.
-    const res = await registry.inTurn(b, () => {
+    /** The plan to write: the draft planned again, refused (409 with the new plan) unless it is the one confirmed. */
+    const confirmed = () => {
       const replanned = draftFrom(ctx, draft);
       const { plan: planned } = replanned.draft;
       const opsHash = draftOpsHash(replanned.draft);
@@ -209,13 +243,48 @@ export function planRoutes({ registry, provider, config, telemetry, h }) {
           extra: { draft: replanned.draft, opsHash, questions: questionsOf(planned), screenConflicts: conflicts, ...(replanned.warning ? { warning: replanned.warning } : {}) },
         });
       }
-      return guiWrite(() => applyAndDocument(ctx.store, planned));
-    });
-    if (!res.entry) return { entry: null, doc: null, build: null, preserved: [], notesDraftNeeded: false };
-    await registry.reload(b);
-    // the base is written: a document that failed is reported, not thrown (the core's error names the machine's paths)
-    const doc = res.docError ? { error: DOC_FAILED } : docName(ctx.store, res.doc);
-    return { entry: res.entry, doc, build: await registry.inTurn(b, () => rebuild(ctx.store)), preserved: res.preserved, notesDraftNeeded: true };
+      return planned;
+    };
+    if (!stream) {
+      // One turn from the check to the write: no read of the base gets between them.
+      const out = await registry.inTurn(b, () => guiWrite(() => applyAndDocument(ctx.store, confirmed())));
+      if (!out.entry) return NOTHING;
+      await registry.reload(b);
+      // the base is written: a document that failed is reported, not thrown (the core's error names the machine's paths)
+      return appliedResult(ctx.store, out, await registry.inTurn(b, () => rebuild(ctx.store)));
+    }
+
+    const send = ev => { if (!res.destroyed && !res.writableEnded) res.write(JSON.stringify(ev) + '\n'); };
+    let written = false;
+    try {
+      // Still one turn from the check to the write, which runs in a worker: nothing on this thread waits for it, and no
+      // read of the base gets between them. The stream opens once the plan is checked; a refusal before is an HTTP error.
+      const path = config.bases.find(x => x.id === b).path;
+      const out = await registry.inTurn(b, () => {
+        const planned = confirmed();
+        res.writeHead(200, NDJSON_HEADERS);
+        send({ type: 'step', step: 'check', state: 'done' });
+        return applyOffThread(applyWorker, { path, plan: planned }, step => {
+          if (step.step === 'write' && step.state === 'done') written = true;
+          send({ type: 'step', ...step });
+        });
+      });
+      if (!out.entry) send({ type: 'result', ...NOTHING });
+      else {
+        await registry.reload(b);
+        send({ type: 'step', step: 'views', state: 'start' });
+        const build = await registry.inTurn(b, () => rebuild(ctx.store, undefined, { onCheck: ({ done, total, key }) => send({ type: 'check', done, total, key }) }));
+        // a build that failed is told by the result (build.error), as a document that failed is
+        if (!build.error) send({ type: 'step', step: 'views', state: 'done', ...(build.available ? {} : { detail: NO_VISUAL_CHECK }) });
+        send({ type: 'result', ...appliedResult(ctx.store, out, build) });
+      }
+    } catch (e) {
+      if (!res.headersSent) throw e;
+      const err = guiRefusal(e);
+      send({ type: 'error', error: err.message ?? String(err), ...(err.code ? { code: err.code } : {}), written });
+    }
+    res.end();
+    return STREAMED;
   }
 
   /**
@@ -303,10 +372,11 @@ export function planRoutes({ registry, provider, config, telemetry, h }) {
     }],
     // Navigation over the preview: the context menu and the notation flip see what the draft adds.
     ['POST', /^\/api\/bases\/([^/]+)\/plan\/actions$/, async (req, [b]) => {
-      const { draft, id } = await read(req);
+      const { draft, id, spec } = await read(req);
       if (typeof id !== 'string' || !id) throw httpError(400, 'informe o id do elemento');
+      if (spec !== undefined && !isObject(spec)) throw httpError(400, 'spec deve ser uma visão');
       const ctx = registry.get(b);
-      return { actions: previewActions(ctx, (await replan(b, ctx, draft)).draft, id) };
+      return { actions: previewActions(ctx, (await replan(b, ctx, draft)).draft, id, spec) };
     }],
     ['POST', /^\/api\/bases\/([^/]+)\/plan\/flip$/, async (req, [b]) => {
       const { draft, spec } = await read(req);
@@ -316,7 +386,7 @@ export function planRoutes({ registry, provider, config, telemetry, h }) {
     }],
     ['POST', /^\/api\/bases\/([^/]+)\/plan\/edit$/, async (req, [b]) => edit(req, b)],
     ['POST', /^\/api\/bases\/([^/]+)\/plan\/element$/, async (req, [b]) => element(req, b)],
-    ['POST', /^\/api\/bases\/([^/]+)\/plan\/apply$/, async (req, [b]) => apply(req, b)],
+    ['POST', /^\/api\/bases\/([^/]+)\/plan\/apply$/, (req, [b], _url, res) => apply(req, res, b)],
     ['POST', /^\/api\/bases\/([^/]+)\/plan\/notes$/, async (req, [b]) => notes(req, b)],
   ];
 }

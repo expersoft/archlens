@@ -188,7 +188,7 @@ export function apply(store, plan, { readCheck } = {}) {
     const res = store.apply(plan.ops, { ...(expect ? { expect, recheck: base => parallelDuplicates(base, plan) } : { baseVersion: plan.storeVersion ?? null }),
       plan, ...(readCheck ? { readCheck } : {}) });
     if (res.request) return { request: res.request, apply: res.apply ?? null, entry: res.entry ?? null, version: null, preserved: [] };
-    return { version: res.version, entry: res.entry ?? appendedEntry(next, plan.ops) ?? plan.entry, preserved: res.preserved };
+    return { version: res.version, entry: res.entry ?? appendedEntry(next, plan.ops) ?? plan.entry, preserved: res.preserved, ...(res.commit ? { commit: res.commit } : {}) };
   } catch (e) {
     if (e.code !== 'E_STORE_CONFLICT') throw e;
     throw e.conflicts ? changed(e.conflicts, store.read()?.raw) : stale(store.version()); // changed between the read and the write

@@ -253,7 +253,7 @@ export function gbrainGitConnector(locator, store, { describe = `${relative(proc
           const pushed = commitAndPush(cur.sha, subject(result.entry));
           if (pushed.sha) {
             checkout(pushed.sha);
-            return result;
+            return { ...result, commit: pushed.sha };
           }
           rejected = pushed.rejected;
         } catch (e) {

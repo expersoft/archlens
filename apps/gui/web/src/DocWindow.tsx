@@ -101,7 +101,7 @@ export function DocWindow({ title, layer, labels, text, editable, original, busy
   };
   const format = (kind: FormatKind) => {
     const ta = area.current;
-    if (!ta) return;
+    if (!ta || busy) return;
     const r = applyFormat(value, { start: ta.selectionStart, end: ta.selectionEnd }, kind);
     pendingSel.current = r.sel;
     setValue(r.text);
@@ -140,7 +140,7 @@ export function DocWindow({ title, layer, labels, text, editable, original, busy
             <>
               <span className="doc-win-sep" />
               {TOOLS.map(([k, label, glyph]) => (
-                <button key={k} type="button" aria-label={label} title={label} disabled={!showEditor} onClick={() => format(k)}>{glyph}</button>
+                <button key={k} type="button" aria-label={label} title={label} disabled={!showEditor || busy} onClick={() => format(k)}>{glyph}</button>
               ))}
               <div role="tablist" className="doc-win-seg">
                 {MODES.map(([m, label]) => (
@@ -167,6 +167,7 @@ export function DocWindow({ title, layer, labels, text, editable, original, busy
               aria-label="Documentação"
               spellCheck={false}
               value={value}
+              readOnly={busy}
               onChange={(ev) => { setValue(ev.target.value); setCursor(lineOf(ev.target.value, ev.target.selectionStart)); }}
               onSelect={(ev) => setCursor(lineOf(value, (ev.target as HTMLTextAreaElement).selectionStart))}
             />

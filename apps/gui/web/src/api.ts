@@ -87,7 +87,8 @@ export const getView = (base: string, spec: ViewSpec) => call<ViewResult>(`${b(b
 export const getElement = (base: string, id: string) => call<ElementDetail>(`${b(base)}/elements/${encodeURIComponent(id)}`);
 export const getDoc = (base: string, id: string) => call<{ text: string | null }>(`${b(base)}/elements/${encodeURIComponent(id)}/doc`);
 /** Só as ações (menu de contexto, duplo clique, Explorador), sem o cartão. */
-export const getActions = (base: string, id: string) => call<{ actions: Action[] }>(`${b(base)}/elements/${encodeURIComponent(id)}/actions`);
+export const getActions = (base: string, id: string, spec?: ViewSpec) =>
+  call<{ actions: Action[] }>(`${b(base)}/elements/${encodeURIComponent(id)}/actions`, spec ? { spec } : undefined);
 export const flip = (base: string, spec: ViewSpec) => call<{ spec: ViewSpec }>(`${b(base)}/flip`, { spec });
 
 export interface Info { brand?: { name?: string; logo: string; logoDark?: string }
@@ -133,8 +134,9 @@ async function stream<E>(path: string, body: unknown, onEvent: (e: E) => void, s
   });
   if (!res.ok) {
     let data: { error?: string; code?: string } = {};
-    try { data = await res.json(); } catch { /* corpo não JSON */ }
-    throw new ApiError(data.error ?? `HTTP ${res.status}`, data.code, res.status);
+    try { data = (await res.json()) ?? {}; } catch { /* corpo não JSON */ }
+    const { error, code, ...extra } = data;
+    throw new ApiError(error ?? `HTTP ${res.status}`, code, res.status, extra);
   }
   if (!res.body) throw new ApiError('resposta sem corpo', undefined, res.status);
   const reader = res.body.getReader();
@@ -262,7 +264,8 @@ export type Notation = 'archimate' | 'c4';
 export const planPreview = (base: string, draft: Draft, specs?: ViewSpec[], notation?: Notation) =>
   call<PlanPreviewResult>(`${b(base)}/plan/preview`, { draft, ...(specs ? { specs } : {}), ...(notation ? { notation } : {}) });
 /** Context-menu actions and notation flip over the preview (the base as the draft leaves it). */
-export const planActions = (base: string, draft: Draft, id: string) => call<{ actions: Action[] }>(`${b(base)}/plan/actions`, { draft, id });
+export const planActions = (base: string, draft: Draft, id: string, spec?: ViewSpec) =>
+  call<{ actions: Action[] }>(`${b(base)}/plan/actions`, { draft, id, ...(spec ? { spec } : {}) });
 export const planFlip = (base: string, draft: Draft, spec: ViewSpec) => call<{ spec: ViewSpec }>(`${b(base)}/plan/flip`, { draft, spec });
 
 export interface QualityResult { key: string; viewport: string; fill: number | null; minFontPx: number | null; issues: string[] }
@@ -275,8 +278,24 @@ export interface PlanApplyResult {
   /** Where the text of removed nodes went, relative to the base. */
   preserved: string[];
   notesDraftNeeded: boolean;
+  /** The commit made, in a gbrain base in git mode. */
+  commit?: string;
 }
 /** Writes the confirmed plan; `confirm` is the opsHash the user was shown. */
 export const planApply = (base: string, draft: Draft, confirm: string) => call<PlanApplyResult>(`${b(base)}/plan/apply`, { draft, confirm });
+/** A step of the apply: checking the plan, writing the base, the document, the saved views. */
+export type ApplyStepId = 'check' | 'write' | 'doc' | 'views';
+/**
+ * The apply as a stream: each step starting and ending (with a detail), the checks of the saved views (k of n), and
+ * the result; or an error, saying whether the base was already written.
+ */
+export type ApplyEvent =
+  | { type: 'step'; step: ApplyStepId; state: 'start' | 'done'; detail?: string }
+  | { type: 'check'; done: number; total: number; key: string; viewport?: string }
+  | ({ type: 'result' } & PlanApplyResult)
+  | { type: 'error'; error: string; code?: string; written: boolean };
+/** Writes the confirmed plan telling its steps; a refusal before the stream (409, 400) is thrown as by `planApply`. */
+export const planApplyStream = (base: string, draft: Draft, confirm: string, onEvent: (e: ApplyEvent) => void, signal: AbortSignal) =>
+  stream<ApplyEvent>(`${b(base)}/plan/apply`, { draft, confirm, stream: true }, onEvent, signal);
 /** Writes the approved interpretation notes. */
 export const planNotes = (base: string, notes: { overview?: string; notes?: string }) => call<{ doc: string }>(`${b(base)}/plan/notes`, notes);

@@ -17,13 +17,14 @@ import { send, type BridgeEvent } from './bridge';
 import { typeHint } from './labels';
 import { PlanView } from './plan/PlanView';
 import type { PreviewNav } from './plan/PlanPreview';
-import { LOCKED_SAVE, lockText, type Lock } from './plan/lock';
+import { LOCKED_SAVE, LOCKED_VIEW as LOADING_VIEW, lockText, type Lock } from './plan/lock';
 import { PropsEditor } from './plan/PropsEditor';
 import { DocEditor } from './plan/DocEditor';
 import { DocTab } from './DocTab';
 import { confirmBrowseEdit, UNSAVED, useBrowseNode } from './browseEdit';
 import { TRIMMED } from './plan/draftStore';
 import { allLabel, oneLabel, toggleAll, toggleOne } from './nesting';
+import { useDelayed } from './useDelayed';
 
 const totalMs = (v: ViewResult) => v.ms.resolve + v.ms.layout + v.ms.render;
 /** `items` null: as ações ainda estão chegando (o menu já abre com "Carregando…"). */
@@ -108,8 +109,9 @@ export function App() {
   const step: Step | undefined = hist.steps[hist.cur];
   const view = step?.view ?? null;
 
-  const stateRef = useRef({ base, catalog, selected, step });
-  stateRef.current = { base, catalog, selected, step };
+  const loading = hist.pending != null;
+  const stateRef = useRef({ base, catalog, selected, step, loading });
+  stateRef.current = { base, catalog, selected, step, loading };
   const matrixSent = useRef<Step | null>(null);
 
   useEffect(() => {
@@ -120,7 +122,6 @@ export function App() {
 
   const [notice, setNotice] = useState<string | null>(null);
 
-  /** Reserva o ticket de forma síncrona, antes de qualquer espera. */
   /** Aborta a pergunta em andamento (o servidor para o agente) e marca o turno como cancelado. */
   const cancelAsk = useCallback(() => {
     const cur = askRun.current;
@@ -130,10 +131,11 @@ export function App() {
     setTurns((ts) => ts.map((x) => (x.id === cur.id && x.status === 'running' ? { ...x, status: 'canceled', stage: undefined } : x)));
   }, []);
 
-  const reserve = useCallback(() => {
+  /** Reserva o ticket de forma síncrona, antes de qualquer espera; `label` é o que o status mostra enquanto carrega. */
+  const reserve = useCallback((label?: string) => {
     cancelAsk(); // qualquer navegação nova vence a pergunta em andamento
     const t = ++ticket.current;
-    dispatch({ type: 'request', ticket: t });
+    dispatch({ type: 'request', ticket: t, label });
     setNotice(null);
     return t;
   }, [cancelAsk]);
@@ -160,7 +162,7 @@ export function App() {
       setCatalog(cat);
       const v = pickInitialView(cat.views);
       if (!v) { setStatus(`${cat.name}: sem visões`); return; }
-      void run(reserve(), id, v.spec, 'Visão', v.title);
+      void run(reserve(v.title), id, v.spec, 'Visão', v.title);
     } catch (e) {
       if (!isDead()) setStatus(e instanceof Error ? e.message : String(e));
     }
@@ -235,12 +237,14 @@ export function App() {
   const openAction = (a: Action, id: string, kind: Step['kind']) => {
     const b = stateRef.current.base;
     if (!b || !a.spec) return;
-    void run(reserve(), b, a.spec, kind, `${a.label}: ${nameOf(id)}`, a.matrix);
+    const label = `${a.label}: ${nameOf(id)}`;
+    void run(reserve(label), b, a.spec, kind, label, a.matrix);
   };
 
   const inView = (id: string) => !!(stateRef.current.step?.view.data as ViewData | null)?.nodes?.[id];
   const selectInView = (id: string) => { if (!leaveBrowseEdit()) return; setSelected(id); send(frame.current, { type: 'select', id }); };
   const expandTicket = useRef(0);
+  const nullEcho = useRef(false); // a select(null) sent to the page, whose answer is still to come
 
   /** Escolha no Explorador/busca: seleciona se está na visão; senão abre a primeira ação de contexto. */
   const pickElement = (id: string) => {
@@ -250,11 +254,16 @@ export function App() {
     setHits([]);
     setSelected(id);
     if (inView(id)) { send(frame.current, { type: 'select', id, focus: true }); return; }
-    const t = reserve();
-    getActions(b, id).then((d) => {
+    const t = reserve(nameOf(id));
+    const shown = stateRef.current.step?.view.spec;
+    getActions(b, id, shown).then((d) => {
       if (t !== ticket.current) return;
       const withSpec = d.actions.filter((a) => a.spec);
-      const a = withSpec.find((x) => /^(Contexto|Containers do sistema|Componentes do container)/.test(x.label)) ?? withSpec[0];
+      // Só numa visão com notation 'archimate' o Explorador fica em ArchiMate; nas demais segue o Contexto de hoje.
+      const keep = (shown as { notation?: string } | undefined)?.notation === 'archimate'
+        ? withSpec.find((x) => x.label === 'Ver em ArchiMate (camadas)') ?? withSpec.find((x) => (x.spec as { notation?: string }).notation === 'archimate' && !x.matrix)
+        : undefined;
+      const a = keep ?? withSpec.find((x) => /^(Contexto|Containers do sistema|Componentes do container)/.test(x.label)) ?? withSpec[0];
       if (!a) { dispatch({ type: 'failed', ticket: t, error: `sem visão para ${nameOf(id)}` }); return; }
       return run(t, b, a.spec!, 'Explorador', `${nameOf(id)}: ${a.label}`, a.matrix);
     }).catch((err) => { if (t === ticket.current) fail(t, err); });
@@ -268,7 +277,7 @@ export function App() {
     const history = (keep > 0 ? turnsRef.current.filter((x) => x.status === 'done').slice(-keep) : []).map((x) => ({ question: x.question, title: x.view?.title }));
     const nodes = Object.keys((cur?.view.data as ViewData | null)?.nodes ?? {});
     const context = cur ? { spec: cur.view.spec, ...(nodes.length ? { nodes } : {}), ...(sel ? { selected: sel } : {}) } : undefined;
-    const t = reserve(); // cancela a anterior e reserva o ticket
+    const t = reserve(question); // cancela a anterior e reserva o ticket
     const id = ++turnSeq.current;
     const ctl = new AbortController();
     const startedAt = Date.now();
@@ -320,11 +329,19 @@ export function App() {
   const openTurn = (turn: Turn) => {
     const v = turn.view;
     if (!v) return;
-    const t = reserve();
+    const t = reserve(turn.question);
     dispatch({ type: 'loaded', ticket: t, step: { kind: 'Pergunta', label: turn.question, view: v, ms: totalMs(v) } });
   };
 
   const goStep = (index: number) => { cancelAsk(); dispatch({ type: 'go', index }); };
+  /** Desiste da espera: invalida o ticket (a resposta tardia não entra) e fica a visão atual. */
+  const cancelLoad = () => {
+    const t = hist.pending;
+    if (t == null) return;
+    ticket.current++;
+    cancelAsk();
+    dispatch({ type: 'cancel', ticket: t });
+  };
 
   const onSearch = (q: string) => {
     const b = stateRef.current.base;
@@ -344,13 +361,22 @@ export function App() {
   const onEvent = (e: BridgeEvent) => {
     const { base: b, step: cur } = stateRef.current;
     if (e.type === 'theme') setDiagramTheme(e.theme); // T dentro do diagrama: só o diagrama muda
+    else if (stateRef.current.loading && (e.type === 'context' || e.type === 'expand')) return; // a visão está carregando
     else if (e.type === 'select') {
       menuTicket.current++;
       setMenu(null);
       const prev = stateRef.current.selected;
       if (e.id === prev) return;
+      // the page answers a select it does not draw with select(null): that answer is not the user deselecting
+      if (e.id === null && nullEcho.current) { nullEcho.current = false; return; }
+      nullEcho.current = false;
+      const drawn = prev !== null && inView(prev);
+      // Puts the previous selection back on the page; a node the view does not draw only clears the highlight.
+      const restore = () => { nullEcho.current = !drawn; send(frame.current, { type: 'select', id: drawn ? prev : null }); };
+      // durante a espera o clique no diagrama não muda nada: a seleção anterior volta a ser destacada
+      if (stateRef.current.loading) { if (e.id !== null || drawn) restore(); return; }
       // the diagram already highlighted the other node: kept on the edited one, it goes back
-      if (!leaveBrowseEdit()) { send(frame.current, { type: 'select', id: prev }); return; }
+      if (!leaveBrowseEdit()) { if (e.id !== null || drawn) restore(); return; }
       setSelected(e.id);
     } else if (e.type === 'ready') {
       const sel = stateRef.current.selected;
@@ -365,7 +391,7 @@ export function App() {
       const rect = frame.current?.getBoundingClientRect();
       const at = { x: (rect?.left ?? 0) + e.x, y: (rect?.top ?? 0) + e.y };
       setMenu({ id: e.id, at, title: nameOf(e.id), items: null });
-      getActions(b, e.id).then((d) => {
+      getActions(b, e.id, stateRef.current.step?.view.spec).then((d) => {
         if (mt === menuTicket.current) setMenu({ id: e.id, at, title: nameOf(e.id), items: d.actions });
       }).catch((err) => {
         if (mt !== menuTicket.current) return;
@@ -379,10 +405,12 @@ export function App() {
       const xt = ++expandTicket.current;
       const live = () => xt === expandTicket.current && b === stateRef.current.base;
       const t0 = ticket.current;
-      getActions(b, e.id).then((d) => {
+      getActions(b, e.id, stateRef.current.step?.view.spec).then((d) => {
         if (!live() || ticket.current !== t0) return; // superado por outro duplo clique ou por outra navegação
         const p = d.actions.find((a) => a.primary && a.spec);
-        if (p) void run(reserve(), b, p.spec!, 'Clique duplo', `${p.label}: ${nameOf(e.id)}`, p.matrix);
+        if (!p) return;
+        const label = `${p.label}: ${nameOf(e.id)}`;
+        void run(reserve(label), b, p.spec!, 'Clique duplo', label, p.matrix);
       }).catch((err) => { if (live() && ticket.current === t0) setNotice(err instanceof Error ? err.message : String(err)); });
     }
   };
@@ -390,27 +418,29 @@ export function App() {
   const notation = (view?.spec as { notation?: string } | undefined)?.notation === 'c4' ? 'c4' : 'archimate';
   const onNotation = (n: 'archimate' | 'c4') => {
     if (!base || !view || n === notation) return;
-    const t = reserve();
+    const label = n === 'c4' ? 'Ver em C4' : 'Ver em ArchiMate';
+    const t = reserve(label);
     flip(base, view.spec)
-      .then((r) => { if (t === ticket.current) return run(t, base, r.spec, 'Notação', n === 'c4' ? 'Ver em C4' : 'Ver em ArchiMate'); })
+      .then((r) => { if (t === ticket.current) return run(t, base, r.spec, 'Notação', label); })
       .catch((err) => { if (t === ticket.current) fail(t, err); });
   };
 
   const nest = view?.nest ?? null;
   const onNestAll = () => {
     if (!base || !view || !nest) return;
-    void run(reserve(), base, toggleAll(view.spec, nest), 'Visão', allLabel(nest));
+    void run(reserve(allLabel(nest)), base, toggleAll(view.spec, nest), 'Visão', allLabel(nest));
   };
   const onNestOne = (id: string) => {
     if (!base || !view || !nest) return;
-    void run(reserve(), base, toggleOne(view.spec, nest, id), 'Visão', `${oneLabel(nest, id)}: ${nameOf(id)}`);
+    const label = `${oneLabel(nest, id)}: ${nameOf(id)}`;
+    void run(reserve(label), base, toggleOne(view.spec, nest, id), 'Visão', label);
   };
 
   const viewData = (view?.data ?? null) as ViewData | null;
   const layersHere = [...new Set(Object.values(viewData?.nodes ?? {}).map((n) => n.layer).filter((l): l is string => !!l))];
   const alertActs: AlertAction[] = base && view ? alertActions({
     spec: view.spec, nest, selected, selectedName: selected ? nameOf(selected) : '', layers: layersHere, notation,
-    nestAll: onNestAll, runSpec: (sp, label) => void run(reserve(), base, sp, 'Visão', label),
+    nestAll: onNestAll, runSpec: (sp, label) => void run(reserve(label), base, sp, 'Visão', label),
   }) : [];
   const planEnabled = info?.plan?.enabled === true;
   const brandName = info?.brand?.name;
@@ -460,7 +490,7 @@ export function App() {
   const removed = !!bn.el?.removed;
   const shownCard = bn.el ? bn.el.card : card;
   const shownDocs = bn.node ? bn.node.docs : docsEnabled;
-  const editLock = browseWriting ? LOCKED_SAVE : planLock ? lockText(planLock) : planUnsaved ? UNSAVED : null;
+  const editLock = browseWriting ? LOCKED_SAVE : loading ? LOADING_VIEW : planLock ? lockText(planLock) : planUnsaved ? UNSAVED : null;
   // An editor never outlives its dirty flag (closed, or hidden by another node, base or mode).
   useEffect(() => { if (!mine) browseDirty.current = false; }, [mine]);
   const browseErrText = mine && browseError?.base === base && browseError.id === selected ? browseError.text : null;
@@ -524,8 +554,14 @@ export function App() {
   };
   const closeMenu = useCallback(() => setMenu(null), []);
   const trail = useMemo(() => hist.steps.slice(0, hist.cur + 1), [hist.steps, hist.cur]);
-  const loading = hist.pending != null;
-  const shownStatus = loading ? 'Carregando…' : hist.error ?? notice ?? (view && catalog ? `${catalog.name} · ${view.title}` : status);
+  // o aviso da espera (barra, status com Cancelar) só aparece depois de ~300 ms; o bloqueio vale desde o início
+  const lateLoading = useDelayed(loading);
+  // no Planejar, a espera é a da prévia (o pedido em andamento que ela informa)
+  const planWait = planning ? planNav?.loading ?? null : null;
+  const latePlan = useDelayed(!!planWait);
+  const progress = planning ? (latePlan && planWait ? { label: planWait.label, onCancel: planWait.cancel } : null)
+    : lateLoading ? { label: hist.pendingLabel ?? 'visão', onCancel: cancelLoad } : null;
+  const shownStatus = hist.error ?? notice ?? (view && catalog ? `${catalog.name} · ${view.title}` : status);
 
   return (
     <Shell
@@ -534,10 +570,10 @@ export function App() {
       onThemeChange={setTheme}
       presenting={presenting}
       status={shownStatus}
+      progress={progress}
       notation={planning ? planNav?.notation ?? undefined : notation}
-      onNotation={planning ? (planNav?.notation ? planNav.flip : undefined) : base && view ? onNotation : undefined}
-      nestLabel={nest && !planning ? allLabel(nest) : undefined}
-      onNestAll={onNestAll}
+      onNotation={planning ? (planNav?.notation && !planWait ? planNav.flip : undefined) : base && view && !loading ? onNotation : undefined}
+      notationHint={(planning ? planWait : loading) ? LOADING_VIEW : undefined}
       bases={bases}
       base={base}
       onBase={onBase}
@@ -575,7 +611,7 @@ export function App() {
           <Explorer
             catalog={catalog}
             selected={selected}
-            onOpenView={(spec, title) => { if (base) void run(reserve(), base, spec, 'Explorador', title); }}
+            onOpenView={(spec, title) => { if (base) void run(reserve(title), base, spec, 'Explorador', title); }}
             onPick={pickElement}
           />
         ),
@@ -616,7 +652,7 @@ export function App() {
               </span>
             ))}
           </nav>
-          <Diagram ref={frame} view={view} theme={diagramTheme} onThemeChange={setDiagramTheme} onEvent={onEvent} busy={loading} alertActions={alertActs} canPresent={leaveBrowseEdit} />
+          <Diagram ref={frame} view={view} theme={diagramTheme} onThemeChange={setDiagramTheme} onEvent={onEvent} busy={loading} alertActions={alertActs} canPresent={leaveBrowseEdit} nest={nest && !planning ? { label: allLabel(nest), onToggle: onNestAll, disabled: loading, hint: LOADING_VIEW } : undefined} />
         </>
       ) : <div className="empty">{shownStatus}</div>}
       {menu && <ContextMenu at={menu.at} title={menu.title} items={menu.items} onPick={(a) => openAction(a, menu.id, 'Menu')} onClose={closeMenu} nest={nest} nodeId={menu.id} onNest={onNestOne} />}

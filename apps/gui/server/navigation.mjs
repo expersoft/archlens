@@ -29,27 +29,44 @@ function traversalCounts(ctx, id, mode) {
   return counts;
 }
 
-export function actionsFor(ctx, id) {
+/** The view on screen as `actionsFor` wants it: its spec and the ids it shows (left out when the spec does not resolve). */
+export function currentOf(model, spec) {
+  try { return { spec, nodes: resolveView(model, { key: 'cur', ...spec }).nodes.map(n => n.id) }; } catch { return { spec }; }
+}
+
+/** Actions of the context menu. `current` ({ spec, nodes? }) is the view on screen: its notation is kept by the actions. */
+export function actionsFor(ctx, id, current) {
   const e = ctx.model.elements.get(id);
   if (!e) return [];
   const k = ctx.kind(e);
   const kids = [...ctx.model.elements.values()].filter(x => x.parent === id);
+  const am = current?.spec?.notation === 'archimate';
   const out = [];
+  // On an ArchiMate view the C4 opening stays in the menu, labelled, and the ArchiMate one is the primary.
+  const c4 = (label, spec) => ({ label: am ? `${label} (C4)` : label, spec, ...(am ? {} : { primary: true }) });
+  const nested = granularity => ({ label: 'Abrir em camadas (aninhado)', primary: true, spec: { notation: 'archimate',
+    viewpoint: 'layered', anchor: id, traverse: { mode: 'both', maxDepth: 2 }, granularity, nesting: { mode: 'nested', depth: 1 } } });
   if (k === 'softwareSystem') {
     if (kids.some(x => ctx.kind(x) === 'container')) {
-      out.push({ label: 'Abrir containers', spec: { notation: 'c4', level: 'container', scope: id }, primary: true });
+      if (am) out.push(nested('container'));
+      out.push(c4('Abrir containers', { notation: 'c4', level: 'container', scope: id }));
     }
     out.push({ label: 'Contexto (C4)', spec: { notation: 'c4', level: 'context', scope: id } });
   } else if (k === 'container') {
     if (kids.some(x => ctx.kind(x) === 'component')) {
-      out.push({ label: 'Abrir componentes', spec: { notation: 'c4', level: 'component', scope: id }, primary: true });
+      if (am) out.push(nested('component'));
+      out.push(c4('Abrir componentes', { notation: 'c4', level: 'component', scope: id }));
     }
     const sys = ctx.systemOf(id);
     if (sys) out.push({ label: 'Containers do sistema, foco aqui (C4)', spec: { notation: 'c4', level: 'container', scope: sys, focus: [id], depth: 1 } });
   } else if (k === 'component') {
     if (e.parent) out.push({ label: 'Componentes do container (C4)', spec: { notation: 'c4', level: 'component', scope: e.parent, focus: [id], depth: 1 } });
   } else if (e.type === 'grouping') {
-    out.push({ label: 'Abrir grupo', spec: { notation: 'c4', level: 'landscape', groups: { only: [id], frames: true } }, primary: true });
+    if (am) {
+      out.push({ label: 'Abrir grupo em camadas (aninhado)', primary: true, spec: { notation: 'archimate', viewpoint: 'application',
+        groups: { only: [id], frames: true }, nesting: { mode: 'nested', depth: 1 } } });
+    }
+    out.push(c4('Abrir grupo', { notation: 'c4', level: 'landscape', groups: { only: [id], frames: true } }));
   }
   if (e.type === 'grouping') return out;
 
@@ -69,9 +86,18 @@ export function actionsFor(ctx, id) {
   }
   out.push({ label: 'Matriz de dependência', spec: { notation: 'archimate', viewpoint: 'impact', anchor: id }, matrix: true });
   const sys = (k === 'container' || k === 'component') ? ctx.systemOf(id) : null;
-  out.push({ label: 'Focar (só vizinhos)', spec: sys
-    ? { notation: 'c4', level: k, scope: k === 'component' ? e.parent : sys, focus: [id], depth: 1 }
-    : { notation: 'archimate', viewpoint: 'layered', anchor: id, traverse: { mode: 'both', maxDepth: 1 }, granularity: 'component' } });
+  const archFocus = { notation: 'archimate', viewpoint: 'layered', anchor: id, traverse: { mode: 'both', maxDepth: 1 }, granularity: 'component' };
+  let focus;
+  if (am) focus = archFocus;
+  else if (sys) focus = { notation: 'c4', level: k, scope: k === 'component' ? e.parent : sys, focus: [id], depth: 1 };
+  else if (current?.spec?.notation === 'c4' && k === 'softwareSystem') focus = { notation: 'c4', level: 'context', scope: id };
+  else if (current?.spec?.notation === 'c4' && current.nodes?.includes(id)) {
+    // the view's own key and title (a saved view, the change view) do not belong to the focused one
+    const { key: _key, title: _title, ...view } = current.spec;
+    focus = { ...view, focus: [id], depth: 1 };
+  }
+  else focus = archFocus;
+  out.push({ label: 'Focar (só vizinhos)', spec: focus });
   return out;
 }
 

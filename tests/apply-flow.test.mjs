@@ -9,6 +9,7 @@ import { resolveBase, openStore } from '../scripts/lib/store/index.mjs';
 import { plan as planOf } from '../scripts/lib/api.mjs';
 import { applyAndDocument, writeNotes, writeDocument } from '../scripts/lib/apply-flow.mjs';
 import { buildDiagrams, renderViews } from '../scripts/lib/build.mjs';
+import { inspectHtml } from '../scripts/lib/deliver.mjs';
 
 const CLI = fileURLToPath(new URL('../scripts/archlens.mjs', import.meta.url));
 const EXAMPLE = fileURLToPath(new URL('../examples/loja-online/', import.meta.url));
@@ -180,4 +181,51 @@ test('apply de uma rodada só de documentação conta o texto na linha, no commi
   assert.match(r.stdout, /: \+0 ~0 −0 doc 1\n/);
   assert.match(r.stdout, /docs\(arquitetura\): \+0 ~0 −0 doc 1/);
   assert.match(run(['query', 'architecture', '--element', 'loja.web'], dir).stdout, /: \+0 ~0 −0 doc 1 \[documentação\]/);
+});
+
+test('onStep: write e doc, início e fim, em ordem', () => {
+  const dir = lojaCopy();
+  const store = storeAt(dir);
+  const steps = [];
+  applyAndDocument(store, finalPlan(store), { onStep: e => steps.push(e) });
+  assert.deepEqual(steps.map(e => [e.step, e.state]), [['write', 'start'], ['write', 'done'], ['doc', 'start'], ['doc', 'done']]);
+  assert.equal(steps[1].detail, store.describe());
+});
+
+test('plano sem mudanças: nenhum onStep', () => {
+  const dir = lojaCopy();
+  const store = storeAt(dir);
+  applyAndDocument(store, finalPlan(store));
+  const steps = [];
+  const again = planOf(store, delta, { today: '2026-11-03' }).plan;
+  assert.deepEqual(applyAndDocument(store, again, { onStep: e => steps.push(e) }), { entry: null });
+  assert.deepEqual(steps, []);
+});
+
+test('documento falha: write done, doc start, sem doc done, docError presente', () => {
+  const dir = lojaCopy();
+  const store = storeAt(dir);
+  const apply = store.apply.bind(store);
+  const read = store.read;
+  store.apply = (...a) => { const r = apply(...a); store.read = () => { store.read = read; throw new Error('disco cheio'); }; return r; };
+  const steps = [];
+  const res = applyAndDocument(store, finalPlan(store), { onStep: e => steps.push(e) });
+  assert.deepEqual(steps.map(e => [e.step, e.state]), [['write', 'start'], ['write', 'done'], ['doc', 'start']]);
+  assert.match(res.docError.message, /disco cheio/);
+});
+
+test('onCheck conta visão × viewport até o total', async t => {
+  const dir = lojaCopy();
+  const store = storeAt(dir);
+  const checks = [];
+  const res = await buildDiagrams(store, store.read().raw, { dir: join(dir, 'out'), name: 'architecture', shots: false, onCheck: c => checks.push(c) });
+  if (!res.available) return t.skip('sem Chromium');
+  assert.ok(checks.length >= 2);
+  assert.deepEqual(checks.map(c => c.done), checks.map((_, i) => i + 1));
+  const total = checks[0].total;
+  assert.equal(checks.length, total);
+  assert.equal(total % 2, 0);
+  assert.ok(checks.every(c => c.total === total && typeof c.key === 'string' && /^\d+x\d+$/.test(c.viewport)));
+  assert.deepEqual([...new Set(checks.map(c => c.viewport))], ['1920x1080', '1280x720']);
+  assert.ok(inspectHtml);
 });

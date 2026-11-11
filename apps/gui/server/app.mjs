@@ -7,7 +7,7 @@ import { query } from '../../../scripts/lib/api.mjs';
 import { createBaseRegistry } from './bases.mjs';
 import { catalog, findElements, labelsOf } from './catalog.mjs';
 import { renderSpec, createViewCache } from './views.mjs';
-import { actionsFor, flipSpec } from './navigation.mjs';
+import { actionsFor, currentOf, flipSpec } from './navigation.mjs';
 import { viewAnswer, formatViewAnswer } from '../../../scripts/lib/query-md.mjs';
 import { plainWikilinks } from '../../../scripts/lib/node-doc.mjs';
 import { createProvider } from './ask/providers.mjs';
@@ -115,7 +115,7 @@ async function chromiumUsable() {
   } catch { return false; }
 }
 
-export async function startServer({ config, staticDir, registry, provider } = {}) {
+export async function startServer({ config, staticDir, registry, provider, applyWorker } = {}) {
   // Throws E_GUI_CONFIG (no key) before anything listens; a test/e2e provider replaces the configured one.
   // A missing key for an `llm` from the config file only turns the search off (`askOff`): the diagrams stay usable.
   let askOff = null;
@@ -225,7 +225,7 @@ export async function startServer({ config, staticDir, registry, provider } = {}
     }],
     ['GET', /^\/api\/telemetry$/, async () => summarize(telemetry.recent())],
     ['POST', /^\/api\/bases\/([^/]+)\/ask$/, (req, [b], _url, res) => ask(req, res, b)],
-    ...(planOn ? planRoutes({ registry, provider, config, telemetry, h: { readJson, httpError, STREAMED, NDJSON_HEADERS } }) : []),
+    ...(planOn ? planRoutes({ registry, provider, config, telemetry, applyWorker, h: { readJson, httpError, STREAMED, NDJSON_HEADERS } }) : []),
     ['GET', /^\/api\/bases$/, async () => registry.list()],
     ['GET', /^\/api\/bases\/([^/]+)\/catalog$/, async (_req, [b]) => catalog(registry.get(b))],
     ['GET', /^\/api\/bases\/([^/]+)\/find$/, async (_req, [b], url) =>
@@ -255,6 +255,14 @@ export async function startServer({ config, staticDir, registry, provider } = {}
       if (!ctx.model.elements.has(id)) throw httpError(400, `"${id}" não existe na base`, 'E_UNKNOWN_REF');
       return { actions: actionsFor(ctx, id) };
     }],
+    // The same, knowing the view on screen: its notation is kept by the actions.
+    ['POST', /^\/api\/bases\/([^/]+)\/elements\/([^/]+)\/actions$/, async (req, [b, id]) => {
+      const { spec } = await readJson(req);
+      if (spec !== undefined && (!spec || typeof spec !== 'object' || Array.isArray(spec))) throw httpError(400, 'spec deve ser uma visão');
+      const ctx = registry.get(b);
+      if (!ctx.model.elements.has(id)) throw httpError(400, `"${id}" não existe na base`, 'E_UNKNOWN_REF');
+      return { actions: actionsFor(ctx, id, spec ? currentOf(ctx.model, spec) : undefined) };
+    }],
     ['POST', /^\/api\/bases\/([^/]+)\/flip$/, async (req, [b]) => {
       const { spec } = await readJson(req);
       if (!spec || typeof spec !== 'object' || Array.isArray(spec)) throw httpError(400, 'informe {spec} no corpo');
@@ -270,15 +278,17 @@ export async function startServer({ config, staticDir, registry, provider } = {}
       const { pathname } = url;
       if (pathname === '/api' || pathname.startsWith('/api/')) {
         if (req.method === 'POST') checkPostOrigin(req);
+        let wrongMethod = false;
         for (const [method, re, fn] of routes) {
           const m = re.exec(pathname);
           if (!m) continue;
-          if (req.method !== method) throw httpError(405, `método ${req.method} não permitido`);
+          if (req.method !== method) { wrongMethod = true; continue; } // another route may take this path with this method
           let params;
           try { params = m.slice(1).map(decodeURIComponent); } catch { throw httpError(400, 'URL com codificação inválida'); }
           const out = await fn(req, params, url, res);
           return out === STREAMED ? undefined : send(res, 200, out);
         }
+        if (wrongMethod) throw httpError(405, `método ${req.method} não permitido`);
         throw httpError(404, 'rota desconhecida');
       }
       if (staticDir && (req.method === 'GET' || req.method === 'HEAD')) return await serveStatic(res, staticDir, pathname);

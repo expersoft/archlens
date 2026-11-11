@@ -7,7 +7,7 @@ export const VIEWPORTS = [[1920, 1080], [1280, 720]];
 export const MIN_FILL = 0.9;
 
 /** Returns { available, results: [{ key, viewport, fill, minFontPx, shot, issues[] }] }. */
-export async function inspectHtml(htmlPath, { shotsDir, viewports = VIEWPORTS, minFill = MIN_FILL } = {}) {
+export async function inspectHtml(htmlPath, { shotsDir, viewports = VIEWPORTS, minFill = MIN_FILL, onCheck } = {}) {
   let chromium;
   try { ({ chromium } = await import('playwright-core')); } catch {
     return { available: false, reason: 'playwright-core não instalado (rode "npm install" na pasta da skill)', results: [] };
@@ -17,6 +17,8 @@ export async function inspectHtml(htmlPath, { shotsDir, viewports = VIEWPORTS, m
     return { available: false, reason: `Chromium indisponível (${e.message.split('\n')[0]}); rode "npx playwright install chromium"`, results: [] };
   }
   const results = [];
+  let done = 0;
+  let total = 0;
   try {
     if (shotsDir) mkdirSync(shotsDir, { recursive: true });
     const url = pathToFileURL(resolve(htmlPath)).href;
@@ -27,6 +29,7 @@ export async function inspectHtml(htmlPath, { shotsDir, viewports = VIEWPORTS, m
       page.on('pageerror', e => errors.push(e.message));
       await page.goto(url);
       const keys = await page.evaluate(() => window.archlens.data.views.map(v => v.key));
+      if (!total) total = keys.length * viewports.length;
       for (const key of keys) {
         await page.evaluate(k => window.archlens.show(window.archlens.data.views.findIndex(v => v.key === k)), key);
         await page.waitForTimeout(120);
@@ -44,6 +47,7 @@ export async function inspectHtml(htmlPath, { shotsDir, viewports = VIEWPORTS, m
         if (m.fill < minFill) issues.push(`ocupa ${(m.fill * 100).toFixed(0)}% da largura (< ${minFill * 100}%): use layout.direction "auto"/"DOWN" ou divida a visão`);
         if (m.minFontPx < m.min) issues.push(`texto ~${m.minFontPx.toFixed(1)}px (< ${m.min}px): divida a visão (focus+depth, exclude, collapse, layers)`);
         results.push({ key, viewport: `${w}x${h}`, fill: +m.fill.toFixed(3), minFontPx: +m.minFontPx.toFixed(1), shot, issues });
+        onCheck?.({ done: ++done, total, key, viewport: `${w}x${h}` });
       }
       if (errors.length) results.push({ key: '*', viewport: `${w}x${h}`, fill: null, minFontPx: null, shot: null, issues: errors.map(e => `erro de JS: ${e}`) });
       await ctx.close();

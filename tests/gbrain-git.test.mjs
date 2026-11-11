@@ -556,3 +556,12 @@ test('the CLI converts a vault with text to the gbrain: ARCHITECTURE.md keeps th
   assert.match(doc, /## Documentação dos nós[\s\S]*O cliente ligou ontem\./);
   assert.match(cli('check', dir), /em dia/);
 });
+
+test('apply devolve o commit gravado', () => {
+  const w = world();
+  const a = w.user('a');
+  seed(a.store());
+  const res = apply(a.store(), finalPlan(a.store(), addVendas()));
+  assert.match(res.commit, /^[0-9a-f]{40}$/);
+  assert.equal(res.commit, sh(w.remote, 'rev-parse', 'main'));
+});

@@ -19,9 +19,10 @@ export interface ShellProps {
   /** Notação da visão atual; o seletor ArchiMate | C4 só age se onNotation for informado. */
   notation?: 'archimate' | 'c4';
   onNotation?: (n: 'archimate' | 'c4') => void;
-  /** Botão da barra: Agrupar tudo / Desagrupar tudo. Ausente (ou rótulo vazio) esconde o botão. */
-  nestLabel?: string;
-  onNestAll?: () => void;
+  /** Dica do seletor de notação desabilitado (ex.: uma visão carregando). */
+  notationHint?: string;
+  /** Espera visível: barra fina na borda de baixo da barra de cima e o status "Carregando “label”…" com Cancelar. */
+  progress?: { label: string; onCancel?: () => void } | null;
   /** Logo da empresa (archlens-gui.json); com ele, o logo substitui a marca e o archlens fica discreto. */
   brand?: Info['brand'];
   bases?: BaseInfo[];
@@ -129,11 +130,16 @@ export function Shell(p: ShellProps) {
             }}
           />
           <div className="seg" role="group" aria-label="Notação">
-            <button className={p.notation !== 'c4' ? 'on' : ''} disabled={!p.onNotation} onClick={() => p.notation === 'c4' && p.onNotation?.('archimate')}>ArchiMate</button>
-            <button className={p.notation === 'c4' ? 'on' : ''} disabled={!p.onNotation} onClick={() => p.notation !== 'c4' && p.onNotation?.('c4')}>C4</button>
+            <button className={p.notation !== 'c4' ? 'on' : ''} disabled={!p.onNotation} title={!p.onNotation ? p.notationHint : undefined} onClick={() => p.notation === 'c4' && p.onNotation?.('archimate')}>ArchiMate</button>
+            <button className={p.notation === 'c4' ? 'on' : ''} disabled={!p.onNotation} title={!p.onNotation ? p.notationHint : undefined} onClick={() => p.notation !== 'c4' && p.onNotation?.('c4')}>C4</button>
           </div>
-          {p.nestLabel && <button type="button" className="nest" onClick={() => p.onNestAll?.()}>{p.nestLabel}</button>}
-          <span className="status">{p.status}</span>
+          {p.progress ? (
+            <>
+              <span className="status">Carregando “{p.progress.label}”…</span>
+              {p.progress.onCancel && <button type="button" className="cancel" onClick={p.progress.onCancel}>Cancelar</button>}
+              <div className="progress" role="progressbar" aria-label="Carregando" />
+            </>
+          ) : <span className="status">{p.status}</span>}
           <button className="icon" aria-label="Alternar tema" title="Tema da interface (o diagrama tem o seu, na barra do diagrama)" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
             {theme === 'dark' ? '☀' : '☾'}
           </button>

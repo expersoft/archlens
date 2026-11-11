@@ -51,14 +51,22 @@ const documentStored = store => {
  * checked before anything is written. `{ entry: null }` when the plan changes nothing. When the base was written but
  * the document could not be regenerated, `doc` is null and `docError` holds the error. Not for a gbrain MCP base.
  */
-export function applyAndDocument(store, plan) {
+export function applyAndDocument(store, plan, { onStep } = {}) {
   if (store.remote) throw storeError('E_STORE_UNSUPPORTED', `${store.describe()} é uma base gbrain no modo mcp; grave com "archlens apply"`);
   assertWritable(store);
   if (isFinal(plan) && plan.ops?.length) assertDocOwned(store);
+  if (plan?.ops?.length) onStep?.({ step: 'write', state: 'start' });
   const res = applyPlan(store, plan);
   if (!res.entry) return { entry: null };
-  try { return { entry: res.entry, preserved: res.preserved, doc: documentStored(store) }; } catch (e) {
-    return { entry: res.entry, preserved: res.preserved, doc: null, docError: e };
+  const commit = res.commit ? { commit: res.commit } : {};
+  onStep?.({ step: 'write', state: 'done', detail: res.commit ? `commit ${res.commit.slice(0, 7)}` : store.describe() });
+  onStep?.({ step: 'doc', state: 'start' });
+  try {
+    const doc = documentStored(store);
+    onStep?.({ step: 'doc', state: 'done' });
+    return { entry: res.entry, preserved: res.preserved, doc, ...commit };
+  } catch (e) {
+    return { entry: res.entry, preserved: res.preserved, doc: null, docError: e, ...commit };
   }
 }
 

@@ -8,10 +8,12 @@ export type Step = {
   matrix?: boolean;
 };
 
-export type HistoryState = { steps: Step[]; cur: number; pending: number | null; error?: string };
+/** `pendingLabel`: o rótulo da espera (título ou ação), para o status "Carregando “…”". */
+export type HistoryState = { steps: Step[]; cur: number; pending: number | null; pendingLabel?: string; error?: string };
 
 export type HistoryAction =
-  | { type: 'request'; ticket: number }
+  | { type: 'request'; ticket: number; label?: string }
+  | { type: 'cancel'; ticket: number }
   | { type: 'loaded'; ticket: number; step: Step }
   | { type: 'failed'; ticket: number; error: string }
   | { type: 'settle'; ticket: number }
@@ -23,21 +25,23 @@ export const initialHistory: HistoryState = { steps: [], cur: -1, pending: null 
 export function reducer(state: HistoryState, a: HistoryAction): HistoryState {
   switch (a.type) {
     case 'request':
-      return { ...state, pending: a.ticket, error: undefined };
+      return { ...state, pending: a.ticket, pendingLabel: a.label, error: undefined };
+    case 'cancel': // o usuário desistiu da espera: fica a visão atual, sem erro
+      return a.ticket === state.pending ? { ...state, pending: null, pendingLabel: undefined } : state;
     case 'loaded': {
       if (a.ticket !== state.pending) return state;
       const steps = [...state.steps.slice(0, state.cur + 1), a.step];
-      return { steps, cur: steps.length - 1, pending: null };
+      return { steps, cur: steps.length - 1, pending: null, pendingLabel: undefined };
     }
     case 'failed':
       if (a.ticket !== state.pending) return state;
-      return { ...state, pending: null, error: a.error };
+      return { ...state, pending: null, pendingLabel: undefined, error: a.error };
     case 'settle': // pedido que terminou sem passo novo (pergunta que só esclarece)
-      return a.ticket === state.pending ? { ...state, pending: null } : state;
+      return a.ticket === state.pending ? { ...state, pending: null, pendingLabel: undefined } : state;
     case 'go':
       if (a.index < 0 || a.index >= state.steps.length) return state;
       // a escolha do usuário vence: uma resposta tardia não o tira deste passo
-      return { ...state, cur: a.index, pending: null };
+      return { ...state, cur: a.index, pending: null, pendingLabel: undefined };
     case 'reset':
       return initialHistory;
   }

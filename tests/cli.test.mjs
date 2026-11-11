@@ -863,6 +863,41 @@ test('plan then apply writes the base and the document', () => {
   assert.equal(run(['check', 'architecture'], dir).status, 0);
 });
 
+test('apply imprime as etapas em ordem', () => {
+  const dir = setup();
+  addDelta(dir);
+  assert.equal(run(['plan', 'architecture', 'd.json', '--out', 'p.json'], dir).status, 0);
+  const r = run(['apply', 'architecture', 'p.json'], dir);
+  assert.equal(r.status, 0, r.stderr);
+  const lines = r.stdout.split('\n').filter(l => l.startsWith('✓ '));
+  const at = t => lines.findIndex(l => l.startsWith(`✓ ${t}`));
+  assert.ok(at('Conferindo o plano com a base atual') >= 0, r.stdout);
+  assert.ok(at('Conferindo o plano com a base atual') < at('Gravando a base'));
+  assert.ok(at('Gravando a base') < at('Gerando o ARCHITECTURE.md'));
+  assert.match(lines[at('Gravando a base')], /^✓ Gravando a base \(.+\)$/);
+  assert.doesNotMatch(r.stdout, /\r|\x1b\[/);
+});
+
+test('apply sem mudanças: só = nada mudou', () => {
+  const dir = setup();
+  writeFileSync(join(dir, 'd.json'), JSON.stringify({ 'archlens-delta': '1.0', source: { kind: 'prompt', ref: 'r' }, ops: [] }));
+  assert.equal(run(['plan', 'architecture', 'd.json', '--out', 'p.json'], dir).status, 0);
+  const r = run(['apply', 'architecture', 'p.json'], dir);
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /= nada mudou/);
+  assert.doesNotMatch(r.stdout, /^✓ (Conferindo|Gravando|Gerando)/m);
+});
+
+test('build imprime visão k de n', t => {
+  const dir = setup();
+  const r = run(['build', 'architecture'], dir);
+  if (/checagem visual pulada/.test(r.stderr + r.stdout)) return t.skip('sem Chromium');
+  assert.ok([0, 3].includes(r.status), r.stderr);
+  assert.match(r.stdout, /^… Regerando as visões salvas$/m);
+  assert.match(r.stdout, /^  visão 1 de \d+: \S+ \d+x\d+$/m);
+  assert.doesNotMatch(r.stdout, /\r|\x1b\[/);
+});
+
 test('apply on a changed base exits 2 and writes nothing', () => {
   const dir = setup();
   addDelta(dir, 'a', 'a.json');

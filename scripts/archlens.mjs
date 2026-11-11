@@ -318,7 +318,15 @@ function applyCommand(store, plan, names) {
   assertWritable(store);
   if (isFinal(plan) && plan.ops?.length) assertDocOwned(store); // before anything is written
   let res;
-  try { res = applyAndDocument(store, plan); if (res.docError) throw res.docError; } catch (e) { if (e.code === 'E_STORE_DOC_FOREIGN') fail(e.message); failApi(e, names); }
+  // the lines come out when a step finishes; the core's check against the base runs inside applyPlan, before the write
+  const onStep = ({ step, state, detail }) => {
+    if (state !== 'done') return;
+    if (step === 'write') {
+      console.log('✓ Conferindo o plano com a base atual');
+      console.log(`✓ Gravando a base${detail ? ` (${detail})` : ''}`);
+    } else if (step === 'doc') console.log('✓ Gerando o ARCHITECTURE.md');
+  };
+  try { res = applyAndDocument(store, plan, { onStep }); if (res.docError) throw res.docError; } catch (e) { if (e.code === 'E_STORE_DOC_FOREIGN') fail(e.message); failApi(e, names); }
   if (!res.entry) { console.log('= nada mudou; a base não foi regravada'); return; }
   afterApply(store, res);
 }
@@ -545,7 +553,9 @@ async function main() {
         if (errors.length) { printIssues(errors, 'ERRO'); fail('corrija os erros do modelo', 2); }
         console.log(`✓ ${relPath(writeDoc(store, { ...base, raw }))}`);
       }
-      const problems = await deliver(buildDiagrams(store, raw, { dir: args['out-dir'] && args['out-dir'] !== true ? args['out-dir'] : undefined,
+      if (!preview) console.log('… Regerando as visões salvas');
+      const onCheck = ({ done, total, key, viewport }) => console.log(`  visão ${done} de ${total}: ${key} ${viewport}`);
+      const problems = await deliver(buildDiagrams(store, raw, { onCheck, dir: args['out-dir'] && args['out-dir'] !== true ? args['out-dir'] : undefined,
         name: args.name && args.name !== true ? args.name : undefined, specs: specsOf(model), ...deliverOpts(args, preview) }), args);
       process.exitCode = problems ? 3 : 0;
       break;

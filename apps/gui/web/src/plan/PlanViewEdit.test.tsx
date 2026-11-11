@@ -3,11 +3,13 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 // @ts-expect-error -- módulo JS do servidor, sem declaração de tipos: o teste usa a regra de verdade
 import { applyEdit, screenConflicts } from '../../../server/plan/edits.mjs';
 
-vi.mock('../api', async (orig) => ({ ...(await orig<typeof import('../api')>()), planElement: vi.fn(), planEdit: vi.fn(), planOpen: vi.fn(), planTurn: vi.fn(), planApply: vi.fn() }));
+vi.mock('../api', async (orig) => ({ ...(await orig<typeof import('../api')>()), planElement: vi.fn(), planEdit: vi.fn(), planOpen: vi.fn(), planTurn: vi.fn(), planApplyStream: vi.fn() }));
 const FINAL = { views: [], skipped: [], summary: 'resumo', changes: [], questions: [], report: null, opsHash: 'h', screenConflicts: [] };
 vi.mock('./PlanPreview', () => ({
-  PlanPreview: ({ onSelect, onLoaded }: { onSelect?: (id: string | null) => void; onLoaded?: (r: unknown) => void }) => (
+  PlanPreview: ({ onSelect, onLoaded, onLoading }: { onSelect?: (id: string | null) => void; onLoaded?: (r: unknown) => void; onLoading?: (on: boolean) => void }) => (
     <div>
+      <button type="button" onClick={() => onLoading?.(true)}>prévia carregando</button>
+      <button type="button" onClick={() => onLoading?.(false)}>prévia chegou</button>
       <button type="button" onClick={() => onSelect?.('a')}>selecionar a</button>
       <button type="button" onClick={() => onLoaded?.(null)}>recarregar prévia</button>
       <button type="button" onClick={() => onLoaded?.(FINAL)}>prévia final</button>
@@ -43,6 +45,18 @@ const openEditor = async () => {
 };
 
 describe('PlanView com o editor do nó', () => {
+  it('durante a prévia, Editar do painel Nó fica em pausa com a dica', async () => {
+    render(<PlanView base="b" />);
+    fireEvent.click(screen.getByText('selecionar a'));
+    await screen.findByRole('heading', { name: 'Cashback' });
+    fireEvent.click(screen.getByText('prévia carregando'));
+    const edit = screen.getByRole('button', { name: /Editar documentação/ }) as HTMLButtonElement;
+    expect(edit.disabled).toBe(true);
+    expect(edit.title).toBe('Disponível quando a visão terminar de carregar');
+    fireEvent.click(screen.getByText('prévia chegou'));
+    expect((screen.getByRole('button', { name: /Editar documentação/ }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
   it('o editor continua aberto, com o texto, quando o PlanView renderiza de novo', async () => {
     await openEditor();
     fireEvent.click(screen.getByText('recarregar prévia'));
@@ -234,14 +248,14 @@ describe('PlanView falando com o App', () => {
 describe('PlanView falando com o App: aplicar, conversa e rascunho só em memória', () => {
   it('reload durante o Aplicar espera ele terminar e o rascunho adotado fica', async () => {
     const onBusy = vi.fn();
-    let finish!: (r: Awaited<ReturnType<typeof api.planApply>>) => void;
-    vi.mocked(api.planApply).mockImplementation(() => new Promise((r) => { finish = r; }));
+    let finish!: (r: api.PlanApplyResult) => void;
+    vi.mocked(api.planApplyStream).mockImplementation((_b, _d, _c, on) => new Promise((done) => { finish = (r) => { on({ type: 'result', ...r }); done(); }; }));
     const { rerender } = render(<PlanView base="b" reload={0} onBusy={onBusy} />);
     await waitFor(() => expect(api.planOpen).toHaveBeenCalledTimes(1));
     fireEvent.click(screen.getByText('prévia final'));
     fireEvent.click(screen.getByRole('button', { name: 'Aplicar' }));
     fireEvent.click(screen.getByRole('button', { name: 'Confirmar e aplicar' }));
-    await waitFor(() => expect(api.planApply).toHaveBeenCalled());
+    await waitFor(() => expect(api.planApplyStream).toHaveBeenCalled());
     await waitFor(() => expect(onBusy).toHaveBeenLastCalledWith('save'));
     const outside = { ...draft, note: 'de fora' };
     const replanned = { ...outside, plan: { state: 'final' } };

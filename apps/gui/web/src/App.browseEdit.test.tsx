@@ -3,7 +3,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 
 vi.mock('./api', async (orig) => ({
   ...(await orig<typeof import('./api')>()),
-  getBases: vi.fn(), getCatalog: vi.fn(), getView: vi.fn(), getElement: vi.fn(), getInfo: vi.fn(), getDoc: vi.fn(),
+  getBases: vi.fn(), getCatalog: vi.fn(), getView: vi.fn(), getElement: vi.fn(), getInfo: vi.fn(), getDoc: vi.fn(), getActions: vi.fn(),
   planElement: vi.fn(), planEdit: vi.fn(), planOpen: vi.fn(), planTurn: vi.fn(),
 }));
 
@@ -160,6 +160,129 @@ describe('App, editar o nó no Navegar', () => {
     const b = await editBtn('propriedades');
     expect(b.disabled).toBe(true);
     expect(b.title).toBe('Aguarde o chat terminar para editar');
+  });
+
+  it('durante a espera, Editar fica desabilitado com a dica', async () => {
+    const { post } = await selectA();
+    expect((await editBtn('propriedades')).disabled).toBe(false);
+    vi.mocked(api.getActions).mockResolvedValue({ actions: [{ label: 'Ver B', spec: { level: 'context', k: 'B' } }] });
+    vi.mocked(api.getView).mockImplementation(() => new Promise(() => {}));
+    post({ type: 'context', id: 'A', x: 5, y: 5 });
+    fireEvent.click(await screen.findByText('Ver B'));
+    const b = await editBtn('propriedades');
+    expect(b.disabled).toBe(true);
+    expect(b.title).toBe('Disponível quando a visão terminar de carregar');
+  });
+
+  it('documentação em edição: a visão nova chega e o texto continua', async () => {
+    vi.mocked(api.planElement).mockResolvedValue(el({ doc: 'antigo', docRaw: 'antigo' }));
+    const { post } = await selectA();
+    fireEvent.click(await editBtn('documentação'));
+    fireEvent.change(screen.getByLabelText('Documentação'), { target: { value: 'rascunho' } });
+    let finish!: (v: api.ViewResult) => void;
+    vi.mocked(api.getActions).mockResolvedValue({ actions: [{ label: 'Ver B', spec: { level: 'context', k: 'B' } }] });
+    vi.mocked(api.getView).mockImplementation(() => new Promise((r) => { finish = r; }));
+    post({ type: 'context', id: 'A', x: 5, y: 5 });
+    fireEvent.click(await screen.findByText('Ver B'));
+    const ta = () => screen.getByLabelText('Documentação') as HTMLTextAreaElement;
+    await waitFor(() => expect(ta().readOnly).toBe(true));
+    expect(ta().value).toBe('rascunho');
+    expect(confirmBtn().hasAttribute('disabled')).toBe(true);
+    await act(async () => { finish({ ...view('B'), data: { nodes: { A: { name: 'Elem A' } }, edges: [] } }); });
+    await waitFor(() => expect(screen.getByRole('navigation', { name: 'Trilha' }).textContent).toBe('Inicial › B'));
+    post({ type: 'ready' }); // a página nova só avisa ready ao carregar (server/embed.test.mjs)
+    await waitFor(() => expect(ta().readOnly).toBe(false));
+    expect(ta().value).toBe('rascunho');
+    expect(confirmBtn().hasAttribute('disabled')).toBe(false);
+  });
+
+  it('propriedades em edição: a visão nova chega e o texto continua', async () => {
+    const { post } = await selectA();
+    await editDono('rascunho');
+    let finish!: (v: api.ViewResult) => void;
+    vi.mocked(api.getActions).mockResolvedValue({ actions: [{ label: 'Ver B', spec: { level: 'context', k: 'B' } }] });
+    vi.mocked(api.getView).mockImplementation(() => new Promise((r) => { finish = r; }));
+    post({ type: 'context', id: 'A', x: 5, y: 5 });
+    fireEvent.click(await screen.findByText('Ver B'));
+    const inp = () => screen.getByLabelText('Valor de dono') as HTMLInputElement;
+    await waitFor(() => expect(inp().readOnly).toBe(true));
+    expect(inp().value).toBe('rascunho');
+    expect((screen.getByRole('button', { name: 'Remover dono' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole('button', { name: '+ Adicionar propriedade' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(confirmBtn().hasAttribute('disabled')).toBe(true);
+    await act(async () => { finish({ ...view('B'), data: { nodes: { A: { name: 'Elem A' } }, edges: [] } }); });
+    await waitFor(() => expect(screen.getByRole('navigation', { name: 'Trilha' }).textContent).toBe('Inicial › B'));
+    post({ type: 'ready' }); // a página nova só avisa ready ao carregar (server/embed.test.mjs)
+    await waitFor(() => expect(inp().readOnly).toBe(false));
+    expect(inp().value).toBe('rascunho');
+    expect(confirmBtn().hasAttribute('disabled')).toBe(false);
+  });
+
+  it('nó fora da visão nova: o painel continua no nó', async () => {
+    vi.mocked(api.planElement).mockResolvedValue(el({ doc: 'antigo', docRaw: 'antigo' }));
+    const { post } = await selectA();
+    fireEvent.click(await editBtn('documentação'));
+    fireEvent.change(screen.getByLabelText('Documentação'), { target: { value: 'rascunho' } });
+    let finish!: (v: api.ViewResult) => void;
+    vi.mocked(api.getActions).mockResolvedValue({ actions: [{ label: 'Ver B', spec: { level: 'context', k: 'B' } }] });
+    vi.mocked(api.getView).mockImplementation(() => new Promise((r) => { finish = r; }));
+    post({ type: 'context', id: 'A', x: 5, y: 5 });
+    fireEvent.click(await screen.findByText('Ver B'));
+    await act(async () => { finish({ ...view('B'), data: { nodes: { B: { name: 'Elem B' } }, edges: [] } }); });
+    await waitFor(() => expect(screen.getByRole('navigation', { name: 'Trilha' }).textContent).toBe('Inicial › B'));
+    post({ type: 'ready' }); // a página nova só avisa ready ao carregar (server/embed.test.mjs)
+    await act(async () => {}); // o ready não dispara nada assíncrono que tire o painel do nó
+    expect(screen.getByRole('heading', { name: 'Elem A' })).toBeTruthy();
+    expect((screen.getByLabelText('Documentação') as HTMLTextAreaElement).value).toBe('rascunho');
+  });
+
+  it('Explorador num nó fora da visão: select:null durante a espera não reenvia a seleção nem fecha o editor', async () => {
+    vi.mocked(api.planElement).mockResolvedValue(el({ doc: 'antigo', docRaw: 'antigo' }));
+    await selectA(); // a visão inicial não desenha A
+    fireEvent.click(await editBtn('documentação'));
+    fireEvent.change(screen.getByLabelText('Documentação'), { target: { value: 'rascunho' } });
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    let finish!: (v: api.ViewResult) => void;
+    vi.mocked(api.getActions).mockResolvedValue({ actions: [{ label: 'Contexto (C4)', spec: { level: 'context', k: 'A' } }] });
+    vi.mocked(api.getView).mockImplementation(() => new Promise((r) => { finish = r; }));
+    fireEvent.click(screen.getByRole('button', { name: 'Explorador' }));
+    await waitFor(() => expect(document.querySelector('[data-id="A"]')).toBeTruthy());
+    fireEvent.click(document.querySelector('[data-id="A"]')!);
+    await waitFor(() => expect(vi.mocked(api.getView)).toHaveBeenCalled());
+    const frame = document.querySelector('iframe')!;
+    const sent = vi.spyOn(frame.contentWindow!, 'postMessage');
+    const page = (data: Record<string, unknown>) => act(() => {
+      window.dispatchEvent(new MessageEvent('message', { data: { source: 'archlens', ...data }, source: frame.contentWindow }));
+    });
+    page({ type: 'select', id: null }); // Esc no diagrama durante a espera
+    page({ type: 'select', id: null });
+    const selects = () => sent.mock.calls.map(([m]) => m as { type?: string; id?: string | null }).filter((m) => m.type === 'select');
+    expect(selects()).toEqual([]);
+    page({ type: 'select', id: 'B' }); // a página destacou outro nó: só o destaque é limpo
+    expect(selects().map((m) => m.id)).toEqual([null]);
+    page({ type: 'select', id: null }); // a resposta da página ao select(null)
+    expect(selects().map((m) => m.id)).toEqual([null]);
+    await act(async () => { finish({ ...view('Ctx A'), data: { nodes: { A: { name: 'Elem A' } }, edges: [] } }); });
+    await waitFor(() => expect(screen.getByRole('navigation', { name: 'Trilha' }).textContent).toBe('Inicial › Ctx A'));
+    expect(screen.getByRole('heading', { name: 'Elem A' })).toBeTruthy();
+    expect((screen.getByLabelText('Documentação') as HTMLTextAreaElement).value).toBe('rascunho');
+    expect(confirm).not.toHaveBeenCalled();
+  });
+
+  it('Cancelar mantém a visão atual e a resposta tardia não entra', async () => {
+    const { post } = await selectA();
+    let finish!: (v: api.ViewResult) => void;
+    vi.mocked(api.getActions).mockResolvedValue({ actions: [{ label: 'Ver B', spec: { level: 'context', k: 'B' } }] });
+    vi.mocked(api.getView).mockImplementation(() => new Promise((r) => { finish = r; }));
+    post({ type: 'context', id: 'A', x: 5, y: 5 });
+    fireEvent.click(await screen.findByText('Ver B'));
+    expect((await editBtn('propriedades')).disabled).toBe(true);
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancelar' }));
+    expect(screen.queryByRole('progressbar')).toBeNull();
+    await waitFor(async () => expect((await editBtn('propriedades')).disabled).toBe(false));
+    await act(async () => { finish(view('B')); });
+    expect(screen.getByRole('navigation', { name: 'Trilha' }).textContent).toBe('Inicial');
+    expect((await editBtn('propriedades')).disabled).toBe(false);
   });
 
   it('com o rascunho só em memória (grande demais) o Editar do Navegar fica desabilitado', async () => {

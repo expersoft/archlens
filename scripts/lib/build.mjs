@@ -60,14 +60,14 @@ export async function renderViews(raw, specs, { title, preview, docs } = {}) {
  * none). With `strict` and quality problems, the page goes to "<out>.rejected.html" (`rejected`) and `out` is kept.
  * Without Chromium the page is written and `available` is false, with the `reason`.
  */
-export async function deliverHtml(raw, specs, out, { title, preview, docs, shots = true, strict = false } = {}) {
+export async function deliverHtml(raw, specs, out, { title, preview, docs, shots = true, strict = false, onCheck } = {}) {
   const { html, warnings } = await renderViews(raw, specs, { title, preview, docs });
   const stem = out.replace(/\.html?$/i, '');
   const tmp = `${stem}.candidate-${process.pid}.html`;
   mkdirSync(dirname(resolve(out)), { recursive: true });
   writeFileSync(tmp, html);
   const shotsDir = typeof shots === 'string' ? shots : shots ? `${stem}.shots` : undefined;
-  const report = await inspectHtml(tmp, { shotsDir });
+  const report = await inspectHtml(tmp, { shotsDir, ...(onCheck ? { onCheck } : {}) });
   const problems = report.results.filter(r => r.issues.length).length;
   const res = { out, problems, results: report.results, available: report.available, ...(report.available ? {} : { reason: report.reason }), warnings, shots: shotsDir };
   if (problems && strict) {
@@ -88,9 +88,9 @@ const pageName = loc => (loc.kind === 'folder' ? 'architecture'
  * The saved diagrams of a base: `specs` (by default its views, or the suggested ones) rendered to <dir>/<name>.html and
  * checked. Does not write the document. Never throws for a missing Chromium (see deliverHtml).
  */
-export async function buildDiagrams(store, raw, { dir = diagramsDir(store.locator), name, specs, title, preview, shots = true, strict = false } = {}) {
+export async function buildDiagrams(store, raw, { dir = diagramsDir(store.locator), name, specs, title, preview, shots = true, strict = false, onCheck } = {}) {
   const model = specs ? null : normalizeModel(raw);
   const views = specs ?? (model.views.length ? model.views : suggestViews(model));
   mkdirSync(dir, { recursive: true });
-  return deliverHtml(raw, views, join(dir, `${name ?? preview?.name ?? pageName(store.locator)}.html`), { title, preview, docs: preview ? undefined : store.read()?.docs, shots, strict });
+  return deliverHtml(raw, views, join(dir, `${name ?? preview?.name ?? pageName(store.locator)}.html`), { title, preview, docs: preview ? undefined : store.read()?.docs, shots, strict, onCheck });
 }

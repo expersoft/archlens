@@ -44,6 +44,10 @@ ferramentas do MCP configurado, na ordem, sem decidir nada, gravando o resultado
 
 ## Fluxo
 
+**Mostre o andamento.** Abra para o usuário um checklist com os passos 1 a 6 abaixo (Confira, Aplique, Gere, Leia o
+relatório, Escreva a interpretação, Entregue) e marque cada um ao concluir. Repasse as linhas `✓ …` e `visão k de n`
+que a CLI imprime, em vez de esperar o fim calado. No modo MCP do gbrain, os passos 0 a 3 entram no checklist.
+
 1. **Confira o plano**: `archlens show <base> p2.json`. O cabeçalho precisa dizer **final** e a revisão do usuário
    precisa estar feita. Aberto: volte à skill archlens-plan.
 2. **Aplique**: `archlens apply <base> p2.json`. Ele valida o resultado, grava `architecture/`, regenera o
