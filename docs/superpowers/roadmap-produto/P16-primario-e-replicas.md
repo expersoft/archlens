@@ -68,6 +68,9 @@ replicando para um gbrain (git ou MCP).
   repositório. A replicação não pode supor que o primário é o PostgreSQL: precisa funcionar de git/gbrain para
   PostgreSQL e no sentido contrário, sempre em sentido único por base.
 - Credenciais de primário e de réplicas são por organização e por base, vindas do provedor de segredos do P08.
+- Réplica em neo4j: um banco por organização, nunca um grafo compartilhado (regra do P12).
+- Excluir uma organização precisa alcançar o primário e todas as réplicas; a lista de destinos por organização é
+  a fonte para isso.
 
 ## Obrigações do repositório
 

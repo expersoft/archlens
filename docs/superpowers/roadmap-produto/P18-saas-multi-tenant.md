@@ -19,7 +19,7 @@ provedor de identidade, suas bases, suas cotas e sua cobrança.
 
 | # | Decisão | Onde foi adiantada |
 |---|---|---|
-| D1 | Isolamento por linha com `org_id` e Row-Level Security no PostgreSQL | P12 |
+| D1 | Isolamento por linha com `org_id` e Row-Level Security no PostgreSQL, com modo dedicado por configuração | P12, P17 |
 | D2 | Bases no banco do serviço ou no repositório do cliente, à escolha do tenant | P04, P12, P16, P17 |
 | D3 | LLM com chave do serviço e cota, e chave do cliente (BYOK) | P06, P08 |
 | D4 | Hierarquia organização → bases | P06, P17 |
@@ -90,8 +90,8 @@ Marketplace de extensões, marca própria por tenant além do que já existe (`b
 - Qual agregador de identidade operar (Keycloak, Cognito, Entra External ID) e quem o administra.
 - O que se cobra (D7 deixou em aberto) e os limites de cada plano.
 - Quando a base mora no repositório do cliente: quais conectores são aceitos e o que fazer com o gbrain em modo MCP.
-- Se algum cliente corporativo exige isolamento físico; D1 escolheu RLS, e isso pode pedir um modo dedicado mais
-  tarde.
+- Quando oferecer o **modo dedicado** (o mecanismo já existe desde o P12: uma organização com primário em outro
+  PostgreSQL): em que plano comercial, quem provisiona o banco e como ele entra em backup e monitoração.
 - Quais requisitos de conformidade são condição de venda para os primeiros clientes.
 
 ## Obrigações do repositório

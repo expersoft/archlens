@@ -52,7 +52,8 @@ ferramenta MCP chama a mesma função que a rota `/api/v1` correspondente, com a
    com uma organização padrão no self-hosted. A organização do caminho tem de bater com a do token; divergência é 404.
 3. **Um ponto só para `organização → credencial → conector` (D2):** o registro de bases passa a ser por organização,
    e a credencial de cada conector vem do provedor de segredos. Nenhum outro código abre um store. Com a base no
-   repositório do cliente, é esse ponto que isola os tenants (a RLS do P12 só cobre o banco do serviço).
+   repositório do cliente, é esse ponto que isola os tenants (a RLS do P12 só cobre o banco do serviço). O mesmo
+   ponto dá o **modo dedicado**: uma organização cujo primário é outro PostgreSQL, só por configuração.
 4. **Sem estado global (D6):** registro de bases, cache de visões e configuração de LLM são por organização e
    injetados; o cache padrão por módulo de `views.mjs` deixa de existir.
 5. **Pontos de extensão públicos (D6):** as interfaces do P06 e do P08 (organização, sessão, segredos, medição,
