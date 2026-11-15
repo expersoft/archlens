@@ -1,0 +1,157 @@
+name: CI
+
+# Roda em todo PR (qualquer branch de destino: develop-v2, main e a futura linha v1) e nos pushes das linhas.
+on:
+  pull_request:
+  push:
+    branches: [main, develop-v2]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  derivados:
+    name: Lint e derivados
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            apps/gui/package-lock.json
+      - run: npm ci
+      - run: npm --prefix apps/gui ci
+      - name: Lint
+        run: npm run lint
+      - name: Manifestos do plugin em sincronia com o package.json
+        run: npm run check-plugin
+      - name: archlens-ask em dia (REFERENCE.md e gabarito)
+        run: npm run check-ask
+      - name: Schemas em dia
+        run: npm run check-schemas
+      - name: Prompts da GUI em dia
+        run: npm --prefix apps/gui run prompt:check
+      - name: Auditoria de dependências (raiz)
+        run: npm audit --audit-level=high
+      - name: Auditoria de dependências (GUI)
+        run: npm --prefix apps/gui audit --audit-level=high
+
+  nucleo:
+    name: Núcleo e CLI (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        # Node 18 fica fora: o playwright-core 1.63 exige Node 20 e derruba `archlens build` (ver o spec do P01).
+        node: [20, 22, 24]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            apps/gui/package-lock.json
+      - run: npm ci
+      # Os testes de `archlens serve` (tests/cli.test.mjs) importam o servidor da GUI e suas dependências.
+      - run: npm --prefix apps/gui ci
+      # Sem navegador: os testes que precisam do Chromium se pulam aqui e rodam no job "navegador".
+      - run: npm test
+
+  gui:
+    name: GUI (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [20, 22, 24]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            apps/gui/package-lock.json
+      - run: npm ci
+      - run: npm --prefix apps/gui ci
+      - name: Typecheck e build
+        run: npm --prefix apps/gui run build
+      - name: Testes do servidor e da interface
+        run: npm run gui:test
+
+  navegador:
+    name: Testes com Chromium (e2e e checagem visual)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            apps/gui/package-lock.json
+      - run: npm ci
+      - run: npm --prefix apps/gui ci
+      - name: Cache do Chromium
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+      - name: Instalar o Chromium
+        run: npx playwright-core install --with-deps chromium
+      - name: Testes da raiz que abrem navegador (com cobertura)
+        shell: bash # pipefail: o tee não pode esconder a falha dos testes
+        run: |
+          node --test --experimental-test-coverage \
+            --test-reporter=spec --test-reporter-destination=stdout \
+            --test-reporter=lcov --test-reporter-destination=lcov.info \
+            tests/*.test.mjs | tee test-output.txt
+      - name: Resumo da cobertura
+        if: always()
+        run: |
+          {
+            echo '## Cobertura (raiz, `node --test`)'
+            echo
+            echo 'Informativa: não há limiar bloqueante neste ciclo. O `lcov.info` completo está nos artefatos.'
+            echo
+            echo '```'
+            grep -E 'all files|^ℹ (tests|pass|fail|skipped) ' test-output.txt || echo 'relatório indisponível'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: cobertura-raiz
+          path: lcov.info
+          if-no-files-found: ignore
+      - name: e2e da GUI
+        run: npm --prefix apps/gui run test:e2e
+
+  windows:
+    name: Lançadores no Windows
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: node --test tests/launcher.test.mjs

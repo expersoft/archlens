@@ -20,8 +20,12 @@
     "ask": "node scripts/gen-ask.mjs",
     "check-ask": "node scripts/gen-ask.mjs --check",
     "gui:build": "npm --prefix apps/gui ci && npm --prefix apps/gui run build",
-    "gui:test": "npm --prefix apps/gui test"
+    "gui:test": "npm --prefix apps/gui test",
+    "lint": "biome lint .",
+    "coverage": "node --test --experimental-test-coverage tests/*.test.mjs",
+    "check-schemas": "node scripts/gen-schemas.mjs && git diff --exit-code -- schemas",
+    "ci": "npm run lint && npm run check-plugin && npm run check-ask && npm run check-schemas && npm test"
   },
   "optionalDependencies": { "playwright-core": "1.63.0" },
-  "devDependencies": { "elkjs": "0.12.0" }
+  "devDependencies": { "@biomejs/biome": "2.6.7", "elkjs": "0.12.0" }
 }

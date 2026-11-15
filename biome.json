@@ -1,0 +1,42 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.6.7/schema.json",
+  "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
+  "files": {
+    "includes": [
+      "**/*.mjs", "**/*.js", "**/*.cjs", "**/*.ts", "**/*.tsx",
+      "!scripts/vendor", "!examples", "!tests/fixtures", "!graphify-out", "!apps/gui/dist"
+    ]
+  },
+  "formatter": { "enabled": false },
+  "assist": { "enabled": false },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": true,
+      "a11y": {
+        "noAutofocus": "warn",
+        "noStaticElementInteractions": "warn",
+        "useAriaPropsSupportedByRole": "warn",
+        "useButtonType": "warn",
+        "useFocusableInteractive": "warn",
+        "useKeyWithClickEvents": "warn",
+        "useSemanticElements": "warn"
+      },
+      "correctness": {
+        "noComponentHookFactories": "warn",
+        "noEmptyCharacterClassInRegex": "off",
+        "noUnsafeOptionalChaining": "warn",
+        "useExhaustiveDependencies": "warn"
+      },
+      "security": { "noDangerouslySetInnerHtml": "warn" },
+      "style": { "noNonNullAssertion": "off", "useTemplate": "off" },
+      "suspicious": {
+        "noArrayIndexKey": "warn",
+        "noAssignInExpressions": "off",
+        "noControlCharactersInRegex": "off",
+        "noShadowRestrictedNames": "warn",
+        "useIterableCallbackReturn": "off"
+      }
+    }
+  }
+}

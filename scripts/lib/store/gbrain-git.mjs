@@ -183,6 +183,31 @@ export function gbrainGitConnector(locator, store, { describe = `${relative(proc
     return { out, preserved };
   }
 
+  /** The clone's remote-tracking branches (ref → commit); symbolic ones (origin/HEAD) follow their target and stay out. */
+  function trackingRefs() {
+    const r = run(tip, ['for-each-ref', '--format=%(refname) %(objectname) %(symref)', 'refs/remotes']);
+    const refs = new Map();
+    if (r.error || r.status !== 0) return refs;
+    for (const line of r.stdout.split('\n')) {
+      const [ref, commit, symref] = line.split(' ');
+      if (ref && commit && !symref) refs.set(ref, commit);
+    }
+    return refs;
+  }
+
+  /**
+   * Since git 2.56 a push to a URL also moves the remote-tracking branch of the one remote that uses that URL. Puts back
+   * (or removes) the branches the push left at `sha`, and only those: a compare-and-swap, so a fetch of the user's in
+   * between is never undone.
+   */
+  function restoreTrackingRefs(before, sha) {
+    for (const [ref, now] of trackingRefs()) {
+      const was = before.get(ref);
+      if (now !== sha || was === sha) continue;
+      run(tip, was ? ['update-ref', ref, was, sha] : ['update-ref', '-d', ref, sha]);
+    }
+  }
+
   /** Commits the worktree's prefix over `parent` (null: a first commit) and pushes it; false when the push was rejected. */
   function commitAndPush(parent, message) {
     git(tip, ['add', '-A', '--', prefix], 'git add falhou');
@@ -190,7 +215,9 @@ export function gbrainGitConnector(locator, store, { describe = `${relative(proc
     beforePush?.();
     // To the remote's URL, not its name: a push by name would move the clone's remote-tracking branch.
     const url = git(tip, ['remote', 'get-url', '--push', remote], `o clone não tem o remote "${remote}"`);
+    const before = trackingRefs();
     const p = run(tip, ['push', '--porcelain', url, `${sha}:refs/heads/${branch}`]);
+    restoreTrackingRefs(before, sha);
     if (p.error || p.status !== 0) {
       // "!" + "[rejected]": the branch moved (fetch first / non-fast-forward); "[remote rejected]" and the rest are errors.
       if (/^!\t.*\t\[rejected\]/m.test(p.stdout ?? '')) return { sha: null, rejected: p };

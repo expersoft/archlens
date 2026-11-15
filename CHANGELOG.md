@@ -65,6 +65,12 @@ versões seguem [SemVer](https://semver.org/lang/pt-BR/).
 - **Núcleo:** aplicar, documentar e construir os diagramas viraram funções do núcleo (`scripts/lib/apply-flow.mjs` e
   `scripts/lib/build.mjs`), usadas pela CLI e pela GUI; o comportamento da CLI não muda.
 
+### Corrigido
+
+- **gbrain (modo git) com git 2.56 ou mais novo:** o `apply` voltou a deixar intactas as branches de acompanhamento
+  do clone do usuário (`origin/<branch>`). A partir do git 2.56, um push pela URL também move a branch de
+  acompanhamento do remote que usa aquela URL; o conector agora a devolve ao valor anterior logo depois do push.
+
 ## [0.6.0] — 2026-11-03
 
 ### Adicionado

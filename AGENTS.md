@@ -36,3 +36,19 @@ Detalhes: `portable/archlens-ask/README.md` e `docs/superpowers/specs/2026-10-25
 3. **Prompts da GUI:** mudanças em `references/views.md` ou na skill `archlens-query` (busca em texto) e na `archlens-plan`, na
    `archlens-apply` ou em `references/` (planejamento) pedem `npm --prefix apps/gui run prompt` (o `gui:test` falha com
    prompt desatualizado).
+
+## CI: o que já é verificado sozinho
+
+Todo PR passa pelo workflow `.github/workflows/ci.yml`. Ele roda o lint (`npm run lint`), `check-plugin`, `check-ask`,
+`check-schemas`, `prompt:check`, `npm audit`, a suíte da raiz e a suíte e o build da GUI (Node 20, 22 e 24),
+os testes que abrem o Chromium (incluindo o e2e da GUI) e os lançadores no Windows.
+
+- **O CI confere se os derivados estão em dia; não decide se a mudança pede atualizar os textos.** Avaliar o impacto no
+  archlens-ask e na GUI, e atualizar à mão `INSTRUCTIONS.md`, `RULES.md`, `EXAMPLES.md` e `eval/perguntas.json`,
+  continua sendo trabalho de quem faz a mudança.
+- **Antes de abrir o PR**, `npm run ci` roda localmente o lint, os checks de derivados e a suíte da raiz; em mudanças
+  que tocam a GUI, rode também `npm run gui:test`.
+- **Exemplos são documentação viva.** Testes de snapshot leem `tests/fixtures/`, nunca `examples/`. Quem edita um
+  exemplo roda `npm run ask` (o gabarito do archlens-ask é gerado a partir dele).
+- **Lint como catraca.** As regras rebaixadas a aviso em `biome.json` são dívida conhecida; não rebaixe regra nova para
+  fazer um PR passar.

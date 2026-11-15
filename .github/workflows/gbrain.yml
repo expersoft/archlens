@@ -1,0 +1,25 @@
+name: Integração com gbrain real
+
+# Precisa de bun e de rede, por isso fica fora do CI de PR. Roda à mão e uma vez por semana.
+# Observação: o GitHub só dispara "schedule" a partir da branch padrão (main).
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 6 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  gbrain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - uses: oven-sh/setup-bun@v2
+      - run: npm ci
+      - run: npm run test:gbrain
