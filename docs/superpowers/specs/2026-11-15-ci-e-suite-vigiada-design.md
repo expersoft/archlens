@@ -81,8 +81,10 @@ retrato; não quebraram na medição e ficam como estão.
    and index" (`tests/gbrain-git.test.mjs`) falha no runner (Ubuntu 26.04, git 2.56.1) e passa com git 2.34, 2.47 e
    2.54. Causa isolada num contêiner: a partir do git 2.56, `git push <url>` atualiza a ref de acompanhamento
    (`refs/remotes/origin/<branch>`) do remote cuja URL coincide. `store/gbrain-git.mjs` empurra pela URL justamente
-   para não mexer nessas refs. Os `fetch --refmap=` continuam sem tocá-las. É defeito de produto, fora do escopo
-   deste ciclo: fica para um PR de correção na v0, e até lá os jobs que rodam a suíte da raiz ficam vermelhos.
+   para não mexer nessas refs. Os `fetch --refmap=` continuam sem tocá-las. O dono pediu a correção neste mesmo PR: o conector
+   anota as branches de acompanhamento antes do push e devolve ao valor anterior (ou remove) só as que o push
+   deixou no commit enviado, com `update-ref` condicional, para nunca desfazer um fetch do usuário. Não há opção
+   do git para desligar o comportamento novo. Conferido com git 2.34 e 2.56.1.
 
 ## Fora do escopo
 
@@ -100,5 +102,5 @@ rebaixadas, Dependabot.
 
 ## Obrigações do repositório
 
-archlens-ask: sem impacto (nenhum tipo, travessia, formato ou texto copiado muda). GUI: `npm run gui:test` rodado;
-só um teste do servidor mudou.
+archlens-ask: sem impacto (nenhum tipo, travessia, formato ou texto copiado muda; o layout das páginas no gbrain é o
+mesmo). GUI: a correção em `store/gbrain-git.mjs` não muda o contrato do conector; `npm run gui:test` rodado.
