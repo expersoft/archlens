@@ -9,14 +9,14 @@ ser um módulo de verdade: com lint, tipos e teste unitário.
 
 ## Evidência
 
-- `scripts/lib/render.mjs` (1151 linhas): desenho dos nós C4 e ArchiMate, legenda, `viewSvg`, `viewData`,
-  `renderHtml`, a folha de estilos inteira e o **cliente do navegador como texto** (a partir da linha ~660: tema,
+- `scripts/lib/render.mjs` (1182 linhas): desenho dos nós C4 e ArchiMate, legenda, `viewSvg`, `viewData`,
+  `renderHtml`, a folha de estilos inteira e o **cliente do navegador como texto** (a partir da linha ~675: tema,
   zoom/pan, trace, story, cartões, gaveta, matriz, exportação SVG/PNG, atalhos, ponte `postMessage` do modo embutido).
-- O cliente só é exercido pelo Playwright (`deliver`, e2e da GUI). Ele monta HTML com `innerHTML` em 5 pontos
-  (linhas ~845, 850, 952, 981, 1053), com escape manual (`escH`).
-- `scripts/archlens.mjs` (877 linhas): `main()` é um `switch` com 20 comandos; `migrate` ocupa ~90 linhas, `remote` e
+- O cliente só é exercido pelo Playwright (`deliver`, e2e da GUI). Ele monta HTML com `innerHTML` em vários pontos
+  (cartões, gaveta, aba de documentação do nó, matriz), com escape manual (`escH`).
+- `scripts/archlens.mjs` (891 linhas): `main()` é um `switch` com 20 comandos; `migrate` ocupa ~90 linhas, `remote` e
   `store` mais ~70; `fail()` chama `process.exit` de dentro da lógica.
-- Outros candidatos: `store/gbrain-mcp.mjs` (936), `layout.mjs` (863), `merge.mjs` (703).
+- Outros candidatos: `store/gbrain-mcp.mjs` (939), `layout.mjs` (863), `merge.mjs` (763).
 
 ## Escopo
 

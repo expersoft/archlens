@@ -8,14 +8,15 @@ Fechar as superfícies de ataque que não dependem de login, e deixar escrito o 
 
 ## Evidência
 
-- **Diagrama na origem do host.** `apps/gui/web/src/Diagram.tsx:127`:
+- **Diagrama na origem do host.** `apps/gui/web/src/Diagram.tsx:134`:
   `<iframe srcDoc={view.html} sandbox="allow-scripts allow-same-origin allow-downloads allow-modals">`. Um `srcDoc`
   com `allow-scripts` e `allow-same-origin` roda na mesma origem da GUI e pode chamar a API com a sessão do usuário.
-  O comentário na linha 44 confirma a dependência ("mesma origem do srcDoc", para ler o tema do `localStorage`).
+  Um comentário no mesmo arquivo confirma a dependência ("mesma origem do srcDoc", para ler o tema do `localStorage`).
 - O HTML do diagrama é gerado em `scripts/lib/render.mjs` a partir de nomes e descrições da base, com escape manual
-  (`esc`, `escH`) e `innerHTML` no cliente (linhas ~845, 850, 952, 981, 1053). A base pode vir de um repositório git
+  (`esc`, `escH`) e `innerHTML` no cliente (cartões, gaveta, aba de documentação do nó, matriz). A documentação do nó é markdown
+  escrito por usuários e passou a ser renderizada dentro do diagrama: é a entrada mais rica para testar. A base pode vir de um repositório git
   ou de um gbrain que outra pessoa escreve. Não foi encontrada falha de escape; o risco é a ausência de segunda barreira.
-- `postMessage(..., '*')` nos dois sentidos (`apps/gui/web/src/bridge.ts:42`, `render.mjs:675`).
+- `postMessage(..., '*')` nos dois sentidos (`apps/gui/web/src/bridge.ts:42`, `render.mjs:689`).
 - Cabeçalhos: só `x-frame-options` e `content-security-policy: frame-ancestors 'self'`. Sem `script-src`, sem
   `nosniff`, sem `referrer-policy`.
 - **SSRF pelo clone.** `apps/gui/server/plan/repo.mjs` (`checkRepo`) aceita qualquer host https ou ssh; redirects estão

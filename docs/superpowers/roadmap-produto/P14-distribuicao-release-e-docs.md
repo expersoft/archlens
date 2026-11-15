@@ -13,7 +13,7 @@ contribuidor) tem a sua documentação.
   reformatação do `package.json`**, `npm run ask`, editar o `CHANGELOG.md`, validar o plugin, testar, abrir PR, criar
   e enviar a tag depois do merge, e levar à `main`.
 - `package.json` tem `"private": true`: o comando `archlens` só existe por link simbólico ou `npm link`.
-- `docs/superpowers/roadmap.md` está desatualizado: não cita a GUI, os lançadores nem os specs em aberto, e marca o
+- `docs/superpowers/roadmap.md` está desatualizado: não cita a GUI, os lançadores, a documentação do nó nem a edição pela GUI, e marca o
   archlens-ask como "em andamento, branch `feat/archlens-ask`".
 - O `README.md` (21 KB) mistura apresentação, instalação, referência da CLI, GUI e processo de release. Há
   `docs/GUIA.md` para o usuário; não há guia de administrador nem `CONTRIBUTING.md`.

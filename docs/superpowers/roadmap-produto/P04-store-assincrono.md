@@ -9,13 +9,14 @@ enquanto lê ou grava uma base.
 
 ## Evidência
 
-- `scripts/lib/store/contract.mjs`: `CONNECTOR_METHODS = ['describe','read','readSubgraph','version',
-  'objectVersions','apply','history']`, todos síncronos.
+- `scripts/lib/store/contract.mjs`: `CONNECTOR_METHODS = ['describe','read','readDoc','readSubgraph',
+  'version','objectVersions','apply','history']`, todos síncronos.
 - `scripts/lib/`: 54 chamadas `readFileSync`/`writeFileSync`; git por `spawnSync` em `store/gbrain-git.mjs`,
   `store/config.mjs`, `store/convert.mjs`, `scan/git.mjs`.
 - `apps/gui/server/bases.mjs`: `readStore` lança "conector assíncrono ainda não suportado pela GUI" se `read()`
   devolver uma promise; bases gbrain são lidas num worker thread para o `git fetch` não travar as requisições; o
-  primeiro carregamento é síncrono.
+  primeiro carregamento é síncrono. O `apply` da GUI e o clone de repositório também foram para workers
+  (`plan/apply-worker.mjs`, `plan/repo-worker.mjs`): três contornos para o mesmo problema.
 - `scripts/lib/api.mjs` (`plan`, `finalize`, `apply`, `query`) chama `store.read()` de forma síncrona.
 - O modo MCP do gbrain já é um caso de E/S que não cabe no contrato: o CLI prepara pedidos e confere recibos
   (`--read-check`, `--receipts`, `--resume`, `--undo`).
@@ -26,7 +27,7 @@ enquanto lê ou grava uma base.
 2. **Adaptar os conectores atuais** (json, markdown, gbrain git, gbrain MCP, legado) e o teste de contrato
    (`tests/store-contract.test.mjs`), que passa a ser a régua para conectores novos.
 3. **Propagar `await`** por `api.mjs`, `apply-flow.mjs`, `build.mjs`, CLI e servidor da GUI.
-4. **GUI:** remover o worker thread de leitura se o conector assíncrono resolver o bloqueio; carregamento inicial
+4. **GUI:** avaliar quais dos três workers deixam de ser necessários com o conector assíncrono; carregamento inicial
    assíncrono; manter a garantia de que a versão e o conteúdo vêm da mesma leitura.
 5. **Garantias preservadas:** versão otimista por objeto, tudo-ou-nada na gravação (`store/atomic.mjs`), erros `E_STORE_*`.
 6. **Guia "como escrever um conector"** em `references/` ou `docs/`, com o teste de contrato como checklist.

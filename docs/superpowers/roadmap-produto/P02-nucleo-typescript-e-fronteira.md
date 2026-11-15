@@ -5,15 +5,15 @@
 ## Objetivo
 
 O núcleo (`scripts/lib/`, CLI) passa a ter tipos verificados, e a GUI consome o núcleo por **uma fronteira pública
-declarada**, não por 25 módulos internos.
+declarada**, não por 29 módulos internos.
 
 ## Evidência
 
-- 62 módulos `.mjs` sem tipos; só `apps/gui/web` passa por `tsc`.
-- O servidor da GUI importa por caminho relativo: `api`, `query`, `merge`, `store/index`, `scan/git`, `registry`,
-  `store/ops`, `model`, `view-build`, `suggest`, `merge-report`, `layout`, `apply-flow`, `store/contract`,
-  `store/config`, `scan/to-delta`, `scan/summary`, `scan/index`, `render`, `query-md`, `query-archimate`, `preview`,
-  `match`, `explain`, `build` (25 módulos, 12 arquivos).
+- 64 módulos `.mjs` sem tipos; só `apps/gui/web` passa por `tsc`.
+- O servidor da GUI importa 29 módulos de `scripts/lib/` por caminho relativo, em 16 arquivos (fora os testes). Entre
+  eles: `api`, `query`, `merge`, `store/index`, `store/ops`, `store/contract`, `registry`, `model`, `view-build`,
+  `render`, `layout`, `apply-flow`, `build`, `preview`, `scan/*`. Liste o conjunto atual com
+  `grep -rh "scripts/lib/" apps/gui/server --include=*.mjs`.
 - Os formatos (`raw`, `model`, `delta`, `plan`, `spec`, `ctx`, operações do store) são descritos em comentários e nos
   JSON Schemas gerados por `scripts/gen-schemas.mjs`.
 - **Restrição dura:** o plugin instalado roda direto com `node`, sem `node_modules` e sem build (README, seção

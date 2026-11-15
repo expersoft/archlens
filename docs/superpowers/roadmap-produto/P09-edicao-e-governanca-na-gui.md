@@ -16,13 +16,16 @@ gravar, e uma forma visual de ver o que mudou e quando.
 - A base guarda o changelog e o ciclo de vida (as-is/to-be, `draft`, `planned`), e a CLI desenha prévias de delta
   (`--delta`, `--plan`). A GUI mostra a prévia do plano corrente, mas não o histórico nem a comparação entre versões.
 - Planejar pela GUI é recusado em base gbrain no modo MCP (`E_GUI_PLAN_MCP`).
-- Dois specs em aberto tratam de edição no nó e ainda não foram versionados:
-  `docs/superpowers/specs/2026-11-04-documentacao-do-no-design.md` e
-  `docs/superpowers/specs/2026-11-09-painel-do-no-e-edicao-no-planejar-design.md` (com planos em `docs/superpowers/plans/`).
+- **Edição já entregue** (PRs #34, #36 e #37, ainda sem versão): documentação do nó, painel do nó, `Editar` no
+  Navegar que leva ao Planejar com a mudança no Delta, editor ampliado da documentação, `Aplicar` com checklist de
+  etapas gravando num worker. Specs: `2026-11-04-documentacao-do-no-design.md`,
+  `2026-11-09-painel-do-no-e-edicao-no-planejar-design.md`, `2026-11-09-navegar-editavel-logo-avisos-design.md`,
+  `2026-11-10-gui-notacao-carregamento-aplicar-design.md`. Toda edição passa pelo fluxo de plano, que é a base certa
+  para a governança.
 
 ## Escopo
 
-Quatro cortes, cada um um ciclo próprio:
+Três cortes de governança e um de complemento, cada um um ciclo próprio:
 
 1. **Propostas no servidor.** O rascunho ganha identificador, dono, estado e histórico de mensagens, guardado no
    servidor. Lista de propostas por base. O que hoje está no navegador vira cache.
@@ -30,8 +33,9 @@ Quatro cortes, cada um um ciclo próprio:
    do plano, regra configurável de quem aprova. Aplicar exige aprovação quando a base pede.
 3. **Histórico e diferença visual.** Linha do tempo do changelog; escolher duas versões e ver o diagrama com a
    notação de prévia que já existe (`+ ~ −`); filtro as-is / to-be nas visões.
-4. **Edição direta de um elemento** pelo painel do nó (nome, descrição, propriedades, documentação), que por baixo
-   gera um delta e passa pelo mesmo fluxo de plano. Absorve ou conclui os dois specs em aberto.
+4. **Lacunas da edição que já existe.** Levantar, usando a GUI atual, o que ainda só se faz pelo chat ou pela CLI
+   (por exemplo criar e remover elementos e relações, mover de pai, editar visões salvas) e decidir com o dono o que
+   vale um formulário. Não refazer o que os PRs #34 a #37 entregaram.
 
 Também: decidir o destino do planejar em base gbrain MCP (suportar, ou explicar na interface por que não).
 
@@ -53,7 +57,6 @@ Edição gráfica livre do diagrama (arrastar caixas, desenhar setas). Edição 
 - Se a aprovação é do archlens ou delegada a um pull request quando a base mora em git (a GUI abre o PR; o merge é a
   aprovação). Esse caminho reaproveita a governança que o time já tem.
 - Como reconstruir uma versão antiga da base: o changelog guarda o suficiente, ou depende do histórico do git.
-- O que fazer com os dois specs em aberto: concluir antes, ou reescrever dentro deste plano.
 
 ## Obrigações do repositório
 
@@ -63,5 +66,5 @@ Mudança de formato do changelog ou da base: `npm run ask`, `check-ask`. Mudanç
 ## Prompt de partida
 
 > Leia `docs/superpowers/roadmap-produto/README.md`, `P09-edicao-e-governanca-na-gui.md`,
-> `docs/superpowers/specs/2026-11-03-gui-planejar-design.md` e os dois specs em aberto citados no brief. Faça o
+> `docs/superpowers/specs/2026-11-03-gui-planejar-design.md` e os quatro specs de edição citados no brief. Faça o
 > brainstorm só do primeiro corte que o dono escolher; os outros viram ciclos seguintes.

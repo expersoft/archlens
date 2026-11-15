@@ -1,32 +1,31 @@
-# P01 — CI no GitHub Actions e suíte verde
+# P01 — CI no GitHub Actions e suíte vigiada
 
 **Trilha:** Engenharia · **Tamanho:** P · **Depende de:** nada · **Desbloqueia:** todos os outros
 
 ## Objetivo
 
-Todo PR para `develop-v2` e `main` é verificado automaticamente, e a suíte passa numa árvore limpa. As regras que hoje
+Todo PR para `develop-v2` e `main` é verificado automaticamente, e a suíte continua passando numa árvore limpa. As regras que hoje
 o `AGENTS.md` pede à mão passam a ser impostas pelo CI.
 
 ## Evidência
 
 - Não existe `.github/workflows`.
-- Em 2026-11-14, em `develop-v2` (`823da71`) com mudanças locais em `examples/loja-online/`:
-  - `npm test`: 710 testes, 706 passam, **3 falham**, 1 pulado, ~114 s. Falham em `tests/query-md.test.mjs`:
-    "container view matches the snapshot", "product-support view matches the snapshot", "impact view renders the
-    matrix as a markdown table". Esse teste lê `examples/loja-online/architecture`, que está modificado localmente:
-    causa provável, não confirmada.
-  - `npm --prefix apps/gui run test:server`: 231 testes, **4 falham**: "same selection with a different spec passes",
-    "derived edge may differ in type", "dry run scores every automatic question" (em `apps/gui/eval/`) e
-    "read_notes devolve as notas atuais como conteúdo externo". Causa não investigada.
+- Em 2026-11-14, num checkout limpo de `develop-v2` (`9b2ac01`), tudo passa: `npm test` com 858 testes (856 passam,
+  2 pulados, ~134 s); `npm --prefix apps/gui run test:server` com 351 (~62 s); vitest com 386 em 41 arquivos;
+  `typecheck`, `check-ask`, `check-plugin` e `prompt:check` sem erro.
+- **Sinal de fragilidade, não reproduzido no código atual:** numa medição anterior, sobre `823da71` e com
+  `examples/loja-online/` modificado localmente, 3 testes de `tests/query-md.test.mjs` falharam ("container view
+  matches the snapshot", "product-support view matches the snapshot", "impact view renders the matrix as a markdown
+  table") e 4 do servidor da GUI também (3 em `apps/gui/eval/`, 1 em `read_notes`). `query-md.test.mjs` lê
+  `examples/loja-online/architecture`; a causa é provável para os 3 primeiros e desconhecida para os outros 4.
 - Sem eslint, prettier ou biome na raiz e em `apps/gui/`.
 - Os checks de derivados existem mas só rodam à mão: `npm run check-ask`, `npm run check-plugin`,
   `npm --prefix apps/gui run prompt:check`, `npm run schemas`.
 
 ## Escopo
 
-1. **Diagnosticar e corrigir as 7 falhas.** Primeiro passo: rodar as duas suítes numa árvore limpa (`git stash` não;
-   use uma worktree nova) para separar o que é defeito do que é efeito das mudanças locais. Use
-   `superpowers:systematic-debugging`.
+1. **Confirmar o ponto de partida.** Rodar as duas suítes numa worktree limpa. Depois, levantar quais testes leem
+   `examples/` e verificar se editar um exemplo os quebra (o sinal de fragilidade acima).
 2. **Fixtures congeladas.** Testes de snapshot não devem ler `examples/` (documentação viva). Copiar o necessário para
    `tests/fixtures/` ou gerar a base no teste. `tests/examples.test.mjs` continua cobrindo os exemplos.
 3. **Workflow de PR** (`.github/workflows/ci.yml`): matriz Node 18, 20, 22 em Linux; um job em Windows para os
@@ -46,7 +45,7 @@ Release automatizado (P14), migração para TypeScript (P02), novos testes de fu
 
 ## Critérios de aceite
 
-- `npm test` e `npm run gui:test` passam numa worktree limpa, três execuções seguidas.
+- `npm test` e `npm run gui:test` passam no CI em três execuções seguidas, em todas as versões de Node da matriz.
 - Um PR que desatualiza `portable/archlens-ask/REFERENCE.md`, os manifestos do plugin ou o prompt da GUI falha no CI.
 - Editar `examples/loja-online/` não quebra testes de snapshot.
 - O `AGENTS.md` cita o CI como verificação e mantém só o que exige julgamento humano.
@@ -65,5 +64,5 @@ archlens-ask: sem impacto esperado (escrever isso no PR). GUI: `npm run gui:test
 ## Prompt de partida
 
 > Leia `docs/superpowers/roadmap-produto/README.md` e `docs/superpowers/roadmap-produto/P01-ci-e-suite-verde.md`.
-> Comece rodando as duas suítes numa worktree limpa e relate as falhas com a saída. Depois conduza o brainstorm das
+> Comece rodando as duas suítes numa worktree limpa e relate o resultado com a saída. Depois conduza o brainstorm das
 > decisões abertas do brief e escreva o spec em `docs/superpowers/specs/`.
