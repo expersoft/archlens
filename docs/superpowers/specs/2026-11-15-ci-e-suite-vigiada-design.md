@@ -72,6 +72,18 @@ retrato; não quebraram na medição e ficam como estão.
 11. **Scripts novos:** `lint`, `coverage`, `check-schemas` (regenera e exige diff vazio) e `ci` (lint, derivados e
     suíte da raiz, para rodar antes do PR).
 
+## O que a primeira execução no GitHub revelou
+
+1. **A suíte da raiz depende das dependências da GUI.** Sem `npm --prefix apps/gui ci`, 7 testes de `archlens serve`
+   em `tests/cli.test.mjs` falham com `Cannot find package '@anthropic-ai/sdk'`. O job `Núcleo e CLI` passou a
+   instalar as duas árvores. Vale para quem clona o repositório: `npm ci` na raiz não basta para `npm test`.
+2. **Defeito do conector gbrain (modo git) com git 2.56.** O teste "the user's clone keeps its branch, working tree
+   and index" (`tests/gbrain-git.test.mjs`) falha no runner (Ubuntu 26.04, git 2.56.1) e passa com git 2.34, 2.47 e
+   2.54. Causa isolada num contêiner: a partir do git 2.56, `git push <url>` atualiza a ref de acompanhamento
+   (`refs/remotes/origin/<branch>`) do remote cuja URL coincide. `store/gbrain-git.mjs` empurra pela URL justamente
+   para não mexer nessas refs. Os `fetch --refmap=` continuam sem tocá-las. É defeito de produto, fora do escopo
+   deste ciclo: fica para um PR de correção na v0, e até lá os jobs que rodam a suíte da raiz ficam vermelhos.
+
 ## Fora do escopo
 
 Release automatizado (P14), TypeScript (P02), testes novos de funcionalidade, correção das violações de lint

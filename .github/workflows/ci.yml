@@ -60,7 +60,12 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
           cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            apps/gui/package-lock.json
       - run: npm ci
+      # Os testes de `archlens serve` (tests/cli.test.mjs) importam o servidor da GUI e suas dependências.
+      - run: npm --prefix apps/gui ci
       # Sem navegador: os testes que precisam do Chromium se pulam aqui e rodam no job "navegador".
       - run: npm test
 
