@@ -7,6 +7,7 @@
   funcionar como plugin/CLI local
 - **Decisões da entrevista:** CI no GitHub Actions; migrar o núcleo para TypeScript; todas as lacunas funcionais do
   roadmap entram (visões, exportações, edição e governança na GUI, conectores) e mais um app desktop (Electron)
+- **Terceira rodada (2026-11-14):** oito decisões de fundação para o SaaS multi-tenant (seção 2.6, R5)
 - **Revisão de 2026-11-14 (segunda rodada):** cinco requisitos novos avaliados em `79d14f2` (seção 2.6) e a decisão
   de abrir uma **linha v1.0.0** numa branch paralela, com `develop-v2` mantendo as versões 0.x (seção 3)
 
@@ -182,12 +183,36 @@ archlens, uma terceira porta sobre as mesmas funções da API de caso de uso, co
 assistentes de IA em qualquer conector, sem depender do layout do gbrain como o archlens-ask depende; leitura
 primeiro, escrita desligada por padrão. Detalhe no P17.
 
-**R5 — SaaS multi-tenant.** Fica para depois de 1.0 estável, como pedido. O que vale decidir **agora**, porque é
-barato hoje e caro depois: (1) todo recurso da API v1 endereçado dentro de uma organização, mesmo havendo uma só;
-(2) nenhum estado global no processo (hoje `views.mjs` tem um cache padrão por módulo e a configuração é única);
-(3) sessão, cotas e propostas fora da memória do processo; (4) segredos e chaves de LLM por organização;
-(5) autorização sempre a partir de `{organização, base, capacidade}`. Esses cinco pontos entram como critérios de
-aceite em P06, P08, P09 e P17.
+**R5 — SaaS multi-tenant.** A construção fica para depois da 1.0 estável, como pedido. As **fundações** foram
+decididas agora, numa terceira rodada de entrevista (2026-11-14), para os planos da v1 já nascerem prontos:
+
+| # | Decisão do dono | Consequência | Planos |
+|---|---|---|---|
+| D1 | Isolamento por **linha com `org_id` e Row-Level Security** no PostgreSQL | toda tabela tem `org_id`; RLS forçada; a conexão declara a organização a cada transação; suíte de testes que tenta cruzar organizações. É o modelo mais barato e o que menos perdoa erro: o isolamento depende de política e de teste, não de separação física | P12, P17, P18 |
+| D2 | As bases moram **no banco do serviço ou no repositório do cliente**, à escolha de cada tenant | todo recurso funciona com qualquer conector como primário; credenciais de conector guardadas por organização e por base; o contrato do store (P04) é a única abstração permitida | P04, P08, P12, P16, P17 |
+| D3 | LLM: **chave do serviço com cota e chave do cliente (BYOK)** | configuração de provedor, chave e cota por organização, não mais um bloco `llm` global; segredo cifrado em repouso | P06, P08, P17 |
+| D4 | Hierarquia **organização → bases** | caminhos `/api/v1/orgs/{org}/bases/{base}`; permissão por base ou padrão da organização; sem nível intermediário | P06, P17 |
+| D5 | IdP corporativo **só por agregador** | o archlens fala OIDC com **um emissor**; Keycloak, Cognito ou Entra External ID federam os IdPs dos clientes, o login social, SAML e provisionamento. A organização do usuário e seus grupos chegam como claims do token | P06, P08, P18 |
+| D6 | **Núcleo aberto (MIT) e SaaS fechado** | o que é só do SaaS vive em pacote privado, ligado por pontos de extensão públicos; o repositório aberto nunca importa o privado | P02, P17, P18 |
+| D7 | Modelo de cobrança **ainda indefinido** | medição genérica desde a fundação: eventos `{organização, usuário, base, tipo, quantidade}` para usuários ativos, tokens de LLM e tamanho, entregues a um coletor substituível | P06, P08 |
+| D8 | Hospedagem **agnóstica, em Kubernetes** | só contêiner, PostgreSQL e armazenamento compatível com S3; nenhum serviço específico de nuvem; servidor sem estado local, pronto para várias réplicas | P08, P12 |
+
+Além delas, continuam valendo como critérios de aceite: nenhum estado global no processo (hoje `views.mjs` tem um
+cache padrão por módulo e a configuração é única) e autorização sempre a partir de `{organização, base, capacidade}`.
+
+**Pontos de atenção que as decisões criam.**
+
+- **D1 + D2 juntas:** RLS só protege o que está no PostgreSQL do serviço. Quando a base mora no repositório do
+  cliente, o isolamento passa a depender de o servidor nunca usar a credencial de uma organização para outra. A
+  resolução `organização → credencial → conector` precisa de um único ponto no código, com teste próprio.
+- **D2 e o gbrain em modo MCP:** como primário num servidor central ele não funciona hoje (quem grava é um agente; a
+  GUI recusa com `E_GUI_PLAN_MCP`). Ou o servidor vira cliente MCP, ou esse modo fica fora do "repositório do
+  cliente" no SaaS. Decisão do P16/P17.
+- **D5:** simplifica o P06 (um emissor só) e move a complexidade para a operação do agregador, que entra no exemplo
+  de implantação do P08. Uma empresa que usa só Entra ID pode apontar direto para ele, sem agregador.
+- **D6:** os pontos de extensão têm de existir antes de haver código privado, senão o SaaS acaba exigindo mudanças no
+  núcleo. São eles: resolução de organização, armazenamento de sessão e de propostas, provedor de segredos, coletor
+  de medição, política de autorização.
 
 ## 3. Duas linhas: v0 em manutenção e v1 em construção
 
@@ -231,9 +256,9 @@ linha de manutenção das versões **0.x**. Tudo que entra em `develop-v2` tem d
 | [P03](P03-decompor-render-e-cli.md) | v1 | `render` e CLI decompostos; cliente do diagrama testável | P02 | M |
 | [P04](P04-store-assincrono.md) | v1 | Contrato de conector assíncrono | P02 | G |
 | [P05](P05-performance-e-escala.md) | v0 (medição) e v1 (remoto) | Benchmarks, orçamentos de tempo, latência local e remota | P01 | M |
-| [P06](P06-autenticacao-e-autorizacao.md) | v1 | OIDC, capacidades por base, política de aprovação, auditoria, cotas | P00 | G |
+| [P06](P06-autenticacao-e-autorizacao.md) | v1 | OIDC com um emissor, organização e capacidades por base, aprovação, auditoria, cotas | P00 | G |
 | [P07](P07-hardening-da-gui.md) | v0 | Isolamento do diagrama, CSP, SSRF, modelo de ameaças | P01 | M |
-| [P08](P08-empacotamento-e-operacao.md) | v1 | Docker, saúde, logs, métricas, guia de implantação | P06, P07, P17 | M |
+| [P08](P08-empacotamento-e-operacao.md) | v1 | Contêiner pronto para Kubernetes, saúde, logs, métricas, medição, guia de implantação | P06, P07, P17 | M |
 | [P09](P09-edicao-e-governanca-na-gui.md) | v1 | Propostas no servidor, revisão e aprovação, histórico e diff visual | P06 | G |
 | [P10](P10-visoes-que-faltam.md) | v0 (defeitos) e v1 (visões) | Deployment, capacidades, negócio no C4, fluxos de eventos | P01 | G |
 | [P11](P11-exportacoes.md) | v1 | Mermaid, PlantUML, Structurizr DSL, ArchiMate Open Exchange | P00 | M |

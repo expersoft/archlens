@@ -23,39 +23,53 @@ aplica ou aprova se tiver essa permissão, e toda gravação fica registrada com
 
 ## Escopo
 
-1. **Autenticação por OpenID Connect**, com um provedor genérico configurável por descoberta (`issuer`): cobre Entra
-   ID, AWS Cognito, Google, Keycloak, Okta e qualquer IdP compatível. Fluxo de código de autorização com PKCE. Mais de
-   um provedor configurado ao mesmo tempo.
-2. **Provedores sociais.** Google entra pelo item 1. Facebook e outros que não seguem OIDC por inteiro: ver decisões
-   (federar por um agregador, ou adaptador próprio).
-3. **Clientes que não são navegador** (com P17): fluxo de código de dispositivo ou PKCE com retorno em `localhost`
+1. **Autenticação por OpenID Connect com um único emissor** (decisão D5), configurado por descoberta (`issuer`).
+   Fluxo de código de autorização com PKCE. O emissor pode ser o IdP da empresa direto (Entra ID, Google Workspace,
+   Okta) ou um **agregador** (Keycloak, AWS Cognito, Entra External ID) que federa vários IdPs.
+2. **Provedores sociais, SAML e vários IdPs** ficam no agregador, não no archlens. O P06 entrega um guia e um exemplo
+   funcional com um agregador de referência (Keycloak em contêiner), incluindo um provedor social federado.
+3. **Organização a partir do token (D4):** uma claim configurável diz a que organização a pessoa pertence; outra traz
+   os grupos. No self-hosted existe uma organização padrão e a claim é opcional.
+4. **Clientes que não são navegador** (com P17): fluxo de código de dispositivo ou PKCE com retorno em `localhost`
    para a CLI e o desktop; tokens pessoais com escopo e validade para automação. O servidor MCP (P17) usa o mesmo IdP como emissor dos
    tokens dos assistentes.
-4. **Sessão** segura (cookie `HttpOnly`, `Secure`, `SameSite`), expiração, renovação e saída (incluindo a saída
+5. **Sessão** segura (cookie `HttpOnly`, `Secure`, `SameSite`), expiração, renovação e saída (incluindo a saída
    iniciada pelo IdP, se suportada).
-5. **Autorização por capacidade e por base.** Capacidades: `ver`, `perguntar` (gasta LLM), `planejar`, `aplicar`,
+6. **Autorização por capacidade e por base.** Capacidades: `ver`, `perguntar` (gasta LLM), `planejar`, `aplicar`,
    `aprovar`, `administrar`. Atribuídas a pessoas ou a **grupos do IdP** (claim de grupos ou papéis), por base ou por
    padrão da organização. Papéis nomeados (leitor, editor, aprovador, administrador) são só conjuntos prontos.
-6. **Política por base:** `aprovação obrigatória` (sim ou não), quantos aprovadores, se o autor pode aprovar a
+7. **Política por base:** `aprovação obrigatória` (sim ou não), quantos aprovadores, se o autor pode aprovar a
    própria proposta. O P06 define e impõe a política na API; a tela e o fluxo de revisão são do P09.
-7. **Auditoria:** autor e horário em cada entrada do changelog; autor do commit no gbrain git; log de acesso, de
+8. **Auditoria:** autor e horário em cada entrada do changelog; autor do commit no gbrain git; log de acesso, de
    gravação e de negação.
-8. **Cotas de LLM** por usuário e por período, e limite de requisições.
-9. **Recusar configuração insegura:** subir fora de `localhost` sem autenticação exige opção explícita e avisa.
-10. **Testes de autorização** por rota (matriz capacidade × rota), incluindo as rotas de streaming, e testes do fluxo
+9. **LLM por organização (D3):** provedor, modelo e chave configurados por organização, com dois modos: chave do
+   serviço com cota, ou chave da própria organização (BYOK). Cotas por organização e por usuário, por período, e
+   limite de requisições. O bloco `llm` global de hoje vira o padrão da organização única do self-hosted.
+10. **Medição genérica (D7):** cada login, chamada ao LLM (tokens de entrada, saída e cache) e gravação emite um
+    evento `{organização, usuário, base, tipo, quantidade, horário}` para um coletor substituível. O padrão grava em
+    arquivo ou banco; a cobrança é do P18.
+11. **Recusar configuração insegura:** subir fora de `localhost` sem autenticação exige opção explícita e avisa.
+12. **Testes de autorização** por rota (matriz capacidade × rota), incluindo as rotas de streaming, e testes do fluxo
     OIDC contra um IdP de teste em contêiner.
-11. **Preparo para o P18:** toda decisão de acesso parte de `{organização, base, capacidade}`, com uma organização
-    padrão; sessão e cotas atrás de uma interface de armazenamento, não em variáveis do processo.
+13. **Pontos de extensão (D6):** resolução de organização, armazenamento de sessão, política de autorização,
+    provedor de segredos e coletor de medição são interfaces públicas com implementação padrão aberta. O pacote
+    privado do SaaS as substitui sem tocar o núcleo. Toda decisão de acesso parte de
+    `{organização, base, capacidade}`; nada disso em variável do processo.
 
 ## Fora do escopo
 
-SAML, SCIM e IdP por tenant (P18). Tela de revisão e aprovação (P09). Empacotamento (P08). Cadastro próprio de
+SAML, SCIM e vários emissores no archlens (ficam no agregador; a automação por tenant é do P18). Tela de revisão e aprovação (P09). Empacotamento (P08). Cadastro próprio de
 usuário e senha: o archlens não guarda senhas.
 
 ## Critérios de aceite
 
-- Login funciona com pelo menos dois IdPs diferentes configurados só por `issuer`, `client_id` e segredo (por
-  exemplo Entra ID e Keycloak), sem código específico de provedor.
+- Login funciona trocando só `issuer`, `client_id` e segredo entre dois emissores diferentes (por exemplo Entra ID
+  direto e Keycloak como agregador), sem código específico de provedor.
+- Com o agregador de referência, uma pessoa entra por um IdP corporativo federado e outra por um provedor social, e
+  as duas chegam ao archlens com organização e grupos corretos.
+- Duas organizações no mesmo servidor: um usuário de uma não lista, não lê e não grava bases da outra, por nenhuma
+  rota; cada uma usa a própria configuração de LLM e a própria cota.
+- Cada chamada ao LLM e cada gravação gera um evento de medição com organização e usuário.
 - Com autenticação ligada, toda rota `/api` sem sessão ou token devolve 401; a matriz capacidade × rota tem teste.
 - Quem não tem `planejar` não vê o Planejar nem consegue chamar suas rotas; quem não tem `aplicar` não aplica; numa
   base com aprovação obrigatória, aplicar sem aprovação devolve 403 mesmo para quem tem `aplicar`.
@@ -65,11 +79,10 @@ usuário e senha: o archlens não guarda senhas.
 
 ## Decisões a fechar no brainstorm
 
-- **Facebook e afins:** federar por um agregador que fale OIDC (Cognito, Keycloak, Entra External ID), que é a via
-  recomendada, ou escrever adaptadores OAuth 2.0 por provedor. Perguntar ao dono qual o caso de uso de login social
-  numa ferramenta de arquitetura corporativa antes de investir.
-- OIDC no próprio servidor (recomendado, dado o requisito) e, além disso, aceitar identidade vinda de um proxy
-  autenticador para quem já tem um.
+- Qual agregador serve de referência no guia e nos testes (Keycloak é o candidato por rodar em contêiner).
+- Nome e formato das claims de organização e de grupos, e o que fazer quando faltam.
+- Além do OIDC no servidor, aceitar identidade vinda de um proxy autenticador para quem já tem um.
+- Onde a chave de LLM de cada organização é guardada e como é cifrada (com o provedor de segredos do P08).
 - Biblioteca de OIDC ou implementação própria. O núcleo tem zero dependências; o servidor pode ter. Autenticação não
   é lugar para código caseiro.
 - Onde mora o mapeamento grupo → capacidade: arquivo de configuração, ou tela de administração com armazenamento.
@@ -86,6 +99,7 @@ sentido para a CLI também (`apply --author`, por exemplo).
 
 > Leia `docs/superpowers/roadmap-produto/README.md` (seções 2.4 e 2.6, R2), `P06-autenticacao-e-autorizacao.md`,
 > `docs/superpowers/specs/2026-10-28-archlens-gui-design.md` e `apps/gui/server/app.mjs`. Conduza o brainstorm
-> começando pelo ambiente real do dono: quais IdPs precisam funcionar no primeiro dia e de onde vêm os grupos.
+> começando pelo ambiente real do dono: qual emissor ele usará no primeiro dia e de onde vêm organização e grupos.
 > Consulte a documentação atual de OIDC de cada provedor citado; não confie na memória. Divida em ciclos:
-> (1) OIDC e sessão, (2) capacidades e política por base, (3) tokens para CLI, (4) auditoria e cotas.
+> (1) OIDC, sessão e organização, (2) capacidades e política por base, (3) tokens para CLI, (4) auditoria, LLM por
+> organização, cotas e medição.

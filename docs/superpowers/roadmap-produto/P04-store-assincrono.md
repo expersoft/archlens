@@ -54,6 +54,9 @@ Escrever conectores novos (P12). Mudar o formato 2.0 da base.
 - O contrato precisa servir a três usos novos: conectores de banco (P12), o **conector remoto** por HTTP (P17) e a
   **replicação** primário → réplicas (P16). Prever no contrato: fluxo de mudanças desde uma versão, marcação de
   conector somente leitura e leitura condicional por versão.
+- **Contexto por chamada (D1, D2):** o conector recebe a organização e a credencial em cada abertura, nunca de
+  variável global, para que o PostgreSQL declare o `org_id` da transação e os conectores de repositório usem a
+  credencial certa.
 
 ## Obrigações do repositório
 

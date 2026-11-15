@@ -64,6 +64,10 @@ replicando para um gbrain (git ou MCP).
 - Garantia: eventual é suficiente, ou algum consumidor precisa saber que está lendo uma versão exata.
 - O que replica além do modelo: notas, visões salvas, changelog, diagramas gerados.
 - Se "réplica" e "exportação agendada" (P11) são o mesmo mecanismo com destinos diferentes.
+- **Qualquer conector como primário (D2):** no SaaS o tenant escolhe entre o banco do serviço e o próprio
+  repositório. A replicação não pode supor que o primário é o PostgreSQL: precisa funcionar de git/gbrain para
+  PostgreSQL e no sentido contrário, sempre em sentido único por base.
+- Credenciais de primário e de réplicas são por organização e por base, vindas do provedor de segredos do P08.
 
 ## Obrigações do repositório
 

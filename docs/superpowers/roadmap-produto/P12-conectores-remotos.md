@@ -25,7 +25,9 @@ contêiner, documentação em `references/base.md`.
 
 1. **Relacional (PostgreSQL).** Passa a ser o primeiro: o dono quer o PostgreSQL como **repositório principal**
    de um servidor central (R3, R4). Tabelas de elementos, relações, visões e changelog; transação no `apply`; versão
-   por linha; um fluxo de mudanças que a replicação (P16) possa consumir.
+   por linha; um fluxo de mudanças que a replicação (P16) possa consumir. **Multi-organização desde o primeiro
+   esquema (D1):** toda tabela tem `org_id`; Row-Level Security habilitada e forçada; o papel da aplicação não pode
+   contorná-la; a organização é declarada na conexão a cada transação; no self-hosted existe uma organização só.
 2. **S3 (e compatíveis).** Os mesmos arquivos do conector json ou markdown num bucket; versão por ETag; escrita
    condicional para a versão otimista.
 3. **neo4j.** Elementos como nós, relações como arestas; `readSubgraph` como consulta nativa; transação no `apply`.
@@ -42,6 +44,10 @@ Usar o banco para responder consultas no lugar do núcleo (as travessias continu
 - Instalar o plugin sem os drivers continua funcionando para os conectores de arquivo; pedir um conector sem o driver
   dá erro com a instrução de instalação.
 - A GUI abre uma base em cada conector.
+- PostgreSQL: uma suíte de isolamento grava bases de duas organizações e tenta ler, alterar e apagar as de uma com a
+  sessão da outra, por SQL direto com o papel da aplicação e pelo conector; todas as tentativas falham. Esquecer de
+  declarar a organização na conexão resulta em zero linhas, não em todas.
+- Tudo roda só com PostgreSQL e armazenamento compatível com S3 comuns, sem extensão ou serviço de uma nuvem (D8).
 
 ## Decisões a fechar no brainstorm
 
@@ -52,7 +58,8 @@ Usar o banco para responder consultas no lugar do núcleo (as travessias continu
   por nome.
 - Onde ficam as credenciais (ambiente, perfil da nuvem), nunca no manifesto da base.
 - Esquema relacional e de grafo: estável e documentado (outros vão consultar) ou detalhe interno.
-- Preparo para o P18: como o esquema acomoda várias organizações (coluna, esquema ou banco por organização).
+- Como a organização chega à conexão com pool (variável de sessão por transação) sem vazar entre requisições.
+- Migrações de esquema: ferramenta e como rodam em implantação com várias réplicas.
 
 ## Obrigações do repositório
 

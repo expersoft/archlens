@@ -38,13 +38,22 @@ está saudável.
 9. **Ponto central (R4):** o servidor é o único lugar com credenciais do conector primário e das réplicas. Guia de
    segredos (arquivo montado, cofre), rotação, e rede: só o servidor alcança o banco e os repositórios.
 10. **Operação das réplicas (P16):** estado e atraso de sincronização nas métricas e na rota de prontidão.
-11. **Preparo para o P18:** nenhuma configuração ou cache global por processo; estado em armazenamento externo
-    quando houver mais de uma réplica do servidor.
+11. **Pronto para Kubernetes (D8):** servidor sem estado local obrigatório (sessão, propostas, cotas e clones em
+    armazenamento externo ou volume declarado), várias réplicas atrás de um balanceador, sondas de saúde e
+    prontidão, configuração só por ambiente e segredos montados. Dependências externas limitadas a PostgreSQL e
+    armazenamento compatível com S3; **nenhum serviço específico de nuvem**. Um chart Helm como último ciclo.
+12. **Agregador de identidade no exemplo (D5):** o `compose` de referência sobe um agregador (Keycloak) já
+    configurado, e o guia mostra como apontar para Entra ID, Cognito ou outro emissor.
+13. **Segredos por organização (D2, D3):** um provedor de segredos substituível guarda, cifradas, as credenciais de
+    conector e as chaves de LLM de cada organização. Implementação padrão em arquivo ou banco; cofre externo como
+    extensão.
+14. **Coletor de medição (D7):** os eventos do P06 são persistidos e expostos (consulta por organização e período,
+    exportação), sem lógica de cobrança.
+15. **Nada global por processo (D6):** nenhuma configuração ou cache compartilhado entre organizações na memória.
 
 ## Fora do escopo
 
-Kubernetes/Helm (pode ser um ciclo posterior). Alta disponibilidade com várias réplicas, a menos que P06 já tenha
-decidido guardar sessão fora da memória.
+Operadores e recursos específicos de uma nuvem. Cobrança (P18).
 
 ## Critérios de aceite
 
@@ -53,13 +62,17 @@ decidido guardar sessão fora da memória.
 - Aplicar um plano dentro do contêiner regenera os diagramas (Chromium funciona sem privilégio extra, ou a limitação
   está documentada).
 - Enviar `SIGTERM` durante um `apply` não deixa a base inconsistente.
+- Num cluster Kubernetes local (kind ou k3d), duas réplicas do servidor atendem a mesma sessão e a mesma proposta;
+  derrubar uma delas não perde trabalho.
+- A chave de LLM de uma organização não aparece em log, em resposta de API nem em texto puro no armazenamento.
 
 ## Decisões a fechar no brainstorm
 
 - Como as bases chegam ao servidor: volume, clone de um repositório git com sincronização, ou gbrain. Quem faz o push
   quando a GUI grava numa base que mora em git.
 - Formato de métricas (Prometheus, OpenTelemetry) conforme o que o time já usa.
-- Uma réplica só (simples, estado em memória e disco) ou preparar para várias.
+- Onde ficam os clones de repositório e os diagramas gerados com várias réplicas (volume compartilhado, S3, ou
+  afinidade de sessão).
 - Tamanho da imagem: Chromium embutido ou imagem "sem diagramas" opcional.
 
 ## Obrigações do repositório

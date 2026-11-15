@@ -48,21 +48,29 @@ ferramenta MCP chama a mesma função que a rota `/api/v1` correspondente, com a
 
 1. **API v1 versionada e documentada** (OpenAPI gerado dos tipos do P02), com erros `E_*` estáveis, paginação e
    idempotência nas escritas. A GUI migra para ela; a API antiga sai.
-2. **Organização no caminho** desde já (`/api/v1/orgs/{org}/bases/{base}/...`), com uma organização padrão. Prepara o
-   P18 sem custo agora.
-3. **Conector remoto** no núcleo, passando no teste de contrato do P04.
-4. **CLI com destino remoto:** `archlens login <url>`, perfis de servidor, e os comandos de base aceitando uma base
+2. **Organização no caminho** (`/api/v1/orgs/{org}/bases/{base}/...`), dois níveis e nada entre eles (decisão D4),
+   com uma organização padrão no self-hosted. A organização do caminho tem de bater com a do token; divergência é 404.
+3. **Um ponto só para `organização → credencial → conector` (D2):** o registro de bases passa a ser por organização,
+   e a credencial de cada conector vem do provedor de segredos. Nenhum outro código abre um store. Com a base no
+   repositório do cliente, é esse ponto que isola os tenants (a RLS do P12 só cobre o banco do serviço).
+4. **Sem estado global (D6):** registro de bases, cache de visões e configuração de LLM são por organização e
+   injetados; o cache padrão por módulo de `views.mjs` deixa de existir.
+5. **Pontos de extensão públicos (D6):** as interfaces do P06 e do P08 (organização, sessão, segredos, medição,
+   autorização) mais o registro de rotas e de ferramentas MCP, para o pacote privado do SaaS acrescentar o que é só
+   dele. Um teste garante que o repositório aberto não importa nada do privado.
+6. **Conector remoto** no núcleo, passando no teste de contrato do P04.
+7. **CLI com destino remoto:** `archlens login <url>`, perfis de servidor, e os comandos de base aceitando uma base
    remota. Consultas (`views`, `resolve`, `query`, `find`) pela API de caso de uso; `plan`/`apply` pelo conector
    remoto ou por rotas próprias.
-5. **Identidade para clientes que não são navegador** (com P06): fluxo de código de dispositivo ou PKCE com retorno
+8. **Identidade para clientes que não são navegador** (com P06): fluxo de código de dispositivo ou PKCE com retorno
    em `localhost`, e tokens pessoais com escopo e validade para automação e CI.
-6. **Onde os diagramas são gerados:** o servidor desenha e confere (ele tem o Chromium); o cliente recebe HTML, SVG
+9. **Onde os diagramas são gerados:** o servidor desenha e confere (ele tem o Chromium); o cliente recebe HTML, SVG
    ou PNG. `build` remoto roda no servidor.
-7. **Performance** (ver seção abaixo).
-8. **Compatibilidade de versões:** o cliente informa sua versão; o servidor recusa com mensagem clara o que não
+10. **Performance** (ver seção abaixo).
+11. **Compatibilidade de versões:** o cliente informa sua versão; o servidor recusa com mensagem clara o que não
    suporta.
-9. **Modo local intacto:** sem servidor configurado, tudo funciona como hoje.
-10. **Servidor MCP do archlens** (seção própria abaixo).
+12. **Modo local intacto:** sem servidor configurado, tudo funciona como hoje.
+13. **Servidor MCP do archlens** (seção própria abaixo).
 
 ## Servidor MCP
 
@@ -139,6 +147,10 @@ Multi-tenant de verdade (P18). Réplicas (P16). GraphQL ou gRPC.
 - Os benchmarks do P05 rodam em modo local e remoto e as metas acima são atendidas, ou a diferença está explicada e
   aceita pelo dono.
 - A GUI não usa nenhuma rota fora de `/api/v1`.
+- Duas organizações no mesmo servidor, uma com a base no PostgreSQL do serviço e outra num repositório git próprio:
+  nenhuma rota, ferramenta MCP ou comando da CLI de uma alcança a base, a credencial, o cache ou a configuração de
+  LLM da outra.
+- O servidor roda com duas réplicas sem afinidade de sessão e responde igual em qualquer uma.
 - Um assistente conectado por MCP responde as perguntas de `portable/archlens-ask/eval/perguntas.json` sobre uma
   base que **não** está no gbrain, com o mesmo gabarito.
 - Pelo MCP, um usuário sem `aplicar` não aplica, e numa base com aprovação obrigatória nenhum agente aplica sem ela.
@@ -159,6 +171,8 @@ Multi-tenant de verdade (P18). Réplicas (P16). GraphQL ou gRPC.
 - **MCP:** as skills passam a preferir o servidor MCP quando ele existir, ou seguem só pela CLI.
 - **MCP:** critério para aposentar o archlens-ask, se houver.
 - O conector remoto entrega a base inteira: aceitar, ou limitar a quem pode planejar.
+- gbrain em modo MCP como primário num servidor central: o servidor vira cliente MCP, ou esse modo fica de fora
+  (hoje a GUI recusa com `E_GUI_PLAN_MCP`).
 - Onde mora o servidor no repositório, já que deixa de ser "o servidor da GUI".
 
 ## Obrigações do repositório

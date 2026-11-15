@@ -65,6 +65,9 @@ Quebrar `render.mjs` e a CLI (P03); tornar o store assíncrono (P04); mudar comp
 - Ordem e tamanho dos PRs; se congela outros PRs do núcleo durante a migração.
 - Subir o Node mínimo para 22 é uma mudança incompatível aceitável numa major; confirmar com o dono.
 - A fronteira pública do núcleo é também a base da API v1 (P17): desenhá-las juntas.
+- **Núcleo aberto, SaaS fechado (D6):** a estrutura de pacotes definida aqui precisa permitir um pacote privado
+  que só depende das interfaces públicas. Nenhuma função do núcleo lê configuração ou cache globais: tudo que varia
+  por organização entra por parâmetro.
 - Destino dos JSON Schemas: gerados dos tipos, ou os tipos gerados dos schemas.
 
 ## Obrigações do repositório

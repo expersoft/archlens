@@ -15,6 +15,19 @@ provedor de identidade, suas bases, suas cotas e sua cobrança.
 - Não há conceito de organização, de dono de base nem de cota.
 - A pré-condição declarada pelo dono: só depois de todo o plano implementado e o projeto estável.
 
+## Decisões já tomadas (2026-11-14)
+
+| # | Decisão | Onde foi adiantada |
+|---|---|---|
+| D1 | Isolamento por linha com `org_id` e Row-Level Security no PostgreSQL | P12 |
+| D2 | Bases no banco do serviço ou no repositório do cliente, à escolha do tenant | P04, P12, P16, P17 |
+| D3 | LLM com chave do serviço e cota, e chave do cliente (BYOK) | P06, P08 |
+| D4 | Hierarquia organização → bases | P06, P17 |
+| D5 | IdP corporativo só por agregador (um emissor OIDC para o archlens) | P06, P08 |
+| D6 | Núcleo aberto (MIT), código do SaaS em pacote privado | P02, P17 |
+| D7 | Cobrança indefinida: medição genérica de usuários, tokens e tamanho | P06, P08 |
+| D8 | Hospedagem agnóstica em Kubernetes | P08, P12 |
+
 ## O que precisa estar pronto antes
 
 Estes pontos são critérios de aceite de outros planos, justamente para o P18 não exigir reescrita:
@@ -28,28 +41,34 @@ Estes pontos são critérios de aceite de outros planos, justamente para o P18 n
 | Um conector de banco como primário | P12 |
 | Auditoria por usuário | P06 |
 | Segredos e chave de LLM configuráveis por escopo | P06, P08 |
+| `org_id` e RLS no esquema do PostgreSQL, com a suíte de isolamento | P12 |
+| Pontos de extensão públicos para o pacote privado | P02, P17 |
+| Eventos de medição emitidos e um coletor substituível | P06, P08 |
+| Servidor sem estado local, implantável em Kubernetes com várias réplicas | P08 |
 
 ## Escopo
 
 1. **Tenants:** criação (autoatendimento ou assistida), ciclo de vida (teste, ativo, suspenso, encerrado), exportação
    e exclusão de todos os dados de um tenant.
-2. **Isolamento de dados:** definir o modelo (banco por tenant, esquema por tenant, ou linha com política de
-   segurança) e prová-lo com testes que tentam cruzar tenants em toda rota.
-3. **Identidade corporativa por tenant:** cada organização liga o próprio IdP (OIDC e SAML), com descoberta pelo
-   domínio do e-mail, provisionamento de usuários e grupos (SCIM) e mapeamento de grupos para capacidades.
+2. **Isolamento de dados (D1, D2):** o esquema com `org_id` e RLS vem do P12. Aqui: endurecer e auditar as
+   políticas, ampliar a suíte que tenta cruzar tenants para toda rota e todo conector, e cobrir o caso em que a base
+   mora no repositório do cliente (o isolamento passa a ser da credencial, não do banco).
+3. **Identidade corporativa por tenant (D5):** automatizar, pela API de administração do agregador, a ligação do IdP
+   de cada organização (OIDC e SAML), a descoberta pelo domínio do e-mail e o provisionamento (SCIM). O archlens
+   continua falando com um emissor só; o que muda é a operação do agregador.
 4. **Isolamento de execução:** clones de repositório, geração de diagramas (Chromium) e chamadas ao LLM de um tenant
    não afetam nem enxergam os de outro; limites de recursos por tenant.
-5. **LLM:** chave do serviço com cota por plano, ou chave trazida pelo cliente; política de retenção do que é enviado
-   ao provedor.
-6. **Planos, medição e cobrança:** o que se mede (usuários, bases, elementos, tokens), limites por plano, integração
-   com um provedor de pagamento.
+5. **LLM (D3):** os dois modos já existem desde o P06/P08. Aqui: cota por plano, tela para o tenant cadastrar a
+   própria chave, e política de retenção do que é enviado ao provedor.
+6. **Planos, medição e cobrança (D7):** os eventos de medição já existem. Aqui: decidir o que se cobra, os limites
+   por plano e a integração com um provedor de pagamento.
 7. **Console de administração** do tenant (usuários, bases, IdP, cotas, auditoria) e console de operação do serviço.
-8. **Operação:** implantação com várias réplicas, cópia de segurança e restauração por tenant, observabilidade por
+8. **Operação (D8):** em Kubernetes, sem serviço específico de nuvem. Implantação com várias réplicas, cópia de segurança e restauração por tenant, observabilidade por
    tenant, página de status, resposta a incidentes.
 9. **Conformidade:** LGPD (papéis de controlador e operador, contrato de tratamento, direitos do titular),
    residência de dados, termos de uso, e o caminho para auditorias de segurança que clientes corporativos pedem.
-10. **Convivência com self-hosted:** a mesma base de código serve aos dois modos; o que for exclusivo do SaaS fica
-    isolado.
+10. **Convivência com self-hosted (D6):** o repositório aberto serve aos dois modos; o que é exclusivo do SaaS vive
+    no pacote privado e entra pelos pontos de extensão. Nenhuma mudança no núcleo só para o SaaS.
 
 ## Fora do escopo (a decidir no início do programa)
 
@@ -68,9 +87,11 @@ Marketplace de extensões, marca própria por tenant além do que já existe (`b
 
 - **Modelo de negócio primeiro:** para quem é o serviço, o que se cobra, e se isso justifica o custo de operar. Sem
   essa resposta, o programa não deve começar.
-- Modelo de isolamento de dados e a nuvem de hospedagem.
-- Licença: o repositório é MIT hoje; decidir se o que é específico do SaaS segue aberto.
-- Onde ficam as bases dos clientes: no banco do serviço, ou o serviço conecta no repositório/gbrain do cliente.
+- Qual agregador de identidade operar (Keycloak, Cognito, Entra External ID) e quem o administra.
+- O que se cobra (D7 deixou em aberto) e os limites de cada plano.
+- Quando a base mora no repositório do cliente: quais conectores são aceitos e o que fazer com o gbrain em modo MCP.
+- Se algum cliente corporativo exige isolamento físico; D1 escolheu RLS, e isso pode pedir um modo dedicado mais
+  tarde.
 - Quais requisitos de conformidade são condição de venda para os primeiros clientes.
 
 ## Obrigações do repositório
