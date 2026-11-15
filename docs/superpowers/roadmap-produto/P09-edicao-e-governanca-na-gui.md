@@ -1,6 +1,6 @@
 # P09 — Edição e governança na GUI
 
-**Trilha:** Servidor de time · **Tamanho:** G · **Depende de:** P06
+**Linha:** v1 · **Tamanho:** G · **Depende de:** P06
 
 ## Objetivo
 
@@ -33,9 +33,8 @@ Três cortes de governança e um de complemento, cada um um ciclo próprio:
    do plano, regra configurável de quem aprova. Aplicar exige aprovação quando a base pede.
 3. **Histórico e diferença visual.** Linha do tempo do changelog; escolher duas versões e ver o diagrama com a
    notação de prévia que já existe (`+ ~ −`); filtro as-is / to-be nas visões.
-4. **Lacunas da edição que já existe.** Levantar, usando a GUI atual, o que ainda só se faz pelo chat ou pela CLI
-   (por exemplo criar e remover elementos e relações, mover de pai, editar visões salvas) e decidir com o dono o que
-   vale um formulário. Não refazer o que os PRs #34 a #37 entregaram.
+4. **Governança das edições gráficas.** Criar, alterar e excluir nós e conexões pela tela é o **P15**. Aqui entra só
+   o que a governança precisa delas: uma edição gráfica vira proposta como qualquer outra e segue a mesma revisão.
 
 Também: decidir o destino do planejar em base gbrain MCP (suportar, ou explicar na interface por que não).
 
@@ -46,7 +45,8 @@ Edição gráfica livre do diagrama (arrastar caixas, desenhar setas). Edição 
 ## Critérios de aceite
 
 - Uma proposta criada num navegador aparece em outro, para outra pessoa com acesso à base.
-- Numa base que exige aprovação, o autor não consegue aplicar a própria proposta; a tentativa pela API devolve 403.
+- Numa base com aprovação obrigatória (política definida no P06), ninguém aplica uma proposta sem aprovação, e o
+  autor só aprova a própria se a política permitir; a tentativa pela API devolve 403.
 - Se a base mudou entre a aprovação e a aplicação e a mudança cruza o plano, a aplicação é recusada e a proposta volta
   para revisão (o mecanismo `E_STORE_CONFLICT`/`E_PLAN_STALE` já existe).
 - A comparação entre duas versões usa o núcleo (`previewModel`, `diffModels`), sem lógica de diff duplicada na GUI.
@@ -54,6 +54,7 @@ Edição gráfica livre do diagrama (arrastar caixas, desenhar setas). Edição 
 ## Decisões a fechar no brainstorm
 
 - Onde as propostas moram: arquivos numa pasta do servidor, dentro da própria base (viajam com o git), ou banco.
+  Com o servidor central (P17), elas passam a ser recurso da API v1, visíveis também pela CLI.
 - Se a aprovação é do archlens ou delegada a um pull request quando a base mora em git (a GUI abre o PR; o merge é a
   aprovação). Esse caminho reaproveita a governança que o time já tem.
 - Como reconstruir uma versão antiga da base: o changelog guarda o suficiente, ou depende do histórico do git.

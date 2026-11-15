@@ -1,6 +1,6 @@
 # P14 — Distribuição, release e documentação
 
-**Trilha:** Engenharia · **Tamanho:** P · **Depende de:** P01
+**Linha:** v0 e v1 · **Tamanho:** P · **Depende de:** P01
 
 ## Objetivo
 
@@ -33,6 +33,9 @@ contribuidor) tem a sua documentação.
    texto de ajuda; guia do administrador (com P08); `CONTRIBUTING.md` com o fluxo de SDD do repositório e as
    obrigações do `AGENTS.md`; links quebrados corrigidos.
 6. **Check de links e de exemplos de comando** na documentação, no CI.
+7. **Duas linhas de release (P00):** a 0.x sai de `develop-v2` para a `main`, como hoje; a 1.0 sai como
+   pré-lançamento (`1.0.0-alpha.N`) da branch da v1, sem tocar a `main` até a versão estável. O `CHANGELOG.md` da v1
+   incorpora as entradas da 0.x a cada forward-merge.
 
 ## Fora do escopo
 

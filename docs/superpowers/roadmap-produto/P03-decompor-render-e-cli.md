@@ -1,6 +1,6 @@
 # P03 — Decompor o render e a CLI
 
-**Trilha:** Engenharia · **Tamanho:** M · **Depende de:** P02 (ou ao menos da fronteira pública de P02)
+**Linha:** v1 · **Tamanho:** M · **Depende de:** P02 (ou ao menos da fronteira pública de P02) · **Desbloqueia:** P15
 
 ## Objetivo
 
@@ -28,6 +28,15 @@ ser um módulo de verdade: com lint, tipos e teste unitário.
    Lógica que hoje está na CLI e é regra de negócio (por exemplo o fluxo de `migrate` e de `remote apply`) desce para
    o núcleo. Comandos devolvem resultado e código de saída; só `main()` chama `process.exit`.
 5. **Avaliar** `gbrain-mcp`, `layout` e `merge` com o mesmo critério e decompor só onde houver costura clara.
+
+## Impacto do forward-merge (linha v0 → v1)
+
+Depois deste plano, `render.mjs` e `scripts/archlens.mjs` deixam de existir como arquivos únicos na v1. Uma correção
+feita neles na v0 **não é levada pelo merge**: precisa ser refeita à mão no módulo correspondente. Por isso:
+
+- este plano vem depois de P02 e P04 na fundação;
+- o PR inclui um mapa "trecho antigo → módulo novo", usado para portar correções;
+- vale decidir com o dono se ele espera a v0 entrar em fim de vida (P00).
 
 ## Fora do escopo
 

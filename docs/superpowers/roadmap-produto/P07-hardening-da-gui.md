@@ -1,6 +1,6 @@
 # P07 — Hardening da GUI e modelo de ameaças
 
-**Trilha:** Servidor de time · **Tamanho:** M · **Depende de:** P01 · **Desbloqueia:** P08, P13
+**Linha:** v0 (é correção de segurança para quem já usa a 0.x; a v1 herda) · **Tamanho:** M · **Depende de:** P01 · **Desbloqueia:** P08, P13, P15
 
 ## Objetivo
 
@@ -37,7 +37,8 @@ Fechar as superfícies de ataque que não dependem de login, e deixar escrito o 
    relação, propriedades, título de visão, notas), verificada no navegador para o HTML autônomo e para a GUI.
 5. **Clone:** lista de hosts permitidos, bloqueio de endereços privados e de link-local depois da resolução de nome.
 6. **Injeção de prompt:** casos adversariais em `apps/gui/eval/` (arquivo de repositório que manda apagar elementos,
-   por exemplo); garantir que nada é gravado sem a confirmação explícita do usuário.
+   por exemplo); garantir que nada é gravado sem a confirmação explícita do usuário. Os mesmos casos valem para as
+   ferramentas do servidor MCP (P17), quando ele existir.
 7. **Cabeçalhos** (`nosniff`, `referrer-policy`, `permissions-policy`) e revisão do log de erros (sem caminhos da
    máquina nem segredos).
 8. **`SECURITY.md` e modelo de ameaças** em `docs/`: ativos, atores, fronteiras de confiança (base, repositório lido,

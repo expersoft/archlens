@@ -1,6 +1,6 @@
 # P01 — CI no GitHub Actions e suíte vigiada
 
-**Trilha:** Engenharia · **Tamanho:** P · **Depende de:** nada · **Desbloqueia:** todos os outros
+**Linha:** v0 (antes de abrir a v1, que herda tudo) · **Tamanho:** P · **Depende de:** nada · **Desbloqueia:** todos os outros
 
 ## Objetivo
 
@@ -38,6 +38,8 @@ o `AGENTS.md` pede à mão passam a ser impostas pelo CI.
 7. **Cobertura.** Relatório (`node --test --experimental-test-coverage` ou c8) publicado no PR, sem limiar bloqueante
    no primeiro ciclo.
 8. **Proteção de branch** documentada (checks obrigatórios em `develop-v2` e `main`).
+9. **Pronto para duas linhas:** os workflows disparam também na branch da v1 (P00), e o formatador é aplicado aqui,
+   antes da bifurcação, para a reformatação não virar conflito de merge depois.
 
 ## Fora do escopo
 
