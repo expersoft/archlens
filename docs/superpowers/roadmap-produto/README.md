@@ -128,7 +128,7 @@ Cinco requisitos avaliados contra o código de `origin/develop-v2` (`79d14f2`).
 | R1 | Edição gráfica: criar, alterar e excluir nós e conexões pela tela | A camada de edições da tela (`apps/gui/server/plan/edits.mjs`) aceita **só** `properties` e `doc` de nós que já existem; qualquer outro campo é recusado. Criar ou remover elementos e relações só pelo chat, pela CLI ou por leitura de repositório | não coberto (o P09 citava como "levantar lacunas") | **P15**, novo |
 | R2 | Autenticação e autorização por IdPs de mercado, com permissões de planejar, aplicar e aprovar | Nenhuma identidade no servidor | coberto em parte pelo P06, que deixava o mecanismo em aberto | **P06**, reescrito |
 | R3 | Conector primário com sincronismo para conectores complementares | `store convert` **move** a base de um conector para outro, uma vez; não existe espelho nem sincronismo. O manifesto aceita um único `store` | não coberto | **P16**, novo (depende de P04 e P12) |
-| R4 | CLI, GUI e desktop acessando um archlens central, sem acesso direto ao conector | A CLI abre o store local em todo comando. A API HTTP é interna da GUI: sem versão, sem identidade, desenhada pelas telas, com o rascunho inteiro viajando no corpo | não coberto | **P17**, novo; ajustes em P06, P08, P13 |
+| R4 | CLI, GUI e desktop acessando um archlens central, sem acesso direto ao conector | A CLI abre o store local em todo comando. A API HTTP é interna da GUI: sem versão, sem identidade, desenhada pelas telas, com o rascunho inteiro viajando no corpo | não coberto; não existe servidor MCP do archlens (só o cliente do gbrain) | **P17**, novo, com servidor MCP; ajustes em P06, P08, P13 |
 | R5 | SaaS multi-tenant depois de tudo estável | Nada; o processo guarda estado global (um cache de visões por processo, configuração única) | não coberto, por decisão anterior | **P18**, novo e último |
 
 **R1 — edição gráfica.** *Negócio:* é o que falta para a GUI servir a quem não quer escrever prompt, e para corrigir
@@ -177,8 +177,10 @@ O custo novo é a rede. Mitigações previstas: GET condicional por versão (`ET
 p95 de até 100 ms por comando em rede local para a base de referência, e nenhuma etapa interativa mais lenta que o
 modo local. Lembrete da medição de outubro: ~88% do tempo de uma consulta pela skill é do modelo, não da CLI.
 *Segurança:* é o ganho principal. As credenciais do conector ficam num ponto só; cada pessoa usa a própria
-identidade; toda escrita passa pela autorização e pela auditoria. *Oportunidade:* um servidor **MCP** do archlens
-sobre a mesma API atenderia assistentes sem execução de código sem depender do layout do gbrain.
+identidade; toda escrita passa pela autorização e pela auditoria. *Servidor MCP (decidido):* a API inclui um servidor **MCP** do
+archlens, uma terceira porta sobre as mesmas funções da API de caso de uso, com a mesma autorização. Atende
+assistentes de IA em qualquer conector, sem depender do layout do gbrain como o archlens-ask depende; leitura
+primeiro, escrita desligada por padrão. Detalhe no P17.
 
 **R5 — SaaS multi-tenant.** Fica para depois de 1.0 estável, como pedido. O que vale decidir **agora**, porque é
 barato hoje e caro depois: (1) todo recurso da API v1 endereçado dentro de uma organização, mesmo havendo uma só;
@@ -240,7 +242,7 @@ linha de manutenção das versões **0.x**. Tudo que entra em `develop-v2` tem d
 | [P14](P14-distribuicao-release-e-docs.md) | v0 e v1 | Release automatizado das duas linhas, roadmap vivo, documentação | P01 | P |
 | [P15](P15-edicao-grafica-do-modelo.md) | v1 | Criar, alterar e excluir nós e conexões pela tela | P03, P07 | G |
 | [P16](P16-primario-e-replicas.md) | v1 | Conector primário com réplicas sincronizadas | P04, P12, P17 | G |
-| [P17](P17-api-remota-e-clientes.md) | v1 | API v1, conector remoto, CLI e GUI como clientes | P02, P04, P06 | G |
+| [P17](P17-api-remota-e-clientes.md) | v1 | API v1, conector remoto, servidor MCP, CLI e GUI como clientes | P02, P04, P06 | G |
 | [P18](P18-saas-multi-tenant.md) | depois da 1.0 | Tenants, SSO corporativo, isolamento, cobrança | todos | G |
 
 **Ordem sugerida.**

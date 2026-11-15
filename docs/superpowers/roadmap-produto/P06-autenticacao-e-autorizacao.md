@@ -29,7 +29,8 @@ aplica ou aprova se tiver essa permissão, e toda gravação fica registrada com
 2. **Provedores sociais.** Google entra pelo item 1. Facebook e outros que não seguem OIDC por inteiro: ver decisões
    (federar por um agregador, ou adaptador próprio).
 3. **Clientes que não são navegador** (com P17): fluxo de código de dispositivo ou PKCE com retorno em `localhost`
-   para a CLI e o desktop; tokens pessoais com escopo e validade para automação.
+   para a CLI e o desktop; tokens pessoais com escopo e validade para automação. O servidor MCP (P17) usa o mesmo IdP como emissor dos
+   tokens dos assistentes.
 4. **Sessão** segura (cookie `HttpOnly`, `Secure`, `SameSite`), expiração, renovação e saída (incluindo a saída
    iniciada pelo IdP, se suportada).
 5. **Autorização por capacidade e por base.** Capacidades: `ver`, `perguntar` (gasta LLM), `planejar`, `aplicar`,
