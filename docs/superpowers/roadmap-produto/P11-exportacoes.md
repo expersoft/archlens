@@ -1,6 +1,6 @@
 # P11 — Exportações
 
-**Trilha:** Funcional · **Tamanho:** M · **Depende de:** P01 · **Item do roadmap:** d
+**Linha:** v1 · **Tamanho:** M · **Depende de:** P00 · **Item do roadmap:** d
 
 ## Objetivo
 

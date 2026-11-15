@@ -1,6 +1,6 @@
 # P13 — App desktop (Electron)
 
-**Trilha:** Funcional · **Tamanho:** M · **Depende de:** P02 (fronteira do núcleo), P07 (isolamento do diagrama)
+**Linha:** v1 · **Tamanho:** M · **Depende de:** P02 (fronteira do núcleo), P07 (isolamento do diagrama), P17 (API remota)
 
 ## Objetivo
 
@@ -26,8 +26,11 @@ instalado e sem `npx playwright install`.
 3. **Configuração pela interface:** provedor e modelo do LLM, com a chave guardada no cofre do sistema operacional.
 4. **Diagramas sem Playwright:** usar o Chromium do Electron para a checagem visual e os screenshots, ou empacotar o
    necessário. O app precisa conseguir aplicar um plano e regenerar os diagramas sozinho.
-5. **Empacotamento** para Windows, macOS e Linux, com assinatura de código e atualização automática.
-6. **Publicação** pelo fluxo de release (em conjunto com P14).
+5. **Dois modos (R4):** abrir uma base local, como hoje, ou **conectar a um servidor archlens** (P17) com login
+   pelo IdP (PKCE com retorno em `localhost`). No modo conectado o app não precisa de credencial de conector nem
+   de chave de LLM.
+6. **Empacotamento** para Windows, macOS e Linux, com assinatura de código e atualização automática.
+7. **Publicação** pelo fluxo de release (em conjunto com P14).
 
 ## Fora do escopo
 
@@ -48,7 +51,8 @@ Funcionalidade que não exista na GUI web. Modo offline do LLM. Loja de aplicati
   Chromium.
 - Onde mora o código (`apps/desktop/`) e como ele consome o núcleo e a GUI (depende da fronteira de P02).
 - Assinatura e notarização: certificados que o dono tem ou precisa comprar.
-- Se o app também conecta num servidor de time (P06/P08) como cliente, ou só abre bases locais.
+- No modo conectado, o app é só uma janela para a GUI servida pelo servidor, ou embute a GUI e fala com a API v1.
+  A primeira é quase gratuita; a segunda permite trabalhar com base local e remota na mesma janela.
 
 ## Obrigações do repositório
 

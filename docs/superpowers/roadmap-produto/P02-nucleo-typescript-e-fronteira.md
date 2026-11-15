@@ -1,6 +1,6 @@
 # P02 — Núcleo em TypeScript com fronteira pública
 
-**Trilha:** Engenharia · **Tamanho:** G · **Depende de:** P01 · **Desbloqueia:** P03, P04, P13
+**Linha:** v1 · **Tamanho:** G · **Depende de:** P00 · **Desbloqueia:** P03, P04, P13, P17
 
 ## Objetivo
 
@@ -32,6 +32,16 @@ declarada**, não por 29 módulos internos.
 5. **Reorganização de pastas** (opcional neste plano): tirar o núcleo de `scripts/` para um nome que comunique a
    camada, mantendo `bin/archlens` e os caminhos que as skills usam.
 
+## Impacto do forward-merge (linha v0 → v1)
+
+Toda correção feita em `develop-v2` chega aqui por merge (P00). Para o git levar a correção ao arquivo certo:
+
+- o commit que renomeia `.mjs` para `.ts` **não altera conteúdo**; as anotações de tipo vêm em commits seguintes;
+- a conversão é por pasta, e cada etapa termina com um forward-merge limpo;
+- a reorganização de pastas (item 5) fica **adiada até o fim da v0**: mover e renomear ao mesmo tempo quebra o
+  reconhecimento de renomeação;
+- arquivos que a v0 altera com frequência (ver `git log --since` em `develop-v2`) são convertidos por último.
+
 ## Fora do escopo
 
 Quebrar `render.mjs` e a CLI (P03); tornar o store assíncrono (P04); mudar comportamento.
@@ -53,6 +63,8 @@ Quebrar `render.mjs` e a CLI (P03); tornar o store assíncrono (P04); mudar comp
   (c) JSDoc + `tsc --checkJs`, mantendo `.mjs` (não é a migração pedida, mas é o plano B se (a) e (b) não servirem).
 - Se o núcleo vira um workspace npm separado (`packages/core`) e a GUI passa a depender dele por nome.
 - Ordem e tamanho dos PRs; se congela outros PRs do núcleo durante a migração.
+- Subir o Node mínimo para 22 é uma mudança incompatível aceitável numa major; confirmar com o dono.
+- A fronteira pública do núcleo é também a base da API v1 (P17): desenhá-las juntas.
 - Destino dos JSON Schemas: gerados dos tipos, ou os tipos gerados dos schemas.
 
 ## Obrigações do repositório

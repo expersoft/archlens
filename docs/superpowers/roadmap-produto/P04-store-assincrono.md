@@ -1,6 +1,6 @@
 # P04 — Contrato de conector assíncrono
 
-**Trilha:** Engenharia · **Tamanho:** G · **Depende de:** P02 · **Desbloqueia:** P12
+**Linha:** v1 · **Tamanho:** G · **Depende de:** P02 · **Desbloqueia:** P12, P16, P17
 
 ## Objetivo
 
@@ -51,6 +51,9 @@ Escrever conectores novos (P12). Mudar o formato 2.0 da base.
   Conectores de grafo (neo4j) só valem a pena se as consultas pedirem subgrafos. Decidir se isso entra aqui ou em P12.
 - Se o modo MCP do gbrain passa a caber no contrato novo ou continua como fluxo à parte.
 - Dividir em ciclos: (1) contrato e conectores de arquivo, (2) gbrain, (3) GUI.
+- O contrato precisa servir a três usos novos: conectores de banco (P12), o **conector remoto** por HTTP (P17) e a
+  **replicação** primário → réplicas (P16). Prever no contrato: fluxo de mudanças desde uma versão, marcação de
+  conector somente leitura e leitura condicional por versão.
 
 ## Obrigações do repositório
 

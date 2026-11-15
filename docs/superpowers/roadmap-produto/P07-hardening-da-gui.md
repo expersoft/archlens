@@ -1,6 +1,6 @@
 # P07 — Hardening da GUI e modelo de ameaças
 
-**Trilha:** Servidor de time · **Tamanho:** M · **Depende de:** P01 · **Desbloqueia:** P08, P13
+**Linha:** v0 (é correção de segurança para quem já usa a 0.x; a v1 herda) · **Tamanho:** M · **Depende de:** P01 · **Desbloqueia:** P08, P13, P15
 
 ## Objetivo
 

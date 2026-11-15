@@ -7,8 +7,10 @@
   funcionar como plugin/CLI local
 - **Decisões da entrevista:** CI no GitHub Actions; migrar o núcleo para TypeScript; todas as lacunas funcionais do
   roadmap entram (visões, exportações, edição e governança na GUI, conectores) e mais um app desktop (Electron)
+- **Revisão de 2026-11-14 (segunda rodada):** cinco requisitos novos avaliados em `79d14f2` (seção 2.6) e a decisão
+  de abrir uma **linha v1.0.0** numa branch paralela, com `develop-v2` mantendo as versões 0.x (seção 3)
 
-Este documento traz a análise e a ordem. Cada plano (`P01`…`P14`) é um arquivo próprio nesta pasta, escrito para ser
+Este documento traz a análise e a ordem. Cada plano (`P00`…`P18`) é um arquivo próprio nesta pasta, escrito para ser
 entregue a outro modelo como **entrada de um ciclo de SDD separado** (brainstorm → spec → plano → execução). Eles são
 briefs, não planos de implementação: dizem o problema, a evidência, o escopo, os critérios de aceite e as decisões que
 o ciclo precisa fechar.
@@ -117,46 +119,149 @@ filtrado para o git, lista de arquivos secretos, credenciais removidas antes de 
   - cada chamada da CLI lê e normaliza a base inteira.
 - O cache de visões da GUI (LRU de 200, por versão da base e spec canônica) é adequado.
 
-## 3. Roadmap
+### 2.6 Requisitos adicionais (segunda rodada)
 
-Três trilhas. A ordem dentro de cada trilha é a recomendada; as dependências entre planos estão na tabela.
+Cinco requisitos avaliados contra o código de `origin/develop-v2` (`79d14f2`).
 
-| Plano | Trilha | Entrega | Depende de | Tamanho |
+| # | Requisito | O que existe hoje | Veredito | Onde entra |
 |---|---|---|---|---|
-| [P01](P01-ci-e-suite-verde.md) | Engenharia | CI no GitHub Actions, lint, fixtures congeladas | — | P |
-| [P02](P02-nucleo-typescript-e-fronteira.md) | Engenharia | Núcleo em TypeScript com fronteira pública | P01 | G |
-| [P03](P03-decompor-render-e-cli.md) | Engenharia | `render` e CLI decompostos; cliente do diagrama testável | P02 | M |
-| [P04](P04-store-assincrono.md) | Engenharia | Contrato de conector assíncrono | P02 | G |
-| [P05](P05-performance-e-escala.md) | Engenharia | Benchmarks, orçamento de tempo, latência da CLI e da GUI | P01 | M |
-| [P06](P06-autenticacao-e-autorizacao.md) | Servidor de time | Login, papéis por base, auditoria, cotas | P01 | G |
-| [P07](P07-hardening-da-gui.md) | Servidor de time | Isolamento do diagrama, CSP, SSRF, modelo de ameaças | P01 | M |
-| [P08](P08-empacotamento-e-operacao.md) | Servidor de time | Docker, saúde, logs, métricas, guia de implantação | P06, P07 | M |
-| [P09](P09-edicao-e-governanca-na-gui.md) | Servidor de time | Propostas no servidor, revisão e aprovação, histórico e diff visual | P06 | G |
-| [P10](P10-visoes-que-faltam.md) | Funcional | Deployment, capacidades, negócio no C4, fluxos de eventos, defeitos de visão | P01 | G |
-| [P11](P11-exportacoes.md) | Funcional | Mermaid, PlantUML, Structurizr DSL, ArchiMate Open Exchange | P01 | M |
-| [P12](P12-conectores-remotos.md) | Funcional | neo4j, relacional, S3 (um ciclo por conector) | P04 | G |
-| [P13](P13-app-desktop-electron.md) | Funcional | App desktop | P02, P07 | M |
-| [P14](P14-distribuicao-release-e-docs.md) | Engenharia | Release automatizado, roadmap vivo, documentação de usuário e de administrador | P01 | P |
+| R1 | Edição gráfica: criar, alterar e excluir nós e conexões pela tela | A camada de edições da tela (`apps/gui/server/plan/edits.mjs`) aceita **só** `properties` e `doc` de nós que já existem; qualquer outro campo é recusado. Criar ou remover elementos e relações só pelo chat, pela CLI ou por leitura de repositório | não coberto (o P09 citava como "levantar lacunas") | **P15**, novo |
+| R2 | Autenticação e autorização por IdPs de mercado, com permissões de planejar, aplicar e aprovar | Nenhuma identidade no servidor | coberto em parte pelo P06, que deixava o mecanismo em aberto | **P06**, reescrito |
+| R3 | Conector primário com sincronismo para conectores complementares | `store convert` **move** a base de um conector para outro, uma vez; não existe espelho nem sincronismo. O manifesto aceita um único `store` | não coberto | **P16**, novo (depende de P04 e P12) |
+| R4 | CLI, GUI e desktop acessando um archlens central, sem acesso direto ao conector | A CLI abre o store local em todo comando. A API HTTP é interna da GUI: sem versão, sem identidade, desenhada pelas telas, com o rascunho inteiro viajando no corpo | não coberto | **P17**, novo; ajustes em P06, P08, P13 |
+| R5 | SaaS multi-tenant depois de tudo estável | Nada; o processo guarda estado global (um cache de visões por processo, configuração única) | não coberto, por decisão anterior | **P18**, novo e último |
+
+**R1 — edição gráfica.** *Negócio:* é o que falta para a GUI servir a quem não quer escrever prompt, e para corrigir
+à mão o que o chat ou a leitura de repositório propôs. *Arquitetura:* o caminho já está preparado. As edições da tela
+são uma camada separada do delta do agente (`composeDelta`), o formato de delta já tem `rename` e `remove`, e o
+núcleo já sabe validar uma relação entre dois tipos (`checkRelationship` em `scripts/lib/registry.mjs`). Falta
+estender essa camada para elementos e relações e dar à ponte do iframe mensagens de edição (hoje só `select`,
+`context`, `expand`). O diagrama é desenhado no servidor com layout automático (ELK): editar graficamente aqui
+significa **comandos sobre o modelo** (paleta, ligar dois nós, excluir, renomear, mover de pai), não posicionamento
+livre de caixas. *Segurança:* mais mensagens na ponte e mais campos de texto do usuário no diagrama, o que reforça o
+P07. *Performance:* cada edição refaz o plano e redesenha a prévia no servidor; precisa de orçamento de resposta
+(P05). *Manutenibilidade:* depende do cliente do diagrama ser modular e testável (P03).
+
+**R2 — identidade.** *Negócio:* requisito de entrada para qualquer empresa. *Arquitetura:* um único protocolo cobre
+os provedores citados: **OpenID Connect** (Entra ID, AWS Cognito, Google, Keycloak, Okta). O Facebook oferece OAuth 2.0
+com um perfil de OIDC limitado; se for exigido, a via simples é federá-lo por um agregador (Cognito, Keycloak, Entra
+External ID) em vez de tratá-lo no archlens. As permissões pedidas viram **capacidades por base** (ver, perguntar,
+planejar, aplicar, aprovar, administrar) e uma **política por base** (aprovação obrigatória ou não), em vez de três
+papéis fixos. Clientes que não são navegador (CLI, desktop) precisam de fluxo próprio: código de dispositivo ou
+PKCE com retorno em `localhost`, e tokens de acesso pessoais para automação. *Segurança:* é o achado S1.
+
+**R3 — primário e réplicas.** *Negócio:* resolve a tensão entre "base confiável e transacional" e "base legível por
+outras ferramentas e assistentes" (o archlens-ask lê o gbrain). *Arquitetura:* recomenda-se **sentido único**:
+primário → réplicas somente leitura, disparado depois de cada `apply` e conferido por uma reconciliação periódica.
+Sincronismo nos dois sentidos traz conflito de escrita e deve ficar fora. Uma mudança feita direto na réplica é
+detectada e relatada (ou vira um delta que passa pelo plano), nunca mesclada em silêncio. **Ponto de atenção:** no
+modo MCP do gbrain quem grava é um agente chamando ferramentas, com recibos; um servidor não consegue replicar para
+lá sozinho, a menos que passe a ser cliente MCP. A réplica gbrain em modo git não tem esse problema. *Performance:* a
+replicação roda fora do caminho do `apply` (fila), para não somar latência à gravação. *Segurança:* o servidor passa
+a guardar credenciais de vários destinos.
+
+**R4 — acesso remoto.** *É preciso criar uma API?* **Sim.** A API de hoje serve às telas e não tem contrato estável.
+Há duas formas, e a recomendação é ter as duas em camadas:
+
+- **API de caso de uso** (`/api/v1`: buscar, resolver visão, cartão do elemento, planejar, aplicar, histórico). O
+  servidor responde com o modelo que já mantém em memória e com o cache de visões. É a que GUI, desktop e as
+  consultas da CLI usam, e a única que permite autorização fina.
+- **Conector remoto** (`store.kind: "remote"`): expõe o contrato do store por HTTP (retrato da base com versão,
+  subgrafo, `apply` com versões esperadas). Permite que `plan`, `apply` e `build` da CLI continuem rodando no
+  cliente sem reescrita. Entrega a base inteira a quem tem acesso de leitura.
+
+*Performance (hipóteses a medir no P05, nada medido ainda):* para consultas, o caminho remoto tende a ser **mais
+rápido** que o local, porque hoje cada comando da CLI lê e normaliza a base inteira e o servidor já tem isso pronto.
+O custo novo é a rede. Mitigações previstas: GET condicional por versão (`ETag`) com cópia local do retrato em
+`.archlens/`, compressão, conexão persistente, leitura por subgrafo e respostas em fluxo. Meta proposta: sobrecarga
+p95 de até 100 ms por comando em rede local para a base de referência, e nenhuma etapa interativa mais lenta que o
+modo local. Lembrete da medição de outubro: ~88% do tempo de uma consulta pela skill é do modelo, não da CLI.
+*Segurança:* é o ganho principal. As credenciais do conector ficam num ponto só; cada pessoa usa a própria
+identidade; toda escrita passa pela autorização e pela auditoria. *Oportunidade:* um servidor **MCP** do archlens
+sobre a mesma API atenderia assistentes sem execução de código sem depender do layout do gbrain.
+
+**R5 — SaaS multi-tenant.** Fica para depois de 1.0 estável, como pedido. O que vale decidir **agora**, porque é
+barato hoje e caro depois: (1) todo recurso da API v1 endereçado dentro de uma organização, mesmo havendo uma só;
+(2) nenhum estado global no processo (hoje `views.mjs` tem um cache padrão por módulo e a configuração é única);
+(3) sessão, cotas e propostas fora da memória do processo; (4) segredos e chaves de LLM por organização;
+(5) autorização sempre a partir de `{organização, base, capacidade}`. Esses cinco pontos entram como critérios de
+aceite em P06, P08, P09 e P17.
+
+## 3. Duas linhas: v0 em manutenção e v1 em construção
+
+**Decisão do dono:** a versão **1.0.0** nasce numa branch nova, paralela a `develop-v2`. `develop-v2` segue como
+linha de manutenção das versões **0.x**. Tudo que entra em `develop-v2` tem de chegar à linha v1.
+
+**Impacto nos planos.**
+
+- **O custo do forward-merge cresce com mudanças estruturais na v1.** P02 troca a extensão de 64 arquivos, P03 parte
+  `render.mjs` e a CLI em vários, P04 espalha `await` pelo núcleo. Uma correção feita em `render.mjs` na v0 não
+  encontra o mesmo arquivo na v1 depois do P03 e precisa ser portada à mão.
+- **Conflitos certos a cada merge:** `package.json` (versão), `CHANGELOG.md`, `.claude-plugin/*.json` e
+  `portable/archlens-ask/REFERENCE.md` (que cita a versão) divergem por definição.
+- **Formato da base.** Se a v1 mudar o formato 2.0 de modo incompatível (por exemplo, autor no changelog), uma base
+  compartilhada entre pessoas em v0 e v1 quebra.
+- **Distribuição.** O marketplace do plugin lê a branch padrão (`main`); a v1 não pode ir para lá antes de ser estável.
+
+**Recomendações** (detalhadas no [P00](P00-linhas-v0-e-v1.md)):
+
+1. **Antes de criar a branch v1, entregar em `develop-v2` o que serve às duas linhas:** P01 (CI) e P07 (correção de
+   segurança que protege quem já usa a 0.x). A v1 herda os dois na criação.
+2. **v0 só recebe correção e segurança.** Funcionalidade nova entra só na v1. Menos divergência, menos conflito.
+3. **Merge, não cherry-pick,** de `develop-v2` para a v1, automatizado: a cada push em `develop-v2`, um PR de
+   forward-merge é aberto; ele não pode ficar parado.
+4. **Renomear sem alterar.** No P02, o commit que troca `.mjs` por `.ts` não muda conteúdo, para o git reconhecer a
+   renomeação e levar as correções da v0 ao arquivo novo. A reorganização de pastas fica para depois do fim da v0.
+5. **P03 por último na fundação**, e só depois de combinar com o dono o custo de portar correções à mão.
+6. **Formato 2.0 compatível** nas duas linhas enquanto a v0 existir: a v1 só acrescenta campos opcionais que a v0
+   ignora. Mudança incompatível exige nova versão de formato e `migrate`.
+7. **Fim da v0 com data ou critério** (por exemplo, 90 dias depois da 1.0.0).
+
+## 4. Roadmap
+
+**Linha:** `v0` = entra em `develop-v2` e chega à v1 pelo forward-merge; `v1` = só na branch nova.
+
+| Plano | Linha | Entrega | Depende de | Tamanho |
+|---|---|---|---|---|
+| [P00](P00-linhas-v0-e-v1.md) | v0 e v1 | Branch v1, forward-merge automático, política da v0, pré-lançamentos | P01 | P |
+| [P01](P01-ci-e-suite-verde.md) | v0 | CI no GitHub Actions, lint, fixtures congeladas | — | P |
+| [P02](P02-nucleo-typescript-e-fronteira.md) | v1 | Núcleo em TypeScript com fronteira pública | P00 | G |
+| [P03](P03-decompor-render-e-cli.md) | v1 | `render` e CLI decompostos; cliente do diagrama testável | P02 | M |
+| [P04](P04-store-assincrono.md) | v1 | Contrato de conector assíncrono | P02 | G |
+| [P05](P05-performance-e-escala.md) | v0 (medição) e v1 (remoto) | Benchmarks, orçamentos de tempo, latência local e remota | P01 | M |
+| [P06](P06-autenticacao-e-autorizacao.md) | v1 | OIDC, capacidades por base, política de aprovação, auditoria, cotas | P00 | G |
+| [P07](P07-hardening-da-gui.md) | v0 | Isolamento do diagrama, CSP, SSRF, modelo de ameaças | P01 | M |
+| [P08](P08-empacotamento-e-operacao.md) | v1 | Docker, saúde, logs, métricas, guia de implantação | P06, P07, P17 | M |
+| [P09](P09-edicao-e-governanca-na-gui.md) | v1 | Propostas no servidor, revisão e aprovação, histórico e diff visual | P06 | G |
+| [P10](P10-visoes-que-faltam.md) | v0 (defeitos) e v1 (visões) | Deployment, capacidades, negócio no C4, fluxos de eventos | P01 | G |
+| [P11](P11-exportacoes.md) | v1 | Mermaid, PlantUML, Structurizr DSL, ArchiMate Open Exchange | P00 | M |
+| [P12](P12-conectores-remotos.md) | v1 | PostgreSQL, S3, neo4j (um ciclo por conector) | P04 | G |
+| [P13](P13-app-desktop-electron.md) | v1 | App desktop, local ou ligado a um servidor | P02, P07, P17 | M |
+| [P14](P14-distribuicao-release-e-docs.md) | v0 e v1 | Release automatizado das duas linhas, roadmap vivo, documentação | P01 | P |
+| [P15](P15-edicao-grafica-do-modelo.md) | v1 | Criar, alterar e excluir nós e conexões pela tela | P03, P07 | G |
+| [P16](P16-primario-e-replicas.md) | v1 | Conector primário com réplicas sincronizadas | P04, P12, P17 | G |
+| [P17](P17-api-remota-e-clientes.md) | v1 | API v1, conector remoto, CLI e GUI como clientes | P02, P04, P06 | G |
+| [P18](P18-saas-multi-tenant.md) | depois da 1.0 | Tenants, SSO corporativo, isolamento, cobrança | todos | G |
 
 **Ordem sugerida.**
 
-1. **Agora:** P01. Nada mais deve começar antes de a suíte, que hoje passa, estar vigiada pelo CI.
-2. **Em paralelo, logo depois:** P07 (segurança que não depende de login), P05 (medir antes de otimizar), P11 e P10
-   (funcionais que só tocam o núcleo de consulta), P14.
-3. **Fundação estrutural:** P02, depois P03 e P04. P02 mexe em todos os arquivos do núcleo: combine uma janela sem
-   outros PRs grandes no núcleo, ou faça por pastas.
-4. **Servidor de time:** P06 → P09 e P08.
-5. **Depois da fundação:** P12 (precisa de P04) e P13 (precisa de P02 e P07).
+1. **Fase 0, em `develop-v2`:** P01, depois P07 e a parte de medição do P05, com o release automatizado do P14.
+2. **Abertura da v1:** P00 (branch, forward-merge, política).
+3. **Fase 1, fundação da v1:** P02 → P04 → P03.
+4. **Fase 2, servidor central:** P06 → P17 → P08, com P09 em seguida.
+5. **Fase 3, funcional:** P10 (visões), P11, P15, P12 → P16, P13.
+6. **1.0.0** quando as fases 1 a 3 estiverem estáveis (critério no P00).
+7. **Fase 4:** P18.
 
-**Conflitos a evitar:** P02 com P03/P10/P11 ao mesmo tempo nos mesmos arquivos; P06 com P09 (P09 parte dos papéis de
-P06).
+**Conflitos a evitar:** P02 ao mesmo tempo que P03, P10 ou P11 nos mesmos arquivos; P09 e P15 antes de P06 fechar o
+modelo de capacidades; P16 antes de existir um primário real (P12); P13 antes de a API v1 (P17) estar estável.
 
-## 4. Como usar os planos
+## 5. Como usar os planos
 
 Cada arquivo `Pnn-*.md` tem as mesmas seções: objetivo, evidência, escopo, fora do escopo, critérios de aceite,
 decisões a fechar no brainstorm, obrigações do repositório e um prompt de partida. Para rodar um:
 
-1. Abra uma sessão nova numa worktree própria.
+1. Abra uma sessão nova numa worktree própria, criada a partir da branch da **linha** do plano (coluna Linha).
 2. Cole o **prompt de partida** do plano. Ele manda ler o brief e este README.
 3. Com superpowers: `brainstorming` (fecha as decisões listadas) → spec em `docs/superpowers/specs/` →
    `writing-plans` → `subagent-driven-development` ou `executing-plans` → `requesting-code-review`.

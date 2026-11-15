@@ -1,6 +1,6 @@
 # P05 — Performance e escala
 
-**Trilha:** Engenharia · **Tamanho:** M · **Depende de:** P01
+**Linha:** v0 para a medição e o débito da CLI; v1 para o modo remoto · **Tamanho:** M · **Depende de:** P01
 
 ## Objetivo
 
@@ -34,7 +34,10 @@ fechar o débito de latência já medido.
    demanda na skill), M4 (`views --match`).
 6. **GUI:** observar mudanças por evento ou por data de modificação antes de reler tudo; layout fora da thread
    principal (pool de workers) se a medição mostrar bloqueio.
-7. **Corrigir o que a medição apontar** como gargalo real com bases grandes. Não otimizar o que não foi medido.
+7. **Modo remoto (linha v1, com P17):** os mesmos benchmarks rodando contra um servidor, em rede local e com
+   latência simulada, para conferir as metas de sobrecarga do P17. A linha de base local é medida aqui, antes.
+8. **Orçamento por gesto de edição** na GUI (P15): tempo entre o gesto e a prévia atualizada.
+9. **Corrigir o que a medição apontar** como gargalo real com bases grandes. Não otimizar o que não foi medido.
 
 ## Fora do escopo
 

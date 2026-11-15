@@ -1,6 +1,6 @@
 # P08 — Empacotamento e operação do servidor
 
-**Trilha:** Servidor de time · **Tamanho:** M · **Depende de:** P06, P07
+**Linha:** v1 · **Tamanho:** M · **Depende de:** P06, P07, P17
 
 ## Objetivo
 
@@ -34,6 +34,12 @@ está saudável.
 7. **Guia do administrador:** instalar, configurar bases (pasta local, repositório git, gbrain), segredos, cópia de
    segurança e restauração, atualização de versão, solução de problemas.
 8. **Publicar a imagem** no registro do GitHub pelo fluxo de release (em conjunto com P14).
+
+9. **Ponto central (R4):** o servidor é o único lugar com credenciais do conector primário e das réplicas. Guia de
+   segredos (arquivo montado, cofre), rotação, e rede: só o servidor alcança o banco e os repositórios.
+10. **Operação das réplicas (P16):** estado e atraso de sincronização nas métricas e na rota de prontidão.
+11. **Preparo para o P18:** nenhuma configuração ou cache global por processo; estado em armazenamento externo
+    quando houver mais de uma réplica do servidor.
 
 ## Fora do escopo
 

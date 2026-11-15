@@ -1,6 +1,6 @@
 # P12 — Conectores remotos: neo4j, relacional, S3
 
-**Trilha:** Funcional · **Tamanho:** G (um ciclo por conector) · **Depende de:** P04 · **Itens do roadmap:** e.4.2, e.4.3, e.4.4
+**Linha:** v1 · **Tamanho:** G (um ciclo por conector) · **Depende de:** P04 · **Desbloqueia:** P16 · **Itens do roadmap:** e.4.2, e.4.3, e.4.4
 
 ## Objetivo
 
@@ -23,10 +23,11 @@ Para cada conector, um ciclo com: `init`, leitura, `readSubgraph`, versão por o
 tudo-ou-nada, histórico, `store convert` de e para ele, teste de contrato, teste de integração com o serviço real em
 contêiner, documentação em `references/base.md`.
 
-1. **S3 (e compatíveis).** O mais simples: os mesmos arquivos do conector json ou markdown num bucket; versão por
-   ETag; escrita condicional para a versão otimista.
-2. **Relacional (PostgreSQL primeiro).** Tabelas de elementos, relações, visões e changelog; transação no `apply`;
-   versão por linha.
+1. **Relacional (PostgreSQL).** Passa a ser o primeiro: o dono quer o PostgreSQL como **repositório principal**
+   de um servidor central (R3, R4). Tabelas de elementos, relações, visões e changelog; transação no `apply`; versão
+   por linha; um fluxo de mudanças que a replicação (P16) possa consumir.
+2. **S3 (e compatíveis).** Os mesmos arquivos do conector json ou markdown num bucket; versão por ETag; escrita
+   condicional para a versão otimista.
 3. **neo4j.** Elementos como nós, relações como arestas; `readSubgraph` como consulta nativa; transação no `apply`.
 
 ## Fora do escopo
@@ -44,13 +45,14 @@ Usar o banco para responder consultas no lugar do núcleo (as travessias continu
 
 ## Decisões a fechar no brainstorm
 
-- **Qual conector primeiro e para quê.** Pergunte ao dono o caso de uso concreto de cada um; sem caso de uso, o
-  conector não deve ser feito. S3 resolve "base compartilhada sem git"; relacional e neo4j só se justificam se outra
-  ferramenta for consultar a base por lá.
+- **Caso de uso de cada conector.** O do PostgreSQL está dado (primário do servidor central). Para S3 e neo4j,
+  pergunte ao dono o caso concreto; sem ele, o conector não deve ser feito. Com réplicas (P16), neo4j faz mais
+  sentido como **destino de réplica** para consulta por outras ferramentas do que como primário.
 - Como distribuir drivers: dependências opcionais, pacote separado por conector, ou conectores como plugins carregados
   por nome.
 - Onde ficam as credenciais (ambiente, perfil da nuvem), nunca no manifesto da base.
 - Esquema relacional e de grafo: estável e documentado (outros vão consultar) ou detalhe interno.
+- Preparo para o P18: como o esquema acomoda várias organizações (coluna, esquema ou banco por organização).
 
 ## Obrigações do repositório
 

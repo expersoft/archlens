@@ -1,6 +1,6 @@
 # P10 — Visões que faltam e defeitos de visão
 
-**Trilha:** Funcional · **Tamanho:** G · **Depende de:** P01 · **Item do roadmap:** c
+**Linha:** v0 para os defeitos; v1 para as visões novas · **Tamanho:** G · **Depende de:** P01 · **Item do roadmap:** c
 
 ## Objetivo
 
