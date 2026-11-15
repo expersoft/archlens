@@ -102,6 +102,19 @@ marketplace do GitHub, vale a branch padrão do repositório. A cópia instalada
 Pelos links simbólicos: um `git pull` (ou trocar de branch) no repositório já atualiza as skills na próxima sessão, sem versão
 nova. É o caminho mais prático para quem desenvolve o archlens.
 
+### Verificação automática (CI)
+
+Todo PR roda `.github/workflows/ci.yml`: lint (Biome), derivados em dia (`check-plugin`, `check-ask`, `check-schemas`,
+`prompt:check`), `npm audit`, a suíte da raiz e a suíte e o build da GUI em Node 20, 22 e 24, os
+testes com Chromium (e2e da GUI e checagem visual, com relatório de cobertura no resumo do job) e os lançadores no
+Windows. Para rodar o essencial antes de abrir o PR: `npm run ci` (e `npm run gui:test` se a mudança toca a GUI).
+
+A integração com um gbrain real (`.github/workflows/gbrain.yml`) roda à mão e uma vez por semana; não bloqueia PR.
+
+**Proteção de branch (configurar no GitHub, em `develop-v2` e `main`):** exigir PR, exigir os checks `Lint e derivados`,
+`Núcleo e CLI (Node 20)`, `(Node 22)`, `(Node 24)`, `GUI (Node 20)`, `(Node 22)`, `(Node 24)`,
+`Testes com Chromium (e2e e checagem visual)` e `Lançadores no Windows`, e exigir a branch em dia com o destino.
+
 ### Publicar uma versão
 
 A versão do plugin vem do `package.json`. Nunca edite `.claude-plugin/*.json` à mão: `npm version` regrava os dois
