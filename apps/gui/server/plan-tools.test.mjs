@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, cpSync, readdirSync, readFileSync, writeFileSync, statSync, mkdirSync } from 'node:fs';
+import { mkdtempSync, cpSync, readdirSync, readFileSync, writeFileSync, statSync, mkdirSync, rmSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
@@ -155,6 +155,7 @@ test('draft_notes é final e devolve as notas propostas', () => withBase(async c
 }));
 
 test('read_notes devolve as notas atuais como conteúdo externo', () => withBase(async (ctx, dir) => {
+  rmSync(join(dir, 'notes'), { recursive: true, force: true }); // o exemplo pode ganhar notas; o teste parte de uma base sem elas
   const s = sessionOf(ctx);
   const empty = await runPlanTool(ctx, s, 'read_notes', {});
   assert.ok(empty.ok);

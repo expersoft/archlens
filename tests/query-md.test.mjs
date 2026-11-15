@@ -12,7 +12,8 @@ import { resolveBase, openStore } from '../scripts/lib/store/index.mjs';
 import { matchSnapshot, memStore } from './helpers.mjs';
 
 const CLI = fileURLToPath(new URL('../scripts/archlens.mjs', import.meta.url));
-const BASE = fileURLToPath(new URL('../examples/loja-online/architecture', import.meta.url));
+// Frozen copy: examples/ is living documentation, snapshots must not move with it (tests/fixtures/loja-online/README.md).
+const BASE = fileURLToPath(new URL('./fixtures/loja-online/architecture', import.meta.url));
 const open = () => openStore(resolveBase(BASE, { cwd: BASE }));
 const model = () => normalizeModel(open().read().raw);
 const run = args => spawnSync(process.execPath, [CLI, ...args], { encoding: 'utf8' });
