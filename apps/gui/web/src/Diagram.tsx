@@ -1,9 +1,8 @@
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
-import { parseMessage, send, type Act, type BridgeEvent } from './bridge';
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
+import { parseMessage, send, withTheme, type Act, type BridgeEvent } from './bridge';
 import type { ViewResult } from './api';
 import { AlertBadge, type AlertAction } from './AlertBadge';
-import { DIAGRAM_THEME_KEY, type Theme } from './theme';
-import { isGuiShortcut } from './shortcuts';
+import type { Theme } from './theme';
 
 export interface DiagramProps {
   view: Pick<ViewResult, 'html'> & { alertInfo?: ViewResult['alertInfo'] };
@@ -50,9 +49,9 @@ export const Diagram = forwardRef<HTMLIFrameElement, DiagramProps>(function Diag
   const canPresentRef = useRef(canPresent);
   canPresentRef.current = canPresent;
 
-  // O iframe lê o tema do localStorage (mesma origem do srcDoc): o host grava antes de carregar.
-  const writeTheme = (t: Theme) => { try { localStorage.setItem(DIAGRAM_THEME_KEY, t); } catch { /* sem storage */ } };
-  writeTheme(theme);
+  // O iframe não tem origem (não lê o localStorage do host): cada documento novo já nasce com o tema marcado.
+  // Depende só de view.html: trocar o tema vai pela ponte, sem recarregar o diagrama.
+  const srcDoc = useMemo(() => withTheme(view.html, themeRef.current), [view.html]);
 
   useEffect(() => { send(frame.current, { type: 'theme', theme }); }, [theme]);
 
@@ -62,6 +61,12 @@ export const Diagram = forwardRef<HTMLIFrameElement, DiagramProps>(function Diag
       if (!e) return;
       if (e.type === 'state') setFlags({ flowing: e.flowing, labels: e.labels, legend: e.legend, matrix: e.matrix });
       if (e.type === 'ready') { setFlags(OFF); send(frame.current, { type: 'theme', theme: themeRef.current }); }
+      if (e.type === 'key') {
+        // Atalhos da GUI e Escape com o foco dentro do diagrama: repete no window do host, onde a GUI escuta.
+        const { type: _t, ...init } = e;
+        window.dispatchEvent(new KeyboardEvent('keydown', init));
+        return;
+      }
       onEventRef.current(e);
     };
     window.addEventListener('message', onMsg);
@@ -78,28 +83,6 @@ export const Diagram = forwardRef<HTMLIFrameElement, DiagramProps>(function Diag
     }
     send(frame.current, { type: 'act', act: a });
   }, []);
-
-  // Atalhos da GUI com o foco dentro do iframe (srcdoc, mesma origem): reencaminha ao window do host.
-  const cleanup = useRef<() => void>(() => {});
-  const onLoad = useCallback(() => {
-    cleanup.current();
-    const w = frame.current?.contentWindow;
-    if (!w) return;
-    const h = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape' }));
-        return;
-      }
-      if (!isGuiShortcut(e)) return;
-      e.preventDefault();
-      window.dispatchEvent(new KeyboardEvent('keydown', {
-        code: e.code, key: e.key, ctrlKey: e.ctrlKey, metaKey: e.metaKey, altKey: e.altKey, shiftKey: e.shiftKey,
-      }));
-    };
-    w.addEventListener('keydown', h);
-    cleanup.current = () => w.removeEventListener('keydown', h);
-  }, []);
-  useEffect(() => () => cleanup.current(), []);
 
   return (
     <div className="diagram" aria-busy={busy || undefined}>
@@ -129,9 +112,9 @@ export const Diagram = forwardRef<HTMLIFrameElement, DiagramProps>(function Diag
         )}
       </div>
       {busy && <div className="busy" aria-hidden="true" />}
-      {/* allow-same-origin só existe para o iframe ler o mesmo localStorage `archlens-theme` do host;
-          com allow-scripts junto ele NÃO isola nada (o srcdoc é da base, conteúdo confiável). */}
-      <iframe ref={frame} title="Diagrama" srcDoc={view.html} sandbox="allow-scripts allow-same-origin allow-downloads allow-modals" allow="fullscreen" onLoad={onLoad} />
+      {/* Sem allow-same-origin: o documento do diagrama vem do conteúdo da base e roda sem origem. Ele não lê a
+          página, o armazenamento nem a API do host; a conversa é só pela ponte (postMessage). */}
+      <iframe ref={frame} title="Diagrama" srcDoc={srcDoc} sandbox="allow-scripts allow-downloads allow-modals" allow="fullscreen" />
     </div>
   );
 });

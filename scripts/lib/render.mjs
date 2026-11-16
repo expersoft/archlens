@@ -684,7 +684,10 @@ const JS = String.raw`
 
   // ---------- theme
   const root = document.documentElement;
-  try { root.dataset.theme = localStorage.getItem('archlens-theme') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'); } catch { root.dataset.theme = 'light'; }
+  // Inside the GUI the iframe is sandboxed without an origin: no localStorage there. The host sets data-theme on <html>.
+  const savedTheme = () => { try { return localStorage.getItem('archlens-theme'); } catch { return null; } };
+  const systemTheme = () => { try { return matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'; } catch { return 'light'; } };
+  root.dataset.theme = root.dataset.theme === 'dark' || root.dataset.theme === 'light' ? root.dataset.theme : savedTheme() || systemTheme();
   const EMBED = !!DATA.embed; // inside the GUI iframe: no toolbar/drawer, talks to the parent via postMessage
   const post = m => { try { window.parent.postMessage({ source: 'archlens', ...m }, '*'); } catch {} };
   const tb = s => $(s) || { classList: { toggle() {}, remove() {}, add() {} }, addEventListener() {} }; // toolbar bits are absent when embedded
@@ -1171,6 +1174,13 @@ const JS = String.raw`
     if (m.type === 'act' && HOST_ACTS.includes(m.act)) { actions[m.act](); postState(); }
     else if (m.type === 'theme' && (m.theme === 'light' || m.theme === 'dark')) root.dataset.theme = m.theme;
     else if (m.type === 'select') { if (m.id && view().nodes[m.id]) { trace(m.id); if (m.focus) focusNode(m.id); } else clearTrace(); }
+  });
+  // The host cannot listen inside a sandboxed iframe: its shortcuts (Ctrl/Meta+B, Ctrl/Meta+K) and Escape go over the bridge.
+  if (EMBED) addEventListener('keydown', e => {
+    const gui = (e.ctrlKey || e.metaKey) && (e.code === 'KeyB' || e.code === 'KeyK');
+    if (!gui && e.key !== 'Escape') return;
+    if (gui) e.preventDefault();
+    post({ type: 'key', key: e.key, code: e.code, ctrlKey: e.ctrlKey, metaKey: e.metaKey, altKey: e.altKey, shiftKey: e.shiftKey });
   });
   addEventListener('hashchange', () => { const i = DATA.views.findIndex(v => '#' + encodeURIComponent(v.key) === location.hash); if (i >= 0 && i !== current) show(i, true); });
 

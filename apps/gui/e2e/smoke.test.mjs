@@ -81,7 +81,8 @@ test('GUI ponta a ponta', async (t) => {
   await t.test('5. tema: interface e diagrama são independentes', async () => {
     const appTheme = () => page.evaluate(() => document.documentElement.dataset.theme);
     const frameTheme = () => frame().locator('html').getAttribute('data-theme');
-    const frameIs = (x) => page.waitForFunction((v) => document.querySelector('iframe[title="Diagrama"]').contentDocument.documentElement.dataset.theme === v, x);
+    // o iframe não tem a origem do host (contentDocument é null): espera pelo próprio documento do diagrama
+    const frameIs = (x) => frame().locator(`html[data-theme="${x}"]`).waitFor({ state: 'attached' });
     const app0 = await appTheme();
     const diag0 = await frameTheme();
     // barra do topo: só a interface muda

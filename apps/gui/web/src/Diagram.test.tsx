@@ -1,5 +1,5 @@
 import { expect, it, vi } from 'vitest';
-import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Diagram } from './Diagram';
 import type { ViewResult } from './api';
@@ -19,21 +19,37 @@ it('Apresentar pede fullscreen no host e não manda act:present', async () => {
   expect(pm).toHaveBeenCalledWith({ source: 'archlens-host', type: 'act', act: 'fit' }, '*');
 });
 
-it('reencaminha atalhos da GUI do iframe para o window do host', () => {
-  const { container } = render(<Diagram view={view} theme="light" onEvent={() => {}} />);
+it('repete no window do host os atalhos da GUI e o Escape que o diagrama manda pela ponte', () => {
+  const onEvent = vi.fn();
+  const { container } = render(<Diagram view={view} theme="light" onEvent={onEvent} />);
   const frame = container.querySelector('iframe')!;
-  fireEvent.load(frame);
   const got: KeyboardEvent[] = [];
   const l = (e: KeyboardEvent) => got.push(e);
   window.addEventListener('keydown', l);
-  const W = frame.contentWindow as unknown as Window & { KeyboardEvent: typeof KeyboardEvent };
-  const ev = new W.KeyboardEvent('keydown', { code: 'KeyB', key: '∫', ctrlKey: true, altKey: true, cancelable: true });
-  W.dispatchEvent(ev);
-  W.dispatchEvent(new W.KeyboardEvent('keydown', { code: 'KeyA', ctrlKey: true }));
+  const post = (data: Record<string, unknown>) => act(() => {
+    window.dispatchEvent(new MessageEvent('message', { data: { source: 'archlens', type: 'key', ...data }, source: frame.contentWindow }));
+  });
+  post({ code: 'KeyB', key: '∫', ctrlKey: true, altKey: true });
+  post({ code: 'KeyA', key: 'a', ctrlKey: true }); // não é atalho da GUI: descartado
+  post({ code: 'Escape', key: 'Escape' });
   window.removeEventListener('keydown', l);
-  expect(ev.defaultPrevented).toBe(true);
-  expect(got).toHaveLength(1);
+  expect(got).toHaveLength(2);
   expect(got[0]).toMatchObject({ code: 'KeyB', ctrlKey: true, altKey: true });
+  expect(got[1]).toMatchObject({ key: 'Escape' });
+  expect(onEvent).not.toHaveBeenCalled();
+});
+
+it('o iframe não tem allow-same-origin e nasce com o tema marcado, sem recarregar ao trocar de tema', () => {
+  const html = '<!doctype html>\n<html lang="pt-BR"><body>x</body></html>';
+  const v = { html, alerts: [] } as unknown as ViewResult;
+  const { container, rerender } = render(<Diagram view={v} theme="dark" onEvent={() => {}} />);
+  const frame = container.querySelector('iframe')!;
+  expect(frame.getAttribute('sandbox')).toBe('allow-scripts allow-downloads allow-modals');
+  expect(frame.getAttribute('srcdoc')).toContain('<html data-theme="dark" lang="pt-BR">');
+  const pm = vi.spyOn(frame.contentWindow!, 'postMessage');
+  rerender(<Diagram view={v} theme="light" onEvent={() => {}} />);
+  expect(frame.getAttribute('srcdoc')).toContain('<html data-theme="dark" lang="pt-BR">'); // mesmo documento
+  expect(pm).toHaveBeenCalledWith({ source: 'archlens-host', type: 'theme', theme: 'light' }, '*');
 });
 
 it('os botões de alternância voltam a desligado a cada nova visão (ready)', () => {
@@ -59,12 +75,10 @@ it('botão de tema do diagrama alterna só o tema do diagrama', async () => {
   const { rerender } = render(<Diagram view={view} theme="light" onThemeChange={onTheme} onEvent={() => {}} />);
   const b = screen.getByRole('button', { name: 'Alternar tema do diagrama' });
   expect(b.textContent).toBe('☾');
-  expect(localStorage.getItem('archlens-theme')).toBe('light');
   await userEvent.click(b);
   expect(onTheme).toHaveBeenCalledWith('dark');
   rerender(<Diagram view={view} theme="dark" onThemeChange={onTheme} onEvent={() => {}} />);
   expect(screen.getByRole('button', { name: 'Alternar tema do diagrama' }).textContent).toBe('☀');
-  expect(localStorage.getItem('archlens-theme')).toBe('dark');
 });
 
 it('o diagrama não mostra mais a faixa de avisos', () => {
