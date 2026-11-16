@@ -16,6 +16,7 @@ import { runAsk } from './ask/agent.mjs';
 import { createTelemetry, summarize } from './ask/telemetry.mjs';
 import { planRoutes } from './plan/routes.mjs';
 import { configError, LOGO_MAX } from './config.mjs';
+import { SAFE_HEADERS } from './headers.mjs';
 
 const BODY_LIMIT = 1024 * 1024;
 const QUESTION_MAX = 2000;
@@ -26,8 +27,6 @@ const TYPES = {
   '.png': 'image/png', '.ico': 'image/x-icon', '.webp': 'image/webp',
 };
 
-// Every response: no framing by another origin.
-const SAFE_HEADERS = { 'x-frame-options': 'SAMEORIGIN', 'content-security-policy': "frame-ancestors 'self'" };
 const NDJSON_HEADERS = { 'content-type': 'application/x-ndjson; charset=utf-8', 'cache-control': 'no-store', ...SAFE_HEADERS };
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '[::1]']);
 
@@ -49,6 +48,16 @@ function hostAllowed(header, configured) {
   if (LOCAL_HOSTS.has(h)) return true;
   const c = String(configured ?? '').toLowerCase();
   return !!c && (h === c || h === `[${c}]`);
+}
+
+/**
+ * What an error says to the client: `{ error, code? }`. A coded error (E_*) or an http one carries a message written
+ * for people. Anything else is unexpected and may quote paths of this machine: it goes to the server log only.
+ */
+export function clientError(e) {
+  if (e?.code || e?.status) return { error: e.message ?? String(e), ...(e.code ? { code: e.code } : {}) };
+  console.error(e);
+  return { error: 'erro interno do servidor' };
 }
 
 const httpError = (status, message, code) => Object.assign(new Error(message), { status, ...(code ? { code } : {}) });
@@ -193,7 +202,7 @@ export async function startServer({ config, staticDir, registry, provider, apply
       write(ev);
     } catch (e) {
       metrics = { ...(e.metrics ?? metrics), total: Date.now() - t0 };
-      if (e.code !== 'E_LLM_ABORT' || !ctl.signal.aborted) write({ type: 'error', error: e.message ?? String(e), ...(e.code ? { code: e.code } : {}) });
+      if (e.code !== 'E_LLM_ABORT' || !ctl.signal.aborted) write({ type: 'error', ...clientError(e) });
     }
     metrics = { ...metrics, render };
     write({ type: 'done', metrics });
@@ -225,7 +234,7 @@ export async function startServer({ config, staticDir, registry, provider, apply
     }],
     ['GET', /^\/api\/telemetry$/, async () => summarize(telemetry.recent())],
     ['POST', /^\/api\/bases\/([^/]+)\/ask$/, (req, [b], _url, res) => ask(req, res, b)],
-    ...(planOn ? planRoutes({ registry, provider, config, telemetry, applyWorker, h: { readJson, httpError, STREAMED, NDJSON_HEADERS } }) : []),
+    ...(planOn ? planRoutes({ registry, provider, config, telemetry, applyWorker, h: { readJson, httpError, clientError, STREAMED, NDJSON_HEADERS } }) : []),
     ['GET', /^\/api\/bases$/, async () => registry.list()],
     ['GET', /^\/api\/bases\/([^/]+)\/catalog$/, async (_req, [b]) => catalog(registry.get(b))],
     ['GET', /^\/api\/bases\/([^/]+)\/find$/, async (_req, [b], url) =>
@@ -297,8 +306,7 @@ export async function startServer({ config, staticDir, registry, provider, apply
       if (res.headersSent) return void res.end();
       if (e.status) return send(res, e.status, { error: e.message, ...(e.code ? { code: e.code } : {}), ...e.extra });
       if (e.code) return send(res, 400, { error: e.message, code: e.code });
-      console.error(e);
-      send(res, 500, { error: e.message ?? String(e) });
+      send(res, 500, clientError(e));
     }
   };
 

@@ -93,6 +93,17 @@ test('provider error ends the stream with error', () => withServer({
   assert.equal(evs.at(-1).type, 'done');
 }));
 
+test('erro inesperado na busca: o fluxo leva o texto genérico, sem o detalhe da máquina', async t => {
+  const logged = t.mock.method(console, 'error', () => {});
+  await withServer({ provider: scripted([new Error('EACCES: /home/alguem/.config/segredo')]) }, async url => {
+    const evs = await lines(await ask(url, Q));
+    const err = evs.find(e => e.type === 'error');
+    assert.deepEqual(err, { type: 'error', error: 'erro interno do servidor' });
+    assert.equal(evs.at(-1).type, 'done');
+  });
+  assert.ok(logged.mock.calls.some(c => /segredo/.test(String(c.arguments[0]?.message))));
+});
+
 test('conexão fechada aborta o agente', () => {
   let sig;
   const provider = {

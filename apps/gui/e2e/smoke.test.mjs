@@ -9,6 +9,7 @@ import { startServer, DIST_DIR } from '../server/index.mjs';
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 let INICIAL; // título da visão inicial (landscape), lido da própria tela
 let srv, browser, page, skip;
+const problems = []; // erros de página e de console (fora o 400 que o teste 6 provoca)
 
 before(async () => {
   try {
@@ -24,6 +25,13 @@ before(async () => {
     staticDir: DIST_DIR,
   });
   page = await browser.newPage({ viewport: { width: 1600, height: 900 } });
+  // a CSP do host vale para a página e, por herança, para o documento do diagrama: nada pode ser barrado no uso normal
+  await page.addInitScript(() => {
+    window.__csp = [];
+    addEventListener('securitypolicyviolation', (e) => window.__csp.push(`${e.violatedDirective} ${e.blockedURI}`));
+  });
+  page.on('pageerror', (e) => problems.push(String(e)));
+  page.on('console', (m) => { if (m.type() === 'error' && !/status of 400/.test(m.text())) problems.push(m.text()); });
 });
 after(async () => {
   await browser?.close();
@@ -127,5 +135,13 @@ test('GUI ponta a ponta', async (t) => {
     await page.waitForFunction((x) => document.querySelector('nav[aria-label="Trilha"]')?.textContent !== x, antes);
     await frame().locator('.node').first().waitFor();
     assert.equal(await fluxo.getAttribute('aria-pressed'), 'false');
+  });
+
+  await t.test('9. a página e o diagrama rodam sob a CSP do host sem nada barrado', async () => {
+    const r = await page.request.get(srv.url);
+    assert.match(r.headers()['content-security-policy'], /^default-src 'self'; script-src 'self' 'sha256-/);
+    assert.deepEqual(await page.evaluate(() => window.__csp), []);
+    assert.deepEqual(await page.frames().find((f) => f !== page.mainFrame()).evaluate(() => window.__csp), []);
+    assert.deepEqual(problems, []);
   });
 });

@@ -147,7 +147,7 @@ const NOTATIONS = new Set(['archimate', 'c4']);
  * `h` brings the server's helpers (readJson, httpError, streaming headers) so this file does not import app.mjs.
  */
 export function planRoutes({ registry, provider, config, telemetry, h, applyWorker = APPLY_WORKER }) {
-  const { readJson, httpError, STREAMED, NDJSON_HEADERS } = h;
+  const { readJson, httpError, clientError, STREAMED, NDJSON_HEADERS } = h;
   const read = (req, limit = BODY_MAX) => bodyOf(readJson, req, httpError, limit);
   // Replanning reads the connector on this thread: in the turn of the base, it does not cross a read in a worker.
   const replan = (b, ctx, draft) => registry.inTurn(b, () => draftFrom(ctx, draft));
@@ -195,7 +195,7 @@ export function planRoutes({ registry, provider, config, telemetry, h, applyWork
       metrics = { ...(e.metrics ?? metrics), total: Date.now() - t0 };
       if (e.code !== 'E_LLM_ABORT' || !ctl.signal.aborted) {
         // The work done so far goes back with the error.
-        write({ type: 'error', error: e.message ?? String(e), ...(e.code ? { code: e.code } : {}), draft: e.draft ?? replanned.draft, previews: e.previews ?? [],
+        write({ type: 'error', ...clientError(e), draft: e.draft ?? replanned.draft, previews: e.previews ?? [],
           ...(replanned.warning ? { warning: replanned.warning } : {}) });
       }
     }

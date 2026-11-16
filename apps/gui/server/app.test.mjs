@@ -7,6 +7,8 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { request } from 'node:http';
 import { startServer } from './app.mjs';
+import { HOST_CSP } from './headers.mjs';
+import { CLIENT_SCRIPT_HASH } from '../../../scripts/lib/render.mjs';
 import { createBaseRegistry } from './bases.mjs';
 import { runTool } from './ask/tools.mjs';
 import { openStore, resolveBase } from '../../../scripts/lib/store/index.mjs';
@@ -344,13 +346,48 @@ test('Host: com host configurado aceita esse nome; com 0.0.0.0 aceita qualquer u
   } finally { await b.close(); }
 });
 
-test('toda resposta proíbe o enquadramento por outra origem', () => withServer(async url => {
-  for (const r of [await fetch(`${url}/api/bases`), await fetch(`${url}/api/nada`), await rawGet(`${url}/api/bases`, 'evil.example')]) {
+test('toda resposta traz a CSP do host e os cabeçalhos de segurança', () => withServer(async url => {
+  assert.equal(HOST_CSP, `default-src 'self'; script-src 'self' '${CLIENT_SCRIPT_HASH}'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'`);
+  const want = {
+    'content-security-policy': HOST_CSP,
+    'x-frame-options': 'SAMEORIGIN',
+    'x-content-type-options': 'nosniff',
+    'referrer-policy': 'no-referrer',
+    'permissions-policy': 'camera=(), microphone=(), geolocation=(), payment=(), usb=()',
+    'cross-origin-opener-policy': 'same-origin',
+  };
+  const view = await post(`${url}/api/bases/telemedicina/view`, { spec: LAND });
+  for (const r of [await fetch(`${url}/api/bases`), await fetch(`${url}/api/info`), await fetch(`${url}/api/nada`), view, await rawGet(`${url}/api/bases`, 'evil.example')]) {
     const h = r.headers instanceof Headers ? k => r.headers.get(k) : k => r.headers[k];
-    assert.equal(h('x-frame-options'), 'SAMEORIGIN');
-    assert.equal(h('content-security-policy'), "frame-ancestors 'self'");
+    for (const [k, v] of Object.entries(want)) assert.equal(h(k), v, k);
   }
 }));
+
+test('arquivos estáticos (a página da GUI) também trazem a CSP do host', async () => {
+  const dist = tmp();
+  writeFileSync(join(dist, 'index.html'), '<!doctype html><title>x</title>');
+  const srv = await startServer({ config: config(), staticDir: dist });
+  try {
+    const r = await fetch(`${srv.url}/`);
+    assert.equal(r.status, 200);
+    assert.equal(r.headers.get('content-security-policy'), HOST_CSP);
+    assert.equal(r.headers.get('x-content-type-options'), 'nosniff');
+  } finally { await srv.close(); }
+});
+
+test('erro inesperado responde texto genérico: o detalhe (caminhos da máquina) fica só no log', async (t) => {
+  const registry = createBaseRegistry(config());
+  registry.list = () => { throw new Error('ENOENT: /home/alguem/segredo.txt não existe'); };
+  const logged = t.mock.method(console, 'error', () => {});
+  const srv = await startServer({ config: config(), registry });
+  try {
+    const r = await fetch(`${srv.url}/api/bases`);
+    assert.equal(r.status, 500);
+    assert.deepEqual(await r.json(), { error: 'erro interno do servidor' });
+    assert.equal(logged.mock.callCount(), 1);
+    assert.match(String(logged.mock.calls[0].arguments[0]?.message), /segredo\.txt/);
+  } finally { await srv.close(); }
+});
 
 test('catálogo, busca e cartão trazem typeLabel e c4Label', () => withServer(async url => {
   const c = await (await fetch(`${url}/api/bases/telemedicina/catalog`)).json();

@@ -230,11 +230,11 @@ async function cloneInto(url, ref, tmp, opts) {
   });
   const sha = ref && /^[0-9a-f]{40}$/i.test(ref);
   const r = await run(['clone', '-q', '--depth', '1', ...(ref && !sha ? ['--branch', ref] : []), '--', url, dir], tmp);
-  if (r.code !== 0) throw repoError(`não foi possível clonar ${normalizeRepoUrl(url)}: ${lastLine(r.stderr)}`);
+  if (r.code !== 0) throw repoError(`não foi possível clonar ${normalizeRepoUrl(url)}: ${hidePaths(lastLine(r.stderr))}`);
   if (sha) {
     const f = await run(['fetch', '-q', '--depth', '1', 'origin', ref], dir);
     const c = f.code === 0 ? await run(['checkout', '-q', 'FETCH_HEAD'], dir) : f;
-    if (c.code !== 0) throw repoError(`não foi possível obter o commit ${ref.slice(0, 7)} de ${normalizeRepoUrl(url)}: ${lastLine(c.stderr)}`);
+    if (c.code !== 0) throw repoError(`não foi possível obter o commit ${ref.slice(0, 7)} de ${normalizeRepoUrl(url)}: ${hidePaths(lastLine(c.stderr))}`);
   }
   if (await sizeOf(dir) > maxMb * 1024 * 1024) throw repoError(`o repositório passou de ${maxMb} MB`);
   return dir;
