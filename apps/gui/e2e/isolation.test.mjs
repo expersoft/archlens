@@ -81,6 +81,11 @@ test('isolamento do diagrama: um script dentro do iframe não alcança o host', 
 test('diagrama isolado: nada de uso se perde', async (t) => {
   if (skip) return t.skip(skip);
   const ctx = await browser.newContext({ viewport: { width: 1600, height: 900 }, acceptDownloads: true, colorScheme: 'light' });
+  // roda em todo frame, inclusive no documento do diagrama: registra o que a CSP barrar
+  await ctx.addInitScript(() => {
+    window.__csp = [];
+    addEventListener('securitypolicyviolation', (e) => window.__csp.push(`${e.violatedDirective} ${e.blockedURI}`));
+  });
   const p = await ctx.newPage();
   const errors = [];
   p.on('pageerror', (e) => errors.push(String(e)));
@@ -201,8 +206,22 @@ test('diagrama isolado: nada de uso se perde', async (t) => {
     await p.keyboard.press('Escape');
   });
 
-  await t.test('nenhum erro no console durante o uso', () => {
+  await t.test('nenhum erro no console e nenhuma violação de CSP durante o uso', async () => {
     assert.deepEqual(errors, []);
+    assert.deepEqual(await p.frames().find((f) => f !== p.mainFrame()).evaluate(() => window.__csp), []);
+    assert.deepEqual(await p.evaluate(() => window.__csp), []);
+  });
+
+  await t.test('a CSP do documento do diagrama barra um script injetado', async () => {
+    const got = await p.frames().find((f) => f !== p.mainFrame()).evaluate(async () => {
+      const s = document.createElement('script');
+      s.textContent = 'window.__injetado = 1';
+      document.body.appendChild(s);
+      await new Promise((ok) => setTimeout(ok, 200)); // o evento de violação chega numa tarefa à parte
+      return { injetado: window.__injetado ?? null, csp: window.__csp };
+    });
+    assert.equal(got.injetado, null);
+    assert.ok(got.csp.some((v) => v.startsWith('script-src')), JSON.stringify(got.csp));
   });
 });
 

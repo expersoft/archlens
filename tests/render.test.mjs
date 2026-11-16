@@ -373,7 +373,8 @@ test('embed off is byte-identical to before', async () => {
   const html = renderHtml({ title: 'Loja Mini', views });
   assert.equal(html, renderHtml({ title: 'Loja Mini', views, embed: false }));
   // snapshot taken before embed existed; the interaction script itself had to grow, so compare the page without it
-  const noJs = h => h.replace(/<script>[\s\S]*<\/script>\n/, '<script></script>\n');
+  // (and without the script's hash in the CSP, which changes with it)
+  const noJs = h => h.replace(/<script>[\s\S]*<\/script>\n/, '<script></script>\n').replace(/'sha256-[^']*'/, "'sha256-'");
   const before = readFileSync(new URL('./fixtures/render-page.html', import.meta.url), 'utf8');
   assert.equal(noJs(html), noJs(before));
   assert.ok(!html.includes('"embed"'), 'no embed key in the data when off');

@@ -1,4 +1,5 @@
 // Renderer: laid-out views → one self-contained, animated HTML page (inline SVG + CSS + JS, no network).
+import { createHash } from 'node:crypto';
 import { ELEMENT_TYPES, LAYER_LABELS, RELATIONSHIP_TYPES } from './registry.mjs';
 import { MIN_SCREEN_PX, frameChipWidth } from './layout.mjs';
 import { ICONS } from './icons.mjs';
@@ -380,6 +381,7 @@ export function renderHtml({ title, subtitle = '', views, preview, embed = false
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="${DIAGRAM_CSP}">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(title)}</title>
 <style>${CSS}</style>${embed ? '\n<style>:root {--bar-h:0px}</style>' : ''}
@@ -1192,3 +1194,9 @@ const JS = String.raw`
   window.archlens = { show, fit, focusNode, trace, play, stop, present, preview, pinCard, data: DATA, get current() { return current; } };
 })();
 `;
+
+// Second barrier behind the escaping above: only the client script of this file runs (by hash, it is the same in every
+// page of a version) and the page never reaches the network. The GUI server puts the same hash in its own policy,
+// because the embedded page (iframe srcdoc) inherits the policy of the page that embeds it.
+export const CLIENT_SCRIPT_HASH = `sha256-${createHash('sha256').update(JS).digest('base64')}`;
+export const DIAGRAM_CSP = `default-src 'none'; script-src '${CLIENT_SCRIPT_HASH}'; style-src 'unsafe-inline'; img-src data: blob:; base-uri 'none'; form-action 'none'`;
