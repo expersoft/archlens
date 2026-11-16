@@ -280,7 +280,8 @@ bin/archlens serve architecture --llm anthropic --plan
   "plan": {
     "maxRounds": 40, "timeoutMs": 600000, "maxTokens": 400000,
     "gitTokenEnv": "GITHUB_TOKEN", "gitTokenHosts": ["github.com"], "gitUser": "x-access-token",
-    "cloneTimeoutMs": 120000, "cloneMaxMb": 200, "allowFileUrls": false
+    "cloneTimeoutMs": 120000, "cloneMaxMb": 200, "allowFileUrls": false,
+    "gitHosts": ["github.com", "git.interno.empresa.com.br"]
   }
 }
 ```
@@ -295,6 +296,11 @@ planejamento é recusado com mensagem clara; use a skill `archlens-plan`.
   ref. O servidor faz um clone raso e o agente lê **só dentro dele** (`scan_repo`, `read_file`, `grep`), recusando
   `.env*`, chaves, `.git/` e links que saem do clone. **Um repositório por rascunho:** aplique ou descarte o atual
   antes de anexar outro. `cloneTimeoutMs` e `cloneMaxMb` limitam o clone.
+- **De onde o servidor clona:** antes de clonar, o servidor resolve o host e **recusa endereços de rede interna**
+  (`localhost`, redes privadas, link-local como `169.254.169.254`), para não servir de ponte para a rede dele.
+  `gitHosts` (opcional) é a lista de hosts permitidos: com ela, **só** esses hosts são clonados, e um host listado
+  vale mesmo em rede interna (um Git local, por exemplo). Os hosts de `gitTokenHosts` também valem em rede interna, e
+  com `gitHosts` definido têm de estar nela.
 - **Token do git (repositório privado):** `gitTokenEnv` é o **nome** da variável (ambiente ou `.env`, nunca o valor no
   JSON) e **`gitTokenHosts` é obrigatório junto com ele**: o token só é entregue aos hosts listados (`gitUser`
   é o usuário, padrão `x-access-token`), não importa que URL alguém anexe, e redirecionamentos do git são desligados.

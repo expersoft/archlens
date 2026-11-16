@@ -33,7 +33,12 @@ Detalhes: `portable/archlens-ask/README.md` e `docs/superpowers/specs/2026-10-25
 1. **Avalie o impacto na GUI:** a ponte com o iframe (`embed`), a forma de `viewData` e do cartão do elemento, o catálogo
    e as ações de navegação.
 2. **Rode `npm run gui:test`** antes de concluir e resolva o que ele apontar.
-3. **Prompts da GUI:** mudanças em `references/views.md` ou na skill `archlens-query` (busca em texto) e na `archlens-plan`, na
+3. **Segurança do diagrama:** o diagrama roda num iframe sem origem e só conversa com a GUI pela ponte (`postMessage`);
+   não volte a dar `allow-same-origin` ao iframe nem leia o iframe pelo host. O script de `render.mjs` é liberado por
+   hash na CSP do documento e na do servidor: nada de manipulador em atributo (`on*=`) nem de recurso externo no HTML
+   gerado. Mudou o cliente do diagrama ou o servidor? Rode também `npm --prefix apps/gui run test:e2e`. O porquê está
+   em `docs/modelo-de-ameacas.md`.
+4. **Prompts da GUI:** mudanças em `references/views.md` ou na skill `archlens-query` (busca em texto) e na `archlens-plan`, na
    `archlens-apply` ou em `references/` (planejamento) pedem `npm --prefix apps/gui run prompt` (o `gui:test` falha com
    prompt desatualizado).
 

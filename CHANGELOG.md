@@ -7,6 +7,11 @@ versões seguem [SemVer](https://semver.org/lang/pt-BR/).
 
 ### Adicionado
 
+- **Segurança da GUI e do HTML gerado (P07).** O diagrama da GUI roda isolado da página (iframe sem origem): um
+  script dentro dele não lê a interface, o armazenamento nem a API. O HTML gerado por `render` e `build` declara uma
+  política de conteúdo (CSP) em que só o script do próprio archlens roda e a página não fala com a rede; o servidor da
+  GUI envia CSP e cabeçalhos de segurança em toda resposta. Nenhum uso mudou: tema, exportações, apresentação e
+  atalhos seguem iguais. Novo [`SECURITY.md`](SECURITY.md) e [modelo de ameaças](docs/modelo-de-ameacas.md).
 - **GUI: Agrupar na barra, notação estável, espera por visão e etapas do Aplicar.** O diagrama ganha **Agrupar** na
   barra. A notação fica estável: o menu, o clique duplo e o Explorador respeitam a notação da visão, e o clique duplo
   em ArchiMate abre camadas aninhadas. Enquanto uma visão carrega, a barra e a linha de status mostram a espera (com
@@ -60,6 +65,10 @@ versões seguem [SemVer](https://semver.org/lang/pt-BR/).
 
 ### Mudado
 
+- **GUI, mudança de comportamento no clone:** o servidor recusa clonar de endereços de rede interna (`localhost`,
+  redes privadas, link-local). Para clonar de um Git interno, declare o host em `plan.gitHosts`; os hosts que já estão
+  em `plan.gitTokenHosts` continuam valendo. Com `plan.gitHosts` definido, só os hosts listados são clonados.
+- **GUI: erro inesperado do servidor** responde "erro interno do servidor"; o detalhe fica no log do servidor.
 - **`archlens check`:** a mensagem de documento desatualizado agora manda rodar `archlens build` e cita a documentação de
   um nó entre as causas.
 - **Núcleo:** aplicar, documentar e construir os diagramas viraram funções do núcleo (`scripts/lib/apply-flow.mjs` e

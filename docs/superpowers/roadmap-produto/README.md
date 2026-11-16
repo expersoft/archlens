@@ -273,6 +273,8 @@ linha de manutenção das versões **0.x**. Tudo que entra em `develop-v2` tem d
 **Ordem sugerida.**
 
 1. **Fase 0, em `develop-v2`:** P01, depois P07 e a parte de medição do P05, com o release automatizado do P14.
+   *Andamento (2026-11-16):* P01 feito (PR #40) e P07 feito (spec `specs/2026-11-16-hardening-da-gui-design.md`).
+   Faltam a medição do P05 e o P14.
 2. **Abertura da v1:** P00 (branch, forward-merge, política).
 3. **Fase 1, fundação da v1:** P02 → P04 → P03.
 4. **Fase 2, servidor central:** P06 → P17 → P08, com P09 em seguida.
