@@ -58,7 +58,7 @@ test('HTML autônomo em file://: todas as funções com a CSP ligada', async (t)
     await p.locator('.node').first().hover();
     await p.locator('.hovercard').waitFor();
     await p.locator('.node').first().click();
-    assert.notEqual((await p.locator('.drawer-body h2').first().innerText()).trim(), '');
+    assert.notEqual((await p.locator('.drawer-body h2').first().textContent()).trim(), '');
     await p.keyboard.press('Escape');
   });
 
