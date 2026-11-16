@@ -15,7 +15,7 @@ const planFlip = vi.mocked(api.planFlip);
 const fromFrame = async (c: HTMLElement, data: Record<string, unknown>, until: () => void) => {
   await waitFor(() => {
     const frame = c.querySelector('iframe')!;
-    window.dispatchEvent(new MessageEvent('message', { data: { source: 'archlens', ...data }, source: frame.contentWindow }));
+    window.dispatchEvent(new MessageEvent('message', { data: { source: 'archlens', ...data }, source: frame.contentWindow, origin: 'null' }));
     until();
   });
 };
@@ -115,7 +115,7 @@ describe('PlanPreview', () => {
     // The frame reports its state; retried until the host has attached its listener to the loaded frame.
     await waitFor(() => {
       const frame = container.querySelector('iframe')!;
-      window.dispatchEvent(new MessageEvent('message', { data: { source: 'archlens', type: 'state', flowing: false, labels: true, legend: false, matrix: false }, source: frame.contentWindow }));
+      window.dispatchEvent(new MessageEvent('message', { data: { source: 'archlens', type: 'state', flowing: false, labels: true, legend: false, matrix: false }, source: frame.contentWindow, origin: 'null' }));
       expect(labels.getAttribute('aria-pressed')).toBe('true');
     });
     await u.click(screen.getByRole('button', { name: 'Alternar tema do diagrama' }));
@@ -210,7 +210,7 @@ describe('PlanPreview', () => {
   const html1 = result({ views: [{ key: 'delta', title: 'O que muda', html: '<p>v1</p>', viewData: { nodes: { b: { name: 'Mudou' } } }, kind: 'change', spec }] });
   const html2 = result({ views: [{ key: 'delta', title: 'O que muda', html: '<p>v2</p>', viewData: { nodes: { b: { name: 'Mudou' } } }, kind: 'change', spec }] });
   const emit = (c: HTMLElement, data: Record<string, unknown>) =>
-    act(() => { window.dispatchEvent(new MessageEvent('message', { data: { source: 'archlens', ...data }, source: c.querySelector('iframe')!.contentWindow })); });
+    act(() => { window.dispatchEvent(new MessageEvent('message', { data: { source: 'archlens', ...data }, source: c.querySelector('iframe')!.contentWindow, origin: 'null' })); });
   const mountSelected = async (onSelect: Mock<(id: string | null) => void>) => {
     planPreview.mockResolvedValue(html1);
     const r = render(<PlanPreview base="b" draft={withDelta} previews={[]} onSelect={onSelect} />);

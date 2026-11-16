@@ -3,10 +3,14 @@
 // `frame.evaluate` faz o papel do script injetado: roda no contexto do documento do diagrama.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { startServer, DIST_DIR } from '../server/index.mjs';
+import { scripted } from '../server/ask/scripted.mjs';
+import { openStore, resolveBase } from '../../../scripts/lib/store/index.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 let srv, browser, page, skip;
@@ -87,9 +91,9 @@ test('diagrama isolado: nada de uso se perde', async (t) => {
   const open = async () => { await p.goto(srv.url); await frame().locator('[data-node="tele"]').waitFor(); };
   t.after(() => ctx.close());
 
-  await t.test('o iframe está em sandbox sem allow-same-origin', async () => {
+  await t.test('o iframe está em sandbox sem allow-same-origin nem allow-modals', async () => {
     await open();
-    assert.equal(await p.locator('iframe[title="Diagrama"]').getAttribute('sandbox'), 'allow-scripts allow-downloads allow-modals');
+    assert.equal(await p.locator('iframe[title="Diagrama"]').getAttribute('sandbox'), 'allow-scripts allow-downloads');
     assert.equal(await p.evaluate(() => document.querySelector('iframe[title="Diagrama"]').contentDocument), null);
   });
 
@@ -200,4 +204,45 @@ test('diagrama isolado: nada de uso se perde', async (t) => {
   await t.test('nenhum erro no console durante o uso', () => {
     assert.deepEqual(errors, []);
   });
+});
+
+// A janela de documentação é da GUI (fora do iframe): o sandbox do diagrama, sem allow-modals, não a afeta.
+test('diagrama isolado: a janela de documentação abre, edita, pede confirmação ao descartar e confirma', async (t) => {
+  if (skip) return t.skip(skip);
+  const dir = join(mkdtempSync(join(tmpdir(), 'archlens-e2e-doc-')), 'architecture');
+  execFileSync(process.execPath, [resolve(ROOT, 'scripts/archlens.mjs'), 'init', dir, '--store', 'markdown', '--name', 'Doc'], { encoding: 'utf8' });
+  const store = openStore(resolveBase(dir));
+  store.apply([
+    { op: 'upsertElement', element: { id: 's1', type: 'application-component', name: 'Sistema Um', c4: { kind: 'softwareSystem' } } },
+    { op: 'upsertElement', element: { id: 's2', type: 'application-component', name: 'Sistema Dois', c4: { kind: 'softwareSystem' } } },
+    { op: 'upsertRelationship', relationship: { id: 's1-s2', from: 's1', to: 's2', type: 'serving' } },
+    { op: 'putDoc', id: 's1', text: '## Visão geral\n\nTexto original do nó.' },
+  ], { baseVersion: store.version() });
+  const own = await startServer({
+    config: { port: 0, host: '127.0.0.1', bases: [{ id: 'doc', path: dir }], llm: { provider: 'anthropic' }, plan: { maxRounds: 8, timeoutMs: 30000, maxTokens: 100000 } },
+    staticDir: DIST_DIR, provider: scripted([]),
+  });
+  const p = await browser.newPage({ viewport: { width: 1600, height: 900 } });
+  t.after(async () => { await p.close(); await own.close(); });
+  await p.goto(own.url);
+  await p.frameLocator('iframe[title="Diagrama"]').locator('[data-node="s1"]').click();
+  await p.getByText('Texto original do nó.').first().waitFor();
+
+  await p.getByRole('button', { name: 'Editar documentação' }).click();
+  await p.locator('[data-card="doc"]').getByRole('button', { name: 'Tela cheia' }).click();
+  const win = p.getByRole('dialog', { name: /Documentação · Sistema Um/ });
+  await win.waitFor();
+  const area = win.getByRole('textbox', { name: 'Documentação' });
+  await area.fill('## Visão geral\n\nTexto editado na janela P07.');
+
+  // descartar com alteração: o confirm nativo é da página do host e continua aparecendo
+  let asked = '';
+  p.once('dialog', (d) => { asked = d.message(); void d.dismiss(); });
+  await win.getByRole('button', { name: 'Cancelar' }).click();
+  assert.notEqual(asked, '', 'descartar com alteração pede confirmação');
+  await win.waitFor(); // recusado: a janela continua aberta com o texto
+
+  await win.getByRole('button', { name: 'Confirmar' }).click();
+  await win.waitFor({ state: 'detached' });
+  await p.getByText('Texto editado na janela P07.').first().waitFor();
 });

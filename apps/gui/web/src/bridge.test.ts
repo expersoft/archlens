@@ -6,7 +6,7 @@ function frame() {
   document.body.appendChild(f);
   return f;
 }
-const ev = (source: unknown, data: unknown) => ({ source, data }) as unknown as MessageEvent;
+const ev = (source: unknown, data: unknown, origin = 'null') => ({ source, data, origin }) as unknown as MessageEvent;
 
 describe('parseMessage', () => {
   it('aceita select vindo do iframe atual', () => {
@@ -38,6 +38,19 @@ describe('parseMessage', () => {
     expect(p({ type: 'theme', theme: 'roxo' })).toBeNull();
     expect(p({ type: 'state', flowing: true })).toEqual({ type: 'state', flowing: true, labels: false, legend: false, matrix: false });
     expect(p({ type: 'nada' })).toBeNull();
+  });
+  it('recusa mensagem com origem diferente de null', () => {
+    const f = frame();
+    expect(parseMessage(ev(f.contentWindow, { source: 'archlens', type: 'ready' }, 'http://localhost:5173'), f)).toBeNull();
+    expect(parseMessage(ev(f.contentWindow, { source: 'archlens', type: 'ready' }, 'null'), f)).toEqual({ type: 'ready' });
+  });
+  it('recusa id acima de 500 caracteres', () => {
+    const f = frame();
+    const p = (d: object) => parseMessage(ev(f.contentWindow, { source: 'archlens', ...d }), f);
+    expect(p({ type: 'select', id: 'a'.repeat(501) })).toBeNull();
+    expect(p({ type: 'expand', id: 'a'.repeat(501) })).toBeNull();
+    expect(p({ type: 'context', id: 'a'.repeat(501), x: 1, y: 1 })).toBeNull();
+    expect(p({ type: 'context', id: 'a', x: Infinity, y: NaN })).toEqual({ type: 'context', id: 'a', x: 0, y: 0 });
   });
   it('key: só Escape e os atalhos da GUI passam', () => {
     const f = frame();

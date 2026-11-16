@@ -55,7 +55,7 @@ async function boot() {
   await new Promise((res) => setTimeout(res, 50)); // deixa o srcDoc do jsdom terminar de carregar
   const frame = r.container.querySelector('iframe')!;
   const post = (data: Record<string, unknown>) => act(() => {
-    window.dispatchEvent(new MessageEvent('message', { data: { source: 'archlens', ...data }, source: frame.contentWindow }));
+    window.dispatchEvent(new MessageEvent('message', { data: { source: 'archlens', ...data }, source: frame.contentWindow, origin: 'null' }));
   });
   return { post };
 }
@@ -112,7 +112,7 @@ describe('App, editar o nó no Navegar', () => {
     await screen.findByRole('navigation', { name: 'Trilha' });
     await new Promise((res) => setTimeout(res, 50));
     const frame = document.querySelector('iframe')!;
-    act(() => { window.dispatchEvent(new MessageEvent('message', { data: { source: 'archlens', type: 'select', id: 'A' }, source: frame.contentWindow })); });
+    act(() => { window.dispatchEvent(new MessageEvent('message', { data: { source: 'archlens', type: 'select', id: 'A' }, source: frame.contentWindow, origin: 'null' })); });
     fireEvent.click(await editBtn('propriedades'));
     expect((screen.getByLabelText('Valor de dono') as HTMLInputElement).value).toBe('rascunho');
     fireEvent.change(screen.getByLabelText('Valor de dono'), { target: { value: 'novo' } });
@@ -156,7 +156,7 @@ describe('App, editar o nó no Navegar', () => {
     await screen.findByRole('navigation', { name: 'Trilha' });
     await new Promise((res) => setTimeout(res, 50));
     const frame = document.querySelector('iframe')!;
-    act(() => { window.dispatchEvent(new MessageEvent('message', { data: { source: 'archlens', type: 'select', id: 'A' }, source: frame.contentWindow })); });
+    act(() => { window.dispatchEvent(new MessageEvent('message', { data: { source: 'archlens', type: 'select', id: 'A' }, source: frame.contentWindow, origin: 'null' })); });
     const b = await editBtn('propriedades');
     expect(b.disabled).toBe(true);
     expect(b.title).toBe('Aguarde o chat terminar para editar');
@@ -252,7 +252,7 @@ describe('App, editar o nó no Navegar', () => {
     const frame = document.querySelector('iframe')!;
     const sent = vi.spyOn(frame.contentWindow!, 'postMessage');
     const page = (data: Record<string, unknown>) => act(() => {
-      window.dispatchEvent(new MessageEvent('message', { data: { source: 'archlens', ...data }, source: frame.contentWindow }));
+      window.dispatchEvent(new MessageEvent('message', { data: { source: 'archlens', ...data }, source: frame.contentWindow, origin: 'null' }));
     });
     page({ type: 'select', id: null }); // Esc no diagrama durante a espera
     page({ type: 'select', id: null });
@@ -295,7 +295,7 @@ describe('App, editar o nó no Navegar', () => {
     await screen.findByRole('navigation', { name: 'Trilha' });
     await new Promise((res) => setTimeout(res, 50));
     const frame = document.querySelector('iframe')!;
-    act(() => { window.dispatchEvent(new MessageEvent('message', { data: { source: 'archlens', type: 'select', id: 'A' }, source: frame.contentWindow })); });
+    act(() => { window.dispatchEvent(new MessageEvent('message', { data: { source: 'archlens', type: 'select', id: 'A' }, source: frame.contentWindow, origin: 'null' })); });
     const b = await editBtn('propriedades');
     expect(b.disabled).toBe(true);
     expect(b.title).toBe(UNSAVED);
@@ -365,7 +365,7 @@ describe('App, editar o nó no Navegar', () => {
     await screen.findByRole('navigation', { name: 'Trilha' });
     await new Promise((res) => setTimeout(res, 50));
     const frame = document.querySelector('iframe')!;
-    act(() => { window.dispatchEvent(new MessageEvent('message', { data: { source: 'archlens', type: 'select', id: 'A' }, source: frame.contentWindow })); });
+    act(() => { window.dispatchEvent(new MessageEvent('message', { data: { source: 'archlens', type: 'select', id: 'A' }, source: frame.contentWindow, origin: 'null' })); });
     await editDono('novo');
     fireEvent.click(confirmBtn());
     await waitFor(() => expect(api.planEdit).toHaveBeenCalled());
@@ -494,7 +494,7 @@ describe('App, editar o nó no Navegar', () => {
     await screen.findByRole('navigation', { name: 'Trilha' });
     await new Promise((res) => setTimeout(res, 50));
     const frame = document.querySelector('iframe')!;
-    act(() => { window.dispatchEvent(new MessageEvent('message', { data: { source: 'archlens', type: 'select', id: 'A' }, source: frame.contentWindow })); });
+    act(() => { window.dispatchEvent(new MessageEvent('message', { data: { source: 'archlens', type: 'select', id: 'A' }, source: frame.contentWindow, origin: 'null' })); });
     fireEvent.click(await editBtn('documentação'));
     expect((screen.getByLabelText('Documentação') as HTMLTextAreaElement).value).toBe('rascunho');
     fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
@@ -582,7 +582,7 @@ describe('App, editar o nó no Navegar', () => {
     await screen.findByRole('navigation', { name: 'Trilha' });
     await new Promise((res) => setTimeout(res, 50));
     const frame = document.querySelector('iframe')!;
-    act(() => { window.dispatchEvent(new MessageEvent('message', { data: { source: 'archlens', type: 'select', id: 'A' }, source: frame.contentWindow })); });
+    act(() => { window.dispatchEvent(new MessageEvent('message', { data: { source: 'archlens', type: 'select', id: 'A' }, source: frame.contentWindow, origin: 'null' })); });
     fireEvent.click(await editBtn('documentação'));
     fireEvent.change(screen.getByLabelText('Documentação'), { target: { value: 'meu texto' } });
     vi.mocked(api.planElement).mockRejectedValue(new Error('falhou'));

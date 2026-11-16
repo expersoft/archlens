@@ -689,6 +689,8 @@ const JS = String.raw`
   const systemTheme = () => { try { return matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'; } catch { return 'light'; } };
   root.dataset.theme = root.dataset.theme === 'dark' || root.dataset.theme === 'light' ? root.dataset.theme : savedTheme() || systemTheme();
   const EMBED = !!DATA.embed; // inside the GUI iframe: no toolbar/drawer, talks to the parent via postMessage
+  // Target '*' on purpose: this page does not know who embeds it. Only the GUI can (frame-ancestors 'self'), and the
+  // messages carry node ids, theme, keys and toolbar state, nothing else.
   const post = m => { try { window.parent.postMessage({ source: 'archlens', ...m }, '*'); } catch {} };
   const tb = s => $(s) || { classList: { toggle() {}, remove() {}, add() {} }, addEventListener() {} }; // toolbar bits are absent when embedded
   const toggleTheme = () => { root.dataset.theme = root.dataset.theme === 'dark' ? 'light' : 'dark'; try { localStorage.setItem('archlens-theme', root.dataset.theme); } catch {} if (EMBED) post({ type: 'theme', theme: root.dataset.theme }); };

@@ -27,7 +27,7 @@ it('repete no window do host os atalhos da GUI e o Escape que o diagrama manda p
   const l = (e: KeyboardEvent) => got.push(e);
   window.addEventListener('keydown', l);
   const post = (data: Record<string, unknown>) => act(() => {
-    window.dispatchEvent(new MessageEvent('message', { data: { source: 'archlens', type: 'key', ...data }, source: frame.contentWindow }));
+    window.dispatchEvent(new MessageEvent('message', { data: { source: 'archlens', type: 'key', ...data }, source: frame.contentWindow, origin: 'null' }));
   });
   post({ code: 'KeyB', key: '∫', ctrlKey: true, altKey: true });
   post({ code: 'KeyA', key: 'a', ctrlKey: true }); // não é atalho da GUI: descartado
@@ -44,7 +44,7 @@ it('o iframe não tem allow-same-origin e nasce com o tema marcado, sem recarreg
   const v = { html, alerts: [] } as unknown as ViewResult;
   const { container, rerender } = render(<Diagram view={v} theme="dark" onEvent={() => {}} />);
   const frame = container.querySelector('iframe')!;
-  expect(frame.getAttribute('sandbox')).toBe('allow-scripts allow-downloads allow-modals');
+  expect(frame.getAttribute('sandbox')).toBe('allow-scripts allow-downloads');
   expect(frame.getAttribute('srcdoc')).toContain('<html data-theme="dark" lang="pt-BR">');
   const pm = vi.spyOn(frame.contentWindow!, 'postMessage');
   rerender(<Diagram view={v} theme="light" onEvent={() => {}} />);
@@ -56,7 +56,7 @@ it('os botões de alternância voltam a desligado a cada nova visão (ready)', (
   const { container, rerender } = render(<Diagram view={view} theme="light" onEvent={() => {}} />);
   const frame = container.querySelector('iframe')!;
   const post = (data: Record<string, unknown>) => act(() => {
-    window.dispatchEvent(new MessageEvent('message', { data: { source: 'archlens', ...data }, source: frame.contentWindow }));
+    window.dispatchEvent(new MessageEvent('message', { data: { source: 'archlens', ...data }, source: frame.contentWindow, origin: 'null' }));
   });
   post({ type: 'state', flowing: true, labels: true, legend: false, matrix: false });
   const fluxo = () => screen.getByRole('button', { name: 'Fluxo' }).getAttribute('aria-pressed');

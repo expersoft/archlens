@@ -114,7 +114,7 @@ export const Diagram = forwardRef<HTMLIFrameElement, DiagramProps>(function Diag
       {busy && <div className="busy" aria-hidden="true" />}
       {/* Sem allow-same-origin: o documento do diagrama vem do conteúdo da base e roda sem origem. Ele não lê a
           página, o armazenamento nem a API do host; a conversa é só pela ponte (postMessage). */}
-      <iframe ref={frame} title="Diagrama" srcDoc={srcDoc} sandbox="allow-scripts allow-downloads allow-modals" allow="fullscreen" />
+      <iframe ref={frame} title="Diagrama" srcDoc={srcDoc} sandbox="allow-scripts allow-downloads" allow="fullscreen" />
     </div>
   );
 });

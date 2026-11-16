@@ -44,7 +44,7 @@ async function boot() {
   await new Promise((res) => setTimeout(res, 50)); // deixa o srcDoc do jsdom terminar de carregar
   const frame = r.container.querySelector('iframe')!;
   const post = (data: Record<string, unknown>) => act(() => {
-    window.dispatchEvent(new MessageEvent('message', { data: { source: 'archlens', ...data }, source: frame.contentWindow }));
+    window.dispatchEvent(new MessageEvent('message', { data: { source: 'archlens', ...data }, source: frame.contentWindow, origin: 'null' }));
   });
   return { frame, post };
 }
