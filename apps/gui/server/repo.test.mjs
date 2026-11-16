@@ -280,7 +280,7 @@ test('clone acima do teto de tempo mata o git antes de limpar', async () => {
   const before = clones();
   const t0 = Date.now();
   try {
-    await assert.rejects(openRepo({ url: `https://127.0.0.1:${silent.port}/y.git` }, { env: {}, plan: { cloneTimeoutMs: 1000 } }), { message: 'o clone passou de 1 s' });
+    await assert.rejects(openRepo({ url: `https://127.0.0.1:${silent.port}/y.git` }, { env: {}, plan: { cloneTimeoutMs: 1000, gitHosts: ['127.0.0.1'] } }), { message: 'o clone passou de 1 s' });
     assert.ok(Date.now() - t0 < 4000);
     // the folder goes only after git has exited
     assert.deepEqual(newClones(before), []);
@@ -304,7 +304,7 @@ test('clone acima do teto de tempo', async () => {
       const out = provider.seen[1].input.results[0];
       assert.equal(out.isError, true);
       assert.equal(out.content, 'o clone passou de 2 s');
-    }, { provider, plan: { cloneTimeoutMs: 2000, allowFileUrls: true } });
+    }, { provider, plan: { cloneTimeoutMs: 2000, allowFileUrls: true, gitHosts: ['127.0.0.1'] } });
   } finally { await silent.close(); }
 });
 
@@ -329,3 +329,20 @@ test('scan_repo recusa delta que estoura o teto do rascunho', () => withBase(asy
   assert.match(r.content, /grande demais/);
   assert.equal(session.draft.delta, null);
 }));
+
+test('clone para rede interna é recusado antes de chamar o git', async () => {
+  const before = clones();
+  for (const url of ['https://169.254.169.254/latest/x.git', 'https://localhost/x.git', 'https://127.0.0.1:9/x.git', 'git@10.0.0.5:x/y.git', 'ssh://git@192.168.0.10/x/y.git', 'https://[::1]/x.git']) {
+    await assert.rejects(openRepo({ url }, { env: {}, plan: {} }),
+      { code: 'E_GUI_REPO', message: 'host de rede interna não é permitido; peça ao administrador para incluí-lo em plan.gitHosts' }, url);
+  }
+  const lookup = async () => [{ address: '140.82.112.3', family: 4 }, { address: '10.0.0.5', family: 4 }];
+  await assert.rejects(openRepo({ url: 'https://rebind.exemplo/x.git' }, { env: {}, plan: {}, lookup }), /rede interna/);
+  assert.deepEqual(newClones(before), [], 'nenhuma pasta de clone foi criada');
+});
+
+test('plan.gitHosts: só os hosts listados são clonados', async () => {
+  const lookup = async () => [{ address: '140.82.112.3', family: 4 }];
+  await assert.rejects(openRepo({ url: 'https://github.com/a/b.git' }, { env: {}, plan: { gitHosts: ['git.interno'] }, lookup }),
+    { code: 'E_GUI_REPO', message: 'host não está em plan.gitHosts: github.com' });
+});

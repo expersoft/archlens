@@ -82,6 +82,20 @@ test('config: plan com valores fora da faixa', () => {
   }
 });
 
+test('config: plan.gitHosts lista hosts e contém plan.gitTokenHosts', () => {
+  const plan = p => loadConfig({ file: write({ llm: LLM, plan: p }) }).plan;
+  assert.deepEqual(plan({ gitHosts: ['github.com', 'git.interno', '10.0.0.5'] }).gitHosts, ['github.com', 'git.interno', '10.0.0.5']);
+  assert.equal('gitHosts' in plan({}), false);
+  for (const gitHosts of [[], 'github.com', ['https://github.com'], ['GitHub.com'], ['a/b'], [''], [5]]) {
+    assert.throws(() => plan({ gitHosts }), e => e.code === 'E_GUI_CONFIG' && e.message.includes('gitHosts'), JSON.stringify(gitHosts));
+  }
+  assert.throws(() => plan({ gitTokenEnv: 'GT', gitTokenHosts: ['github.com'], gitHosts: ['git.interno'] }),
+    e => e.code === 'E_GUI_CONFIG' && e.message.includes('plan.gitTokenHosts deve estar contido em plan.gitHosts'));
+  assert.deepEqual(plan({ gitTokenEnv: 'GT', gitTokenHosts: ['github.com'], gitHosts: ['github.com', 'git.interno'] }).gitHosts, ['github.com', 'git.interno']);
+  // quem já usa gitTokenHosts e não define gitHosts segue como estava
+  assert.deepEqual(plan({ gitTokenEnv: 'GT', gitTokenHosts: ['github.com'] }).gitTokenHosts, ['github.com']);
+});
+
 test('config: plan.gitTokenHosts é obrigatório com plan.gitTokenEnv e lista hosts', () => {
   assert.throws(() => loadConfig({ file: write({ llm: LLM, plan: { gitTokenEnv: 'GT' } }) }),
     e => e.code === 'E_GUI_CONFIG' && e.message.includes('plan.gitTokenHosts é obrigatório com plan.gitTokenEnv'));

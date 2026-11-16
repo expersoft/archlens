@@ -9,6 +9,7 @@ import { tmpdir } from 'node:os';
 import { join, relative, sep, isAbsolute } from 'node:path';
 import { normalizeRepoUrl } from '../../../../scripts/lib/scan/git.mjs';
 import { cleanRepoUrl } from './draft.mjs';
+import { assertCloneHost } from './netguard.mjs';
 
 export const SECRET_FILES = ['.env', '.env.*', '*.pem', '*.key', '*.p12', '*.pfx', 'id_rsa*', 'id_ed25519*', '.npmrc', '.pypirc', '.netrc', '.git/'];
 export const READ_MAX = 200 * 1024;
@@ -257,7 +258,8 @@ async function cloneAndScan(url, ref, opts) {
 
 /**
  * The clone of `{ url, ref }`: `{ dir, commit, inv }` (inv: the scan inventory, without the clone's path). Kept for
- * 30 min under url@commit; a second call within that time reuses it. `opts`: `{ env, plan }` of the server.
+ * 30 min under url@commit; a second call within that time reuses it. `opts`: `{ env, plan }` of the server (and
+ * `lookup`, the DNS resolver, for the tests).
  */
 export async function openRepo(target, opts = {}) {
   const { url, ref } = checkRepo(target, { allowFileUrls: !!opts.plan?.allowFileUrls });
@@ -265,6 +267,9 @@ export async function openRepo(target, opts = {}) {
   const hit = entries.get(latest.get(id));
   if (hit) return hit.repo;
   if (pending.has(id)) return pending.get(id);
+  // Every clone of the GUI passes here: no clone to the server's own network (see netguard.mjs).
+  const { scheme, host } = partsOf(url);
+  if (scheme !== 'file') await assertCloneHost(host, { gitHosts: opts.plan?.gitHosts, trusted: opts.plan?.gitTokenHosts, lookup: opts.lookup });
   const p = cloneAndScan(url, ref, opts).then(({ tmp, repo }) => {
     const key = `${normalizeRepoUrl(url)}@${repo.commit}`;
     if (entries.has(key)) rmSync(tmp, { recursive: true, force: true });

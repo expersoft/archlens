@@ -69,12 +69,18 @@ function checkPlan(plan, hasLlm) {
     bad('gitTokenHosts deve ser uma lista de nomes de host (minúsculos, sem esquema), como ["github.com"]');
   }
   if (p.gitTokenEnv !== undefined && p.gitTokenHosts === undefined) throw configError('plan.gitTokenHosts é obrigatório com plan.gitTokenEnv');
+  // Clone allowlist: with it, only these hosts are cloned, and a listed host may be on the server's own network.
+  if (p.gitHosts !== undefined && !(Array.isArray(p.gitHosts) && p.gitHosts.length && p.gitHosts.every(h => typeof h === 'string' && HOSTNAME.test(h)))) {
+    bad('gitHosts deve ser uma lista de nomes de host (minúsculos, sem esquema), como ["github.com", "git.interno"]');
+  }
+  if (p.gitHosts !== undefined && (p.gitTokenHosts ?? []).some(h => !p.gitHosts.includes(h))) throw configError('plan.gitTokenHosts deve estar contido em plan.gitHosts');
   if (p.allowFileUrls !== undefined && typeof p.allowFileUrls !== 'boolean') bad('allowFileUrls deve ser verdadeiro ou falso');
   return {
     maxRounds: p.maxRounds ?? 40, timeoutMs: p.timeoutMs ?? 600000, maxTokens: p.maxTokens ?? 400000,
     ...(p.gitTokenEnv !== undefined ? { gitTokenEnv: p.gitTokenEnv, gitTokenHosts: p.gitTokenHosts } : {}),
     gitUser: p.gitUser ?? 'x-access-token', cloneTimeoutMs: p.cloneTimeoutMs ?? 120000, cloneMaxMb: p.cloneMaxMb ?? 200,
     allowFileUrls: p.allowFileUrls ?? false,
+    ...(p.gitHosts !== undefined ? { gitHosts: p.gitHosts } : {}),
   };
 }
 
