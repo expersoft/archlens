@@ -4,10 +4,10 @@ import { CLIENT_SCRIPT_HASH } from '../../../scripts/lib/render.mjs';
 /**
  * The host page's policy. The diagram arrives as an iframe srcdoc, which inherits this policy: its client script is
  * allowed by hash (the same one the diagram's own <meta> policy carries). 'unsafe-inline' is for styles only: the SVG
- * and React use style attributes, and a style runs no code.
+ * and React use style attributes, and a style runs no code. https images are allowed: a node's documentation may show them.
  */
 export const HOST_CSP = [
-  "default-src 'self'", `script-src 'self' '${CLIENT_SCRIPT_HASH}'`, "style-src 'self' 'unsafe-inline'", "img-src 'self' data: blob:",
+  "default-src 'self'", `script-src 'self' '${CLIENT_SCRIPT_HASH}'`, "style-src 'self' 'unsafe-inline'", "img-src 'self' data: blob: https:",
   "connect-src 'self'", "object-src 'none'", "base-uri 'none'", "form-action 'none'", "frame-ancestors 'self'",
 ].join('; ');
 

@@ -10,7 +10,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { startServer, DIST_DIR } from '../server/index.mjs';
 import { openStore, resolveBase } from '../../../scripts/lib/store/index.mjs';
-import { xssOps, VIEWS, DOCS } from '../../../tests/fixtures/xss/base.mjs';
+import { xssOps, VIEWS, DOCS, IMAGE } from '../../../tests/fixtures/xss/base.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const CLI = resolve(ROOT, 'scripts/archlens.mjs');
@@ -45,10 +45,14 @@ async function watched() {
     addEventListener('securitypolicyviolation', (e) => window.__csp.push(`${e.violatedDirective} ${e.blockedURI}`));
     addEventListener('message', (e) => { if (e.data && e.data.xss !== undefined) window.__msg.push(e.data.xss); });
   });
+  // the image of the documentation is answered here (a 1×1 PNG): the test never reaches the network
+  const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64');
+  const images = [];
+  await ctx.route(IMAGE, (r) => { images.push(r.request().url()); return r.fulfill({ status: 200, contentType: 'image/png', body: PNG }); });
   const page = await ctx.newPage();
   const dialogs = [];
   page.on('dialog', (d) => { dialogs.push(d.message()); void d.dismiss(); });
-  return { ctx, page, dialogs };
+  return { ctx, page, dialogs, images };
 }
 
 /** O que um documento (página ou frame) mostra de errado: tudo tem de voltar vazio. */
@@ -68,7 +72,7 @@ const CLEAN = { ran: [], csp: [], msg: [], handlers: [], jsLinks: [], frames: 0 
 
 test('cargas de XSS no HTML autônomo: nada executa em nenhuma visão', async (t) => {
   if (skip) return t.skip(skip);
-  const { ctx, page, dialogs } = await watched();
+  const { ctx, page, dialogs, images } = await watched();
   t.after(() => ctx.close());
   await page.goto(pathToFileURL(file).href);
   await page.locator('.node').first().waitFor();
@@ -101,11 +105,12 @@ test('cargas de XSS no HTML autônomo: nada executa em nenhuma visão', async (t
     });
   }
   assert.deepEqual(dialogs, []);
+  assert.ok(images.length > 0, 'a imagem da documentação carregou (a CSP permite imagens https)');
 });
 
 test('cargas de XSS na GUI: nada executa na página nem no diagrama', async (t) => {
   if (skip) return t.skip(skip);
-  const { ctx, page, dialogs } = await watched();
+  const { ctx, page, dialogs, images } = await watched();
   t.after(() => ctx.close());
   const diagram = () => page.frames().find((f) => f !== page.mainFrame());
   const frame = () => page.frameLocator('iframe[title="Diagrama"]');
@@ -168,4 +173,5 @@ test('cargas de XSS na GUI: nada executa na página nem no diagrama', async (t) 
   });
 
   assert.deepEqual(dialogs, []);
+  assert.ok(images.length > 0, 'a imagem da documentação carregou no cartão da GUI');
 });

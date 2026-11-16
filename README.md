@@ -300,7 +300,8 @@ planejamento é recusado com mensagem clara; use a skill `archlens-plan`.
   (`localhost`, redes privadas, link-local como `169.254.169.254`), para não servir de ponte para a rede dele.
   `gitHosts` (opcional) é a lista de hosts permitidos: com ela, **só** esses hosts são clonados, e um host listado
   vale mesmo em rede interna (um Git local, por exemplo). Os hosts de `gitTokenHosts` também valem em rede interna, e
-  com `gitHosts` definido têm de estar nela.
+  com `gitHosts` definido têm de estar nela. Atrás de um proxy HTTPS (`HTTPS_PROXY`), um nome que o servidor não resolve é
+  deixado para o proxy; para restringir os destinos nesse caso, use `gitHosts`.
 - **Token do git (repositório privado):** `gitTokenEnv` é o **nome** da variável (ambiente ou `.env`, nunca o valor no
   JSON) e **`gitTokenHosts` é obrigatório junto com ele**: o token só é entregue aos hosts listados (`gitUser`
   é o usuário, padrão `x-access-token`), não importa que URL alguém anexe, e redirecionamentos do git são desligados.

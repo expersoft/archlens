@@ -8,6 +8,9 @@ const hit = n => `window.__xss=(window.__xss||[]).concat(${n});try{parent.postMe
 /** One text that breaks out of the usual contexts: tag body, attribute, title, style, script, svg. */
 export const payload = n => `X${n}"'><img src=x onerror="${hit(n)}"><svg onload="${hit(n)}"></svg></title></style></script><script>${hit(n)}</script><iframe srcdoc="<script>${hit(n)}</script>"></iframe><a href="javascript:${hit(n)}">l</a>`;
 
+/** A real image address, as people put in a node's page. The test answers it itself: nothing leaves the machine. */
+export const IMAGE = 'https://imagens.archlens.test/arquitetura.png';
+
 /** Markdown of a node's page: raw html, a javascript: link, an image with a handler, a link reference. */
 export const markdown = n => [
   `## Visão geral ${payload(n)}`,
@@ -19,6 +22,9 @@ export const markdown = n => [
   `<details open ontoggle="${hit(n + 5)}"><summary>s</summary></details>`,
   '',
   `[ref]: javascript:${hit(n + 6)}`,
+  '',
+  // a legitimate image of a node's page: it must load without the policy acting (https images are allowed)
+  `![diagrama](${IMAGE})`,
 ].join('\n');
 
 let n = 0;

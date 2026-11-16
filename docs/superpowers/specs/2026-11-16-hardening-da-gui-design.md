@@ -163,3 +163,17 @@ host com a base de cargas; (c) clone; (d) injeção de prompt; (e) cabeçalhos e
 - **Documentação:** `README.md` da GUI e `docs/GUIA.md` ganham `plan.gitHosts`; o `CHANGELOG.md` registra a mudança
   de comportamento do clone (rede interna recusada por padrão).
 - **Snapshots:** o HTML gerado ganha a linha da CSP; snapshots em `tests/fixtures/` são atualizados uma vez.
+
+## Emendas depois da revisão final (2026-11-16)
+
+A revisão independente do diff apontou três pontos; as decisões abaixo valem sobre o texto acima.
+
+- **Imagens (decisões 4 e 5).** As duas políticas ganham `https:` em `img-src`. Sem isso, imagens da documentação de um
+  nó deixavam de aparecer, o que contraria "nenhum uso se perde". Imagem por `http` ou por caminho relativo não
+  carrega; fica registrado no `CHANGELOG`. *(decisão de quem executou; o dono pode preferir desligar imagens)*
+- **Erros (decisão 9).** Só erros do archlens (`E_*`) e os http levam a própria mensagem ao cliente, com caminho
+  absoluto reduzido ao nome do arquivo (`apps/gui/server/redact.mjs`). Erros do sistema (`ENOENT`, `EACCES`) contam
+  como inesperados. O `scrub` do log **não** foi feito: `console.error` segue cru.
+- **Clone atrás de proxy (decisão 7).** Com proxy HTTPS configurado, um nome que o servidor não resolve é deixado para
+  o proxy, para não quebrar redes em que só o proxy resolve nomes externos. *(decisão de quem executou)*
+

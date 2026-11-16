@@ -347,7 +347,7 @@ test('Host: com host configurado aceita esse nome; com 0.0.0.0 aceita qualquer u
 });
 
 test('toda resposta traz a CSP do host e os cabeçalhos de segurança', () => withServer(async url => {
-  assert.equal(HOST_CSP, `default-src 'self'; script-src 'self' '${CLIENT_SCRIPT_HASH}'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'`);
+  assert.equal(HOST_CSP, `default-src 'self'; script-src 'self' '${CLIENT_SCRIPT_HASH}'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'`);
   const want = {
     'content-security-policy': HOST_CSP,
     'x-frame-options': 'SAMEORIGIN',
@@ -386,6 +386,34 @@ test('erro inesperado responde texto genérico: o detalhe (caminhos da máquina)
     assert.deepEqual(await r.json(), { error: 'erro interno do servidor' });
     assert.equal(logged.mock.callCount(), 1);
     assert.match(String(logged.mock.calls[0].arguments[0]?.message), /segredo\.txt/);
+  } finally { await srv.close(); }
+});
+
+test('nenhuma resposta de erro leva caminho da máquina: base inválida, erro do sistema com código, erro inesperado', async (t) => {
+  t.mock.method(console, 'error', () => {});
+  const d = tmp();
+  const bad = join(d, 'architecture');
+  cpSync(ex('telemedicina'), bad, { recursive: true });
+  writeFileSync(join(bad, 'model.json'), '{ isto não é json');
+  const registry = createBaseRegistry({ port: 0, bases: [{ id: 'ruim', path: bad }, { id: 'telemedicina', path: ex('telemedicina') }] });
+  const srv = await startServer({ config: { port: 0, bases: [] }, registry });
+  const clean = (text, what) => {
+    assert.doesNotMatch(text, new RegExp(d.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), what);
+    assert.ok(!text.includes(tmpdir()), what);
+  };
+  try {
+    const list = await (await fetch(`${srv.url}/api/bases`)).text();
+    assert.match(list, /"id":"ruim"[^}]*"ok":false/);
+    assert.match(list, /model\.json/, 'a mensagem ainda diz qual arquivo');
+    clean(list, 'GET /api/bases');
+    const cat = await fetch(`${srv.url}/api/bases/ruim/catalog`);
+    assert.equal(cat.status, 400);
+    clean(await cat.text(), 'catálogo da base inválida');
+    // um erro do sistema tem `code`, mas não foi escrito para pessoas
+    registry.list = () => { throw Object.assign(new Error(`EACCES: permission denied, open '${join(d, 'segredo.txt')}'`), { code: 'EACCES' }); };
+    const sys = await fetch(`${srv.url}/api/bases`);
+    assert.equal(sys.status, 500);
+    assert.deepEqual(await sys.json(), { error: 'erro interno do servidor' });
   } finally { await srv.close(); }
 });
 

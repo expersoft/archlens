@@ -17,6 +17,7 @@ import { createTelemetry, summarize } from './ask/telemetry.mjs';
 import { planRoutes } from './plan/routes.mjs';
 import { configError, LOGO_MAX } from './config.mjs';
 import { SAFE_HEADERS } from './headers.mjs';
+import { hideMachinePaths } from './redact.mjs';
 
 const BODY_LIMIT = 1024 * 1024;
 const QUESTION_MAX = 2000;
@@ -51,11 +52,12 @@ function hostAllowed(header, configured) {
 }
 
 /**
- * What an error says to the client: `{ error, code? }`. A coded error (E_*) or an http one carries a message written
- * for people. Anything else is unexpected and may quote paths of this machine: it goes to the server log only.
+ * What an error says to the client: `{ error, code? }`. An archlens error (code E_*) or an http one carries a message
+ * written for people; absolute paths in it are cut to the file name. Anything else, system errors (ENOENT, EACCES…)
+ * included, is unexpected: it goes to the server log only.
  */
 export function clientError(e) {
-  if (e?.code || e?.status) return { error: e.message ?? String(e), ...(e.code ? { code: e.code } : {}) };
+  if (e?.status || /^E_/.test(e?.code ?? '')) return { error: hideMachinePaths(e.message ?? String(e)), ...(e.code ? { code: e.code } : {}) };
   console.error(e);
   return { error: 'erro interno do servidor' };
 }
@@ -304,8 +306,8 @@ export async function startServer({ config, staticDir, registry, provider, apply
       throw httpError(404, 'rota desconhecida');
     } catch (e) {
       if (res.headersSent) return void res.end();
-      if (e.status) return send(res, e.status, { error: e.message, ...(e.code ? { code: e.code } : {}), ...e.extra });
-      if (e.code) return send(res, 400, { error: e.message, code: e.code });
+      if (e.status) return send(res, e.status, { ...clientError(e), ...e.extra });
+      if (/^E_/.test(e.code ?? '')) return send(res, 400, clientError(e));
       send(res, 500, clientError(e));
     }
   };

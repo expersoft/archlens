@@ -30,7 +30,7 @@ Vale para a linha 0.x. Cada barreira cita o teste que a prova; se o teste sair, 
 | Barreira | Prova |
 |---|---|
 | Todo texto da base é escapado ao entrar no HTML (`esc`, `escH` em `scripts/lib/render.mjs`); a documentação do nó passa pelo `markdown-it` com `html: false` | `apps/gui/e2e/xss.test.mjs` (base de cargas `tests/fixtures/xss/base.mjs`) |
-| O documento do diagrama declara uma CSP: só o script do cliente roda (pelo hash) e a página não fala com a rede | `tests/render-csp.test.mjs`, `apps/gui/e2e/standalone.test.mjs` |
+| O documento do diagrama declara uma CSP: só o script do cliente roda (pelo hash) e a página não faz requisição por script nem carrega recurso de fora, com exceção de imagens `https` (a documentação de um nó pode mostrá-las) | `tests/render-csp.test.mjs`, `apps/gui/e2e/standalone.test.mjs` |
 | Na GUI, o diagrama roda num iframe sem origem (`sandbox="allow-scripts allow-downloads"`): não lê a página, o armazenamento nem a API do host | `apps/gui/e2e/isolation.test.mjs` |
 | A ponte entre a GUI e o diagrama só aceita mensagens do iframe dela, de origem `null`, com forma e tamanho conferidos | `apps/gui/web/src/bridge.test.ts` |
 
@@ -44,7 +44,7 @@ barreira segurou.
 | Guarda de DNS rebinding: ligado em `localhost`, o servidor recusa outro `Host` | `apps/gui/server/app.test.mjs` |
 | Todo POST exige `content-type: application/json` e `Origin` igual ao `Host` | `apps/gui/server/app.test.mjs` |
 | CSP do host, `frame-ancestors 'self'`, `nosniff`, `referrer-policy`, `permissions-policy`, `cross-origin-opener-policy` em toda resposta | `apps/gui/server/app.test.mjs`, `apps/gui/e2e/smoke.test.mjs` |
-| Erro inesperado responde texto genérico; o detalhe (caminhos da máquina) fica no log do servidor | `apps/gui/server/app.test.mjs`, `apps/gui/server/ask.test.mjs` |
+| Erro inesperado (incluindo erros do sistema, como `ENOENT`) responde texto genérico e o detalhe fica no log do servidor; nas mensagens do archlens (`E_*`), caminho absoluto vira só o nome do arquivo | `apps/gui/server/app.test.mjs`, `apps/gui/server/ask.test.mjs`, `apps/gui/server/redact.test.mjs` |
 
 ### Servidor da GUI → rede (clone de repositórios)
 
@@ -72,6 +72,11 @@ administrador (um Git local, por exemplo).
 Os casos adversariais rodam roteirizados na suíte. Com um modelo real, rode à mão:
 `node apps/gui/eval/run.mjs --plan-injection --config archlens-gui.json` (e `--plan-limits`).
 
+**Servidor atrás de proxy HTTPS.** Quando o git sai por um proxy (`HTTPS_PROXY`, `ALL_PROXY`), quem resolve o nome e
+conecta é o proxy. Um nome que a máquina do servidor não resolve é então deixado para o proxy decidir; o que resolve
+localmente para rede interna, e todo endereço IP escrito na URL, continua recusado. Nesse arranjo, a proteção contra
+destinos internos depende das regras do proxy, ou de `plan.gitHosts`.
+
 ## O que cada modo de uso assume
 
 | Modo | Assume |
@@ -90,8 +95,15 @@ Os casos adversariais rodam roteirizados na suíte. Com um modelo real, rode à 
    e o estado da barra.
 3. **O nome do host é resolvido duas vezes no clone** (na checagem e pelo git). Um DNS hostil pode responder
    diferente na segunda. A checagem reduz o risco; `plan.gitHosts` o fecha.
-4. **`'unsafe-inline'` para estilo.** O SVG e a interface usam atributos `style`. Estilo não executa código; o risco
+4. **Imagens `https` na documentação.** Quem escreve na base pode apontar uma imagem para um servidor dele: quem abre a
+   página revela o endereço IP e o momento da leitura a esse servidor. Já era assim antes da CSP; bloquear tiraria as
+   imagens da documentação. A CSP não impede navegação: um link continua sendo um link.
+5. **`'unsafe-inline'` para estilo.** O SVG e a interface usam atributos `style`. Estilo não executa código; o risco
    que sobra é de aparência.
-5. **Credenciais da máquina do servidor no clone.** URLs `ssh` e `https` de hosts fora de `plan.gitTokenHosts` usam
+6. **Credenciais da máquina do servidor no clone.** URLs `ssh` e `https` de hosts fora de `plan.gitTokenHosts` usam
    as credenciais git da máquina. Num servidor sem login, quem alcança a porta lê o que essas credenciais leem.
-6. **Sem limite de uso por pessoa.** Há teto por mensagem (`maxTokens`, `maxRounds`), não por pessoa nem por período.
+7. **Sem limite de uso por pessoa.** Há teto por mensagem (`maxTokens`, `maxRounds`), não por pessoa nem por período.
+8. **A recusa do clone distingue "não resolve" de "rede interna".** Quem alcança a porta consegue descobrir se um nome
+   existe no DNS interno. Fecha com o login (P06) ou com `plan.gitHosts`.
+9. **Faixas IPv6 de transição** (endereços compatíveis com IPv4, 6to4, Teredo) não estão na lista de rede interna. Os
+   sistemas atuais não as encaminham para a rede local.

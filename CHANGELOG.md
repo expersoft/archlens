@@ -68,7 +68,11 @@ versões seguem [SemVer](https://semver.org/lang/pt-BR/).
 - **GUI, mudança de comportamento no clone:** o servidor recusa clonar de endereços de rede interna (`localhost`,
   redes privadas, link-local). Para clonar de um Git interno, declare o host em `plan.gitHosts`; os hosts que já estão
   em `plan.gitTokenHosts` continuam valendo. Com `plan.gitHosts` definido, só os hosts listados são clonados.
-- **GUI: erro inesperado do servidor** responde "erro interno do servidor"; o detalhe fica no log do servidor.
+- **GUI: erro inesperado do servidor** (incluindo erros do sistema, como arquivo sem permissão) responde "erro interno
+  do servidor"; o detalhe fica no log do servidor. Nas demais mensagens, o caminho absoluto de um arquivo vira só o
+  nome dele.
+- **Imagens na documentação de um nó:** com a política de conteúdo, só imagens `https` (e embutidas) aparecem; imagem
+  por `http` ou por caminho relativo deixa de carregar.
 - **`archlens check`:** a mensagem de documento desatualizado agora manda rodar `archlens build` e cita a documentação de
   um nó entre as causas.
 - **Núcleo:** aplicar, documentar e construir os diagramas viraram funções do núcleo (`scripts/lib/apply-flow.mjs` e

@@ -10,7 +10,7 @@ import { renderHtml, CLIENT_SCRIPT_HASH, DIAGRAM_CSP } from '../scripts/lib/rend
 import { asBase } from './helpers.mjs';
 
 const view = async () => layoutView(resolveView(normalizeModel(asBase(JSON.parse(readFileSync(new URL('./fixtures/shop.json', import.meta.url))))), { key: 'k', notation: 'c4', level: 'container', scope: 'loja' }));
-const POLICY = /^default-src 'none'; script-src 'sha256-[A-Za-z0-9+/]{43}='; style-src 'unsafe-inline'; img-src data: blob:; base-uri 'none'; form-action 'none'$/;
+const POLICY = /^default-src 'none'; script-src 'sha256-[A-Za-z0-9+/]{43}='; style-src 'unsafe-inline'; img-src data: blob: https:; base-uri 'none'; form-action 'none'$/;
 
 test('the page declares the CSP right after the charset, and the hash is the embedded script\'s', async () => {
   const html = renderHtml({ title: 't', views: [await view()] });

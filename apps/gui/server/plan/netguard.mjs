@@ -26,14 +26,17 @@ export function isInternalAddress(ip) {
   return internal.check(text, family === 6 ? 'ipv6' : 'ipv4');
 }
 
+/** True when git reaches https hosts through a proxy (the variables it reads, as the clone's environment keeps them). */
+export const httpsProxied = (env = process.env) => ['HTTPS_PROXY', 'https_proxy', 'ALL_PROXY', 'all_proxy'].some(k => !!env[k]);
+
 /**
  * Throws E_GUI_REPO unless the server may clone from `host` (a name or an IP literal, brackets allowed).
  * With `gitHosts`, only the listed hosts pass, and a listed one passes whatever it resolves to (a local git server the
  * administrator declared). Without it, every address of the host must be public, except for the `trusted` hosts: the
  * ones that already receive the git token (plan.gitTokenHosts), which the administrator named too. `lookup` is injectable
- * for the tests.
+ * for the tests. `proxied`: git goes through an https proxy (httpsProxied).
  */
-export async function assertCloneHost(host, { gitHosts, trusted = [], lookup = dnsLookup } = {}) {
+export async function assertCloneHost(host, { gitHosts, trusted = [], proxied = false, lookup = dnsLookup } = {}) {
   const name = String(host).toLowerCase().replace(/^\[(.*)\]$/, '$1');
   if (gitHosts) {
     if (gitHosts.includes(name)) return;
@@ -45,6 +48,9 @@ export async function assertCloneHost(host, { gitHosts, trusted = [], lookup = d
   else {
     try { addresses = await lookup(name, { all: true }); } catch { addresses = []; }
   }
+  // Behind a proxy the server may not resolve public names at all: the proxy does, and it is the proxy that connects.
+  // A name this machine cannot resolve is then left to it; what does resolve here to the internal network is still refused.
+  if (!addresses.length && proxied) return;
   if (!addresses.length) throw repoError(`não foi possível resolver o host ${name}`);
   if (addresses.some(a => isInternalAddress(a.address))) {
     throw repoError('host de rede interna não é permitido; peça ao administrador para incluí-lo em plan.gitHosts');

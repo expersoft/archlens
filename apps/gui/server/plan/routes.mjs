@@ -281,7 +281,7 @@ export function planRoutes({ registry, provider, config, telemetry, h, applyWork
     } catch (e) {
       if (!res.headersSent) throw e;
       const err = guiRefusal(e);
-      send({ type: 'error', error: err.message ?? String(err), ...(err.code ? { code: err.code } : {}), written });
+      send({ type: 'error', ...clientError(err), written });
     }
     res.end();
     return STREAMED;

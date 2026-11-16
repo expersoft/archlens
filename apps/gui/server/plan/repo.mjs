@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 import { join, relative, sep, isAbsolute } from 'node:path';
 import { normalizeRepoUrl } from '../../../../scripts/lib/scan/git.mjs';
 import { cleanRepoUrl } from './draft.mjs';
-import { assertCloneHost } from './netguard.mjs';
+import { assertCloneHost, httpsProxied } from './netguard.mjs';
 
 export const SECRET_FILES = ['.env', '.env.*', '*.pem', '*.key', '*.p12', '*.pfx', 'id_rsa*', 'id_ed25519*', '.npmrc', '.pypirc', '.netrc', '.git/'];
 export const READ_MAX = 200 * 1024;
@@ -269,7 +269,9 @@ export async function openRepo(target, opts = {}) {
   if (pending.has(id)) return pending.get(id);
   // Every clone of the GUI passes here: no clone to the server's own network (see netguard.mjs).
   const { scheme, host } = partsOf(url);
-  if (scheme !== 'file') await assertCloneHost(host, { gitHosts: opts.plan?.gitHosts, trusted: opts.plan?.gitTokenHosts, lookup: opts.lookup });
+  if (scheme !== 'file') {
+    await assertCloneHost(host, { gitHosts: opts.plan?.gitHosts, trusted: opts.plan?.gitTokenHosts, proxied: scheme === 'https' && httpsProxied(machineEnv()), lookup: opts.lookup });
+  }
   const p = cloneAndScan(url, ref, opts).then(({ tmp, repo }) => {
     const key = `${normalizeRepoUrl(url)}@${repo.commit}`;
     if (entries.has(key)) rmSync(tmp, { recursive: true, force: true });

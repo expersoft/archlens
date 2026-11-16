@@ -4,6 +4,7 @@ import { openStore, resolveBase } from '../../../scripts/lib/store/index.mjs';
 import { contentVersion } from '../../../scripts/lib/store/ops.mjs';
 import { subgraphOf } from '../../../scripts/lib/store/contract.mjs';
 import { normalizeModel, c4KindOf } from '../../../scripts/lib/model.mjs';
+import { hideMachinePaths } from './redact.mjs';
 
 const guiError = (message) => Object.assign(new Error(message), { code: 'E_GUI_BASE' });
 
@@ -71,7 +72,8 @@ function readOffThread(data, workers) {
  */
 const inTurn = (slot, fn) => (slot.turn = (slot.turn ?? Promise.resolve()).then(() => fn(), () => fn()));
 
-const describe = e => `${e.code ? `${e.code}: ` : ''}${e.message}`;
+// Shown in the GUI (GET /api/bases): which file, never where the server keeps it.
+const describe = e => hideMachinePaths(`${e.code ? `${e.code}: ` : ''}${e.message}`);
 
 /**
  * `pollMs`: how often a local base (json, markdown) is checked. `remotePollMs`: a remote one (gbrain git), read in a

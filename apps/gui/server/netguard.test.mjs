@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { isInternalAddress, assertCloneHost } from './plan/netguard.mjs';
+import { isInternalAddress, assertCloneHost, httpsProxied } from './plan/netguard.mjs';
 
 const at = (...ips) => async () => ips.map(address => ({ address, family: address.includes(':') ? 6 : 4 }));
 const never = async () => { throw new Error('lookup não devia ser chamado'); };
@@ -52,4 +52,20 @@ test('assertCloneHost com gitHosts: só os listados, e um listado vale mesmo em 
 test('assertCloneHost: host que já recebe o token (gitTokenHosts) continua valendo em rede interna, sem gitHosts', async () => {
   await assertCloneHost('gitlab.empresa.com.br', { trusted: ['gitlab.empresa.com.br'], lookup: at('10.0.0.5') });
   await assert.rejects(assertCloneHost('outro.empresa.com.br', { trusted: ['gitlab.empresa.com.br'], lookup: at('10.0.0.5') }), /rede interna/);
+});
+
+test('assertCloneHost atrás de proxy: nome que só o proxy resolve passa; o que resolve para rede interna continua recusado', async () => {
+  const fails = async () => { throw Object.assign(new Error('getaddrinfo ENOTFOUND'), { code: 'ENOTFOUND' }); };
+  await assertCloneHost('github.com', { lookup: fails, proxied: true });
+  await assert.rejects(assertCloneHost('github.com', { lookup: fails }), /não foi possível resolver/);
+  await assert.rejects(assertCloneHost('x.exemplo', { lookup: at('10.0.0.5'), proxied: true }), /rede interna/);
+  await assert.rejects(assertCloneHost('169.254.169.254', { lookup: fails, proxied: true }), /rede interna/);
+  await assert.rejects(assertCloneHost('github.com', { gitHosts: ['git.interno'], lookup: fails, proxied: true }), /plan\.gitHosts/);
+});
+
+test('httpsProxied: lê as variáveis de proxy que o git usa para https', () => {
+  assert.equal(httpsProxied({}), false);
+  for (const k of ['HTTPS_PROXY', 'https_proxy', 'ALL_PROXY', 'all_proxy']) assert.equal(httpsProxied({ [k]: 'http://proxy:3128' }), true, k);
+  assert.equal(httpsProxied({ HTTP_PROXY: 'http://proxy:3128' }), false);
+  assert.equal(httpsProxied({ HTTPS_PROXY: '' }), false);
 });

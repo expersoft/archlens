@@ -1196,7 +1196,8 @@ const JS = String.raw`
 `;
 
 // Second barrier behind the escaping above: only the client script of this file runs (by hash, it is the same in every
-// page of a version) and the page never reaches the network. The GUI server puts the same hash in its own policy,
+// page of a version) and the page loads nothing from the network, except https images: a node's documentation (markdown
+// people write) may show them. The GUI server puts the same hash in its own policy,
 // because the embedded page (iframe srcdoc) inherits the policy of the page that embeds it.
 export const CLIENT_SCRIPT_HASH = `sha256-${createHash('sha256').update(JS).digest('base64')}`;
-export const DIAGRAM_CSP = `default-src 'none'; script-src '${CLIENT_SCRIPT_HASH}'; style-src 'unsafe-inline'; img-src data: blob:; base-uri 'none'; form-action 'none'`;
+export const DIAGRAM_CSP = `default-src 'none'; script-src '${CLIENT_SCRIPT_HASH}'; style-src 'unsafe-inline'; img-src data: blob: https:; base-uri 'none'; form-action 'none'`;

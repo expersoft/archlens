@@ -163,6 +163,8 @@ topo ganha **Navegar | Planejar**. O fluxo é o da `archlens-plan` e da `archlen
 1. **Descreva a mudança** no chat ("a API de Pedidos passa a falar com o Sistema X"; `Ctrl+Enter` ou o botão envia,
    `Enter` quebra a linha, **Limpar** ou `/limpar` começa uma conversa nova sem perder o rascunho) ou **anexe um repositório** por URL
    git (botão "Anexar repositório"; um por rascunho). O agente consulta a base, monta o delta e o planeja.
+   O servidor recusa clonar de endereços de rede interna; um Git interno precisa estar em `plan.gitHosts` (veja o
+   README).
 2. **Responda as decisões por botões.** Cada pergunta aberta do plano (conflito, possível duplicata, remoção) vem com a
    recomendação do agente e o motivo; clicar numa opção responde. Dá para responder também em texto.
 3. **Confira a prévia**: **Diagrama** (a base com o que muda desenhado por cima, ou lado a lado) e **Plano**. O painel
