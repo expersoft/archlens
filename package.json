@@ -28,7 +28,8 @@
     "lint": "biome lint .",
     "coverage": "node --test --experimental-test-coverage tests/*.test.mjs",
     "check-schemas": "node scripts/gen-schemas.mjs && git diff --exit-code -- schemas",
-    "ci": "npm run lint && npm run check-plugin && npm run check-ask && npm run check-schemas && npm test"
+    "ci": "npm run lint && npm run check-plugin && npm run check-ask && npm run check-schemas && npm test",
+    "release": "node scripts/release.mjs"
   },
   "optionalDependencies": {
     "playwright-core": "1.63.0"
