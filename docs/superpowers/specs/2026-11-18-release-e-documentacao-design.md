@@ -133,8 +133,8 @@ conteúdo das referências (`references/`) ou das skills além de consertar link
 
 ## Critérios de aceite
 
-- Preparar uma versão é disparar "Preparar versão" e aprovar o PR que ele abre; nenhum arquivo editado à mão. O PR
-  passa no `check-plugin` e no `check-ask` sem intervenção.
+- A 0.7.0 sai pelo `release.mjs` sem nenhum arquivo editado à mão, e o PR dela passa no `check-plugin` e no
+  `check-ask` sem intervenção. A partir da 0.7.1, preparar uma versão é disparar "Preparar versão" e aprovar o PR.
 - Depois da promoção para a `main`, a tag `v<versão>` e o release do GitHub existem, com as notas do changelog.
 - `npm version patch --no-git-tag-version` num checkout limpo muda só a linha da versão no `package.json`.
 - O `roadmap.md` lista tudo o que existe e nenhum item entregue aparece como pendente.
@@ -146,7 +146,13 @@ conteúdo das referências (`references/`) ou das skills além de consertar link
 Um workflow com `workflow_dispatch` só pode ser disparado depois que o arquivo está na branch padrão (`main`), e a
 `main` só recebe código pela promoção manual. Por isso o próprio P14 não pode sair pelo botão.
 
-**Decisão:** PENDENTE (ver a pergunta ao dono na conversa).
+**Decisão do dono (2026-11-18):** a **0.7.0** (que leva o P07 e o P14) é preparada com `scripts/release.mjs` rodado
+à mão, num PR próprio para `develop-v2` depois do merge do P14. Quando o dono promove a 0.7.0 para a `main`, o
+`tag.yml` (que já estará lá) cria a tag e o release, e o botão "Preparar versão" passa a existir. O primeiro critério
+de aceite e a confirmação de que o CI aparece no PR de release ficam para a 0.7.1.
+
+Descartado: promover para a `main` sem subir a versão. Quem já instalou não receberia nada (o Claude Code guarda o
+plugin pelo número da versão) e quem instalasse receberia código novo com o número 0.6.0.
 
 ## O que fica para o dono
 
