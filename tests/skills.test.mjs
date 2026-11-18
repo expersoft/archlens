@@ -128,7 +128,7 @@ test('the references document the documentation of a node as built', () => {
   for (const term of ['## Documentação do nó', 'E_STORE_DOC', 'store convert', '`archlens build']) assert.ok(base.includes(term), `base.md: ${term}`);
   const filter = ref('views.md').split('## Filtro por propriedade')[1];
   assert.match(filter, /`granularity`.*antes de `where`/, 'views.md: granularity age antes de where');
-  assert.match(read(join(ROOT, 'README.md')), /aba \*\*Documentação\*\*/, 'README: como ler');
+  assert.match(read(join(ROOT, 'docs', 'GUIA.md')), /aba \*\*Documentação\*\*/, 'GUIA: como ler (a seção saiu do README no P14)');
 });
 
 test('archlens-apply runs init; without a base, plan and query ask the repository type and hand init over to it', () => {
@@ -233,4 +233,10 @@ test('merge.md previews never run build (it writes inside the base)', () => {
   const section = text.slice(text.indexOf('## Pré-visualizando'), text.indexOf('\n## ', text.indexOf('## Pré-visualizando') + 1));
   assert.ok(section.length > 0);
   for (const line of section.split('\n')) assert.doesNotMatch(line, /archlens(\.mjs)? build /, `prévia com build: "${line.trim()}"`);
+});
+
+// npm version rewrites package.json with JSON.stringify(…, null, 2): any other layout turns a release into a reformat.
+test('package.json está no formato que o npm grava (npm version só muda a versão)', () => {
+  const text = read(join(ROOT, 'package.json'));
+  assert.equal(text, `${JSON.stringify(JSON.parse(text), null, 2)}\n`);
 });
