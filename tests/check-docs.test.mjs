@@ -1,7 +1,7 @@
 // scripts/check-docs.mjs: internal links, anchors and archlens commands cited in the documentation.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { slugify, anchorsOf, linksOf, commandsOf, checkDocs } from '../scripts/check-docs.mjs';
@@ -42,4 +42,8 @@ test('checkDocs aponta link, âncora e comando quebrados, e aceita o resto', () 
     'ruim.md:2: âncora #nao-tem não existe em outro.md',
     'ruim.md:4: comando "archlens fazer-tudo" não existe na CLI',
   ]);
+});
+
+test('README.md cabe em 8 KB (o resto mora no guia, em docs/GUI.md e no CONTRIBUTING.md)', () => {
+  assert.ok(statSync(new URL('../README.md', import.meta.url)).size <= 8192);
 });

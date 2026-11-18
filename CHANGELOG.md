@@ -7,6 +7,12 @@ versões seguem [SemVer](https://semver.org/lang/pt-BR/).
 
 ### Adicionado
 
+- **Release em um passo e documentação por público (P14).** O workflow "Preparar versão" (Actions) sobe a versão,
+  regrava os manifestos do plugin, regenera o archlens-ask, fecha esta seção do changelog e abre o PR; na promoção para a
+  `main`, a tag e o release do GitHub saem sozinhos. O mesmo trabalho roda à mão com `npm run release`. O README ficou
+  curto; a configuração da GUI foi para [`docs/GUI.md`](docs/GUI.md), o fluxo de contribuição e de release para o
+  [`CONTRIBUTING.md`](CONTRIBUTING.md), e a referência da CLI é gerada em [`docs/cli.md`](docs/cli.md). O CI confere os
+  links e os comandos citados na documentação.
 - **Segurança da GUI e do HTML gerado (P07).** O diagrama da GUI roda isolado da página (iframe sem origem): um
   script dentro dele não lê a interface, o armazenamento nem a API. O HTML gerado por `render` e `build` declara uma
   política de conteúdo (CSP) em que só o script do próprio archlens roda e a página não fala com a rede; o servidor da

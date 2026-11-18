@@ -45,7 +45,7 @@ Detalhes: `portable/archlens-ask/README.md` e `docs/superpowers/specs/2026-10-25
 ## CI: o que já é verificado sozinho
 
 Todo PR passa pelo workflow `.github/workflows/ci.yml`. Ele roda o lint (`npm run lint`), `check-plugin`, `check-ask`,
-`check-schemas`, `prompt:check`, `npm audit`, a suíte da raiz e a suíte e o build da GUI (Node 20, 22 e 24),
+`check-schemas`, `check-cli-doc`, `check-docs` (links e comandos da documentação), `prompt:check`, `npm audit`, a suíte da raiz e a suíte e o build da GUI (Node 20, 22 e 24),
 os testes que abrem o Chromium (incluindo o e2e da GUI) e os lançadores no Windows.
 
 - **O CI confere se os derivados estão em dia; não decide se a mudança pede atualizar os textos.** Avaliar o impacto no

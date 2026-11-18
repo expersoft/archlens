@@ -4,6 +4,7 @@ O archlens transforma uma descrição de arquitetura (texto livre ou JSON) em um
 conhecimento** (a pasta `architecture/` e o `ARCHITECTURE.md` gerado) e extrai dela diagramas **C4** e **ArchiMate** em HTML animado,
 feitos para apresentação em tela cheia.
 
+- [O que o archlens faz](#o-que-o-archlens-faz)
 - [Instalação](#instalação)
 - [Usando com o Claude](#usando-com-o-claude)
 - [Evoluindo a base](#evoluindo-a-base)
@@ -11,7 +12,39 @@ feitos para apresentação em tela cheia.
 - [Base compartilhada no gbrain](#base-compartilhada-no-gbrain)
 - [Apresentando](#apresentando)
 - [Os cenários, com exemplos](#os-cenários-com-exemplos)
+- [Documentação do nó](#documentação-do-nó)
+- [Manter o ARCHITECTURE.md em dia](#manter-o-architecturemd-em-dia)
 - [Problemas comuns](#problemas-comuns)
+
+Configurar e operar a GUI (servidor, LLM, Planejar): [GUI.md](GUI.md). Todos os comandos da CLI: [cli.md](cli.md).
+
+## O que o archlens faz
+
+- Aceita **texto livre** ou uma **DSL JSON** documentada (`references/notation.md`).
+- Um metamodelo só: **ArchiMate 3.2** com **perfil C4** por cima. O mesmo container é caixa azul no
+  C4 e application component no ArchiMate.
+- Mantém a base em **`architecture/`** e gera dela o **`ARCHITECTURE.md`**, de onde se
+  extraem visões novas a qualquer momento. A base grava um **formato único (2.0)**: tipos ArchiMate, perfil C4 em
+  `c4.kind`, hierarquia por `parent`; `c4:*`, `uses` e `children` valem só na entrada. Base 1.x: `archlens migrate`.
+- **Base compartilhada no gbrain:** `archlens init` escolhe onde a base mora: `model.json`, um vault markdown (Obsidian)
+  ou um [gbrain](https://github.com/garrytan/gbrain), no **modo git** (o CLI grava um commit por apply no repositório que
+  o gbrain sincroniza) ou no **modo MCP** (o agente chama as ferramentas do gbrain; o CLI prepara os pedidos e confere os
+  recibos, com `--resume` e `--undo` para applies parciais). Times aplicam em paralelo: o plano guarda a versão de cada
+  objeto que altera ou em que se apoiou, e só o que se cruza é recusado.
+- **Base que evolui:** cada informação nova vira um delta; `archlens plan` casa entidades (id, alias, nome parecido),
+  pergunta conflitos e duplicatas, e registra proveniência, ciclo de vida (as-is/to-be) e histórico.
+- **Lê repositórios** (compose, k8s/Helm, Terraform, OpenAPI/AsyncAPI, graphify) e gera deltas com proveniência (`archlens scan`).
+- **Prévia de mudanças:** `--delta` / `--plan` desenham a base com um delta ainda não aplicado (esboço à mão no estilo do draw.io, com hachura, `+ ~ − ?`,
+  removidos riscados); o status `draft` marca o que ainda está em discussão.
+- **C4:** landscape, context, container, component, dynamic, com `focus`/`depth` e elevação de relações; um modelo
+  ArchiMate (serviços, interfaces) também gera as setas C4, derivadas e tracejadas.
+- **ArchiMate:** camadas de negócio, aplicação e tecnologia, com aninhamento visual (`"nesting": "nested"`); visões entre camadas por travessia de
+  suporte (o que sustenta uma oferta ou processo), matriz de impacto de um componente, derivação de
+  relações através do que foi ocultado, granularidade C4.
+- **Relações explicadas:** cada seta vira uma frase em português ("A serve B: B usa A; se A falhar, há impacto em B"), com cartão de hover, legenda com as setas reais e glossário das confusões comuns do ArchiMate.
+- **HTML animado** num arquivo único: prévia animada no hover, 100% da largura, modo apresentação (`P`), setas entre visões,
+  zoom e pan pelo `viewBox`, trace, story, pulso de impacto, tema claro/escuro, exportação SVG/PNG.
+- **Checagem visual** (`deliver`): screenshots em 1920×1080 e 1280×720, largura ocupada ≥ 90% e fonte ≥ 14px.
 
 ## Instalação
 
@@ -157,14 +190,14 @@ repositório dele substitui (remove o placeholder e leva as relações para o co
 
 ### Planejar pela GUI
 
-Com a GUI ligada em modo Planejar (`archlens serve architecture --llm anthropic --plan`; veja o README) o seletor do
+Com a GUI ligada em modo Planejar (`archlens serve architecture --llm anthropic --plan`; veja [GUI.md](GUI.md#planejar-pela-gui)) o seletor do
 topo ganha **Navegar | Planejar**. O fluxo é o da `archlens-plan` e da `archlens-apply`, sem sair do navegador:
 
 1. **Descreva a mudança** no chat ("a API de Pedidos passa a falar com o Sistema X"; `Ctrl+Enter` ou o botão envia,
    `Enter` quebra a linha, **Limpar** ou `/limpar` começa uma conversa nova sem perder o rascunho) ou **anexe um repositório** por URL
    git (botão "Anexar repositório"; um por rascunho). O agente consulta a base, monta o delta e o planeja.
-   O servidor recusa clonar de endereços de rede interna; um Git interno precisa estar em `plan.gitHosts` (veja o
-   README).
+   O servidor recusa clonar de endereços de rede interna; um Git interno precisa estar em `plan.gitHosts` (veja
+   [GUI.md](GUI.md#planejar-pela-gui)).
 2. **Responda as decisões por botões.** Cada pergunta aberta do plano (conflito, possível duplicata, remoção) vem com a
    recomendação do agente e o motivo; clicar numa opção responde. Dá para responder também em texto.
 3. **Confira a prévia**: **Diagrama** (a base com o que muda desenhado por cima, ou lado a lado) e **Plano**. O painel
@@ -381,6 +414,54 @@ Quando os sistemas formam plataformas, modele cada uma como `grouping` e preench
 exemplo, "mostre as interações entre a Plataforma de Vendas e a de Back-office": a visão `vendas-x-backoffice` do
 exemplo (`groups: { only: [...], crossOnly: true }`) mostra só os sistemas que se falam entre as plataformas, cada
 uma numa moldura. A visão `plataformas` traz o panorama C4 com as molduras.
+
+## Documentação do nó
+
+Cada nó da base (sistema, processo de negócio ou qualquer outro) carrega duas coisas: `properties`, fatos curtos para
+filtrar (squad, linguagem), e **documentação**, texto livre em markdown com o que iria numa wiki. O texto fica na página
+do elemento, depois de `<!-- archlens:end -->`, por isso exige uma base `markdown` ou `gbrain`; numa base `json`, o
+pedido recusa com `E_STORE_DOC` (`archlens store convert` troca o conector).
+
+**Para escrever:**
+
+- **Pelo plano** (Planejar na GUI ou skill `archlens-plan`): peça "documente o nó X". O texto entra em `docs` no delta e
+  é revisado antes do apply. Trocar ou limpar um texto existente abre uma pergunta, com a diferença à vista; o texto
+  antigo fica só no git da base.
+- **Direto no markdown**, em dois passos: edite só o trecho depois do bloco e rode `archlens build`. Até o build, o
+  `ARCHITECTURE.md` e os HTML salvos ficam com o texto antigo e o `archlens check` falha. Essa edição não entra no
+  histórico.
+
+**Para ler:**
+
+- cartão **Documentação** no painel do nó da GUI e aba **Documentação** no HTML gerado (ao lado de Detalhes), com o diagrama visível;
+- seção Documentação em `archlens query <base> --element <id>`; com `--doc`, só o texto, como está na página;
+- seção `Documentação dos nós` no `ARCHITECTURE.md`;
+- busca com LLM, quando o agente abre o nó.
+
+Para filtrar uma visão por valor de propriedade, use `where` (`references/views.md`): `{"notation":"c4","level":"landscape","where":{"squad":"Checkout"}}`.
+O exemplo `examples/loja-online-vault` traz nós documentados. Detalhes em `references/base.md` e `references/merge.md`.
+
+## Manter o ARCHITECTURE.md em dia
+
+```bash
+# .git/hooks/pre-commit
+path/to/archlens/bin/archlens check || exit 1
+```
+
+```yaml
+# CI (GitHub Actions)
+- run: path/to/archlens/bin/archlens check
+```
+
+Em times com Windows, fixe as quebras de linha em LF para o documento e a base não mudarem só por causa do checkout
+(o `check` já ignora CRLF, mas os diffs ficam limpos):
+
+```gitattributes
+# .gitattributes
+ARCHITECTURE.md text eol=lf
+architecture/** text eol=lf
+architecture/**/*.png binary
+```
 
 ## Problemas comuns
 
