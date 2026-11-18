@@ -234,3 +234,9 @@ test('merge.md previews never run build (it writes inside the base)', () => {
   assert.ok(section.length > 0);
   for (const line of section.split('\n')) assert.doesNotMatch(line, /archlens(\.mjs)? build /, `prévia com build: "${line.trim()}"`);
 });
+
+// npm version rewrites package.json with JSON.stringify(…, null, 2): any other layout turns a release into a reformat.
+test('package.json está no formato que o npm grava (npm version só muda a versão)', () => {
+  const text = read(join(ROOT, 'package.json'));
+  assert.equal(text, `${JSON.stringify(JSON.parse(text), null, 2)}\n`);
+});
