@@ -1,0 +1,44 @@
+name: Tag e release
+
+# Quando uma versão chega à main (a promoção manual, por PR), cria a tag v<versão> e o release do GitHub com as notas
+# do CHANGELOG.md (P14). É o momento em que quem instala pelo marketplace recebe a versão. Sem versão nova (a tag já
+# existe) ou sem a seção no changelog, termina sem fazer nada.
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: tag
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    name: Tag e release da versão
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Tag e release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          versao=$(node -p "require('./package.json').version")
+          if [ -n "$(git tag -l "v$versao")" ]; then echo "A tag v$versao já existe: nada a fazer."; exit 0; fi
+          if ! node scripts/release.mjs notes "$versao" --out "$RUNNER_TEMP/notas.md"; then
+            echo "O CHANGELOG.md não tem a seção da versão $versao: nada a fazer."; exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "v$versao" -m "archlens $versao" "$GITHUB_SHA"
+          git push origin "v$versao"
+          pre=""
+          case "$versao" in *-*) pre="--prerelease" ;; esac
+          gh release create "v$versao" --title "archlens $versao" --notes-file "$RUNNER_TEMP/notas.md" --verify-tag $pre

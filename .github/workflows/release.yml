@@ -1,0 +1,108 @@
+name: Preparar versão
+
+# Prepara uma versão e abre o PR dela (P14). O trabalho é do scripts/release.mjs (versão, manifestos do plugin,
+# archlens-ask, CHANGELOG.md); aqui só ficam o commit, a branch, o PR e o CI. Promover para a main continua manual,
+# por PR; a tag e o release do GitHub saem sozinhos nessa promoção (tag.yml). Ver CONTRIBUTING.md.
+on:
+  workflow_dispatch:
+    inputs:
+      tipo:
+        description: Tipo de versão (como no npm version)
+        type: choice
+        options: [patch, minor, major, premajor, preminor, prerelease]
+        default: minor
+      branch:
+        description: Linha de onde a versão sai
+        type: string
+        default: develop-v2
+      preid:
+        description: Identificador das pré-versões (premajor, preminor, prerelease)
+        type: string
+        default: alpha
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  preparar:
+    name: Preparar a versão e abrir o PR
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      TIPO: ${{ inputs.tipo }}
+      BRANCH: ${{ inputs.branch }}
+      PREID: ${{ inputs.preid }}
+    steps:
+      # Uma pré-versão em develop-v2 chegaria a quem instala pelo marketplace na próxima promoção para a main.
+      - name: Pré-versão não sai de develop-v2
+        run: |
+          case "$TIPO" in
+            pre*) if [ "$BRANCH" = "develop-v2" ]; then echo "::error::pré-versões saem da linha v1, não de develop-v2"; exit 1; fi ;;
+          esac
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.branch }}
+          fetch-depth: 0 # as tags: o release.mjs recusa preparar enquanto a versão atual não tem tag
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            apps/gui/package-lock.json
+      - run: npm ci
+      - run: npm --prefix apps/gui ci
+      - name: Preparar a versão
+        id: versao
+        run: |
+          versao=$(node scripts/release.mjs "$TIPO" --preid "$PREID" --notes "$RUNNER_TEMP/notas.md")
+          echo "versao=$versao" >> "$GITHUB_OUTPUT"
+      - name: A branch do release ainda não existe
+        env:
+          VERSAO: ${{ steps.versao.outputs.versao }}
+        run: |
+          if git ls-remote --exit-code --heads origin "chore/release-$VERSAO" > /dev/null; then
+            echo "::error::a branch chore/release-$VERSAO já existe: feche o PR dela ou apague a branch"; exit 1
+          fi
+      - name: Checagens (lint, derivados e suíte da raiz)
+        run: npm run ci
+      - name: Commit, push e PR
+        env:
+          VERSAO: ${{ steps.versao.outputs.versao }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "chore/release-$VERSAO"
+          git add -A
+          git commit -m "chore(release): versão $VERSAO"
+          git push origin "chore/release-$VERSAO"
+          {
+            echo "Versão **$VERSAO**, preparada pelo workflow \"Preparar versão\"."
+            echo
+            echo "## Notas (do CHANGELOG.md)"
+            echo
+            cat "$RUNNER_TEMP/notas.md"
+            echo
+            echo "## Conferir antes do merge"
+            echo
+            echo "- [ ] O CHANGELOG.md diz o que muda nesta versão."
+            echo "- [ ] O CI passou neste PR (ele é disparado pelo workflow; veja a aba Checks)."
+            echo "- [ ] Depois do merge: promover para a \`main\` por PR. A tag e o release do GitHub saem sozinhos."
+            echo
+            echo "archlens-ask: o REFERENCE.md foi regenerado (cita a versão)."
+          } > "$RUNNER_TEMP/corpo.md"
+          gh pr create --base "$BRANCH" --head "chore/release-$VERSAO" --title "chore(release): versão $VERSAO" --body-file "$RUNNER_TEMP/corpo.md"
+      # Um PR aberto pelo GITHUB_TOKEN não dispara workflows; workflow_dispatch é a exceção do GitHub. O CI roda no
+      # commit do PR e aparece nele. Se não aparecer, o plano B é um token próprio (ver CONTRIBUTING.md).
+      - name: CI no PR do release
+        env:
+          VERSAO: ${{ steps.versao.outputs.versao }}
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run ci.yml --ref "chore/release-$VERSAO"
