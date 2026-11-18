@@ -46,7 +46,7 @@ sugerida e um brief por plano. Andamento:
 |---|---|---|---|---|
 | [P01](roadmap-produto/P01-ci-e-suite-verde.md) | CI no GitHub Actions, lint, fixtures congeladas | feito | [spec](specs/2026-11-15-ci-e-suite-vigiada-design.md) | PR #40 → `develop-v2` |
 | [P07](roadmap-produto/P07-hardening-da-gui.md) | Isolamento do diagrama, CSP, clone sem rede interna, modelo de ameaças | feito | [spec](specs/2026-11-16-hardening-da-gui-design.md) · [plano](plans/2026-11-16-hardening-da-gui.md) | commits `376be8d`…`74850f1` em `develop-v2` |
-| [P14](roadmap-produto/P14-distribuicao-release-e-docs.md) | Release automatizado, este roadmap em dia, documentação por público | feito | [spec](specs/2026-11-18-release-e-documentacao-design.md) · [plano](plans/2026-11-18-release-e-documentacao.md) | branch `chore/p14-release-e-docs` → `develop-v2` |
+| [P14](roadmap-produto/P14-distribuicao-release-e-docs.md) | Release automatizado, este roadmap em dia, documentação por público | feito | [spec](specs/2026-11-18-release-e-documentacao-design.md) · [plano](plans/2026-11-18-release-e-documentacao.md) | PR #41 → `develop-v2` |
 | [P05](roadmap-produto/P05-performance-e-escala.md) | Benchmarks e orçamentos de tempo (a parte de medição) | a seguir | — | — |
 | [P00](roadmap-produto/P00-linhas-v0-e-v1.md) | Abertura da linha v1 | depois da Fase 0 (P05 e P14) | — | — |
 | P02, P03, P04, P06, P08 a P13, P15 a P18 | Linha v1 e depois | não iniciados | [ordem e dependências](roadmap-produto/README.md) | — |
