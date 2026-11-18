@@ -81,6 +81,8 @@ export function closeChangelog(text, { version, previous, date }) {
  */
 export function prepareRelease({ root, type, preid = 'alpha', date, exec }) {
   if (!TYPES.includes(type)) throw releaseError('E_RELEASE_TYPE', `tipo de versão desconhecido: ${type} (use ${TYPES.join(', ')})`);
+  // An identifier npm would normalize (empty, dots, spaces) makes package.json and CHANGELOG.md disagree on the version.
+  if (!/^[0-9A-Za-z-]+$/.test(preid)) throw releaseError('E_RELEASE_TYPE', `preid inválido: "${preid}" (use letras, números e hífen, como alpha)`);
   if (exec('git', ['status', '--porcelain']).trim()) {
     throw releaseError('E_RELEASE_DIRTY', 'a árvore tem mudanças não commitadas: prepare a versão a partir de um checkout limpo');
   }
@@ -95,6 +97,8 @@ export function prepareRelease({ root, type, preid = 'alpha', date, exec }) {
   const logPath = join(root, 'CHANGELOG.md');
   const closed = closeChangelog(readFileSync(logPath, 'utf8'), { version, previous, date });
   exec('npm', ['version', version, '--no-git-tag-version']);
+  const written = JSON.parse(readFileSync(pkgPath, 'utf8')).version;
+  if (written !== version) throw releaseError('E_RELEASE_VERSION', `o npm gravou ${written} no package.json, não ${version}: desfaça com git checkout e confira o tipo e o preid`);
   exec('npm', ['run', 'ask']);
   writeFileSync(logPath, closed);
   return { version, previous, notes: releaseNotes(closed, version) };

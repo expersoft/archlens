@@ -51,3 +51,10 @@ test('os inputs chegam aos scripts por variável de ambiente, nunca interpolados
     for (const s of steps(load(name))) assert.doesNotMatch(s.run ?? '', /\$\{\{\s*(inputs|github\.event)\./, `${name}: ${s.name}`);
   }
 });
+
+test('tag.yml se recupera de falha parcial: decide pelo release, não pela tag, e avisa quando falta a seção', () => {
+  const run = runs(load('tag.yml')).join('\n');
+  assert.match(run, /gh release view "v\$versao"/, 'um release já existente é o que encerra o job');
+  assert.match(run, /if \[ -z "\$\(git tag -l "v\$versao"\)" \]/, 'a tag só é criada se faltar');
+  assert.match(run, /::warning::[^\n]*CHANGELOG/, 'sem a seção no changelog, o job avisa no resumo');
+});

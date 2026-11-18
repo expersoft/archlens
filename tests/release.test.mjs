@@ -95,3 +95,18 @@ test('prepareRelease: recusas, sempre antes de mexer em arquivo', () => {
   const exists = refuse({ tags: 'v0.6.0\nv0.7.0\n' }, 'minor', 'E_RELEASE_TAG_EXISTS');
   assert.ok(!exists.calls.some(c => c.startsWith('npm')), 'a tag é conferida antes de subir a versão');
 });
+
+test('prepareRelease: preid inválido é recusado antes de qualquer arquivo mudar', () => {
+  for (const preid of ['', 'al pha', 'alpha.1', 'á']) {
+    const s = sandbox();
+    assert.throws(() => prepareRelease({ root: s.root, type: 'prerelease', preid, date: '2026-11-18', exec: s.exec }), { code: 'E_RELEASE_TYPE' }, JSON.stringify(preid));
+    assert.ok(!s.calls.some(c => c.startsWith('npm')), JSON.stringify(preid));
+  }
+});
+
+test('prepareRelease: o npm gravando outra versão interrompe antes de fechar o changelog', () => {
+  const s = sandbox();
+  const exec = (cmd, args) => (cmd === 'npm' && args[0] === 'version' ? s.exec(cmd, ['version', '0.7.0-x']) : s.exec(cmd, args));
+  assert.throws(() => prepareRelease({ root: s.root, type: 'minor', date: '2026-11-18', exec }), { code: 'E_RELEASE_VERSION' });
+  assert.equal(s.changelog(), LOG);
+});

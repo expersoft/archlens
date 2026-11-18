@@ -1,8 +1,9 @@
 name: Tag e release
 
 # Quando uma versão chega à main (a promoção manual, por PR), cria a tag v<versão> e o release do GitHub com as notas
-# do CHANGELOG.md (P14). É o momento em que quem instala pelo marketplace recebe a versão. Sem versão nova (a tag já
-# existe) ou sem a seção no changelog, termina sem fazer nada.
+# do CHANGELOG.md (P14). É o momento em que quem instala pelo marketplace recebe a versão. Decide pelo release, não pela
+# tag: se uma execução anterior criou a tag e falhou no release, rodar de novo completa o que faltou. Sem a seção da
+# versão no changelog, termina com um aviso no resumo do job.
 on:
   push:
     branches: [main]
@@ -31,14 +32,16 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           versao=$(node -p "require('./package.json').version")
-          if [ -n "$(git tag -l "v$versao")" ]; then echo "A tag v$versao já existe: nada a fazer."; exit 0; fi
+          if gh release view "v$versao" > /dev/null 2>&1; then echo "O release v$versao já existe: nada a fazer."; exit 0; fi
           if ! node scripts/release.mjs notes "$versao" --out "$RUNNER_TEMP/notas.md"; then
-            echo "O CHANGELOG.md não tem a seção da versão $versao: nada a fazer."; exit 0
+            echo "::warning::O CHANGELOG.md não tem a seção da versão $versao: nem tag nem release foram criados."; exit 0
           fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag -a "v$versao" -m "archlens $versao" "$GITHUB_SHA"
-          git push origin "v$versao"
+          if [ -z "$(git tag -l "v$versao")" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git tag -a "v$versao" -m "archlens $versao" "$GITHUB_SHA"
+            git push origin "v$versao"
+          fi
           pre=""
           case "$versao" in *-*) pre="--prerelease" ;; esac
           gh release create "v$versao" --title "archlens $versao" --notes-file "$RUNNER_TEMP/notas.md" --verify-tag $pre

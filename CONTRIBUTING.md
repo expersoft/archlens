@@ -68,7 +68,8 @@ a quem usa o que sai numa versão nova.
    `major`) e a branch (`develop-v2`). O workflow sobe a versão, regrava os manifestos do plugin, regenera o
    archlens-ask, fecha a seção do changelog com a data, roda `npm run ci` e abre o PR `chore/release-<versão>`, disparando
    o CI nele.
-3. **Revise e faça o merge** do PR de release em `develop-v2`.
+3. **Revise e faça o merge** do PR de release em `develop-v2`. Antes, se tiver o Claude Code à mão, `claude plugin validate .`
+   no checkout da branch do release confere a estrutura do plugin (o CI só confere a sincronia das versões).
 4. **Promova para a `main`** com um PR `develop-v2` → `main`. É esse passo que entrega a versão a quem instala pelo
    marketplace. No merge, o workflow **Tag e release** cria a tag `v<versão>` e o release do GitHub com as notas do
    changelog.
@@ -80,13 +81,19 @@ outra), tag da nova versão já existente e changelog vazio. Pré-versões (`pre
 **Sem o Actions (plano B).** O mesmo trabalho roda na sua máquina, a partir de um checkout limpo:
 
 ```bash
-git switch -c chore/release-<versão>
-npm run release -- minor          # ou patch / major; imprime a versão nova
+npm run release -- minor          # ou patch / major; imprime a versão nova (os manifestos do plugin ficam staged)
 npm run ci
+claude plugin validate .
+```
+
+Depois crie a branch com a versão impressa, comite tudo e abra o PR para `develop-v2`:
+
+```bash
+git switch -c chore/release-<versão>
 git add -A && git commit -m "chore(release): versão <versão>"
 ```
 
-Depois, PR para `develop-v2` e os passos 3 e 4 acima. `npm run test:gbrain` (integração com um gbrain real; precisa do
+Em seguida, os passos 3 e 4 acima. `npm run test:gbrain` (integração com um gbrain real; precisa do
 bun e de rede) é opcional.
 
 **Configuração do repositório que o fluxo precisa.** "Allow GitHub Actions to create and approve pull requests" ligado em
