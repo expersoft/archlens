@@ -15,7 +15,7 @@ const UNRELEASED = '## [Não lançado]';
 export const TYPES = ['patch', 'minor', 'major', 'premajor', 'preminor', 'prerelease'];
 
 const releaseError = (code, message) => Object.assign(new Error(message), { code });
-const escape = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const escapeRe = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /** The version npm version would give for `type` (the six types the release accepts). */
 export function nextVersion(current, type, preid = 'alpha') {
@@ -31,7 +31,7 @@ export function nextVersion(current, type, preid = 'alpha') {
     case 'preminor': return `${x}.${y + 1}.0-${preid}.0`;
     case 'prerelease': {
       if (!pre) return `${x}.${y}.${z + 1}-${preid}.0`;
-      const p = new RegExp(`^${escape(preid)}\\.(\\d+)$`).exec(pre);
+      const p = new RegExp(`^${escapeRe(preid)}\\.(\\d+)$`).exec(pre);
       return p ? `${x}.${y}.${z}-${preid}.${Number(p[1]) + 1}` : `${x}.${y}.${z}-${preid}.0`;
     }
     default: throw releaseError('E_RELEASE_TYPE', `tipo de versão desconhecido: ${type} (use ${TYPES.join(', ')})`);
